@@ -1,0 +1,50 @@
+#!/bin/bash
+
+# Aliases shared between zsh & bash shells
+source $SSHHOME/.sshrc.d/.aliasesrc
+
+# Zsh configuration creation
+touch ~/.zshrc
+if ! grep -q "# sshrc-config" ~/.zshrc; then
+  echo "# sshrc-config-start" >>~/.zshrc
+  cat $SSHHOME/.sshrc.d/.zshrc >>~/.zshrc
+  echo "# sshrc-config-end" >>~/.zshrc
+fi
+
+# Nano configuration creation
+touch ~/.nanorc
+if ! grep -q "# sshrc-config" ~/.nanorc; then
+  echo "# sshrc-config-start" >>~/.nanorc
+  cat $SSHHOME/.sshrc.d/.nanorc >>~/.nanorc
+  echo "# sshrc-config-end" >>~/.nanorc
+fi
+
+# Vim configuration
+export VIMINIT="let \$MYVIMRC='$SSHHOME/.sshrc.d/.vimrc' | source \$MYVIMRC"
+
+source $SSHHOME/.sshrc.d/.checkrc
+
+# Final setup
+PURPLE='\033[0;35m' # purple
+BLUE='\033[0;34m'   # blue
+GREEN='\033[0;32m'  # green
+RED='\033[0;31m'    # red
+NC='\033[0m'        # No Color
+echo -e -n "${BLUE}sshrc loaded with... ${NC}"
+
+if [ -d /usr/share/fish/functions ]; then
+  echo -e "${GREEN}fish shell! ${NC}:^)"
+  # Load aliases into fish & remove welcome message
+  fish -C "source ${SSHHOME}/.sshrc.d/.aliasesrc && set fish_greeting \"\"" -i
+  echo -e "${BLUE}sshrc closing!${NC}"
+  exit 0
+elif [ -d /usr/share/zsh/functions ]; then
+  echo -e "${PURPLE}zsh shell! ${NC}:)"
+  zsh -i
+  echo -e "${BLUE}sshrc closing!${NC}"
+  exit 0
+else
+  # Bash Profile
+  source $SSHHOME/.sshrc.d/.bashrc
+  echo -e "${RED}only bash today ${NC}:("
+fi

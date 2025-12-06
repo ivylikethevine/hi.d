@@ -1,0 +1,14 @@
+#!/bin/bash
+
+alias dcl="docker container ls"
+alias dcu="docker compose up"
+alias dcud="docker compose up -d"
+alias dcd="docker compose down"
+
+alias ls="ls -alh --color=auto"
+alias grep='grep --color=auto'
+
+alias hi="sshrc"
+alias aliases="nano ~/.sshrc.d/.aliasesrc"
+alias hi_config="nano ~/.sshrc && nano ~/.sshrc.d/.sshrc"
+

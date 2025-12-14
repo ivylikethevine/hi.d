@@ -7,7 +7,7 @@ PACKAGES=(
   # vi
   # vim
   nano
-  rsync
+  # rsync
   # tar
   # zip
   # jq
@@ -15,10 +15,10 @@ PACKAGES=(
   # avahi-daemon
   # neofetch
   docker
-  python
-  node
-  rustup
-  # asdf-vm
+  # python
+  # node
+  # rustup
+  asdf
   # direnv
 )
 BLUE='\033[0;34m'

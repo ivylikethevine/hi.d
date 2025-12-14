@@ -2,6 +2,7 @@
 HISTFILE=~/.zsh_history
 HISTSIZE=2000
 SAVEHIST=2000
+source $SSHHOME/.sshrc.d/.aliasesrc
 
 autoload -Uz compinit
 compinit

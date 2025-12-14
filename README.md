@@ -3,6 +3,8 @@
 Chainloader to unify local configuration with portable variations for ssh hosts. Order of execution:
 First, `~/.sshrc` is executed, which chainloads `~/.sshrc.d/.sshrc`. The second loader determines the shell, loads aliases, and then starts a session. For local configurations, stubs are used to load the shared files under `~/.sshrc.d/`. Local-only changes should remain in `~/.bashrc, ~/.zshrc, ~/.config/fish/config.fish`, etc.
 
+configured vim to actually be `ln /home/$USER/.vimrc /home/$USER/sshrc.d/.vimrc`
+
 Built using:
 
 - sshm - github.com/Gu1llaum-3/sshm
@@ -41,7 +43,7 @@ alias local_config="nano ~/.zshrc"
 # sshrc-config
 ```
 
-###`~/.config/fish/config.fish`
+### `~/.config/fish/config.fish`
 
 ```bash
 source ~/.sshrc.d/config.fish
@@ -69,3 +71,8 @@ Editor Configurations
 - `.sshrc` - chainloader
 - `.aliasesrc` - shared aliases between bash, zsh, and fish
 - `.checkrc` - check for commonly used commands
+
+Possible todos:
+
+- gitconfig
+- gitignore

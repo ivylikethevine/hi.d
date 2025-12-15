@@ -1,0 +1,88 @@
+#!/bin/sh
+BLACK='\e[0;30m'
+RED='\e[0;31m'
+GREEN='\e[0;32m'
+YELLOW='\e[0;33m'
+BLUE='\e[0;34m'
+PURPLE='\e[0;35m'
+CYAN='\e[0;36m'
+WHITE='\e[0;37m'
+BOLD_BLACK='\e[1;30m'
+BOLD_RED='\e[1;31m'
+BOLD_GREEN='\e[1;32m'
+BOLD_YELLOW='\e[1;33m'
+BOLD_BLUE='\e[1;34m'
+BOLD_PURPLE='\e[1;35m'
+BOLD_CYAN='\e[1;36m'
+BOLD_WHITE='\e[1;37m'
+NC='\e[0m'
+sshrc_start="# sshrc-config-start"
+sshrc_end="# sshrc-config-end"
+
+colecho() {
+  echo -e "$2$1${NC}"
+}
+
+colecho_n() {
+  echo -e -n "$2$1${NC}"
+}
+
+time_display() {
+  echo -e "${BOLD_CYAN}$(date -u "+%a %b %e %H:%M:%S %Z %Y") ${BOLD_PURPLE}|${BOLD_YELLOW} $(date "+%a %b %e %H:%M:%S %Z %Y")${NC}"
+}
+
+remove_between() {
+  sed -i "/^$sshrc_start/,/^$sshrc_end/d" -- $1
+}
+
+copy_config() {
+  touch $1
+  if ! grep -q "$sshrc_start" $1; then
+    echo "$sshrc_start" >>$1
+    cat "$SSHHOME/.sshrc.d/$2" >>$1
+    echo "$sshrc_end" >>$1
+  fi
+}
+
+trap 'remove_between ~/.zshrc; remove_between ~/.nanorc; ' EXIT
+
+if [ ! -f /bin/bash ]; then
+  if [ ! -f /usr/bin/bash ]; then
+    echo "No bash... sorry :~("
+    sh # sshrc doesn't run on sh.... crashes connection
+    exit 0
+  fi
+fi
+
+export VIMINIT="let \$MYVIMRC='$SSHHOME/.sshrc.d/vim.rc' | source \$MYVIMRC"
+copy_config ~/.nanorc nano.rc
+
+time_display
+colecho_n "sshrc loaded with..." $BLUE
+
+if [ -d /usr/share/fish/functions ]; then
+  colecho "fish shell! :^)" $GREEN
+  source $SSHHOME/.sshrc.d/check.rc
+
+  fish -C "source ${SSHHOME}/.sshrc.d/aliases.rc && set fish_greeting \"\"" -i
+elif [ -d /usr/share/zsh/functions ]; then
+  colecho "zsh shell! :)" $PURPLE
+  copy_config ~/.zshrc zsh.rc
+  source $SSHHOME/.sshrc.d/aliases.rc
+  source $SSHHOME/.sshrc.d/check.rc
+  export ZDOTDIR=$SSHHOME/.sshrc.d
+
+  zsh -i
+else
+  colecho "only bash today :(" $RED
+  source $SSHHOME/.sshrc.d/bash.rc
+  source $SSHHOME/.sshrc.d/aliases.rc
+  source $SSHHOME/.sshrc.d/check.rc
+  touch ~/.hushlogin # only works on subsequent logins :/
+  bash -i
+  # rm -f ~/.hushlogin # would like to remove this after we leave, but can't :/
+fi
+
+time_display
+colecho "sshrc closing!" $BLUE
+exit 0

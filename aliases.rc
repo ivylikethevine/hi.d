@@ -9,6 +9,5 @@ alias ls="ls -alh --color=auto"
 alias grep='grep --color=auto'
 
 alias hi="sshrc"
-alias aliases="nano ~/.sshrc.d/.aliasesrc"
+alias aliases="nano ~/.sshrc.d/aliases.rc"
 alias hi_config="nano ~/.sshrc && nano ~/.sshrc.d/.sshrc"
-

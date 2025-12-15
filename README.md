@@ -20,57 +20,33 @@ Reminder - place local only changes after the "`# sshrc-config`" comment in the 
 
 ```bash
 #!/bin/bash
-source $SSHHOME/.sshrc.d/.sshrc
+source $SSHHOME/.sshrc.d/ssh.rc
 ```
 
 ### `~/.bashrc`
 
-```bash
-source ~/.sshrc.d/.bashrc
-source ~/.sshrc.d/.aliasesrc
-alias config="nano ~/.sshrc.d/.bashrc"
-alias local_config="nano ~/.bashrc"
-# sshrc-config
-```
-
 ### `~/.zshrc`
 
-```bash
-source ~/.sshrc.d/.zshrc
-source ~/.sshrc.d/.aliasesrc
-alias config="nano ~/.sshrc.d/.zshrc"
-alias local_config="nano ~/.zshrc"
-# sshrc-config
-```
-
 ### `~/.config/fish/config.fish`
-
-```bash
-source ~/.sshrc.d/config.fish
-source ~/.sshrc.d/.aliasesrc
-alias config="nano ~/.sshrc.d/config.fish"
-alias local_config="nano ~/.config/fish/config.fish"
-# sshrc-config
-```
 
 #### Supported Configs
 
 Shell Configurations
 
-- `.bashrc`
-- `.zshrc`
+- `bash.rc`
+- `zsh.rc`
 - `.config/fish/config.fish`
 
 Editor Configurations
 
-- `.nanorc`
-- `.vimrc`
+- `nano.rc`
+- `vim.rc`
 
 ##### Other Features
 
-- `.sshrc` - chainloader
-- `.aliasesrc` - shared aliases between bash, zsh, and fish
-- `.checkrc` - check for commonly used commands
+- `ssh.rc` - chainloader
+- `aliases.rc` - shared aliases between bash, zsh, and fish
+- `check.rc` - check for commonly used commands
 
 Possible todos:
 

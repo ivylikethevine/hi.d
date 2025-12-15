@@ -1,4 +1,5 @@
 #!/bin/bash
+
 PACKAGES=(
   sudo
   curl
@@ -21,17 +22,16 @@ PACKAGES=(
   asdf
   # direnv
 )
-BLUE='\033[0;34m'
-GREEN='\033[0;32m'
-RED='\033[0;31m'
-NC='\033[0m' # No Color
 
-echo -e -n "${BLUE}Available cmds: ${NC}| "
+colecho_n "Available cmds:" $BLUE
+colecho_n " | " $NC
 for package in "${PACKAGES[@]}"; do
   if command -v "$package" &>/dev/null; then
-    echo -e -n "${GREEN}$package ✓ ${NC}| "
+    colecho_n "$package ✓" $GREEN
+    colecho_n " | " $NC
   else
-    echo -e -n "${RED}$package ✗ ${NC}| "
+    colecho_n "$package ✗" $RED
+    colecho_n " | " $NC
   fi
 done
 echo

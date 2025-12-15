@@ -44,27 +44,3 @@ if ! shopt -oq posix; then
     . /etc/bash_completion
   fi
 fi
-
-view() {
-  local path="$1"
-
-  if [[ -z "$path" ]]; then
-    echo "Usage: view <path> -> ls directory, cat file"
-    return 1
-  fi
-
-  if [[ ! -e "$path" ]]; then
-    printf 'Error: "%s" does not exist.\n' "$path"
-    return 1
-  fi
-
-  if [[ -f "$path" ]]; then
-    cat "$path"
-  elif [[ -d "$path" ]]; then
-    ls -alh "$path"
-  else
-    # Anything else (symlink, socket, FIFO, …)
-    printf 'Error: "%s" is not a file or a directory.\n' "$path"
-    return 1
-  fi
-}

@@ -28,7 +28,7 @@ colecho_n() {
 }
 
 time_display() {
-  echo -e "${BOLD_CYAN}$(date -u "+%a %b %e %H:%M:%S %Z %Y") ${BOLD_PURPLE}|${BOLD_YELLOW} $(date "+%a %b %e %H:%M:%S %Z %Y")${NC}"
+  echo -e " ${BOLD_CYAN}$(date -u "+%a %b %e %H:%M:%S %Z %Y") ${NC}|${BOLD_YELLOW} $(date "+%a %b %e %H:%M:%S %Z %Y")${NC}"
 }
 
 remove_between() {
@@ -44,6 +44,23 @@ copy_config() {
   fi
 }
 
+source_shared() {
+  source $SSHHOME/.sshrc.d/aliases.rc
+  source $SSHHOME/.sshrc.d/check.rc
+}
+
+header() {
+  colecho '~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~' $BOLD_GREEN
+  colecho_n " Connected!" $BOLD_GREEN
+  colecho_n " | " $NC
+  colecho_n "OS: $(uname -s)" $CYAN
+  colecho_n " | " $NC
+  colecho_n "Arch: $(uname -m)" $YELLOW
+  colecho_n " | " $NC
+  colecho "$(cat /etc/os-release | grep PRETTY_NAME | cut -d= -f2 | tr -d '"')" $BLUE
+  time_display
+}
+
 trap 'remove_between ~/.zshrc; remove_between ~/.nanorc; ' EXIT
 
 if [ ! -f /bin/bash ]; then
@@ -54,11 +71,13 @@ if [ ! -f /bin/bash ]; then
   fi
 fi
 
+header
 export VIMINIT="let \$MYVIMRC='$SSHHOME/.sshrc.d/vim.rc' | source \$MYVIMRC"
 copy_config ~/.nanorc nano.rc
 
-time_display
-colecho_n "sshrc loaded with..." $BLUE
+colecho_n " sshrc loaded with..." $BLUE
+touch ~/.hushlogin
+# only works on subsequent logins :/ -> sshrc uses bash for the initial shell, so we should always create this
 
 if [ -d /usr/share/fish/functions ]; then
   colecho "fish shell! :^)" $GREEN
@@ -68,21 +87,20 @@ if [ -d /usr/share/fish/functions ]; then
 elif [ -d /usr/share/zsh/functions ]; then
   colecho "zsh shell! :)" $PURPLE
   copy_config ~/.zshrc zsh.rc
-  source $SSHHOME/.sshrc.d/aliases.rc
-  source $SSHHOME/.sshrc.d/check.rc
-  export ZDOTDIR=$SSHHOME/.sshrc.d
+  source_shared
 
   zsh -i
 else
   colecho "only bash today :(" $RED
   source $SSHHOME/.sshrc.d/bash.rc
-  source $SSHHOME/.sshrc.d/aliases.rc
-  source $SSHHOME/.sshrc.d/check.rc
-  touch ~/.hushlogin # only works on subsequent logins :/
+  source_shared
+
   bash -i
-  # rm -f ~/.hushlogin # would like to remove this after we leave, but can't :/
 fi
 
 time_display
-colecho "sshrc closing!" $BLUE
+colecho '~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~' $BOLD_RED
+colecho_n " sshrc closing! " $BLUE
+# rm -f ~/.hushlogin # would like to remove this after we leave, but can't :/
+
 exit 0

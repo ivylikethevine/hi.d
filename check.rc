@@ -5,33 +5,43 @@ PACKAGES=(
   curl
   wget
   ping
+  tldr
   # vi
   # vim
-  nano
+  # nano
   # rsync
   # tar
   # zip
-  # jq
-  # netstat
+  jq
+  netstat
   # avahi-daemon
   # neofetch
   docker
-  # python
+  python
   # node
   # rustup
-  asdf
+  # asdf
   # direnv
 )
 
-colecho_n "Available cmds:" $BLUE
+colecho_n " Installed:" $BOLD_GREEN
 colecho_n " | " $NC
 for package in "${PACKAGES[@]}"; do
   if command -v "$package" &>/dev/null; then
-    colecho_n "$package ✓" $GREEN
-    colecho_n " | " $NC
+    colecho_n "$package ✓ " $GREEN
   else
-    colecho_n "$package ✗" $RED
-    colecho_n " | " $NC
+    colecho_n "" # do nothing
+  fi
+done
+
+echo
+colecho_n " Missing:  " $BOLD_YELLOW
+colecho_n " | " $NC
+for package in "${PACKAGES[@]}"; do
+  if command -v "$package" &>/dev/null; then
+    colecho_n "" # do nothing
+  else
+    colecho_n "$package ✗ " $YELLOW
   fi
 done
 echo

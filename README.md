@@ -4,6 +4,7 @@ Chainloader to unify local configuration with portable variations for ssh hosts.
 First, `~/.sshrc` is executed, which chainloads `~/.sshrc.d/.sshrc`. The second loader determines the shell, loads aliases, and then starts a session. For local configurations, stubs are used to load the shared files under `~/.sshrc.d/`. Local-only changes should remain in `~/.bashrc, ~/.zshrc, ~/.config/fish/config.fish`, etc.
 
 configured vim to actually be `ln /home/$USER/.vimrc /home/$USER/sshrc.d/.vimrc`
+`du -sh --exclude=.git --apparent-size` -> filesize (needs to be under 64k)
 
 Built using:
 

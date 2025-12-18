@@ -44,13 +44,10 @@ copy_config() {
   fi
 }
 
-source_shared() {
-  source $SSHHOME/.sshrc.d/aliases.rc
-  source $SSHHOME/.sshrc.d/check.rc
-}
-
 header() {
+  touch ~/.hushlogin # only works on subsequent logins :/ -> sshrc uses bash for the initial shell, so we should always create this
   colecho '~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~' $BOLD_GREEN
+  time_display
   colecho_n " Connected!" $BOLD_GREEN
   colecho_n " | " $NC
   colecho_n "OS: $(uname -s)" $CYAN
@@ -58,49 +55,47 @@ header() {
   colecho_n "Arch: $(uname -m)" $YELLOW
   colecho_n " | " $NC
   colecho "$(cat /etc/os-release | grep PRETTY_NAME | cut -d= -f2 | tr -d '"')" $BLUE
+}
+
+footer() {
+  colecho '~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~' $BOLD_RED
   time_display
+  colecho_n " sshrc closing! " $BLUE
+  # rm ~/.hushlogin # would like to remove this after we leave, but can't :/
+  exit 0
 }
 
 trap 'remove_between ~/.zshrc; remove_between ~/.nanorc; ' EXIT
+header
+
+source $SSHHOME/.sshrc.d/aliases.rc
+source $SSHHOME/.sshrc.d/check.rc
 
 if [ ! -f /bin/bash ]; then
   if [ ! -f /usr/bin/bash ]; then
-    echo "No bash... sorry :~("
+    colecho "No bash... sorry :~(" $BOLD_RED
     sh # sshrc doesn't run on sh.... crashes connection
-    exit 0
+    footer
   fi
 fi
 
-header
 export VIMINIT="let \$MYVIMRC='$SSHHOME/.sshrc.d/vim.rc' | source \$MYVIMRC"
 copy_config ~/.nanorc nano.rc
 
-colecho_n " sshrc loaded with..." $BLUE
-touch ~/.hushlogin
-# only works on subsequent logins :/ -> sshrc uses bash for the initial shell, so we should always create this
+source $SSHHOME/.sshrc.d/bash.rc
+copy_config ~/.zshrc zsh.rc
+
+colecho_n " sshrc loaded with... " $BLUE
 
 if [ -d /usr/share/fish/functions ]; then
   colecho "fish shell! :^)" $GREEN
-  source $SSHHOME/.sshrc.d/check.rc
-
-  fish -C "source ${SSHHOME}/.sshrc.d/aliases.rc && set fish_greeting \"\"" -i
+  fish -C "source ${SSHHOME}/.sshrc.d/aliases.rc && set fish_greeting ''" -i
 elif [ -d /usr/share/zsh/functions ]; then
   colecho "zsh shell! :)" $PURPLE
-  copy_config ~/.zshrc zsh.rc
-  source_shared
-
   zsh -i
 else
   colecho "only bash today :(" $RED
-  source $SSHHOME/.sshrc.d/bash.rc
-  source_shared
-
   bash -i
 fi
 
-time_display
-colecho '~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~' $BOLD_RED
-colecho_n " sshrc closing! " $BLUE
-# rm -f ~/.hushlogin # would like to remove this after we leave, but can't :/
-
-exit 0
+footer

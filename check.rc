@@ -6,25 +6,50 @@ PACKAGES=(
   wget
   ping
   tldr
-  # vi
-  # vim
-  # nano
-  # rsync
-  # tar
-  # zip
+  vi
+  vim
+  nano
+  rsync
+  tar
+  zip
   jq
   netstat
-  # avahi-daemon
-  # neofetch
+  avahi-daemon
+  neofetch
   docker
   python
-  # node
-  # rustup
-  # asdf
-  # direnv
+  node
+  rustup
+  asdf
+  direnv
 )
 
-colecho_n " Installed:" $BOLD_GREEN
+# TODO: Display based on priority
+PRIORITY=(
+  1 # sudo
+  1 # curl
+  1 # wget
+  1 # ping
+  2 # tldr
+  1 # vi
+  2 # vim
+  1 # nano
+  3 # rsync
+  3 # tar
+  3 # zip
+  3 # jq
+  3 # netstat
+  3 # avahi-daemon
+  3 # neofetch
+  2 # docker
+  2 # python
+  2 # node
+  2 # rustup
+  1 # asdf
+  2 # direnv
+)
+
+colecho_n " Installed:" $BOLD_CYAN
 colecho_n " | " $NC
 for package in "${PACKAGES[@]}"; do
   if command -v "$package" &>/dev/null; then

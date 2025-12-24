@@ -5,9 +5,11 @@ alias dcu="docker compose up"
 alias dcud="docker compose up -d"
 alias dcd="docker compose down"
 
-alias ls="ls -alh --color=auto"
+alias ls="ls -lh --color=auto"
+alias lsa="ls -alh --color=auto"
 alias grep='grep --color=auto'
 
 alias hi="sshrc"
 alias aliases="nano ~/.sshrc.d/aliases.rc"
 alias hi_config="nano ~/.sshrc && nano ~/.sshrc.d/.sshrc"
+alias zed="zeditor"

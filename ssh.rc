@@ -32,7 +32,9 @@ time_display() {
 }
 
 remove_between() {
-  sed -i "/^$sshrc_start/,/^$sshrc_end/d" -- $1
+  if test -f $1; then
+    sed -i "/^$sshrc_start/,/^$sshrc_end/d" -- $1
+  fi
 }
 
 copy_config() {
@@ -65,7 +67,7 @@ footer() {
   exit 0
 }
 
-trap 'remove_between ~/.zshrc; remove_between ~/.nanorc; ' EXIT
+trap 'remove_between ~/.zshrc; remove_between ~/.nanorc; remove_between ~/.config/fish/config.fish' EXIT
 header
 
 source $SSHHOME/.sshrc.d/aliases.rc
@@ -89,6 +91,7 @@ colecho_n " sshrc loaded with... " $BLUE
 
 if [ -d /usr/share/fish/functions ]; then
   colecho "fish shell! :^)" $GREEN
+  copy_config ~/.config/fish/config.fish config.fish
   fish -C "source ${SSHHOME}/.sshrc.d/aliases.rc && set fish_greeting ''" -i
 elif [ -d /usr/share/zsh/functions ]; then
   colecho "zsh shell! :)" $PURPLE

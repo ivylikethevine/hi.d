@@ -67,7 +67,7 @@ footer() {
   exit 0
 }
 
-trap 'remove_between ~/.zshrc; remove_between ~/.nanorc; remove_between ~/.config/fish/config.fish' EXIT
+trap 'remove_between ~/.bashrc; remove_between ~/.zshrc; remove_between ~/.nanorc; remove_between ~/.config/fish/config.fish' EXIT
 header
 
 source $SSHHOME/.sshrc.d/aliases.rc
@@ -83,8 +83,7 @@ fi
 
 export VIMINIT="let \$MYVIMRC='$SSHHOME/.sshrc.d/vim.rc' | source \$MYVIMRC"
 copy_config ~/.nanorc nano.rc
-
-source $SSHHOME/.sshrc.d/bash.rc
+copy_config ~/.bashrc bash.rc
 copy_config ~/.zshrc zsh.rc
 
 colecho_n " sshrc loaded with... " $BLUE

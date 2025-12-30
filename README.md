@@ -8,12 +8,18 @@ configured vim to actually be `ln /home/$USER/.vimrc /home/$USER/sshrc.d/.vimrc`
 
 Built using:
 
-- sshm - github.com/Gu1llaum-3/sshm
+- sshm - https://github.com/Gu1llaum-3/sshm
   - organize ssh hosts
 - sshrc - https://github.com/cdown/sshrc
   - bring local configuration to remote hosts
 
 Had to modify sshrc `/usr/bin/share/sshrc`
+
+Original Line 9:
+`SIZE=$(tar cfz - -h -C $SSHHOME $files | wc -c)`
+
+Modified Line 9:
+`SIZE=$(tar cfz - -h -C $SSHHOME --exclude .git --exclude .gitignore --exclude README.md $files | wc -c)`
 
 Original Line 59:
 `echo $'"$(tar czf - -h -C $SSHHOME $files | openssl enc -base64)"' | tr -s ' ' $'\n' | openssl enc -base64 -d | tar mxzf - -C \$SSHHOME`

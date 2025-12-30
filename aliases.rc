@@ -9,6 +9,8 @@ alias ls="ls -lh --color=auto"
 alias lsa="ls -alh --color=auto"
 alias grep='grep --color=auto'
 
+alias hi="hi" # mainly here for this reminder that each shell (bash, zsh, and fish), use their own hi functions
+alias hii="ssh"
 alias aliases="nano ~/.sshrc.d/aliases.rc"
 alias zed="zeditor"
 

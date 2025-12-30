@@ -74,7 +74,7 @@ footer() {
   exit 0
 }
 
-trap 'remove_between ~/.bashrc; remove_between ~/.zshrc; remove_between ~/.nanorc; remove_between ~/.config/fish/config.fish; rm ~/.aliasesrc' EXIT
+trap 'remove_between ~/.bashrc; remove_between ~/.zshrc; remove_between ~/.nanorc; remove_between ~/.config/fish/config.fish; rm -f ~/.aliasesrc' EXIT
 header
 
 source $SSHHOME/.sshrc.d/check.rc
@@ -83,6 +83,8 @@ if [ ! -f /bin/bash ]; then
   if [ ! -f /usr/bin/bash ]; then
     colecho "No bash... sorry :~(" $BOLD_RED
     sh # run sh without loading excess stuff that likely won't work
+    # TODO: Determine if there are any basic sh things we can run instead
+    # Possibilities: cut-down version of check.rc? a colored prompt? etc.
     footer
   fi
 fi

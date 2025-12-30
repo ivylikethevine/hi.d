@@ -20,15 +20,20 @@ sshrc_start="# sshrc-config-start"
 sshrc_end="# sshrc-config-end"
 
 colecho() {
-  echo -e "$2$1${NC}"
+  echo -e "$2$1$NC"
 }
 
 colecho_n() {
-  echo -e -n "$2$1${NC}"
+  echo -ne "$2$1$NC"
+}
+
+spacer() {
+  colecho_n " | " $NC
 }
 
 time_display() {
-  echo -e " ${BOLD_CYAN}$(date -u "+%a %b %e %H:%M:%S %Z %Y") ${NC}|${BOLD_YELLOW} $(date "+%a %b %e %H:%M:%S %Z %Y")${NC}"
+  spacer
+  echo -e "$BOLD_CYAN$(date -u "+%a %b %e %H:%M:%S %Z %Y")   $NC|$BOLD_YELLOW   $(date "+%a %b %e %H:%M:%S %Z %Y")$NC"
 }
 
 remove_between() {
@@ -47,81 +52,80 @@ copy_config() {
 }
 
 header() {
-  colecho '~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~' $BOLD_GREEN
+  colecho '~~~~~~~~~~~~~~~~~~~~~~~~~~ Connected! ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~' $BOLD_GREEN
   time_display
-  colecho_n " Connected!" $BOLD_GREEN
-  colecho_n " | " $NC
-  colecho_n "OS: $(uname -s)" $CYAN
-  colecho_n " | " $NC
-  colecho_n "Arch: $(uname -m)" $PURPLE
-  colecho_n " | " $NC
-  colecho "$(cat /etc/os-release | grep PRETTY_NAME | cut -d= -f2 | tr -d '"')" $BLUE
-  if [ -f ~/.gitconfig ]; then
-    colecho_n " Github Identity Found!" $BLUE
-    colecho_n " | " $NC
-    colecho_n "$(cat ~/.gitconfig | grep email | cut -d= -f2 | tr -d ' ' | awk -F@ '{for(i=0;i<length($2);i++) c=c"●"; print $1"@"c; c=""}')" $YELLOW
-  else
-    colecho_n " No Github Identity Found..." $YELLOW
-  fi
-  colecho_n " | " $NC
+  spacer
+  colecho_n "$(cat /etc/os-release | grep PRETTY_NAME | cut -d= -f2 | tr -d '"')" $GREEN
+  spacer
+  colecho_n "$(uname -m)" $PURPLE
+  spacer
+
   if [ -f /usr/bin/bc ]; then
     if [ -f /usr/bin/docker ]; then
       # TODO: Find a non-bc way to do this
-      colecho "Running Containers: $(echo "$(docker container ls | wc -l) - 1" | bc)" $CYAN
+      colecho "Running Containers: $(echo "$(docker container ls | wc -l) - 1" | bc)" $BLUE
     else
       colecho "Counting impossible, no docker :(" $BOLD_YELLOW
     fi
   else
     colecho "Counting impossible, no bc :(" $BOLD_YELLOW
   fi
+  spacer
+  if [ -f ~/.gitconfig ]; then
+    colecho_n "Github Identity Found: " $BLUE
+    colecho "$(cat ~/.gitconfig | grep email | cut -d= -f2 | tr -d ' ' | awk -F@ '{for(i=0;i<length($2);i++) c=c"●"; print $1"@"c; c=""}')" $YELLOW
+  else
+    colecho "No Github Identity Found..." $YELLOW
+  fi
+
 }
 
 footer() {
   local EXCLUDE="--exclude .git --exclude .gitignore --exclude README.md --exclude hi.sh"
   colecho_n " $(du -sh $EXCLUDE --apparent-size $SSHHOME/.sshrc.d | awk '{ print $1 }') " $NC
-  colecho '~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~' $BOLD_RED
+  colecho '~~~~~~~~~~~~~~~~~~~~~~~~~ Disconnected! ~~~~~~~~~~~~~~~~~~~~~~~~~~~' $BOLD_RED
   time_display
-  colecho_n " sshrc closing! " $BLUE
-  if [ -f ~/.hushlogin ]; then
-    rm ~/.hushlogin
-  fi
+  spacer
+  colecho_n "sshrc closing! " $BLUE
   exit 0
 }
 
-trap 'remove_between ~/.bashrc; remove_between ~/.zshrc; remove_between ~/.nanorc; remove_between ~/.config/fish/config.fish; rm -f ~/.aliasesrc' EXIT
-header
-
-source $SSHHOME/.sshrc.d/check.rc
-export VIMINIT="let \$MYVIMRC='$SSHHOME/.sshrc.d/vim.rc' | source \$MYVIMRC"
-copy_config ~/.nanorc nano.rc
-
-if [ ! -f /bin/bash ]; then
-  if [ ! -f /usr/bin/bash ]; then
-    colecho "No bash... sorry :~(" $BOLD_RED
-    sh # run sh without loading excess stuff that likely won't work
-    # TODO: Determine if there are any basic sh things we can run instead
-    # Possibilities: cut-down version of check.rc? a colored prompt? etc.
-    footer
-    exit 1
+clean() {
+  remove_between ~/.bashrc
+  remove_between ~/.zshrc
+  remove_between ~/.nanorc
+  remove_between ~/.config/fish/config.fish
+  rm -f ~/.aliasesrc
+  if [ -f ~/.hushlogin ]; then
+    rm -f ~/.hushlogin
   fi
-fi
+}
 
-copy_config ~/.bashrc bash.rc
-copy_config ~/.zshrc zsh.rc
-copy_config ~/.aliasesrc aliases.rc
+run_sshrc() {
+  trap 'clean' EXIT
+  header
 
-colecho_n " sshrc loaded with... " $BLUE
+  source $SSHHOME/.sshrc.d/check.rc
+  export VIMINIT="let \$MYVIMRC='$SSHHOME/.sshrc.d/vim.rc' | source \$MYVIMRC"
+  copy_config ~/.nanorc nano.rc
+  copy_config ~/.bashrc bash.rc
+  copy_config ~/.zshrc zsh.rc
+  copy_config ~/.aliasesrc aliases.rc
 
-if [ -f /usr/bin/fish ]; then
-  colecho "fish shell! :^)" $GREEN
-  copy_config ~/.config/fish/config.fish config.fish
-  fish -C "source ${SSHHOME}/.sshrc.d/aliases.rc && set fish_greeting ''" -i
-elif [ -f /usr/bin/zsh ]; then
-  colecho "zsh shell! :)" $PURPLE
-  zsh -i
-else
-  colecho "only bash today :(" $RED
-  bash -i
-fi
+  spacer
+  colecho_n "sshrc loaded with... " $BLUE
 
-footer
+  if [ -f /usr/bin/fish ]; then
+    colecho "fish shell! :^)" $GREEN
+    copy_config ~/.config/fish/config.fish config.fish
+    fish -C "source $SSHHOME/.sshrc.d/aliases.rc && set fish_greeting ''" -i
+  elif [ -f /usr/bin/zsh ]; then
+    colecho "zsh shell! :)" $PURPLE
+    zsh -i
+  else
+    colecho "only bash today :(" $RED
+    bash -i
+  fi
+
+  footer
+}

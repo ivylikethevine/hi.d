@@ -79,24 +79,40 @@ function prompt_login --description "display user name for the prompt"
     set fish_color_user bryellow
   end
 
-  echo -n -s (set_color $fish_color_user) "$USER" (set_color $color_at) @ (set_color $color_host) (prompt_hostname) (set_color normal)
+  echo -ns (set_color $fish_color_user) " $USER" (set_color $color_at) @ (set_color $color_host) (prompt_hostname) (set_color normal)
 end
 
 function fish_greeting
   if not set -q fish_greeting
-    set -l line0 (printf (_ '%s%s~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~') (set_color brgreen))
-    set -l line1 \n(printf (_ ' %s' (date -u "+%a %b %e %H:%M:%S %Z %Y")) (set_color brcyan))
-    set -l line2 (printf (_ ' %s| ' ) (set_color normal))
-    set -l line3 (printf (_ '%s' (date "+%a %b %e %H:%M:%S %Z %Y")) (set_color bryellow))
-    set -l line4 \n(printf (_ '%s Online!') (set_color brgreen))
-    set -l line5 (printf (_ ' %s| ' ) (set_color normal))
-    set -l line6 (printf (_ '%sOS: '(uname -s)) (set_color brcyan))
-    set -l line7 (printf (_ ' %s| ' ) (set_color normal))
-    set -l line8 (printf (_ '%sArch: ' (uname -m) ) (set_color brmagenta))
-    set -l line9 (printf (_ ' %s| ' ) (set_color normal))
-    set -l line10 (printf (_ '%s' (cat /etc/os-release | grep PRETTY_NAME | cut -d= -f2 | tr -d '\"') '%s') (set_color brblue) (set_color normal))
+    set -l part1 (printf (_ ' %s%s~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Online! ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~') (set_color brgreen))
+    set -l part2 \n(printf (_ ' %s|%s ' (date -u "+%a %b %e %H:%M:%S %Z %Y")) (set_color normal) (set_color brcyan))
+    set -l part3 (printf (_ '  %s|  ' ) (set_color normal))
+    set -l part4 (printf (_ '%s' (date "+%a %b %e %H:%M:%S %Z %Y")) (set_color bryellow))
+    set -l part5 \n(printf (_ '%s') (set_color brgreen))
+    set -l part6 (printf (_ ' %s| ' ) (set_color normal))
+    set -l part7 (printf (_ '%s' (cat /etc/os-release | grep PRETTY_NAME | cut -d= -f2 | tr -d '\"') '%s') (set_color brgreen) (set_color normal))
+    set -l part8 (printf (_ ' %s| ' ) (set_color normal))
+    set -l part9 (printf (_ '%s' (uname -m) ) (set_color brmagenta))
 
-    set -g fish_greeting "$line0$line1$line2$line3$line4$line5$line6$line7$line8$line9$line10"
+    if [ -f "/usr/bin/bc" ]
+      if [ -f "/usr/bin/docker" ]
+        # TODO: Find a non-bc way to do this
+        set -g part10 (printf (_ ' %s|%s Running Containers: ' (echo "$(docker container ls | wc -l) - 1" | bc)) (set_color normal) (set_color brblue))
+      else
+        set -g part10 (printf (_ ' %s| Counting impossible, no docker :( %s' ) (set_color normal) (set_color bryellow) (set_color normal))
+      end
+    else
+      set -g part10 (printf (_ ' %s|%s Counting impossible, no bc :(' ) (set_color normal) (set_color bryellow) (set_color normal))
+    end
+
+    if [ -f "/home/$USER/.gitconfig" ]
+      set -g part11 \n(printf (_ ' %s|%s Github Identity Found: %s' (cat ~/.gitconfig | grep email | cut -d= -f2 | tr -d ' ' | awk -F@ '{for(i=0;i<length($2);i++) c=c"●"; print $1"@"c; c=""}')) (set_color normal) (set_color brblue) (set_color bryellow))
+    else
+      set -g part11 \n(printf (_ ' %s|%s No Github Identity Found... %s') (set_color normal) (set_color yellow) (set_color normal))
+    end
+
+
+    set -g fish_greeting "$part1$part2$part3$part4$part5$part6$part7$part8$part9$part10$part11"
   end
 
   # The greeting used to be skipped when fish_greeting was empty (not just undefined)

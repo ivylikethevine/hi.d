@@ -1,16 +1,16 @@
 #!/bin/sh
 
 PACKAGES=(
-  sudo
-  curl
+  # sudo
+  # curl
   wget
   ping
   tldr
   # vi
-  vim
+  # vim
   nano
   # rsync
-  tar
+  # tar
   zip
   jq
   yq
@@ -23,31 +23,28 @@ PACKAGES=(
   rustup
   asdf
   # direnv
-  cosign
+  # cosign
   gpg
   git
   htop
-  bc
+  # bc
 )
 
 # TODO: Display important names from groups of commands based on priority
-colecho_n " Installed:" $BOLD_CYAN
-colecho_n " | " $NC
+spacer
+colecho_n "Installed: " $BOLD_CYAN
 for package in "${PACKAGES[@]}"; do
   if command -v "$package" &>/dev/null; then
     colecho_n "$package ✓ " $GREEN
-  else
-    colecho_n "" # do nothing
   fi
 done
 
 echo
-colecho_n " Missing:  " $BOLD_YELLOW
-colecho_n " | " $NC
+spacer
+colecho_n "Missing:   " $BOLD_YELLOW
+# colecho_n " | " $NC
 for package in "${PACKAGES[@]}"; do
-  if command -v "$package" &>/dev/null; then
-    colecho_n "" # do nothing
-  else
+  if ! command -v "$package" &>/dev/null; then
     colecho_n "$package ✗ " $YELLOW
   fi
 done

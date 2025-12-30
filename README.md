@@ -14,6 +14,10 @@ Built using:
   - bring local configuration to remote hosts
 
 Had to modify sshrc `/usr/bin/sshrc` -> hi.sh
+Possible features:
+
+- nomad alloc exec
+- docker exec
 
 ```bash
 sudo mv /usr/bin/sshrc /usr/bin/sshrc.bak
@@ -31,6 +35,7 @@ Reminder - place local only changes after the "`# sshrc-config`" comment in the 
 #!/bin/bash
 source $SSHHOME/.sshrc.d/ssh.rc
 source $SSHHOME/.sshrc.d/aliases.rc
+run_sshrc
 ```
 
 ### `~/.bashrc`
@@ -87,7 +92,3 @@ Editor Configurations
 - `ssh.rc` - chainloader
 - `aliases.rc` - shared aliases between bash, zsh, and fish
 - `check.rc` - check for commonly used commands
-
-Possible todos:
-
-- gitignore

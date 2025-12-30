@@ -47,7 +47,6 @@ copy_config() {
 }
 
 header() {
-  touch ~/.hushlogin # only works on subsequent logins :/ -> sshrc uses bash for the initial shell, so we should always create this
   colecho '~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~' $BOLD_GREEN
   time_display
   colecho_n " Connected!" $BOLD_GREEN
@@ -60,17 +59,32 @@ header() {
   if [ -f ~/.gitconfig ]; then
     colecho_n " Github Identity Found!" $BLUE
     colecho_n " | " $NC
-    colecho "$(cat ~/.gitconfig | grep email | cut -d= -f2 | tr -d ' ' | awk -F@ '{for(i=0;i<length($2);i++) c=c"●"; print $1"@"c; c=""}')" $YELLOW
+    colecho_n "$(cat ~/.gitconfig | grep email | cut -d= -f2 | tr -d ' ' | awk -F@ '{for(i=0;i<length($2);i++) c=c"●"; print $1"@"c; c=""}')" $YELLOW
   else
-    colecho " No Github Identity Found..." $YELLOW
+    colecho_n " No Github Identity Found..." $YELLOW
+  fi
+  colecho_n " | " $NC
+  if [ -f /usr/bin/bc ]; then
+    if [ -f /usr/bin/docker ]; then
+      # TODO: Find a non-bc way to do this
+      colecho "Running Containers: $(echo "$(docker container ls | wc -l) - 1" | bc)" $CYAN
+    else
+      colecho "Counting impossible, no docker :(" $BOLD_YELLOW
+    fi
+  else
+    colecho "Counting impossible, no bc :(" $BOLD_YELLOW
   fi
 }
 
 footer() {
+  local EXCLUDE="--exclude .git --exclude .gitignore --exclude README.md --exclude hi.sh"
+  colecho_n " $(du -sh $EXCLUDE --apparent-size $SSHHOME/.sshrc.d | awk '{ print $1 }') " $NC
   colecho '~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~' $BOLD_RED
   time_display
   colecho_n " sshrc closing! " $BLUE
-  # rm ~/.hushlogin # would like to remove this after we leave, but can't :/
+  if [ -f ~/.hushlogin ]; then
+    rm ~/.hushlogin
+  fi
   exit 0
 }
 
@@ -78,6 +92,8 @@ trap 'remove_between ~/.bashrc; remove_between ~/.zshrc; remove_between ~/.nanor
 header
 
 source $SSHHOME/.sshrc.d/check.rc
+export VIMINIT="let \$MYVIMRC='$SSHHOME/.sshrc.d/vim.rc' | source \$MYVIMRC"
+copy_config ~/.nanorc nano.rc
 
 if [ ! -f /bin/bash ]; then
   if [ ! -f /usr/bin/bash ]; then
@@ -86,22 +102,21 @@ if [ ! -f /bin/bash ]; then
     # TODO: Determine if there are any basic sh things we can run instead
     # Possibilities: cut-down version of check.rc? a colored prompt? etc.
     footer
+    exit 1
   fi
 fi
 
-export VIMINIT="let \$MYVIMRC='$SSHHOME/.sshrc.d/vim.rc' | source \$MYVIMRC"
-copy_config ~/.nanorc nano.rc
 copy_config ~/.bashrc bash.rc
 copy_config ~/.zshrc zsh.rc
 copy_config ~/.aliasesrc aliases.rc
 
 colecho_n " sshrc loaded with... " $BLUE
 
-if [ -d /usr/share/fish/functions ]; then
+if [ -f /usr/bin/fish ]; then
   colecho "fish shell! :^)" $GREEN
   copy_config ~/.config/fish/config.fish config.fish
   fish -C "source ${SSHHOME}/.sshrc.d/aliases.rc && set fish_greeting ''" -i
-elif [ -d /usr/share/zsh/functions ]; then
+elif [ -f /usr/bin/zsh ]; then
   colecho "zsh shell! :)" $PURPLE
   zsh -i
 else

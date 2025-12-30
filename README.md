@@ -4,7 +4,7 @@ Chainloader to unify local configuration with portable variations for ssh hosts.
 First, `~/.sshrc` is executed, which chainloads `~/.sshrc.d/ssh.rc`. The second loader determines the shell, loads aliases, and then starts a session. For local configurations, stubs are used to load the shared files under `~/.sshrc.d/`. Local-only changes should remain in `~/.bashrc, ~/.zshrc, ~/.config/fish/config.fish`, etc.
 
 configured vim to actually be `ln /home/$USER/.vimrc /home/$USER/sshrc.d/.vimrc`
-`du -sh --exclude=.git --apparent-size` -> filesize (needs to be under 64k)
+`du -s --exclude .git --exclude .gitignore --exclude README.md --exclude hi.sh --apparent-size` -> filesize (needs to be under 64k)
 
 Built using:
 
@@ -13,19 +13,13 @@ Built using:
 - sshrc - https://github.com/cdown/sshrc
   - bring local configuration to remote hosts
 
-Had to modify sshrc `/usr/bin/share/sshrc`
+Had to modify sshrc `/usr/bin/sshrc` -> hi.sh
 
-Original Line 9:
-`SIZE=$(tar cfz - -h -C $SSHHOME $files | wc -c)`
-
-Modified Line 9:
-`SIZE=$(tar cfz - -h -C $SSHHOME --exclude .git --exclude .gitignore --exclude README.md $files | wc -c)`
-
-Original Line 59:
-`echo $'"$(tar czf - -h -C $SSHHOME $files | openssl enc -base64)"' | tr -s ' ' $'\n' | openssl enc -base64 -d | tar mxzf - -C \$SSHHOME`
-
-Modified Line 59:
-`echo $'"$(tar czf - -h -C $SSHHOME --exclude .git --exclude .gitignore --exclude README.md $files | openssl enc -base64)"' | tr -s ' ' $'\n' | openssl enc -base64 -d | tar mxzf - -C \$SSHHOME`
+```bash
+sudo mv /usr/bin/sshrc /usr/bin/sshrc.bak
+chmod +x ~/.sshrc.d/hi.sh
+sudo ln ~/.sshrc.d/hi.sh /usr/bin/sshrc
+```
 
 ## Required Stubs
 
@@ -96,5 +90,4 @@ Editor Configurations
 
 Possible todos:
 
-- gitconfig
 - gitignore

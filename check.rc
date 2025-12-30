@@ -6,27 +6,28 @@ PACKAGES=(
   wget
   ping
   tldr
-  vi
+  # vi
   vim
   nano
-  rsync
+  # rsync
   tar
   zip
   jq
-  netstat
-  avahi-daemon
+  yq
+  # netstat
+  # avahi-daemon
   neofetch
   docker
   python
   node
   rustup
   asdf
-  direnv
+  # direnv
   cosign
   gpg
   git
-  yq
   htop
+  bc
 )
 
 # TODO: Display important names from groups of commands based on priority

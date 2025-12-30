@@ -1,4 +1,4 @@
-# SSHRC-Config
+# hi.sh -> unity of sshm + sshrc
 
 Chainloader to unify local configuration with portable variations for ssh hosts. Order of execution:
 First, `~/.sshrc` is executed, which chainloads `~/.sshrc.d/.sshrc`. The second loader determines the shell, loads aliases, and then starts a session. For local configurations, stubs are used to load the shared files under `~/.sshrc.d/`. Local-only changes should remain in `~/.bashrc, ~/.zshrc, ~/.config/fish/config.fish`, etc.

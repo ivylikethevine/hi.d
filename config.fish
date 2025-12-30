@@ -104,3 +104,15 @@ function fish_greeting
   test -n "$fish_greeting"
   and echo $fish_greeting
 end
+
+function hi
+  sshrc "$argv"
+  if [ $status -eq 0 ]
+    echo -n "" # no-op
+  else
+    echo \n(printf (_ '%s====================================%s') (set_color brred) (set_color normal))
+    echo (printf (_ '%ssshrc failed, falling back to ssh...%s') (set_color bryellow) (set_color normal))
+    echo (printf (_ '%s====================================%s') (set_color brred) (set_color normal))\n
+    ssh "$argv"
+  end
+end

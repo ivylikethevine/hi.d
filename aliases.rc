@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 
 alias dcl="docker container ls"
 alias dcu="docker compose up"
@@ -9,7 +9,5 @@ alias ls="ls -lh --color=auto"
 alias lsa="ls -alh --color=auto"
 alias grep='grep --color=auto'
 
-alias hi="sshrc"
 alias aliases="nano ~/.sshrc.d/aliases.rc"
-alias hi_config="nano ~/.sshrc && nano ~/.sshrc.d/.sshrc"
 alias zed="zeditor"

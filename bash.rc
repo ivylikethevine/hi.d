@@ -68,3 +68,15 @@ if ! shopt -oq posix; then
     . /etc/bash_completion
   fi
 fi
+
+hi() {
+  sshrc "$@"
+  if [ $? -eq 0 ]; then
+    echo -n "" # no-op
+  else
+    echo -e "\n\033[01;31m====================================\033[00;0m"
+    echo -e "\033[01;33msshrc failed, falling back to ssh...\033[00;0m"
+    echo -e "\033[01;31m====================================\033[00;0m\n"
+    ssh "$@"
+  fi
+}

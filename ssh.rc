@@ -76,7 +76,7 @@ source $SSHHOME/.sshrc.d/check.rc
 if [ ! -f /bin/bash ]; then
   if [ ! -f /usr/bin/bash ]; then
     colecho "No bash... sorry :~(" $BOLD_RED
-    sh # sshrc doesn't run on sh.... crashes connection
+    sh # run sh without loading excess stuff that likely won't work
     footer
   fi
 fi

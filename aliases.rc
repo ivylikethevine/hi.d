@@ -16,3 +16,5 @@ alias nollama="docker compose -f /home/$USER/projects/csd-selfhost/ollama/compos
 alias yollama="docker compose -f /home/$USER/projects/csd-selfhost/ollama/compose.yml up -d"
 alias zy="yollama && zed"
 alias zn="nollama && killall zed-editor"
+alias yayy="yay -Syyu"
+alias yayc="yay -Sc"

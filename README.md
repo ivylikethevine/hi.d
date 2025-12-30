@@ -8,9 +8,9 @@ configured vim to actually be `ln /home/$USER/.vimrc /home/$USER/sshrc.d/.vimrc`
 
 Built using:
 
-- sshm - https://github.com/Gu1llaum-3/sshm
+- sshm - https://github.com/Gu1llaum-3/sshm (optional, but useful to configure `~/.ssh/config`)
   - organize ssh hosts
-- sshrc - https://github.com/cdown/sshrc
+- sshrc - https://github.com/cdown/sshrc (built into `hi.sh`)
   - bring local configuration to remote hosts
 
 Had to modify sshrc `/usr/bin/sshrc` -> hi.sh
@@ -27,7 +27,7 @@ sudo ln ~/.sshrc.d/hi.sh /usr/bin/sshrc
 
 ## Required Stubs
 
-Reminder - place local only changes after the "`# sshrc-config`" comment in the local files. **Anything in this directory will be copied to all hosts connected to via `sshm` (or the "hi" alias).**
+Reminder - place local only changes after the "`# sshrc-config`" comment in the local files. **Anything in this directory will be copied to all hosts connected to via `sshrc` (or the "hi" alias).**
 
 ### `~/.sshrc`
 

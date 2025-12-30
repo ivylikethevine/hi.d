@@ -33,6 +33,7 @@ if [ -n "$force_color_prompt" ]; then
     color_prompt=
   fi
 fi
+# TODO: Unify these colors with the ones in ssh.rc/config.fish/zsh.rc/check.rc
 if [ "$color_prompt" = yes ]; then
   USER_COLOR='32m'
   HOST_COLOR='32m'

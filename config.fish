@@ -84,35 +84,32 @@ end
 
 function fish_greeting
   if not set -q fish_greeting
-    set -l part1 (printf (_ ' %s%s~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Online! ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~') (set_color brgreen))
-    set -l part2 \n(printf (_ ' %s|%s ' (date -u "+%a %b %e %H:%M:%S %Z %Y")) (set_color normal) (set_color brcyan))
-    set -l part3 (printf (_ '  %s|  ' ) (set_color normal))
-    set -l part4 (printf (_ '%s' (date "+%a %b %e %H:%M:%S %Z %Y")) (set_color bryellow))
-    set -l part5 \n(printf (_ '%s') (set_color brgreen))
-    set -l part6 (printf (_ ' %s| ' ) (set_color normal))
-    set -l part7 (printf (_ '%s' (cat /etc/os-release | grep PRETTY_NAME | cut -d= -f2 | tr -d '\"') '%s') (set_color brgreen) (set_color normal))
-    set -l part8 (printf (_ ' %s| ' ) (set_color normal))
-    set -l part9 (printf (_ '%s' (uname -m) ) (set_color brmagenta))
+    set -l spacer (printf (_ '%s|' ) (set_color normal))
+    set -l header (printf (_ ' %s%s~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Online! ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~') (set_color brgreen))
+    set -l utctime (printf (_ '%s' (date -u "+%a %b %e %H:%M:%S %Z %Y")) (set_color brcyan))
+    set -l localtime (printf (_ '%s' (date "+%a %b %e %H:%M:%S %Z %Y")) (set_color bryellow))
+    set -l distro (printf (_ '%s' (cat /etc/os-release | grep PRETTY_NAME | cut -d= -f2 | tr -d '\"') '%s') (set_color brgreen) (set_color normal))
+    set -l arch (printf (_ '%s' (uname -m) ) (set_color brmagenta))
 
     if [ -f "/usr/bin/bc" ]
       if [ -f "/usr/bin/docker" ]
         # TODO: Find a non-bc way to do this
-        set -g part10 (printf (_ ' %s|%s Running Containers: ' (echo "$(docker container ls | wc -l) - 1" | bc)) (set_color normal) (set_color brblue))
+        set -g containers (printf (_ '%sRunning Containers: ' (echo "$(docker container ls | wc -l) - 1" | bc)) (set_color brblue))
       else
-        set -g part10 (printf (_ ' %s| Counting impossible, no docker :( %s' ) (set_color normal) (set_color bryellow) (set_color normal))
+        set -g containers (printf (_ ' %sCounting impossible, no docker :(' ) (set_color bryellow))
       end
     else
-      set -g part10 (printf (_ ' %s|%s Counting impossible, no bc :(' ) (set_color normal) (set_color bryellow) (set_color normal))
+      set -g containers (printf (_ ' %sCounting impossible, no bc :(' )  (set_color bryellow))
     end
 
     if [ -f "/home/$USER/.gitconfig" ]
-      set -g part11 \n(printf (_ ' %s|%s Github Identity Found: %s' (cat ~/.gitconfig | grep email | cut -d= -f2 | tr -d ' ' | awk -F@ '{for(i=0;i<length($2);i++) c=c"●"; print $1"@"c; c=""}')) (set_color normal) (set_color brblue) (set_color bryellow))
+      set -g gitidentity (printf (_ '%sGithub Identity Found: %s' (cat ~/.gitconfig | grep email | cut -d= -f2 | tr -d ' ' | awk -F@ '{for(i=0;i<length($2);i++) c=c"●"; print $1"@"c; c=""}')) (set_color brblue) (set_color bryellow))
     else
-      set -g part11 \n(printf (_ ' %s|%s No Github Identity Found... %s') (set_color normal) (set_color yellow) (set_color normal))
+      set -g gitidentity (printf (_ '%sNo Github Identity Found... %s') (set_color yellow) (set_color normal))
     end
 
 
-    set -g fish_greeting "$part1$part2$part3$part4$part5$part6$part7$part8$part9$part10$part11"
+    set -g fish_greeting "$header"\n "$spacer $utctime   $spacer   $localtime"\n "$spacer $distro $spacer $arch $spacer $containers"\n" $spacer $gitidentity"
   end
 
   # The greeting used to be skipped when fish_greeting was empty (not just undefined)

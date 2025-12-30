@@ -32,7 +32,7 @@ PACKAGES=(
 
 # TODO: Display important names from groups of commands based on priority
 spacer
-colecho_n "Installed: " $BOLD_CYAN
+colecho_n "Installed: " $BRCYAN
 for package in "${PACKAGES[@]}"; do
   if command -v "$package" &>/dev/null; then
     colecho_n "$package ✓ " $GREEN
@@ -41,8 +41,7 @@ done
 
 echo
 spacer
-colecho_n "Missing:   " $BOLD_YELLOW
-# colecho_n " | " $NC
+colecho_n "Missing:   " $BRYELLOW
 for package in "${PACKAGES[@]}"; do
   if ! command -v "$package" &>/dev/null; then
     colecho_n "$package ✗ " $YELLOW

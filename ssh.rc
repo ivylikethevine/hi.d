@@ -54,9 +54,16 @@ header() {
   colecho_n " | " $NC
   colecho_n "OS: $(uname -s)" $CYAN
   colecho_n " | " $NC
-  colecho_n "Arch: $(uname -m)" $YELLOW
+  colecho_n "Arch: $(uname -m)" $PURPLE
   colecho_n " | " $NC
   colecho "$(cat /etc/os-release | grep PRETTY_NAME | cut -d= -f2 | tr -d '"')" $BLUE
+  if [ -f ~/.gitconfig ]; then
+    colecho_n " Github Identity Found!" $BLUE
+    colecho_n " | " $NC
+    colecho "$(cat ~/.gitconfig | grep email | cut -d= -f2 | tr -d ' ' | awk -F@ '{for(i=0;i<length($2);i++) c=c"●"; print $1"@"c; c=""}')" $YELLOW
+  else
+    colecho " No Github Identity Found..." $YELLOW
+  fi
 }
 
 footer() {
@@ -67,10 +74,9 @@ footer() {
   exit 0
 }
 
-trap 'remove_between ~/.bashrc; remove_between ~/.zshrc; remove_between ~/.nanorc; remove_between ~/.config/fish/config.fish' EXIT
+trap 'remove_between ~/.bashrc; remove_between ~/.zshrc; remove_between ~/.nanorc; remove_between ~/.config/fish/config.fish; rm ~/.aliasesrc' EXIT
 header
 
-source $SSHHOME/.sshrc.d/aliases.rc
 source $SSHHOME/.sshrc.d/check.rc
 
 if [ ! -f /bin/bash ]; then
@@ -85,6 +91,7 @@ export VIMINIT="let \$MYVIMRC='$SSHHOME/.sshrc.d/vim.rc' | source \$MYVIMRC"
 copy_config ~/.nanorc nano.rc
 copy_config ~/.bashrc bash.rc
 copy_config ~/.zshrc zsh.rc
+copy_config ~/.aliasesrc aliases.rc
 
 colecho_n " sshrc loaded with... " $BLUE
 

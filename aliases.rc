@@ -11,3 +11,8 @@ alias grep='grep --color=auto'
 
 alias aliases="nano ~/.sshrc.d/aliases.rc"
 alias zed="zeditor"
+
+alias nollama="docker compose -f /home/$USER/projects/csd-selfhost/ollama/compose.yml down"
+alias yollama="docker compose -f /home/$USER/projects/csd-selfhost/ollama/compose.yml up -d"
+alias zy="yollama && zed"
+alias zn="nollama && killall zed-editor"

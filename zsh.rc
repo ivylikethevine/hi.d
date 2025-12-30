@@ -1,4 +1,14 @@
 # Zsh Configuration SSHRC
+if [ -f ~/.aliasesrc ]; then
+  source ~/.aliasesrc
+fi
+if [ -f ~/aliases.rc ]; then
+  source ~/aliases.rc
+fi
+if [ -f $SSHHOME/aliases.rc ]; then
+  source ~/aliases.rc
+fi
+
 HISTFILE=~/.zsh_history
 HISTSIZE=2000
 SAVEHIST=2000

@@ -13,6 +13,14 @@ Built using:
 - sshrc - https://github.com/cdown/sshrc
   - bring local configuration to remote hosts
 
+Had to modify sshrc `/usr/bin/share/sshrc`
+
+Original Line 59:
+`echo $'"$(tar czf - -h -C $SSHHOME $files | openssl enc -base64)"' | tr -s ' ' $'\n' | openssl enc -base64 -d | tar mxzf - -C \$SSHHOME`
+
+Modified Line 59:
+`echo $'"$(tar czf - -h -C $SSHHOME --exclude .git --exclude .gitignore --exclude README.md $files | openssl enc -base64)"' | tr -s ' ' $'\n' | openssl enc -base64 -d | tar mxzf - -C \$SSHHOME`
+
 ## Required Stubs
 
 Reminder - place local only changes after the "`# sshrc-config`" comment in the local files. **Anything in this directory will be copied to all hosts connected to via `sshm` (or the "hi" alias).**

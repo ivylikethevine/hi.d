@@ -1,4 +1,13 @@
 #!/bin/bash
+if [ -f ~/.aliasesrc ]; then
+  source ~/.aliasesrc
+fi
+if [ -f ~/aliases.rc ]; then
+  source ~/aliases.rc
+fi
+if [ -f $SSHHOME/aliases.rc ]; then
+  source ~/aliases.rc
+fi
 
 # Bash configuration SSHRC
 HISTCONTROL=ignoreboth

@@ -60,3 +60,5 @@ hi() {
     ssh "$@"
   fi
 }
+
+# TODO: Add colored user/hostname/@ symbols for hosts as per bash and fish shells

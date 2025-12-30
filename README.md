@@ -1,7 +1,7 @@
 # hi.sh -> unity of sshm + sshrc
 
 Chainloader to unify local configuration with portable variations for ssh hosts. Order of execution:
-First, `~/.sshrc` is executed, which chainloads `~/.sshrc.d/.sshrc`. The second loader determines the shell, loads aliases, and then starts a session. For local configurations, stubs are used to load the shared files under `~/.sshrc.d/`. Local-only changes should remain in `~/.bashrc, ~/.zshrc, ~/.config/fish/config.fish`, etc.
+First, `~/.sshrc` is executed, which chainloads `~/.sshrc.d/ssh.rc`. The second loader determines the shell, loads aliases, and then starts a session. For local configurations, stubs are used to load the shared files under `~/.sshrc.d/`. Local-only changes should remain in `~/.bashrc, ~/.zshrc, ~/.config/fish/config.fish`, etc.
 
 configured vim to actually be `ln /home/$USER/.vimrc /home/$USER/sshrc.d/.vimrc`
 `du -sh --exclude=.git --apparent-size` -> filesize (needs to be under 64k)
@@ -22,13 +22,44 @@ Reminder - place local only changes after the "`# sshrc-config`" comment in the 
 ```bash
 #!/bin/bash
 source $SSHHOME/.sshrc.d/ssh.rc
+source $SSHHOME/.sshrc.d/aliases.rc
 ```
 
 ### `~/.bashrc`
 
+```bash
+# LOCAL
+source ~/.sshrc.d/aliases.rc
+source ~/.sshrc.d/bash.rc
+alias config="nano ~/.sshrc.d/bash.rc"
+alias local_config="nano ~/.bashrc"
+alias aliases="nano ~/.sshrc.d/aliases.rc"
+# sshrc-config
+```
+
 ### `~/.zshrc`
 
+```bash
+# LOCAL
+source ~/.sshrc.d/aliases.rc
+source ~/.sshrc.d/zsh.rc
+alias config="nano ~/.sshrc.d/zsh.rc"
+alias local_config="nano ~/.zshrc"
+alias aliases="nano ~/.sshrc.d/aliases.rc"
+# sshrc-config
+```
+
 ### `~/.config/fish/config.fish`
+
+```bash
+# LOCAL
+source ~/.sshrc.d/aliases.rc
+source ~/.sshrc.d/config.fish
+alias config="nano ~/.sshrc.d/config.fish"
+alias local_config="nano ~/.config/fish/config.fish"
+alias aliases="nano ~/.sshrc.d/aliases.rc"
+# sshrc-config
+```
 
 #### Supported Configs
 

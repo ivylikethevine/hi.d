@@ -11,6 +11,10 @@ function sshrc() {
     if [ -d $SSHHOME/.sshrc.d ]; then
       files="$files .sshrc.d"
     fi
+    # TODO: Add timing to determine if/when we are transferring too much stuff
+    # start=`date +%s.%N`
+    # end=`date +%s.%N`
+    # runtime=$( echo "$end - $start" | bc -l )
     SIZE=$(tar cfz - -h -C $SSHHOME $sshrc_exclude $files | wc -c)
     if [ $SIZE -gt 65536 ]; then
       echo >&2 $'.sshrc.d and .sshrc files must be less than 64kb\ncurrent size: '$SIZE' bytes'

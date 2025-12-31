@@ -2,32 +2,55 @@
 
 PACKAGES=(
   # sudo
-  # curl
+  curl
   wget
   ping
   tldr
   # vi
-  # vim
+  vim
   nano
   # rsync
   # tar
-  zip
+  # zip
   jq
   yq
   # netstat
   # avahi-daemon
-  neofetch
+  # neofetch
   docker
-  python
-  node
+  # python
+  # node
   rustup
   asdf
-  # direnv
-  # cosign
-  gpg
-  git
-  htop
+  direnv
+  cosign
+  # gpg
+  # git
+  # htop
   # bc
+)
+
+SYSTEMS=(
+  apt
+  pacman
+  apk
+  nix
+  dpkg
+  rpm
+  dnf
+  zypper
+  pkgconf
+  chocolatey
+  choco
+  wpkg
+  appimage  # TODO: Determine how to check for AppImage support
+  brew
+  flatpak
+  snap
+  yay
+  yum
+  paru
+  make # Is this a system? Idk but it seems useful to know
 )
 
 installed() {
@@ -39,15 +62,26 @@ installed() {
       cecho_n "$package ✓ " $GREEN
     fi
   done
+  echo
 }
 
 missing() {
-  echo
   spacer
   cecho_n "Missing:   " $BRYELLOW
   for package in "${PACKAGES[@]}"; do
     if ! command -v "$package" &>/dev/null; then
       cecho_n "$package ✗ " $YELLOW
+    fi
+  done
+  echo
+}
+
+systems() {
+  spacer
+  cecho_n "Systems:   " $BRBLUE
+  for system in "${SYSTEMS[@]}"; do
+    if command -v "$system" &>/dev/null; then
+      cecho_n "$system ✓ " $BLUE
     fi
   done
   echo

@@ -9,14 +9,17 @@ alias ls="ls -lh --color=auto"
 alias lsa="ls -alh --color=auto"
 alias grep='grep --color=auto'
 
-alias hi="hi" # mainly here for this reminder that each shell (bash, zsh, and fish), use their own hi functions
+alias view="vew" # here to avoid calling vi (and each shell has their own vew functions)
+alias hi="hi" # here for a reminder that each shell (bash, zsh, and fish), use their own hi functions
 alias hii="ssh"
-alias aliases="nano ~/.sshrc.d/aliases.rc"
 alias zed="zeditor"
 
 alias nollama="docker compose -f /home/$USER/projects/csd-selfhost/ollama/compose.yml down"
 alias yollama="docker compose -f /home/$USER/projects/csd-selfhost/ollama/compose.yml up -d"
 alias zy="yollama && zed"
 alias zn="nollama && killall zed-editor"
+
 alias yayy="yay -Syyu"
 alias yayc="yay -Sc"
+
+alias esshrc="zed ~/.sshrc.d"

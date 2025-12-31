@@ -8,12 +8,12 @@ bind \e\[2\;5~ ''
 complete sshrc --wraps ssh
 complete hi --wraps sshrc
 
-function view --description 'Cat a file or list a directory in detail'
+function vew --description 'Cat a file or list a directory in detail | spelled vew to avoid calling vi'
   set args (count $argv)
   set path "$argv[$args]"
 
   if test -z "$path"
-    echo "Usage: view <path> -> ls directory or cat file"
+    echo "Usage: vew <path> -> ls directory or cat file"
     return 1
   end
 
@@ -91,15 +91,10 @@ function fish_greeting
     set -l distro (printf (_ '%s' (cat /etc/os-release | grep PRETTY_NAME | cut -d= -f2 | tr -d '\"') '%s') (set_color green) (set_color normal))
     set -l arch (printf (_ '%s' (uname -m) ) (set_color brmagenta))
 
-    if [ -f "/usr/bin/bc" ]
-      if [ -f "/usr/bin/docker" ]
-        # TODO: Find a non-bc way to do this
-        set -g containers (printf (_ '%sRunning Containers: ' (echo "$(docker container ls | wc -l) - 1" | bc)) (set_color brblue))
-      else
-        set -g containers (printf (_ ' %sCounting impossible, no docker :(' ) (set_color bryellow))
-      end
+    if [ -f "/usr/bin/docker" ]
+      set -g containers (printf (_ '%sRunning Containers: ' (docker container ls | wc -l | awk '{print $1 - 1}')) (set_color brblue))
     else
-      set -g containers (printf (_ ' %sCounting impossible, no bc :(' )  (set_color bryellow))
+      set -g containers (printf (_ '%sCounting impossible, no docker :(' ) (set_color bryellow))
     end
 
     if [ -f "/home/$USER/.gitconfig" ]
@@ -108,8 +103,13 @@ function fish_greeting
       set -g gitidentity (printf (_ '%sNo Github Identity Found... %s') (set_color yellow) (set_color normal))
     end
 
+    if [ -f "/home/$USER/.sshrc.d/check.rc" -a -f "/home/$USER/.sshrc.d/ssh.rc" ]
+      set -g installed (bash -c "source /home/$USER/.sshrc.d/ssh.rc; source /home/$USER/.sshrc.d/check.rc; installed")
+      set -g missing (bash -c "source /home/$USER/.sshrc.d/ssh.rc; source /home/$USER/.sshrc.d/check.rc; missing")
+      set -g systems (bash -c "source /home/$USER/.sshrc.d/ssh.rc; source /home/$USER/.sshrc.d/check.rc; systems")
+    end
 
-    set -g fish_greeting "$header"\n "$spacer $utctime   $spacer   $localtime"\n "$spacer $distro $spacer $arch $spacer $containers"\n" $spacer $gitidentity"
+    set -g fish_greeting $header\n $spacer $utctime   $spacer   $localtime\n $spacer $distro $spacer $arch $spacer $containers\n $spacer $gitidentity\n$installed\n$missing\n$systems
   end
 
   # The greeting used to be skipped when fish_greeting was empty (not just undefined)

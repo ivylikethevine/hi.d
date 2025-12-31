@@ -71,15 +71,10 @@ header() {
   cecho_n "$(uname -m)" $PURPLE
   spacer
 
-  if [ -f /usr/bin/bc ]; then
-    if [ -f /usr/bin/docker ]; then
-      # TODO: Find a non-bc way to do this
-      cecho "Running Containers: $(echo "$(docker container ls | wc -l) - 1" | bc)" $BLUE
-    else
-      cecho "Counting impossible, no docker :(" $BRYELLOW
-    fi
+  if [ -f /usr/bin/docker ]; then
+    cecho "Running Containers: $(docker container ls | wc -l | awk '{print $1 - 1}')" $BLUE
   else
-    cecho "Counting impossible, no bc :(" $BRYELLOW
+    cecho "Counting impossible, no docker :(" $BRYELLOW
   fi
   spacer
   if [ -f ~/.gitconfig ]; then
@@ -104,6 +99,7 @@ run_sshrc() {
   header
 
   source $SSHHOME/.sshrc.d/check.rc
+  systems
   installed
   missing
 

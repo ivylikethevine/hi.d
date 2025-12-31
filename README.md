@@ -19,6 +19,7 @@ Possible features:
 - nomad alloc exec
 - docker exec
 - install/check script that diffs users files against a stubs directory in this project?
+- investigate sshd config
 
 ```bash
 sudo mv /usr/bin/sshrc /usr/bin/sshrc.bak

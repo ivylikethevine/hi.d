@@ -66,36 +66,39 @@ clean() {
 header() {
   cecho '~~~~~~~~~~~~~~~~~~~~~~~~ Connected! ~~~~~~~~~~~~~~~~~~~~~~~~~~~~' $BRGREEN
   timestamp
-  cecho_n "$(cat /etc/os-release | grep PRETTY_NAME | cut -d= -f2 | tr -d '"')" $GREEN
+
+  cecho_n "$(uname -s)" $YELLOW
   spacer
   cecho_n "$(uname -m)" $PURPLE
   spacer
-
-  if [ -f /usr/bin/docker ]; then
-    cecho "Running Containers: $(docker container ls | wc -l | awk '{print $1 - 1}')" $BLUE
-  else
-    cecho "Counting impossible, no docker :(" $BRYELLOW
-  fi
+  cecho "$(cat /etc/os-release | grep PRETTY_NAME | cut -d= -f2 | tr -d '"')" $GREEN
 
   spacer
   if [ -f ~/.gitconfig ]; then
-    cecho_n "Github Identity Found: " $CYAN
+    cecho_n "Github Identity: " $CYAN
     cecho_n "$(cat ~/.gitconfig | grep email | cut -d= -f2 | tr -d ' ' | awk -F@ '{for(i=0;i<length($2);i++) c=c"●"; print $1"@"c; c=""}')" $YELLOW
   else
     cecho_n "No Github Identity Found..." $YELLOW
   fi
 
   spacer
-  cecho_n "Authorized: $(ls ~/.ssh | grep authorized_keys | wc -l)" $RED
+  if [ -f /usr/bin/docker ]; then
+    cecho_n "Containers: $(docker container ls | wc -l | awk '{print $1 - 1}')" $BLUE
+  else
+    cecho_n "No docker :(" $BRYELLOW
+  fi
+
   spacer
-  cecho "Public: $(ls ~/.ssh | grep .pub | wc -l)" $PURPLE
+  cecho_n "Auth: $(ls ~/.ssh | grep authorized_keys | wc -l)" $RED
+  spacer
+  cecho "Pub: $(ls ~/.ssh | grep .pub | wc -l)" $PURPLE
 }
 
 footer() {
   cecho_n " $(du -sh $sshrc_exclude --apparent-size $SSHHOME/.sshrc.d | awk '{ print $1 }') " $NC
   cecho '~~~~~~~~~~~~~~~~~~~~~~~ Disconnected! ~~~~~~~~~~~~~~~~~~~~~~~~~~' $BRRED
   timestamp
-  cecho_n "sshrc closing! " $BRCYAN
+  cecho_n "sshrc closing! " $BRPURPLE
   exit 0
 }
 
@@ -104,8 +107,11 @@ run_sshrc() {
   header
 
   source $SSHHOME/.sshrc.d/check.rc
-  systems
+
+  spacer
   installed
+  spacer
+  systems
   missing
 
   export VIMINIT="let \$MYVIMRC='$SSHHOME/.sshrc.d/vim.rc' | source \$MYVIMRC"
@@ -115,7 +121,7 @@ run_sshrc() {
   configure ~/.aliasesrc aliases.rc
 
   spacer
-  cecho_n "sshrc loaded with... " $BLUE
+  cecho_n "sshrc loaded with... " $PURPLE
 
   if [ -f /usr/bin/fish ]; then
     cecho "fish shell! :^)" $GREEN

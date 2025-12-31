@@ -2,9 +2,9 @@
 
 PACKAGES=(
   # sudo
-  curl
-  wget
-  ping
+  # curl
+  # wget
+  # ping
   tldr
   # vi
   vim
@@ -55,8 +55,7 @@ SYSTEMS=(
 
 installed() {
   # TODO: Display important names from groups of commands based on priority
-  spacer
-  cecho_n "Installed: " $BRGREEN
+  # cecho_n "Installed: " $BRGREEN
   for package in "${PACKAGES[@]}"; do
     if command -v "$package" &>/dev/null; then
       cecho_n "$package ✓ " $GREEN
@@ -66,23 +65,21 @@ installed() {
 }
 
 missing() {
-  spacer
-  cecho_n "Missing:   " $BRYELLOW
+  # cecho_n "Missing:   " $BRYELLOW
   for package in "${PACKAGES[@]}"; do
     if ! command -v "$package" &>/dev/null; then
-      cecho_n "$package ✗ " $YELLOW
+      cecho_n "$package ✗ " $BRYELLOW
     fi
   done
   echo
 }
 
 systems() {
-  spacer
-  cecho_n "Systems:   " $BRBLUE
+  # cecho_n "Systems:   " $BRBLUE
   for system in "${SYSTEMS[@]}"; do
     if command -v "$system" &>/dev/null; then
       cecho_n "$system ✓ " $BLUE
     fi
   done
-  echo
+  # echo
 }

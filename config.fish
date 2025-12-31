@@ -90,17 +90,17 @@ function fish_greeting
     set -l localtime (printf (_ '%s' (date "+%a %b %e %H:%M:%S %Z %Y")) (set_color bryellow))
     set -l distro (printf (_ '%s' (cat /etc/os-release | grep PRETTY_NAME | cut -d= -f2 | tr -d '\"') '%s') (set_color green) (set_color normal))
     set -l arch (printf (_ '%s' (uname -m) ) (set_color brmagenta))
-    set -l authorized (printf (_ '%sAuthorized: ' (ls ~/.ssh | grep authorized_keys | wc -l)) (set_color red))
-    set -l public (printf (_ '%sPublic: ' (ls ~/.ssh | grep .pub | wc -l)) (set_color magenta) )
+    set -l authorized (printf (_ '%sAuth: ' (ls ~/.ssh | grep authorized_keys | wc -l)) (set_color red))
+    set -l public (printf (_ '%sPub: ' (ls ~/.ssh | grep .pub | wc -l)) (set_color magenta) )
 
     if [ -f "/usr/bin/docker" ]
-      set -g containers (printf (_ '%sRunning Containers: ' (docker container ls | wc -l | awk '{print $1 - 1}')) (set_color brblue))
+      set -g containers (printf (_ '%sContainers: ' (docker container ls | wc -l | awk '{print $1 - 1}')) (set_color brblue))
     else
       set -g containers (printf (_ '%sCounting impossible, no docker :(' ) (set_color bryellow))
     end
 
     if [ -f "/home/$USER/.gitconfig" ]
-      set -g gitidentity (printf (_ '%sGithub Identity Found: %s' (cat ~/.gitconfig | grep email | cut -d= -f2 | tr -d ' ' | awk -F@ '{for(i=0;i<length($2);i++) c=c"●"; print $1"@"c; c=""}')) (set_color brcyan) (set_color yellow))
+      set -g gitidentity (printf (_ '%sGithub Identity: %s' (cat ~/.gitconfig | grep email | cut -d= -f2 | tr -d ' ' | awk -F@ '{for(i=0;i<length($2);i++) c=c"●"; print $1"@"c; c=""}')) (set_color brcyan) (set_color yellow))
     else
       set -g gitidentity (printf (_ '%sNo Github Identity Found... %s') (set_color yellow) (set_color normal))
     end
@@ -112,7 +112,8 @@ function fish_greeting
       set -g missing (bash -c "source $ssh_root/ssh.rc; source $ssh_root/check.rc; missing")
     end
 
-    set -g fish_greeting $header\n $spacer $utctime   $spacer   $localtime\n $spacer $distro $spacer $arch $spacer $containers\n $spacer $gitidentity $spacer $authorized $spacer $public\n$systems\n$installed\n$missing
+    # set -g fish_greeting $header\n $spacer $utctime   $spacer   $localtime\n $spacer $distro $spacer $arch $spacer $containers\n $spacer $gitidentity $spacer $authorized $spacer $public\n$systems\n$installed\n$missing
+    set -g fish_greeting $header\n" "$spacer $utctime"   "$spacer"   "$localtime\n $spacer $gitidentity $spacer $containers $spacer $authorized $spacer $public\n $spacer $installed\n $spacer $systems$missing
   end
 
   # The greeting used to be skipped when fish_greeting was empty (not just undefined)

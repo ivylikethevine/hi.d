@@ -1,16 +1,17 @@
 #!/usr/bin/env bash
-EXCLUDE="--exclude .git --exclude .gitignore --exclude README.md --exclude hi.sh"
+# TODO: Unify between this and ssh.rc
+sshrc_exclude="--exclude .git --exclude .gitignore --exclude README.md --exclude hi.sh"
 
 function sshrc() {
   local SSHHOME=${SSHHOME:=~}
 
-  echo -ne "\r $(du -sh $EXCLUDE --apparent-size ~/.sshrc.d | awk '{ print $1 }') "
+  echo -ne "\r $(du -sh $sshrc_exclude --apparent-size ~/.sshrc.d | awk '{ print $1 }') "
   if [ -f $SSHHOME/.sshrc ]; then
     local files=.sshrc
     if [ -d $SSHHOME/.sshrc.d ]; then
       files="$files .sshrc.d"
     fi
-    SIZE=$(tar cfz - -h -C $SSHHOME $EXCLUDE $files | wc -c)
+    SIZE=$(tar cfz - -h -C $SSHHOME $sshrc_exclude $files | wc -c)
     if [ $SIZE -gt 65536 ]; then
       echo >&2 $'.sshrc.d and .sshrc files must be less than 64kb\ncurrent size: '$SIZE' bytes'
       exit 1
@@ -50,7 +51,7 @@ EOF
 EOF
     )"' | tr -s ' ' $'\n' | openssl enc -base64 -d > \$SSHHOME/bashsshrc
             chmod +x \$SSHHOME/bashsshrc
-            echo $'"$(tar czf - -h -C $SSHHOME $EXCLUDE $files | openssl enc -base64)"' | tr -s ' ' $'\n' | openssl enc -base64 -d | tar mxzf - -C \$SSHHOME
+            echo $'"$(tar czf - -h -C $SSHHOME $sshrc_exclude $files | openssl enc -base64)"' | tr -s ' ' $'\n' | openssl enc -base64 -d | tar mxzf - -C \$SSHHOME
             export SSHHOME=\$SSHHOME
             echo \"$CMDARG\" >> \$SSHHOME/sshrc.bashrc
             bash --rcfile \$SSHHOME/sshrc.bashrc

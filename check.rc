@@ -30,21 +30,25 @@ PACKAGES=(
   # bc
 )
 
-# TODO: Display important names from groups of commands based on priority
-spacer
-colecho_n "Installed: " $BRCYAN
-for package in "${PACKAGES[@]}"; do
-  if command -v "$package" &>/dev/null; then
-    colecho_n "$package ✓ " $GREEN
-  fi
-done
+installed() {
+  # TODO: Display important names from groups of commands based on priority
+  spacer
+  cecho_n "Installed: " $BRGREEN
+  for package in "${PACKAGES[@]}"; do
+    if command -v "$package" &>/dev/null; then
+      cecho_n "$package ✓ " $GREEN
+    fi
+  done
+}
 
-echo
-spacer
-colecho_n "Missing:   " $BRYELLOW
-for package in "${PACKAGES[@]}"; do
-  if ! command -v "$package" &>/dev/null; then
-    colecho_n "$package ✗ " $YELLOW
-  fi
-done
-echo
+missing() {
+  echo
+  spacer
+  cecho_n "Missing:   " $BRYELLOW
+  for package in "${PACKAGES[@]}"; do
+    if ! command -v "$package" &>/dev/null; then
+      cecho_n "$package ✗ " $YELLOW
+    fi
+  done
+  echo
+}

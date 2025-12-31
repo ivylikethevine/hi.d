@@ -86,9 +86,9 @@ function fish_greeting
   if not set -q fish_greeting
     set -l spacer (printf (_ '%s|' ) (set_color normal))
     set -l header (printf (_ ' %s%s~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Online! ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~') (set_color brgreen))
-    set -l utctime (printf (_ '%s' (date -u "+%a %b %e %H:%M:%S %Z %Y")) (set_color brcyan))
+    set -l utctime (printf (_ '%s' (date -u "+%a %b %e %H:%M:%S %Z %Y")) (set_color brblue))
     set -l localtime (printf (_ '%s' (date "+%a %b %e %H:%M:%S %Z %Y")) (set_color bryellow))
-    set -l distro (printf (_ '%s' (cat /etc/os-release | grep PRETTY_NAME | cut -d= -f2 | tr -d '\"') '%s') (set_color brgreen) (set_color normal))
+    set -l distro (printf (_ '%s' (cat /etc/os-release | grep PRETTY_NAME | cut -d= -f2 | tr -d '\"') '%s') (set_color green) (set_color normal))
     set -l arch (printf (_ '%s' (uname -m) ) (set_color brmagenta))
 
     if [ -f "/usr/bin/bc" ]
@@ -103,7 +103,7 @@ function fish_greeting
     end
 
     if [ -f "/home/$USER/.gitconfig" ]
-      set -g gitidentity (printf (_ '%sGithub Identity Found: %s' (cat ~/.gitconfig | grep email | cut -d= -f2 | tr -d ' ' | awk -F@ '{for(i=0;i<length($2);i++) c=c"●"; print $1"@"c; c=""}')) (set_color brblue) (set_color bryellow))
+      set -g gitidentity (printf (_ '%sGithub Identity Found: %s' (cat ~/.gitconfig | grep email | cut -d= -f2 | tr -d ' ' | awk -F@ '{for(i=0;i<length($2);i++) c=c"●"; print $1"@"c; c=""}')) (set_color brcyan) (set_color yellow))
     else
       set -g gitidentity (printf (_ '%sNo Github Identity Found... %s') (set_color yellow) (set_color normal))
     end

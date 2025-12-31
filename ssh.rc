@@ -1,48 +1,41 @@
 #!/bin/sh
-# comment is number of uses of that color so far
-RED='\e[0;31m'      # 1
-GREEN='\e[0;32m'    # 3 +
-YELLOW='\e[0;33m'   # 3 +
-BLUE='\e[0;34m'     # 4 +
-PURPLE='\e[0;35m'   # 2
-CYAN='\e[0;36m'     # 0 -
-WHITE='\e[0;37m'    # 0 -
-BRRED='\e[1;31m'    # 1
-BRGREEN='\e[1;32m'  # 1
-BRYELLOW='\e[1;33m' # 4 +
-BRBLUE='\e[1;34m'   # 0 -
-BRPURPLE='\e[1;35m' # 0 -
-BRCYAN='\e[1;36m'   # 2
-BRWHITE='\e[1;37m'  # 0 -
-NC='\e[0m'          # 6
+RED='\e[0;31m'
+GREEN='\e[0;32m'
+YELLOW='\e[0;33m'
+BLUE='\e[0;34m'
+PURPLE='\e[0;35m'
+CYAN='\e[0;36m'
+BRRED='\e[1;31m'
+BRGREEN='\e[1;32m'
+BRYELLOW='\e[1;33m'
+BRBLUE='\e[1;34m'
+BRPURPLE='\e[1;35m'
+BRCYAN='\e[1;36m'
+NC='\e[0m'
 
+sshrc_exclude="--exclude .git --exclude .gitignore --exclude README.md --exclude hi.sh"
 sshrc_start="# sshrc-config-start"
 sshrc_end="# sshrc-config-end"
 
-colecho() {
+cecho() {
   echo -e "$2$1$NC"
 }
 
-colecho_n() {
+cecho_n() {
   echo -ne "$2$1$NC"
 }
 
 spacer() {
-  colecho_n " | " $NC
+  cecho_n " | " $NC
 }
 
-time_display() {
+timestamp() {
   spacer
-  echo -e "$BRCYAN$(date -u "+%a %b %e %H:%M:%S %Z %Y")   $NC|$BRYELLOW   $(date "+%a %b %e %H:%M:%S %Z %Y")$NC"
+  echo -e "$BRBLUE$(date -u "+%a %b %e %H:%M:%S %Z %Y")   $NC|$BRYELLOW   $(date "+%a %b %e %H:%M:%S %Z %Y")$NC"
+  spacer
 }
 
-remove_between() {
-  if test -f $1; then
-    sed -i "/^$sshrc_start/,/^$sshrc_end/d" -- $1
-  fi
-}
-
-copy_config() {
+configure() {
   touch $1
   if ! grep -q "$sshrc_start" $1; then
     echo "$sshrc_start" >>$1
@@ -51,54 +44,59 @@ copy_config() {
   fi
 }
 
+deconfigure() {
+  if test -f $1; then
+    sed -i "/^$sshrc_start/,/^$sshrc_end/d" -- $1
+  fi
+}
+
+clean() {
+  deconfigure ~/.bashrc
+  deconfigure ~/.zshrc
+  deconfigure ~/.nanorc
+  deconfigure ~/.config/fish/config.fish
+  if [ -f ~/.aliasesrc ]; then
+    rm -f ~/.aliasesrc
+  fi
+  if [ -f ~/.hushlogin ]; then
+    rm -f ~/.hushlogin
+  fi
+}
+
 header() {
-  colecho '~~~~~~~~~~~~~~~~~~~~~~~~ Connected! ~~~~~~~~~~~~~~~~~~~~~~~~~~~~' $BRGREEN
-  time_display
+  cecho '~~~~~~~~~~~~~~~~~~~~~~~~ Connected! ~~~~~~~~~~~~~~~~~~~~~~~~~~~~' $BRGREEN
+  timestamp
+  cecho_n "$(cat /etc/os-release | grep PRETTY_NAME | cut -d= -f2 | tr -d '"')" $GREEN
   spacer
-  colecho_n "$(cat /etc/os-release | grep PRETTY_NAME | cut -d= -f2 | tr -d '"')" $GREEN
-  spacer
-  colecho_n "$(uname -m)" $PURPLE
+  cecho_n "$(uname -m)" $PURPLE
   spacer
 
   if [ -f /usr/bin/bc ]; then
     if [ -f /usr/bin/docker ]; then
       # TODO: Find a non-bc way to do this
-      colecho "Running Containers: $(echo "$(docker container ls | wc -l) - 1" | bc)" $BLUE
+      cecho "Running Containers: $(echo "$(docker container ls | wc -l) - 1" | bc)" $BLUE
     else
-      colecho "Counting impossible, no docker :(" $BRYELLOW
+      cecho "Counting impossible, no docker :(" $BRYELLOW
     fi
   else
-    colecho "Counting impossible, no bc :(" $BRYELLOW
+    cecho "Counting impossible, no bc :(" $BRYELLOW
   fi
   spacer
   if [ -f ~/.gitconfig ]; then
-    colecho_n "Github Identity Found: " $BLUE
-    colecho "$(cat ~/.gitconfig | grep email | cut -d= -f2 | tr -d ' ' | awk -F@ '{for(i=0;i<length($2);i++) c=c"●"; print $1"@"c; c=""}')" $YELLOW
+    cecho_n "Github Identity Found: " $CYAN
+    cecho "$(cat ~/.gitconfig | grep email | cut -d= -f2 | tr -d ' ' | awk -F@ '{for(i=0;i<length($2);i++) c=c"●"; print $1"@"c; c=""}')" $YELLOW
   else
-    colecho "No Github Identity Found..." $YELLOW
+    cecho "No Github Identity Found..." $YELLOW
   fi
 
 }
 
 footer() {
-  local EXCLUDE="--exclude .git --exclude .gitignore --exclude README.md --exclude hi.sh"
-  colecho_n " $(du -sh $EXCLUDE --apparent-size $SSHHOME/.sshrc.d | awk '{ print $1 }') " $NC
-  colecho '~~~~~~~~~~~~~~~~~~~~~~~ Disconnected! ~~~~~~~~~~~~~~~~~~~~~~~~~~' $BRRED
-  time_display
-  spacer
-  colecho_n "sshrc closing! " $BLUE
+  cecho_n " $(du -sh $sshrc_exclude --apparent-size $SSHHOME/.sshrc.d | awk '{ print $1 }') " $NC
+  cecho '~~~~~~~~~~~~~~~~~~~~~~~ Disconnected! ~~~~~~~~~~~~~~~~~~~~~~~~~~' $BRRED
+  timestamp
+  cecho_n "sshrc closing! " $BRCYAN
   exit 0
-}
-
-clean() {
-  remove_between ~/.bashrc
-  remove_between ~/.zshrc
-  remove_between ~/.nanorc
-  remove_between ~/.config/fish/config.fish
-  rm -f ~/.aliasesrc
-  if [ -f ~/.hushlogin ]; then
-    rm -f ~/.hushlogin
-  fi
 }
 
 run_sshrc() {
@@ -106,24 +104,27 @@ run_sshrc() {
   header
 
   source $SSHHOME/.sshrc.d/check.rc
+  installed
+  missing
+
   export VIMINIT="let \$MYVIMRC='$SSHHOME/.sshrc.d/vim.rc' | source \$MYVIMRC"
-  copy_config ~/.nanorc nano.rc
-  copy_config ~/.bashrc bash.rc
-  copy_config ~/.zshrc zsh.rc
-  copy_config ~/.aliasesrc aliases.rc
+  configure ~/.nanorc nano.rc
+  configure ~/.bashrc bash.rc
+  configure ~/.zshrc zsh.rc
+  configure ~/.aliasesrc aliases.rc
 
   spacer
-  colecho_n "sshrc loaded with... " $BLUE
+  cecho_n "sshrc loaded with... " $BLUE
 
   if [ -f /usr/bin/fish ]; then
-    colecho "fish shell! :^)" $GREEN
-    copy_config ~/.config/fish/config.fish config.fish
+    cecho "fish shell! :^)" $GREEN
+    configure ~/.config/fish/config.fish config.fish
     fish -C "source $SSHHOME/.sshrc.d/aliases.rc && set fish_greeting ''" -i
   elif [ -f /usr/bin/zsh ]; then
-    colecho "zsh shell! :)" $PURPLE
+    cecho "zsh shell! :)" $PURPLE
     zsh -i
   else
-    colecho "only bash today :(" $RED
+    cecho "only bash today :(" $RED
     bash -i
   fi
 

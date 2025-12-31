@@ -76,14 +76,19 @@ header() {
   else
     cecho "Counting impossible, no docker :(" $BRYELLOW
   fi
+
   spacer
   if [ -f ~/.gitconfig ]; then
     cecho_n "Github Identity Found: " $CYAN
-    cecho "$(cat ~/.gitconfig | grep email | cut -d= -f2 | tr -d ' ' | awk -F@ '{for(i=0;i<length($2);i++) c=c"●"; print $1"@"c; c=""}')" $YELLOW
+    cecho_n "$(cat ~/.gitconfig | grep email | cut -d= -f2 | tr -d ' ' | awk -F@ '{for(i=0;i<length($2);i++) c=c"●"; print $1"@"c; c=""}')" $YELLOW
   else
-    cecho "No Github Identity Found..." $YELLOW
+    cecho_n "No Github Identity Found..." $YELLOW
   fi
 
+  spacer
+  cecho_n "Authorized: $(ls ~/.ssh | grep authorized_keys | wc -l)" $RED
+  spacer
+  cecho "Public: $(ls ~/.ssh | grep .pub | wc -l)" $PURPLE
 }
 
 footer() {

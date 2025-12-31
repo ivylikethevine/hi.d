@@ -90,6 +90,8 @@ function fish_greeting
     set -l localtime (printf (_ '%s' (date "+%a %b %e %H:%M:%S %Z %Y")) (set_color bryellow))
     set -l distro (printf (_ '%s' (cat /etc/os-release | grep PRETTY_NAME | cut -d= -f2 | tr -d '\"') '%s') (set_color green) (set_color normal))
     set -l arch (printf (_ '%s' (uname -m) ) (set_color brmagenta))
+    set -l authorized (printf (_ '%sAuthorized: ' (ls ~/.ssh | grep authorized_keys | wc -l)) (set_color red))
+    set -l public (printf (_ '%sPublic: ' (ls ~/.ssh | grep .pub | wc -l)) (set_color magenta) )
 
     if [ -f "/usr/bin/docker" ]
       set -g containers (printf (_ '%sRunning Containers: ' (docker container ls | wc -l | awk '{print $1 - 1}')) (set_color brblue))
@@ -103,13 +105,14 @@ function fish_greeting
       set -g gitidentity (printf (_ '%sNo Github Identity Found... %s') (set_color yellow) (set_color normal))
     end
 
-    if [ -f "/home/$USER/.sshrc.d/check.rc" -a -f "/home/$USER/.sshrc.d/ssh.rc" ]
-      set -g installed (bash -c "source /home/$USER/.sshrc.d/ssh.rc; source /home/$USER/.sshrc.d/check.rc; installed")
-      set -g missing (bash -c "source /home/$USER/.sshrc.d/ssh.rc; source /home/$USER/.sshrc.d/check.rc; missing")
-      set -g systems (bash -c "source /home/$USER/.sshrc.d/ssh.rc; source /home/$USER/.sshrc.d/check.rc; systems")
+    set -l ssh_root "/home/$USER/.sshrc.d/"
+    if [ -f "$ssh_root/check.rc" -a -f "$ssh_root/ssh.rc" ]
+      set -g systems (bash -c "source $ssh_root/ssh.rc; source $ssh_root/check.rc; systems")
+      set -g installed (bash -c "source $ssh_root/ssh.rc; source $ssh_root/check.rc; installed")
+      set -g missing (bash -c "source $ssh_root/ssh.rc; source $ssh_root/check.rc; missing")
     end
 
-    set -g fish_greeting $header\n $spacer $utctime   $spacer   $localtime\n $spacer $distro $spacer $arch $spacer $containers\n $spacer $gitidentity\n$installed\n$missing\n$systems
+    set -g fish_greeting $header\n $spacer $utctime   $spacer   $localtime\n $spacer $distro $spacer $arch $spacer $containers\n $spacer $gitidentity $spacer $authorized $spacer $public\n$systems\n$installed\n$missing
   end
 
   # The greeting used to be skipped when fish_greeting was empty (not just undefined)

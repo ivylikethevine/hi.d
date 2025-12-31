@@ -1,4 +1,3 @@
 #!/bin/bash
 source $SSHHOME/.sshrc.d/ssh.rc
-source $SSHHOME/.sshrc.d/aliases.rc
 run_sshrc

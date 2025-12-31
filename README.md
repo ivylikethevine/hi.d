@@ -1,4 +1,4 @@
-# hi.sh -> unity of sshm + sshrc
+# hi.sh -> sshrc superset
 
 Chainloader to unify local configuration with portable variations for ssh hosts. Order of execution:
 First, `~/.sshrc` is executed, which chainloads `~/.sshrc.d/ssh.rc`. The second loader determines the shell, loads aliases, and then starts a session. For local configurations, stubs are used to load the shared files under `~/.sshrc.d/`. Local-only changes should remain in `~/.bashrc, ~/.zshrc, ~/.config/fish/config.fish`, etc.
@@ -8,24 +8,17 @@ configured vim to actually be `ln /home/$USER/.vimrc /home/$USER/sshrc.d/.vimrc`
 
 Built using:
 
-- sshm - https://github.com/Gu1llaum-3/sshm (optional, but useful to configure `~/.ssh/config`)
-  - organize ssh hosts
 - sshrc - https://github.com/cdown/sshrc (built into `hi.sh`)
   - bring local configuration to remote hosts
+- sshm - https://github.com/Gu1llaum-3/sshm (optional, but useful to configure `~/.ssh/config`)
+  - organize ssh hosts
 
-Had to modify sshrc `/usr/bin/sshrc` -> hi.sh
 Possible features:
 
 - nomad alloc exec
 - docker exec
 - install/check script that diffs users files against a stubs directory in this project?
 - investigate sshd config
-
-```bash
-sudo mv /usr/bin/sshrc /usr/bin/sshrc.bak
-chmod +x ~/.sshrc.d/hi.sh
-sudo ln ~/.sshrc.d/hi.sh /usr/bin/sshrc
-```
 
 ## Required Stubs (view stubs folder)
 

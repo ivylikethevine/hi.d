@@ -1,7 +1,3 @@
 # LOCAL
-source ~/.sshrc.d/aliases.rc
 source ~/.sshrc.d/bash.rc
-alias config="nano ~/.sshrc.d/bash.rc"
-alias local_config="nano ~/.bashrc"
-alias aliases="nano ~/.sshrc.d/aliases.rc"
 # sshrc-config

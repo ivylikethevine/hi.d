@@ -102,9 +102,9 @@ function fish_greeting
     end
 
     if [ -f "/home/$USER/.gitconfig" ]
-      set -g gitidentity (printf (_ '%sGithub Identity: %s' (cat ~/.gitconfig | grep email | cut -d= -f2 | tr -d ' ' | awk -F@ '{for(i=0;i<length($2);i++) c=c"●"; print $1"@"c; c=""}')) (set_color brcyan) (set_color yellow))
+      set -g gitidentity (printf (_ '%sGit Identity: %s' (cat ~/.gitconfig | grep email | cut -d= -f2 | tr -d ' ' | awk -F@ '{for(i=0;i<length($2);i++) c=c"●"; print $1"@"c; c=""}')) (set_color brcyan) (set_color yellow))
     else
-      set -g gitidentity (printf (_ '%sNo Github Identity Found... %s') (set_color yellow) (set_color normal))
+      set -g gitidentity (printf (_ '%sNo Git Identity Found... %s') (set_color yellow) (set_color normal))
     end
 
     set -l ssh_root "/home/$USER/.sshrc.d/"

@@ -11,3 +11,9 @@ function setup_hi() {
 # for the parts of the local files that have the sshrc-start and end flags)
 function check_stubs() {
 }
+
+# use sshrc.d configs for source tracking
+function link_configs() {
+  sudo ln ~/.sshrc.d/nano.rc ~/.nanorc
+  sudo ln ~/.sshrc.d/vim.rc ~/.vimrc
+}

@@ -13,7 +13,7 @@ BRPURPLE='\e[1;35m'
 BRCYAN='\e[1;36m'
 NC='\e[0m'
 
-sshrc_exclude="--exclude .git --exclude .gitignore --exclude README.md --exclude hi.sh"
+sshrc_exclude="--exclude .git --exclude .gitignore --exclude README.md --exclude hi.sh --exclude install.sh --exclude stubs"
 sshrc_start="# sshrc-config-start"
 sshrc_end="# sshrc-config-end"
 
@@ -63,15 +63,22 @@ clean() {
   fi
 }
 
-header() {
-  cecho '~~~~~~~~~~~~~~~~~~~~~~~~ Connected! ~~~~~~~~~~~~~~~~~~~~~~~~~~~~' $BRGREEN
-  timestamp
-
+system_info() {
   cecho_n "$(uname -s)" $YELLOW
   spacer
   cecho_n "$(uname -m)" $PURPLE
   spacer
-  cecho "$(cat /etc/os-release | grep PRETTY_NAME | cut -d= -f2 | tr -d '"')" $GREEN
+  cecho_n "$(cat /etc/os-release | grep PRETTY_NAME | cut -d= -f2 | tr -d '"')" $GREEN
+  spacer
+  cecho_n "CPUs: $(nproc)" $BLUE
+  spacer
+  cecho "RAM: $(free -h --giga | awk '/^Mem:/ {print $2}GB') " $CYAN
+}
+
+header() {
+  cecho '~~~~~~~~~~~~~~~~~~~~~~~~ Connected! ~~~~~~~~~~~~~~~~~~~~~~~~~~~~' $BRGREEN
+  timestamp
+  system_info
 
   spacer
   if [ -f ~/.gitconfig ]; then
@@ -112,9 +119,12 @@ run_sshrc() {
   installed
   spacer
   systems
+  cecho_n "| " $NC
   missing
-
-  export VIMINIT="let \$MYVIMRC='$SSHHOME/.sshrc.d/vim.rc' | source \$MYVIMRC"
+  if [ -f /usr/bin/vim ]; then
+    # Will cause errors if we load this with only VI
+    export VIMINIT="let \$MYVIMRC='$SSHHOME/.sshrc.d/vim.rc' | source \$MYVIMRC"
+  fi
   configure ~/.nanorc nano.rc
   configure ~/.bashrc bash.rc
   configure ~/.zshrc zsh.rc

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # TODO: Unify between this and ssh.rc
-sshrc_exclude="--exclude .git --exclude .gitignore --exclude README.md --exclude hi.sh"
+sshrc_exclude="--exclude .git --exclude .gitignore --exclude README.md --exclude hi.sh --exclude install.sh --exclude stubs"
 
 function sshrc() {
   local SSHHOME=${SSHHOME:=~}

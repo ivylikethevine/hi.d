@@ -115,7 +115,7 @@ function fish_greeting
     end
 
     # set -g fish_greeting $header\n $spacer $utctime   $spacer   $localtime\n $spacer $distro $spacer $arch $spacer $containers\n $spacer $gitidentity $spacer $authorized $spacer $public\n$systems\n$installed\n$missing
-    set -g fish_greeting $header\n" "$spacer $utctime"   "$spacer"   "$localtime\n $spacer $gitidentity $spacer $containers $spacer $authorized $spacer $public\n $spacer $installed\n $spacer $systems$missing
+    set -g fish_greeting $header\n" "$spacer $utctime"   "$spacer"   "$localtime\n $spacer $gitidentity $spacer $containers $spacer $authorized $spacer $public\n $spacer $installed\n $spacer $systems"| "$missing
   end
 
   test -n "$fish_greeting"

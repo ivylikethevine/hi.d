@@ -1,0 +1,7 @@
+# LOCAL
+source ~/.sshrc.d/aliases.rc
+source ~/.sshrc.d/zsh.rc
+alias config="nano ~/.sshrc.d/zsh.rc"
+alias local_config="nano ~/.zshrc"
+alias aliases="nano ~/.sshrc.d/aliases.rc"
+# sshrc-config

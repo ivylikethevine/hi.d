@@ -47,13 +47,12 @@ function prompt_login --description "display user name for the prompt"
     end
   end
 
-  # Prepend the chroot environment if present
   if set -q __fish_machine[1]
     echo -n -s (set_color yellow) "$__fish_machine" (set_color normal) ' '
   end
 
-  # If we're running via SSH, change the @ sign color.
   set -l color_host $fish_color_host
+  set -l color_user $fish_color_user
   set -l color_at normal
   if set -q SSH_TTY; and set -q fish_color_host_remote
     set color_host $fish_color_host_remote
@@ -73,13 +72,16 @@ function prompt_login --description "display user name for the prompt"
     set color_host brgreen
   end
   if [ $USER = "root" -o $USER = "admin" ]
-    set fish_color_user red
+    set color_user red
   end
   if [ $USER = "team" -o $USER = "edison" ]
-    set fish_color_user bryellow
+    set color_user brblue
+  end
+  if [ $USER = "ivy" ]
+    set color_user bryellow
   end
 
-  echo -ns (set_color $fish_color_user) " $USER" (set_color $color_at) @ (set_color $color_host) (prompt_hostname) (set_color normal)
+  echo -ns (set_color $color_user) " $USER" (set_color $color_at) @ (set_color $color_host) (prompt_hostname) (set_color normal)
 end
 
 function fish_greeting
@@ -116,17 +118,13 @@ function fish_greeting
     set -g fish_greeting $header\n" "$spacer $utctime"   "$spacer"   "$localtime\n $spacer $gitidentity $spacer $containers $spacer $authorized $spacer $public\n $spacer $installed\n $spacer $systems$missing
   end
 
-  # The greeting used to be skipped when fish_greeting was empty (not just undefined)
-  # Keep it that way to not print superfluous newlines on old configuration
   test -n "$fish_greeting"
   and echo $fish_greeting
 end
 
 function hi
   sshrc "$argv"
-  if [ $status -eq 0 ]
-    echo -n "" # no-op
-  else
+  if [ ! $status -eq 0 ]
     echo \n(printf (_ '%s====================================%s') (set_color brred) (set_color normal))
     echo (printf (_ '%ssshrc failed, falling back to ssh...%s') (set_color bryellow) (set_color normal))
     echo (printf (_ '%s====================================%s') (set_color brred) (set_color normal))\n

@@ -108,10 +108,10 @@ function fish_greeting
     end
 
     set -l ssh_root "/home/$USER/.sshrc.d/"
-    if [ -f "$ssh_root/check.rc" -a -f "$ssh_root/ssh.rc" ]
-      set -g systems (bash -c "source $ssh_root/ssh.rc; source $ssh_root/check.rc; systems")
-      set -g installed (bash -c "source $ssh_root/ssh.rc; source $ssh_root/check.rc; installed")
-      set -g missing (bash -c "source $ssh_root/ssh.rc; source $ssh_root/check.rc; missing")
+    if [ -f "$ssh_root/check.rc" -a -f "$ssh_root/load.sh" ]
+      set -g systems (bash -c "source $ssh_root/load.sh; source $ssh_root/check.rc; systems")
+      set -g installed (bash -c "source $ssh_root/load.sh; source $ssh_root/check.rc; installed")
+      set -g missing (bash -c "source $ssh_root/load.sh; source $ssh_root/check.rc; missing")
     end
 
     # set -g fish_greeting $header\n $spacer $utctime   $spacer   $localtime\n $spacer $distro $spacer $arch $spacer $containers\n $spacer $gitidentity $spacer $authorized $spacer $public\n$systems\n$installed\n$missing
@@ -130,4 +130,5 @@ function hi
     echo (printf (_ '%s====================================%s') (set_color brred) (set_color normal))\n
     ssh "$argv"
   end
+  # TODO: swap to sh & copy over minimal config
 end

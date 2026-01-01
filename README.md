@@ -1,7 +1,7 @@
 # hi.sh -> sshrc superset
 
 Chainloader to unify local configuration with portable variations for ssh hosts. Order of execution:
-First, `~/.sshrc` is executed, which chainloads `~/.sshrc.d/ssh.rc`. The second loader determines the shell, loads aliases, and then starts a session. For local configurations, stubs are used to load the shared files under `~/.sshrc.d/`. Local-only changes should remain in `~/.bashrc, ~/.zshrc, ~/.config/fish/config.fish`, etc.
+First, `~/.sshrc` is executed, which chainloads `~/.sshrc.d/load.sh`. The second loader determines the shell, loads aliases, and then starts a session. For local configurations, stubs are used to load the shared files under `~/.sshrc.d/`. Local-only changes should remain in `~/.bashrc, ~/.zshrc, ~/.config/fish/config.fish`, etc.
 
 configured vim to actually be `ln /home/$USER/.vimrc /home/$USER/sshrc.d/.vimrc`
 `du -sb --exclude .git --exclude .gitignore --exclude README.md --exclude hi.sh --exclude install.sh --exclude stubs --apparent-size` -> filesize (needs to be under 64k)
@@ -19,6 +19,8 @@ Possible features:
 - docker exec
 - install/check script that diffs users files against a stubs directory in this project?
 - investigate sshd config
+- tmux
+- screen
 
 ## Required Stubs (view stubs folder)
 
@@ -39,6 +41,10 @@ Editor Configurations
 
 ##### Other Features
 
-- `ssh.rc` - chainloader
+- `load.sh` - chainloader
 - `aliases.rc` - shared aliases between bash, zsh, and fish
 - `check.rc` - check for commonly used commands
+
+Goals:
+
+- maximize amount of tracked configurations

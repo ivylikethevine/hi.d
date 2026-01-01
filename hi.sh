@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# TODO: Unify between this and ssh.rc
 sshrc_exclude="--exclude .git --exclude .gitignore --exclude README.md --exclude hi.sh --exclude install.sh --exclude stubs"
+start=$(date +%s.%N)
 
 function sshrc() {
   local SSHHOME=${SSHHOME:=~}
@@ -11,10 +11,6 @@ function sshrc() {
     if [ -d $SSHHOME/.sshrc.d ]; then
       files="$files .sshrc.d"
     fi
-    # TODO: Add timing to determine if/when we are transferring too much stuff
-    # start=`date +%s.%N`
-    # end=`date +%s.%N`
-    # runtime=$( echo "$end - $start" | bc -l )
     SIZE=$(tar cfz - -h -C $SSHHOME $sshrc_exclude $files | wc -c)
     if [ $SIZE -gt 65536 ]; then
       echo >&2 $'.sshrc.d and .sshrc files must be less than 64kb\ncurrent size: '$SIZE' bytes'
@@ -58,6 +54,8 @@ EOF
             echo $'"$(tar czf - -h -C $SSHHOME $sshrc_exclude $files | openssl enc -base64)"' | tr -s ' ' $'\n' | openssl enc -base64 -d | tar mxzf - -C \$SSHHOME
             export SSHHOME=\$SSHHOME
             echo \"$CMDARG\" >> \$SSHHOME/sshrc.bashrc
+            echo \"copy_time () { echo \"copy time: $(echo "$(date +%s.%N) - $start" | bc -l | awk '{printf "%.3f\n", $1}')s\"; } \" >> \$SSHHOME/.sshrc.d/load.sh
+            echo \"sshrc_exclude='$sshrc_exclude'\" >> \$SSHHOME/.sshrc.d/load.sh
             bash --rcfile \$SSHHOME/sshrc.bashrc
             "
   else

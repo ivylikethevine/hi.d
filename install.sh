@@ -4,7 +4,7 @@
 function setup_hi() {
   sudo mv /usr/bin/sshrc /usr/bin/sshrc.bak
   chmod +x ~/.sshrc.d/hi.sh
-  sudo ln ~/.sshrc.d/hi.sh /usr/bin/sshrc
+  sudo ln ~/.sshrc.d/hi.sh /usr/bin/sshrc # TODO: Fix how this is undone after a git pull...
 }
 
 # for each of the stubs in the stubs directory, diff it against the local version (but only

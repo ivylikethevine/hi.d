@@ -13,7 +13,6 @@ BRPURPLE='\e[1;35m'
 BRCYAN='\e[1;36m'
 NC='\e[0m'
 
-sshrc_exclude="--exclude .git --exclude .gitignore --exclude README.md --exclude hi.sh --exclude install.sh --exclude stubs"
 sshrc_start="# sshrc-config-start"
 sshrc_end="# sshrc-config-end"
 
@@ -102,6 +101,7 @@ header() {
 }
 
 footer() {
+  # sshrc_exclude is adding to load.sh by hi.sh
   cecho_n " $(du -sh $sshrc_exclude --apparent-size $SSHHOME/.sshrc.d | awk '{ print $1 }') " $NC
   cecho '~~~~~~~~~~~~~~~~~~~~~~~ Disconnected! ~~~~~~~~~~~~~~~~~~~~~~~~~~' $BRRED
   timestamp
@@ -114,7 +114,6 @@ run_sshrc() {
   header
 
   source $SSHHOME/.sshrc.d/check.rc
-
   spacer
   installed
   spacer
@@ -134,14 +133,20 @@ run_sshrc() {
   cecho_n "sshrc loaded with... " $PURPLE
 
   if [ -f /usr/bin/fish ]; then
-    cecho "fish shell! :^)" $GREEN
+    cecho_n "fish shell! :^)" $GREEN
+    spacer
+    copy_time # created by hi.sh to show time to copy over info
     configure ~/.config/fish/config.fish config.fish
     fish -C "source $SSHHOME/.sshrc.d/aliases.rc && set fish_greeting ''" -i
   elif [ -f /usr/bin/zsh ]; then
-    cecho "zsh shell! :)" $PURPLE
+    cecho_n "zsh shell! :)" $PURPLE
+    spacer
+    copy_time # created by hi.sh to show time to copy over info
     zsh -i
   else
-    cecho "only bash today :(" $RED
+    cecho_n "only bash today :(" $RED
+    spacer
+    copy_time # created by hi.sh to show time to copy over info
     bash -i
   fi
 

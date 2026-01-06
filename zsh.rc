@@ -71,4 +71,30 @@ function hi() {
   fi
 }
 # TODO: Add colored user/hostname/@ symbols for hosts as per bash and fish shells
-# TODO: Add zsh vew
+
+# Spelled vew to avoid calling vi
+# TODO: add option supports
+vew() {
+  # $1 – path to inspect
+  local p="${1:-}"
+
+  # Argument check
+  if [[ -z "$p" ]]; then
+    printf 'Usage: %s <file_or_directory>\n' "${FUNCNAME[0]}" >&2
+    return 1
+  fi
+
+  # Regular file → cat
+  if [[ -f "$p" ]]; then
+    cat -- "$p"
+
+  # Directory → list (what you prefer, here a plain `ls -l`)
+  elif [[ -d "$p" ]]; then
+    ls -l -- "$p"
+
+  # Anything else (symlink to a non‑regular file, device, nonexistent, …)
+  else
+    printf 'Error: %s is not a regular file or directory.\n' "$p" >&2
+    return 2
+  fi
+}

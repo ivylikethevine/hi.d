@@ -75,16 +75,16 @@ xterm* | rxvt*)
 esac
 export GCC_COLORS='error=01;31:warning=01;35:note=01;36:caret=01;32:locus=01:quote=01'
 if ! shopt -oq posix; then
-  if [ -f /usr/share/bash-completion/bash_completion ]; then
+  if [[ -f /usr/share/bash-completion/bash_completion ]]; then
     . /usr/share/bash-completion/bash_completion
-  elif [ -f /etc/bash_completion ]; then
+  elif [[ -f /etc/bash_completion ]]; then
     . /etc/bash_completion
   fi
 fi
 
 hi() {
   sshrc "$@"
-  if [ $? -ne 0 ]; then
+  if [[ $? -ne 0 ]]; then
     echo -e "\n\033[01;31m====================================\033[00;0m"
     echo -e "\033[01;33msshrc failed, falling back to ssh...\033[00;0m"
     echo -e "\033[01;31m====================================\033[00;0m\n"
@@ -93,4 +93,30 @@ hi() {
   # TODO: swap to sh & copy over minimal config
 
 }
-# TODO: Add bash vew
+
+# Spelled vew to avoid calling vi
+# TODO: add option supports
+vew() {
+  # $1 – path to inspect
+  local p="${1:-}"
+
+  # Argument check
+  if [[ -z "$p" ]]; then
+    printf 'Usage: %s <file_or_directory>\n' "${FUNCNAME[0]}" >&2
+    return 1
+  fi
+
+  # Regular file → cat
+  if [[ -f "$p" ]]; then
+    cat -- "$p"
+
+  # Directory → list (what you prefer, here a plain `ls -l`)
+  elif [[ -d "$p" ]]; then
+    ls -l -- "$p"
+
+  # Anything else (symlink to a non‑regular file, device, nonexistent, …)
+  else
+    printf 'Error: %s is not a regular file or directory.\n' "$p" >&2
+    return 2
+  fi
+}

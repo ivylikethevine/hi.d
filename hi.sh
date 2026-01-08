@@ -1,6 +1,7 @@
 #!/bin/bash
 sshrc_exclude="--exclude .git --exclude .gitignore \
-  --exclude README.md --exclude hi.sh --exclude install.sh --exclude stubs"
+  --exclude README.md --exclude hi.sh --exclude install.sh \
+  --exclude stubs --exclude *.pem --exclude *.pub --exclude *.rsa --exclude *.key"
 start=$(date +%s.%N)
 
 function sshrc() {

@@ -7,7 +7,9 @@ alias dcd="docker compose down"
 
 alias ls="ls -lh --color=auto"
 alias lsa="ls -alh --color=auto"
-alias grep='grep --color=auto'
+alias grep="grep --color=auto"
+
+# end sh-compatible aliases
 
 alias view="vew" # here to avoid calling vi (and each shell has their own vew functions)
 alias hi="sshrc" # wraps our override function

@@ -55,6 +55,8 @@ SYSTEMS=(
   # paru
   make # Is this a system? Idk but it seems useful to know
   cmake
+  systemd
+  systemctl
 )
 
 installed() {

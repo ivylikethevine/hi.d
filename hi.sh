@@ -108,9 +108,12 @@ command -v openssl >/dev/null 2>&1 || {
 hi() {
   sshrc "$@"
   if [[ $? -ne 0 ]]; then
-    echo -e "\n\033[01;31m====================================\033[00;0m"
-    echo -e "\033[01;33msshrc failed, falling back to ssh...\033[00;0m"
-    echo -e "\033[01;31m====================================\033[00;0m\n"
+    echo -e "\n\033[01;31m=======================================\033[00;0m"
+    echo -e "\033[01;33msshrc failed, falling back to sh + ssh...\033[00;0m"
+    echo -e "\033[01;31m=======================================\033[00;0m\n"
+    # aliases=$(sed '/# end sh-compatible aliases/Q' ~/.sshrc.d/aliases.rc | tr '\n' '; ' | tr ';' ';;')
+    # copy to .profile? .shrc?
+    # ssh -t "$DOMAIN" $SSHARGS "sh -i <<<'$aliases'"
     ssh "$@"
   fi
 }

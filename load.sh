@@ -1,4 +1,5 @@
 #!/bin/sh
+start=$(date +%s.%N)
 RED='\e[0;31m'
 GREEN='\e[0;32m'
 YELLOW='\e[0;33m'
@@ -34,7 +35,7 @@ timestamp() {
   spacer
 }
 
-configure() {
+configure_file() {
   touch $1
   if ! grep -q "$sshrc_start" $1; then
     echo "$sshrc_start" >>$1
@@ -43,22 +44,37 @@ configure() {
   fi
 }
 
-deconfigure() {
+clean_file() {
   if test -f $1; then
     sed -i "/^$sshrc_start/,/^$sshrc_end/d" -- $1
   fi
 }
 
-clean() {
-  deconfigure ~/.bashrc
-  deconfigure ~/.zshrc
-  deconfigure ~/.nanorc
-  deconfigure ~/.config/fish/config.fish
+clean_all() {
+  clean_file ~/.bashrc
+  clean_file ~/.zshrc
+  clean_file ~/.nanorc
+  clean_file ~/.config/fish/config.fish
   if [ -f ~/.aliasesrc ]; then
     rm -f ~/.aliasesrc
   fi
   if [ -f ~/.hushlogin ]; then
     rm -f ~/.hushlogin
+  fi
+}
+
+configure_all() {
+  if command -v "vim" &>/dev/null; then
+    # Will cause errors if we load this with only VI
+    export VIMINIT="let \$MYVIMRC='$SSHHOME/.sshrc.d/vim.rc' | source \$MYVIMRC"
+  fi
+  configure_file ~/.nanorc nano.rc
+  configure_file ~/.bashrc bash.rc
+  configure_file ~/.zshrc zsh.rc
+  configure_file ~/.aliasesrc aliases.rc
+  if command -v "fish" &>/dev/null; then
+    # This path won't exist if fish isn't installed
+    configure_file ~/.config/fish/config.fish config.fish
   fi
 }
 
@@ -74,11 +90,7 @@ system_info() {
   cecho "RAM: $(free -h --giga | awk '/^Mem:/ {print $2}GB') " $CYAN
 }
 
-header() {
-  cecho '~~~~~~~~~~~~~~~~~~~~~~~~ Connected! ~~~~~~~~~~~~~~~~~~~~~~~~~~~~' $BRGREEN
-  timestamp
-  system_info
-
+git_identity() {
   spacer
   if [ -f ~/.gitconfig ]; then
     cecho_n "Git Identity: " $CYAN
@@ -86,33 +98,32 @@ header() {
   else
     cecho_n "No Git Identity Found..." $YELLOW
   fi
+}
 
+docker_count() {
   spacer
-  if [ -f /usr/bin/docker ]; then
+  if command -v "docker" &>/dev/null; then
     cecho_n "Containers: $(docker container ls | wc -l | awk '{print $1 - 1}')" $BLUE
   else
     cecho_n "No docker :(" $BRYELLOW
   fi
+}
 
+key_count() {
   spacer
   cecho_n "Auth: $(ls ~/.ssh | grep authorized_keys | wc -l)" $RED
   spacer
   cecho "Pub: $(ls ~/.ssh | grep .pub | wc -l)" $PURPLE
 }
 
-footer() {
-  # sshrc_exclude is adding to load.sh by hi.sh
-  cecho_n " $(du -sh $sshrc_exclude --apparent-size $SSHHOME/.sshrc.d | awk '{ print $1 }') " $NC
-  cecho '~~~~~~~~~~~~~~~~~~~~~~~ Disconnected! ~~~~~~~~~~~~~~~~~~~~~~~~~~' $BRRED
-  timestamp
-  cecho_n "sshrc closing! " $BRPURPLE
-  exit 0
+timers() {
+  spacer
+  cecho_n "load: $(echo "$(date +%s.%N) - $start" | bc -l | awk '{printf "%.3f\n", $1}')s"
+  spacer
+  copy_time # created by hi.sh to show time to copy over info
 }
 
-run_sshrc() {
-  trap 'clean' EXIT
-  header
-
+check_packages() {
   source $SSHHOME/.sshrc.d/check.rc
   spacer
   installed
@@ -120,35 +131,43 @@ run_sshrc() {
   systems
   cecho_n "| " $NC
   missing
-  if [ -f /usr/bin/vim ]; then
-    # Will cause errors if we load this with only VI
-    export VIMINIT="let \$MYVIMRC='$SSHHOME/.sshrc.d/vim.rc' | source \$MYVIMRC"
-  fi
-  configure ~/.nanorc nano.rc
-  configure ~/.bashrc bash.rc
-  configure ~/.zshrc zsh.rc
-  configure ~/.aliasesrc aliases.rc
+}
 
+say_hi() {
+  minimal=false # can also modify in ~/.sshrc
+
+  trap 'clean_all' EXIT
+  cecho '~~~~~~~~~~~~~~~~~~~~~~~~ Connected! ~~~~~~~~~~~~~~~~~~~~~~~~~~~~' $BRGREEN
+  timestamp
+  system_info
+  if [ "$minimal" = false ]; then
+    git_identity
+    docker_count
+    key_count
+    check_packages
+  fi
+  configure_all
   spacer
   cecho_n "sshrc loaded with... " $PURPLE
 
-  if [ -f /usr/bin/fish ]; then
+  if command -v "fish" &>/dev/null; then
     cecho_n "fish shell! :^)" $GREEN
-    spacer
-    copy_time # created by hi.sh to show time to copy over info
-    configure ~/.config/fish/config.fish config.fish
+    timers
     fish -C "source $SSHHOME/.sshrc.d/aliases.rc && set fish_greeting ''" -i
-  elif [ -f /usr/bin/zsh ]; then
+  elif command -v "zsh" &>/dev/null; then
     cecho_n "zsh shell! :)" $PURPLE
-    spacer
-    copy_time # created by hi.sh to show time to copy over info
+    timers
     zsh -i
   else
     cecho_n "only bash today :(" $RED
-    spacer
-    copy_time # created by hi.sh to show time to copy over info
+    timers
     bash -i
   fi
 
-  footer
+  # sshrc_exclude is adding to load.sh by hi.sh
+  cecho_n " $(du -sh $sshrc_exclude --apparent-size $SSHHOME/.sshrc.d | awk '{ print $1 }') " $NC
+  cecho '~~~~~~~~~~~~~~~~~~~~~~~ Disconnected! ~~~~~~~~~~~~~~~~~~~~~~~~~~' $BRRED
+  timestamp
+  cecho_n "sshrc closing! " $BRPURPLE
+  exit 0
 }

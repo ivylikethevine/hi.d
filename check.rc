@@ -28,6 +28,8 @@ PACKAGES=(
   # git
   # htop
   # bc
+  sshpass
+  # openssl
 )
 
 SYSTEMS=(
@@ -55,7 +57,6 @@ SYSTEMS=(
 
 installed() {
   # TODO: Display important names from groups of commands based on priority
-  # cecho_n "Installed: " $BRGREEN
   for package in "${PACKAGES[@]}"; do
     if command -v "$package" &>/dev/null; then
       cecho_n "$package ✓ " $GREEN
@@ -65,7 +66,6 @@ installed() {
 }
 
 missing() {
-  # cecho_n "Missing:   " $BRYELLOW
   for package in "${PACKAGES[@]}"; do
     if ! command -v "$package" &>/dev/null; then
       cecho_n "$package ✗ " $BRYELLOW
@@ -75,11 +75,9 @@ missing() {
 }
 
 systems() {
-  # cecho_n "Systems:   " $BRBLUE
   for system in "${SYSTEMS[@]}"; do
     if command -v "$system" &>/dev/null; then
       cecho_n "$system ✓ " $BLUE
     fi
   done
-  # echo
 }

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-sshrc_exclude="--exclude .git --exclude .gitignore --exclude README.md --exclude hi.sh --exclude install.sh --exclude stubs"
+sshrc_exclude="--exclude .git --exclude .gitignore \
+  --exclude README.md --exclude hi.sh --exclude install.sh --exclude stubs"
 start=$(date +%s.%N)
 
 function sshrc() {
@@ -54,7 +55,7 @@ EOF
             echo $'"$(tar czf - -h -C $SSHHOME $sshrc_exclude $files | openssl enc -base64)"' | tr -s ' ' $'\n' | openssl enc -base64 -d | tar mxzf - -C \$SSHHOME
             export SSHHOME=\$SSHHOME
             echo \"$CMDARG\" >> \$SSHHOME/sshrc.bashrc
-            echo \"copy_time () { echo \"copy time: $(echo "$(date +%s.%N) - $start" | bc -l | awk '{printf "%.3f\n", $1}')s\"; } \" >> \$SSHHOME/.sshrc.d/load.sh
+            echo \"copy_time () { echo \"copy: $(echo "$(date +%s.%N) - $start" | bc -l | awk '{printf "%.3f\n", $1}')s\"; } \" >> \$SSHHOME/.sshrc.d/load.sh
             echo \"sshrc_exclude='$sshrc_exclude'\" >> \$SSHHOME/.sshrc.d/load.sh
             bash --rcfile \$SSHHOME/sshrc.bashrc
             "

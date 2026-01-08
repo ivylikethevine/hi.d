@@ -37,10 +37,12 @@ timestamp() {
 
 configure_file() {
   touch $1
-  if ! grep -q "$sshrc_start" $1; then
-    echo "$sshrc_start" >>$1
-    cat "$SSHHOME/.sshrc.d/$2" >>$1
-    echo "$sshrc_end" >>$1
+  if test -f $1; then
+    if ! grep -q "$sshrc_start" $1; then
+      echo "$sshrc_start" >>$1
+      cat "$SSHHOME/.sshrc.d/$2" >>$1
+      echo "$sshrc_end" >>$1
+    fi
   fi
 }
 
@@ -134,7 +136,7 @@ check_packages() {
 }
 
 say_hi() {
-  minimal=false # can also modify in ~/.sshrc
+  # minimal=false # can also modify in ~/.sshrc
 
   trap 'clean_all' EXIT
   cecho '~~~~~~~~~~~~~~~~~~~~~~~~ Connected! ~~~~~~~~~~~~~~~~~~~~~~~~~~~~' $BRGREEN

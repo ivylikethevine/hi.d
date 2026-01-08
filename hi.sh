@@ -12,21 +12,27 @@ function sshrc() {
     if [ -d $SSHHOME/.sshrc.d ]; then
       files="$files .sshrc.d"
     fi
-    SIZE=$(tar cfz - -h -C $SSHHOME $sshrc_exclude $files | wc -c)
+    local SIZE=$(tar cfz - -h -C $SSHHOME $sshrc_exclude $files | wc -c)
     if [ $SIZE -gt 65536 ]; then
       echo >&2 $'.sshrc.d and .sshrc files must be less than 64kb\ncurrent size: '$SIZE' bytes'
       exit 1
     fi
+    local DIVIDER="$"
+    if [ $SHELL = "/usr/bin/fish" ]; then
+      DIVIDER=""
+    fi
+    local TR_COMMAND="tr -s ' ' $DIVIDER'\n'"
+    local OPENSSL_COMMAND="openssl enc -base64"
     ssh -t "$DOMAIN" $SSHARGS "
             command -v openssl >/dev/null 2>&1 || { echo >&2 \"sshrc requires openssl to be installed on the server, but it's not. Aborting.\"; exit 1; }
             export SSHHOME=\$(mktemp -d -t .$(whoami).sshrc.XXXX)
             export SSHRCCLEANUP=\$SSHHOME
             trap \"rm -rf \$SSHRCCLEANUP; exit\" 0
-            echo $'"$(cat "$0" | openssl enc -base64)"' | tr -s ' ' $'\n' | openssl enc -base64 -d > \$SSHHOME/sshrc
+            echo $DIVIDER'"$(cat "$0" | $OPENSSL_COMMAND)"' | $TR_COMMAND | $OPENSSL_COMMAND -d > \$SSHHOME/sshrc
             chmod +x \$SSHHOME/sshrc
 
-            echo $'"$(
-      cat <<'EOF' | openssl enc -base64
+            echo $DIVIDER'"$(
+      cat <<'EOF' | $OPENSSL_COMMAND
                 if [ -r /etc/profile ]; then source /etc/profile; fi
                 if [ -r ~/.bash_profile ]; then source ~/.bash_profile
                 elif [ -r ~/.bash_login ]; then source ~/.bash_login
@@ -35,10 +41,10 @@ function sshrc() {
                 export PATH=$PATH:$SSHHOME
                 source $SSHHOME/.sshrc;
 EOF
-    )"' | tr -s ' ' $'\n' | openssl enc -base64 -d > \$SSHHOME/sshrc.bashrc
+    )"' | $TR_COMMAND | $OPENSSL_COMMAND -d > \$SSHHOME/sshrc.bashrc
 
-            echo $'"$(
-      cat <<'EOF' | openssl enc -base64
+            echo $DIVIDER'"$(
+      cat <<'EOF' | $OPENSSL_COMMAND
 #!/usr/bin/env bash
                 exec bash --rcfile <(echo '
                 [ -r /etc/profile ] && source /etc/profile
@@ -50,9 +56,9 @@ EOF
                 export PATH=$PATH:'$SSHHOME'
                 ') "$@"
 EOF
-    )"' | tr -s ' ' $'\n' | openssl enc -base64 -d > \$SSHHOME/bashsshrc
+    )"' | $TR_COMMAND | $OPENSSL_COMMAND -d > \$SSHHOME/bashsshrc
             chmod +x \$SSHHOME/bashsshrc
-            echo $'"$(tar czf - -h -C $SSHHOME $sshrc_exclude $files | openssl enc -base64)"' | tr -s ' ' $'\n' | openssl enc -base64 -d | tar mxzf - -C \$SSHHOME
+            echo $DIVIDER'"$(tar czf - -h -C $SSHHOME $sshrc_exclude $files | $OPENSSL_COMMAND)"' | $TR_COMMAND | $OPENSSL_COMMAND -d | tar mxzf - -C \$SSHHOME
             export SSHHOME=\$SSHHOME
             echo \"$CMDARG\" >> \$SSHHOME/sshrc.bashrc
             echo \"copy_time () { echo \"copy: $(echo "$(date +%s.%N) - $start" | bc -l | awk '{printf "%.3f\n", $1}')s\"; } \" >> \$SSHHOME/.sshrc.d/load.sh

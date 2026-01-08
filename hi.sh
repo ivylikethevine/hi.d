@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/bash
 sshrc_exclude="--exclude .git --exclude .gitignore \
   --exclude README.md --exclude hi.sh --exclude install.sh --exclude stubs"
 start=$(date +%s.%N)
@@ -103,5 +103,16 @@ command -v openssl >/dev/null 2>&1 || {
   echo >&2 "sshrc requires openssl to be installed locally, but it's not. Aborting."
   exit 1
 }
+
+hi() {
+  sshrc "$@"
+  if [[ $? -ne 0 ]]; then
+    echo -e "\n\033[01;31m====================================\033[00;0m"
+    echo -e "\033[01;33msshrc failed, falling back to ssh...\033[00;0m"
+    echo -e "\033[01;31m====================================\033[00;0m\n"
+    ssh "$@"
+  fi
+}
+
 sshrc_parse "$@"
-sshrc
+hi

@@ -48,3 +48,9 @@ Editor Configurations
 Goals:
 
 - maximize amount of tracked configurations
+
+TODO:
+
+- add colored user/hostname/@ symbols for hosts as per bash and fish shells to zsh
+- unify colors between all shells
+- swap to sh & copy over minimal config if bash not installed

@@ -42,21 +42,23 @@ SYSTEMS=(
   dnf
   zypper
   pkgconf
-  chocolatey
+  # chocolatey
   choco
   wpkg
-  appimage  # TODO: Determine how to check for AppImage support
+  # appimage
+  fusermount # Surrogate for appimage?
   brew
   flatpak
   snap
   yay
-  yum
-  paru
+  # yum
+  # paru
   make # Is this a system? Idk but it seems useful to know
+  cmake
 )
 
 installed() {
-  # TODO: Display important names from groups of commands based on priority
+  # TODO: Display important names from groups of commands based on priority?
   for package in "${PACKAGES[@]}"; do
     if command -v "$package" &>/dev/null; then
       cecho_n "$package ✓ " $GREEN

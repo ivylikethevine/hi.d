@@ -1,3 +1,17 @@
+#!/bin/fish
+if test -f ~/.aliasesrc
+  source ~/.aliasesrc
+end
+if test -f ~/aliases.rc
+  source ~/aliases.rc
+end
+if test -f "$SSHHOME/aliases.rc"
+  source "$SSHHOME/aliases.rc"
+end
+if test -f ~/.sshrc.d/aliases.rc
+  source ~/.sshrc.d/aliases.rc
+end
+
 bind \cH backward-kill-word
 bind ctrl-delete kill-word
 bind \e\[3\;5~ kill-word
@@ -120,15 +134,4 @@ function fish_greeting
 
   test -n "$fish_greeting"
   and echo $fish_greeting
-end
-
-function hi
-  sshrc "$argv"
-  if [ ! $status -eq 0 ]
-    echo \n(printf (_ '%s====================================%s') (set_color brred) (set_color normal))
-    echo (printf (_ '%ssshrc failed, falling back to ssh...%s') (set_color bryellow) (set_color normal))
-    echo (printf (_ '%s====================================%s') (set_color brred) (set_color normal))\n
-    ssh "$argv"
-  end
-  # TODO: swap to sh & copy over minimal config
 end

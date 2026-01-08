@@ -10,7 +10,7 @@ alias lsa="ls -alh --color=auto"
 alias grep='grep --color=auto'
 
 alias view="vew" # here to avoid calling vi (and each shell has their own vew functions)
-alias hi="hi" # here for a reminder that each shell (bash, zsh, and fish), use their own hi functions
+alias hi="sshrc" # wraps our override function
 alias hii="ssh"
 alias zed="zeditor"
 

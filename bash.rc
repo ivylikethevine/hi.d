@@ -5,8 +5,11 @@ fi
 if [ -f ~/aliases.rc ]; then
   source ~/aliases.rc
 fi
-if [ -f $SSHHOME/aliases.rc ]; then
-  source ~/aliases.rc
+if [ -f "$SSHHOME/aliases.rc" ]; then
+  source "$SSHHOME/aliases.rc"
+fi
+if [ -f ~/.sshrc.d/aliases.rc ]; then
+  source ~/.sshrc.d/aliases.rc
 fi
 
 # Bash configuration SSHRC
@@ -33,7 +36,6 @@ if [ -n "$force_color_prompt" ]; then
     color_prompt=
   fi
 fi
-# TODO: Unify these colors with the ones in load.sh/config.fish/zsh.rc/check.rc
 if [ "$color_prompt" = yes ]; then
   USER_COLOR='32m'
   HOST_COLOR='32m'
@@ -82,39 +84,19 @@ if ! shopt -oq posix; then
   fi
 fi
 
-hi() {
-  sshrc "$@"
-  if [[ $? -ne 0 ]]; then
-    echo -e "\n\033[01;31m====================================\033[00;0m"
-    echo -e "\033[01;33msshrc failed, falling back to ssh...\033[00;0m"
-    echo -e "\033[01;31m====================================\033[00;0m\n"
-    ssh "$@"
-  fi
-  # TODO: swap to sh & copy over minimal config
-
-}
-
 # Spelled vew to avoid calling vi
-# TODO: add option supports
 vew() {
-  # $1 – path to inspect
   local p="${1:-}"
 
-  # Argument check
   if [[ -z "$p" ]]; then
     printf 'Usage: %s <file_or_directory>\n' "${FUNCNAME[0]}" >&2
     return 1
   fi
 
-  # Regular file → cat
   if [[ -f "$p" ]]; then
     cat -- "$p"
-
-  # Directory → list (what you prefer, here a plain `ls -l`)
   elif [[ -d "$p" ]]; then
-    ls -l -- "$p"
-
-  # Anything else (symlink to a non‑regular file, device, nonexistent, …)
+    ls -l "$@"
   else
     printf 'Error: %s is not a regular file or directory.\n' "$p" >&2
     return 2

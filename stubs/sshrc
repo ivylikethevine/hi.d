@@ -1,3 +1,4 @@
 #!/bin/bash
 source $SSHHOME/.sshrc.d/load.sh
-run_sshrc
+minimal=true # or false
+say_hi

@@ -28,7 +28,7 @@ function sshrc() {
             command -v openssl >/dev/null 2>&1 || { echo >&2 \"sshrc requires openssl to be installed on the server, but it's not. Aborting.\"; exit 1; }
             export SSHHOME=\$(mktemp -d -t .$(whoami).sshrc.XXXX)
             export SSHRCCLEANUP=\$SSHHOME
-            trap '\"rm -rf \$SSHRCCLEANUP; exit\" 0'
+            trap \"rm -rf \$SSHRCCLEANUP; exit\" exit
             echo $DIVIDER'"$(cat "$0" | $OPENSSL_COMMAND)"' | $TR_COMMAND | $OPENSSL_COMMAND -d > \$SSHHOME/sshrc
             chmod +x \$SSHHOME/sshrc
 

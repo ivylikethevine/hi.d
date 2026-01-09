@@ -138,7 +138,7 @@ check_packages() {
 say_hi() {
   # minimal=false # can also modify in ~/.sshrc
 
-  trap 'clean_all' EXIT
+  trap 'clean_all' exit
   cecho '~~~~~~~~~~~~~~~~~~~~~~~~ Connected! ~~~~~~~~~~~~~~~~~~~~~~~~~~~~' $BRGREEN
   timestamp
   system_info

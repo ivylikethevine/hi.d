@@ -5,6 +5,7 @@ PACKAGES=(
   # curl
   # wget
   # ping
+  bat # improved cat
   tldr
   # vi
   vim

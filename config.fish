@@ -12,17 +12,21 @@ if test -f ~/.sshrc.d/aliases.rc
   source ~/.sshrc.d/aliases.rc
 end
 
-bind \cH backward-kill-word
-bind ctrl-delete kill-word
-bind \e\[3\;5~ kill-word
-bind \e\[1\;5H beginning-of-line
-bind \e\[1\;5F end-of-line
-bind \e\[2\;5~ ''
+# conditionally load since bat is sometimes batcat on debian systems
+if [ -f "/usr/bin/bat" ]
+  alias batcat="bat"
+  alias bat="bat -P --tabs 2 --theme Monokai\ Extended\ Bright --style changes,grid,numbers"
+  complete batcat --wraps bat
 
-complete sshrc --wraps ssh
-complete hi --wraps sshrc
+end
 
-function vew --description 'Cat a file or list a directory in detail | spelled vew to avoid calling vi'
+if [ -f "/usr/bin/batcat" ]
+  alias bat="batcat"
+  alias batcat="batcat -P --tabs 2 --theme Monokai\ Extended\ Bright --style changes,grid,numbers"
+  complete bat --wraps batcat
+end
+
+function vew --description 'Cat/bat a file or list a directory in detail | spelled vew to avoid calling vi'
   set args (count $argv)
   set path "$argv[$args]"
 
@@ -37,14 +41,28 @@ function vew --description 'Cat a file or list a directory in detail | spelled v
   end
 
   if test -f "$path"
-    cat $argv
+    if [ -f "/usr/bin/batcat" -o -f "/usr/bin/bat" ]
+      bat "$argv"
+    else
+      cat "$argv"
+    end
   else if test -d "$path"
-    ls "$path"
+    ls "$argv"
   else
     echo "Error: '$path' is not a file or a directory."
     return 1
   end
 end
+
+bind \cH backward-kill-word
+bind ctrl-delete kill-word
+bind \e\[3\;5~ kill-word
+bind \e\[1\;5H beginning-of-line
+bind \e\[1\;5F end-of-line
+bind \e\[2\;5~ ''
+
+complete sshrc --wraps ssh
+complete hi --wraps sshrc
 
 function prompt_login --description "display user name for the prompt"
   if not set -q __fish_machine

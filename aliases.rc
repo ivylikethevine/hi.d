@@ -9,6 +9,12 @@ alias ls="ls -lh --color=auto"
 alias lsa="ls -alh --color=auto"
 alias grep="grep --color=auto"
 
+alias gi="git"
+alias gp="git pull"
+alias gf="git fetch -a"
+alias gs="git status"
+alias gd="git diff --color=always"
+
 # end sh-compatible aliases
 
 # exported here since we have to wrap the bat/batcat call per shell

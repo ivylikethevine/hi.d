@@ -10,6 +10,10 @@ function setup_hi() {
 # for each of the stubs in the stubs directory, diff it against the local version (but only
 # for the parts of the local files that have the sshrc-start and end flags)
 function check_stubs() {
+  diff --color=always -w -u ~/.sshrc.d/stubs/sshrc ~/.sshrc
+  diff --color=always -w -u ~/.sshrc.d/stubs/bashrc ~/.bashrc
+  diff --color=always -w -u ~/.sshrc.d/stubs/zshrc ~/.zshrc
+  diff --color=always -w -u ~/.sshrc.d/stubs/config.fish ~/.config/fish/config.fish
 }
 
 # use sshrc.d configs for source tracking

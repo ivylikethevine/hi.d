@@ -15,14 +15,13 @@ end
 # conditionally load since bat is sometimes batcat on debian systems
 if [ -f "/usr/bin/bat" ]
   alias batcat="bat"
-  alias bat="bat -P --tabs 2 --theme Monokai\ Extended\ Bright --style changes,grid,numbers"
+  alias bat="bat $bat_opts"
   complete batcat --wraps bat
-
 end
 
 if [ -f "/usr/bin/batcat" ]
   alias bat="batcat"
-  alias batcat="batcat -P --tabs 2 --theme Monokai\ Extended\ Bright --style changes,grid,numbers"
+  alias batcat="batcat $bat_opts"
   complete bat --wraps batcat
 end
 

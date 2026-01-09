@@ -15,12 +15,12 @@ fi
 # conditionally load since bat is sometimes batcat on debian systems
 if [ -f "/usr/bin/bat" ]; then
   alias batcat="bat"
-  alias bat="bat -P --tabs 2 --theme Monokai\ Extended\ Bright --style changes,grid,numbers"
+  alias bat="bat $bat_opts"
 fi
 
 if [ -f "/usr/bin/batcat" ]; then
   alias bat="batcat"
-  alias batcat="batcat -P --tabs 2 --theme Monokai\ Extended\ Bright --style changes,grid,numbers"
+  alias batcat="batcat $bat_opts"
 fi
 
 # Spelled vew to avoid calling vi
@@ -45,7 +45,6 @@ vew() {
     return 2
   fi
 }
-
 
 HISTCONTROL=ignoreboth
 HISTSIZE=2000

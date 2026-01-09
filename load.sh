@@ -155,7 +155,7 @@ say_hi() {
   if command -v "fish" &>/dev/null; then
     cecho_n "fish shell! :^)" $GREEN
     timers
-    fish -C "source $SSHHOME/.sshrc.d/aliases.rc && set fish_greeting ''" -i
+    fish -C "set fish_greeting ''" -i
   elif command -v "zsh" &>/dev/null; then
     cecho_n "zsh shell! :)" $PURPLE
     timers

@@ -14,6 +14,7 @@ function check_stubs() {
   diff --color=always -w -u ~/.sshrc.d/stubs/bashrc ~/.bashrc
   diff --color=always -w -u ~/.sshrc.d/stubs/zshrc ~/.zshrc
   diff --color=always -w -u ~/.sshrc.d/stubs/config.fish ~/.config/fish/config.fish
+  # also need to check permissions on these files!
 }
 
 # use sshrc.d configs for source tracking
@@ -21,3 +22,4 @@ function link_configs() {
   sudo ln ~/.sshrc.d/nano.rc ~/.nanorc
   sudo ln ~/.sshrc.d/vim.rc ~/.vimrc
 }
+check_stubs

@@ -2,6 +2,10 @@ set tabsize 2
 set linenumbers
 set mouse
 set softwrap
+set atblanks
+set autoindent
+set breaklonglines
+set indicator
 
 include "/usr/share/nano/*.nanorc"
 include "/usr/share/nano/extra/*.nanorc"

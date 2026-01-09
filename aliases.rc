@@ -14,6 +14,8 @@ alias grep="grep --color=auto"
 # exported here since we have to wrap the bat/batcat call per shell
 export bat_opts="-P --tabs 2 --theme Monokai\ Extended\ Bright --style changes,grid,numbers"
 
+alias chron="cron"
+alias chrontab="crontab"
 alias view="vew" # here to avoid calling vi (and each shell has their own vew functions)
 alias hi="sshrc" # wraps our override function
 alias hii="ssh"

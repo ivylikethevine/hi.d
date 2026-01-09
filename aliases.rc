@@ -11,8 +11,6 @@ alias grep="grep --color=auto"
 
 # end sh-compatible aliases
 
-alias bat="bat -P --tabs 2 --theme Monokai\ Extended\ Bright --style changes,grid,numbers"
-
 alias view="vew" # here to avoid calling vi (and each shell has their own vew functions)
 alias hi="sshrc" # wraps our override function
 alias hii="ssh"

@@ -44,6 +44,8 @@ Editor Configurations
 - `load.sh` - chainloader
 - `aliases.rc` - shared aliases between bash, zsh, and fish
 - `check.rc` - check for commonly used commands
+- `tmux.conf` - tmux configuration/support
+- `install.sh` - configure local shells to use sshrc.d configurations (compare against stubs folder)
 
 Goals:
 

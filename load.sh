@@ -95,10 +95,10 @@ system_info() {
 git_identity() {
   spacer
   if [ -f ~/.gitconfig ]; then
-    cecho_n "Git Identity: " $CYAN
+    cecho_n "Git ID: " $CYAN
     cecho_n "$(cat ~/.gitconfig | grep email | cut -d= -f2 | tr -d ' ' | awk -F@ '{for(i=0;i<length($2);i++) c=c"●"; print $1"@"c; c=""}')" $YELLOW
   else
-    cecho_n "No Git Identity Found..." $YELLOW
+    cecho_n "No Git ID Found..." $YELLOW
   fi
 }
 

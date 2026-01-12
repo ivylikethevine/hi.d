@@ -18,7 +18,7 @@ PACKAGES=(
   # netstat
   # avahi-daemon
   # neofetch
-  docker
+  # docker
   # python
   # node
   rustup
@@ -43,7 +43,7 @@ SYSTEMS=(
   rpm
   dnf
   zypper
-  pkgconf
+  # pkgconf
   # chocolatey
   choco
   wpkg
@@ -52,12 +52,12 @@ SYSTEMS=(
   brew
   flatpak
   snap
-  yay
+  # yay
   # yum
   # paru
-  make # Is this a system? Idk but it seems useful to know
-  cmake
-  systemd
+  # make # Is this a system? Idk but it seems useful to know
+  # cmake
+  # systemd
   systemctl
 )
 

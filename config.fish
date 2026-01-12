@@ -154,7 +154,9 @@ function prompt_login --description "display user name for the prompt"
 end
 
 function fish_greeting
-  set smaller_header true
+  if not [ (prompt_hostname) = "mavie" ]
+    set -g smaller_header true
+  end
   if not set -q fish_greeting
     set -l spacer (printf (_ '%s|' ) (set_color normal))
     set -l header (printf (_ ' %s%s~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Online! ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~') (set_color brgreen))

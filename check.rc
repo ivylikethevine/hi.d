@@ -1,68 +1,76 @@
 #!/bin/sh
+# TODO: Better divide
+# - system (pacman, apt, dnf, nix, etc)
+# - commands
+# - convenience (bat, tldr, sshm, etc.)
+# - add-ons (docker, nomad, etc)
+# - tools (jq, yq, zip, tar)
 
 PACKAGES=(
-  # sudo
-  # curl
-  # wget
-  # ping
-  bat # improved cat
-  tldr
-  # vi
+  sudo
+  curl
+  wget
+  ping
+  vi
   vim
   nano
-  # rsync
-  # tar
-  # zip
+  rsync
+  tar
+  zip
   jq
   yq
-  # netstat
-  # avahi-daemon
-  # neofetch
-  # docker
-  # python
-  # node
+  netstat
+  avahi-daemon
+  neofetch
+  docker
+  python
+  node
+  nomad
   rustup
-  asdf
-  direnv
   cosign
-  # gpg
-  # git
-  # htop
-  # bc
+  gpg
+  git
+  htop
+  bc
   sshpass
-  # openssl
+  openssl
   tmux
   screen
-  cloc # count lines of code
-  sshm
-  sshrc
+  asdf
+  direnv
+  tldr # tool
+  bat # improved cat, tool
+  cloc # count lines of code, tool
+  sshm # tool
+  sshrc # tool
+  command
 )
 
 SYSTEMS=(
-  apt
-  pacman
-  apk
-  nix
-  dpkg
-  rpm
-  dnf
-  zypper
-  # pkgconf
-  # chocolatey
-  choco
-  wpkg
-  # appimage
-  fusermount # Surrogate for appimage?
-  brew
-  flatpak
-  snap
-  # yay
-  # yum
-  # paru
-  # make # Is this a system? Idk but it seems useful to know
-  # cmake
-  # systemd
-  systemctl
+  apt # system
+  pacman # system
+  apk # system
+  nix # system
+  dpkg # system
+  rpm # system
+  dnf # system
+  zypper # tool?
+  pkgconf # tool?
+  chocolatey # system
+  choco # system
+  wpkg # ?
+  appimage # ?
+  fusermount # ? Surrogate for appimage
+  brew # system
+  flatpak # system
+  snap # system
+  yay # tool? superset of pacman
+  yum # tool? superset of pacman
+  paru # tool? superset of pacman
+  make # Is this a system? Idk but it seems useful to know
+  cmake # Is this a system? Idk but it seems useful to know
+  systemd # system
+  systemctl # system
 )
 
 installed() {

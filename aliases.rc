@@ -25,6 +25,7 @@ alias chrontab="crontab"
 alias view="vew" # here to avoid calling vi (and each shell has their own vew functions)
 alias hi="sshrc" # wraps our override function
 alias hii="ssh"
+alias hey="hii"
 alias zed="zeditor"
 
 alias nollama="docker compose -f /home/$USER/projects/csd-selfhost/ollama/compose.yml down"

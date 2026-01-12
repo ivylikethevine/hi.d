@@ -31,6 +31,8 @@ PACKAGES=(
   # bc
   sshpass
   # openssl
+  tmux
+  screen
   cloc # count lines of code
 )
 

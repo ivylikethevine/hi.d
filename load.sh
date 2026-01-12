@@ -135,6 +135,20 @@ check_packages() {
   missing
 }
 
+# TODO: Add tmux support + handle disconnects/reconnects/older sessions
+tmuxrc() {
+  local TMUXDIR=/tmp/tmuxrc
+  if ! [ -d $TMUXDIR ]; then
+    rm -rf $TMUXDIR
+    mkdir -p $TMUXDIR
+  fi
+  rm -rf $TMUXDIR/.sshrc.d
+  cp -r $SSHHOME/.sshrc $SSHHOME/bashsshrc $SSHHOME/sshrc $SSHHOME/.sshrc.d $TMUXDIR
+  SSHHOME=$TMUXDIR SHELL=$TMUXDIR/bashsshrc /usr/bin/tmux -S $TMUXDIR/tmuxserver $@
+}
+# export SHELL=`which bash`
+# tmuxrc
+
 say_hi() {
   # minimal=false # can also modify in ~/.sshrc
 

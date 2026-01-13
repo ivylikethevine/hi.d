@@ -40,7 +40,7 @@ function vew --description 'Cat/bat a file or list a directory in detail | spell
   end
 
   if test -f "$path"
-    if [ -f "/usr/bin/batcat" -o -f "/usr/bin/bat" ]
+    if [ -f "/usr/bin/batcat" ] || [ -f "/usr/bin/bat" ]
       bat "$argv"
     else
       cat "$argv"
@@ -100,6 +100,7 @@ set -gx fish_pager_color_selected_background --reverse
 set -gx fish_pager_color_selected_completion
 set -gx fish_pager_color_selected_description
 set -gx fish_pager_color_selected_prefix
+# set -gx fish_color_search_match --background='333'
 
 function prompt_login --description "display user name for the prompt"
   if not set -q __fish_machine

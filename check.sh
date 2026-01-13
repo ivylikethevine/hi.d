@@ -30,6 +30,7 @@ PACKAGES=(
   vim
   nano
   emacs
+  micro
   pico
   neovim
   rsync
@@ -46,10 +47,10 @@ PACKAGES=(
 )
 
 TOOLS=(
-  tldr # tool
-  bat # improved cat, tool
-  cloc # count lines of code, tool
-  sshm # tool
+  tldr  # tool
+  bat   # improved cat, tool
+  cloc  # count lines of code, tool
+  sshm  # tool
   sshrc # tool
   ssh-audit
   sshpass
@@ -57,32 +58,33 @@ TOOLS=(
   shellcheck
   jq
   yq
+  glances
 )
 
 SYSTEMS=(
-  apt # system
-  pacman # system
-  apk # system
-  nix # system
-  dpkg # system
-  rpm # system
-  dnf # system
-  zypper # tool?
-  pkgconf # tool?
+  apt        # system
+  pacman     # system
+  apk        # system
+  nix        # system
+  dpkg       # system
+  rpm        # system
+  dnf        # system
+  zypper     # tool?
+  pkgconf    # tool?
   chocolatey # system
-  choco # system
-  wpkg # ?
-  appimage # ?
+  choco      # system
+  wpkg       # ?
+  appimage   # ?
   fusermount # ? Surrogate for appimage
-  brew # system
-  flatpak # system
-  snap # system
+  brew       # system
+  flatpak    # system
+  snap       # system
   # yay # tool? superset of pacman
   # yum # tool? superset of pacman
   # paru # tool? superset of pacman
   make # Is this a system? Idk but it seems useful to know
   # cmake # Is this a system? Idk but it seems useful to know
-  systemd # system
+  systemd   # system
   systemctl # system
 )
 

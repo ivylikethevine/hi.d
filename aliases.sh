@@ -20,6 +20,8 @@ alias gd="git diff --color=always"
 # exported here since we have to wrap the bat/batcat call per shell
 export bat_opts="-P --tabs 2 --theme Monokai\ Extended\ Bright --style changes,grid,numbers"
 
+alias now="date -u '+%a %b %e %H:%M:%S %Z %Y'; date '+%a %b %e %H:%M:%S %Z %Y'; date +%s"
+
 alias chron="cron"
 alias chrontab="crontab"
 alias view="vew" # here to avoid calling vi (and each shell has their own vew functions)

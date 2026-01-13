@@ -13,11 +13,12 @@ BRPURPLE='\e[1;35m' # 11
 BRCYAN='\e[1;36m' # 12
 NC='\e[0m' # 13
 
-start=$(date +%s.%N)
 sshrc_start="# sshrc-config-start"
 sshrc_end="# sshrc-config-end"
+
 minimal=${minimal:-}
 sshrc_exclude=${sshrc_exclude:-"--exclude .git --exclude stubs --exclude reports --exclude README.md"}
+start=$(date +%s.%N)
 
 cecho() {
   echo -e "$2$1$NC"
@@ -137,15 +138,18 @@ check_packages() {
   spacer
   tools
   echo
-  spacer
-  basics
-  echo
-  spacer
-  installed
-  echo
-  spacer
-  missing
-  echo
+
+  if [ "$minimal" = false ]; then
+    spacer
+    basics
+    echo
+    spacer
+    installed
+    echo
+    spacer
+    missing
+    echo
+  fi
 }
 
 # TODO: Add tmux support + handle disconnects/reconnects/older sessions
@@ -173,8 +177,8 @@ say_hi() {
     git_identity
     docker_count
     key_count
-    check_packages
   fi
+  check_packages
   configure_all
   spacer
   cecho_n "sshrc loaded with... " "$BRCYAN"

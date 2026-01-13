@@ -2,14 +2,20 @@
 if [ -f ~/.aliasesrc ]; then
   source ~/.aliasesrc
 fi
-if [ -f ~/aliases.rc ]; then
-  source ~/aliases.rc
+if [ -f ~/aliases.sh ]; then
+  source ~/aliases.sh
 fi
-if [ -f "$SSHHOME/aliases.rc" ]; then
-  source "$SSHHOME/aliases.rc"
+if [ -f "$SSHHOME/aliases.sh" ]; then
+  source "$SSHHOME/aliases.sh"
 fi
-if [ -f ~/.sshrc.d/aliases.rc ]; then
-  source ~/.sshrc.d/aliases.rc
+if [ -f ~/.sshrc.d/aliases.sh ]; then
+  source ~/.sshrc.d/aliases.sh
+fi
+if [ -f "$SSHHOME/.sshrc.d/prompt_colors.sh" ]; then
+  source "$SSHHOME/.sshrc.d/prompt_colors.sh"
+fi
+if [ -f ~/.sshrc.d/prompt_colors.sh ]; then
+  source ~/.sshrc.d/prompt_colors.sh
 fi
 
 # conditionally load since bat is sometimes batcat on debian systems
@@ -56,7 +62,7 @@ compdef sshrc=ssh
 
 autoload -Uz promptinit
 promptinit
-prompt adam1
+# prompt adam1
 
 bindkey -e
 
@@ -95,3 +101,27 @@ zstyle ':completion:*' use-compctl false
 zstyle ':completion:*' verbose true
 zstyle ':completion:*:*:kill:*:processes' list-colors '=(#b) #([0-9]#)*=0=01;31'
 zstyle ':completion:*:kill:*' command 'ps -u $USER -o pid,%cpu,tty,cputime,cmd'
+
+[ -x /usr/bin/lesspipe ] && eval "$(SHELL=/bin/sh lesspipe)"
+if [ -z "${debian_chroot:-}" ] && [ -r /etc/debian_chroot ]; then
+  debian_chroot=$(cat /etc/debian_chroot)
+fi
+case "$TERM" in
+xterm-color | *-256color) color_prompt=yes ;;
+esac
+force_color_prompt=yes
+if [ -n "$force_color_prompt" ]; then
+  if [ -x /usr/bin/tput ] && tput setaf 1 >&/dev/null; then
+    color_prompt=yes
+  else
+    color_prompt=
+  fi
+fi
+if [ "$color_prompt" = yes ]; then
+  USER_COLOR=$(user_color "$(whoami)")
+  HOST_COLOR=$(host_color "$(hostname)")
+  AT_COLOR=$(at_color "${SSH_TTY}")
+  PLAIN_COLOR=$(plain)
+
+  PS1=" ${debian_chroot:+($debian_chroot)}${USER_COLOR}%n${AT_COLOR}@${HOST_COLOR}%m:${PLAIN_COLOR}%1~\$ "
+fi

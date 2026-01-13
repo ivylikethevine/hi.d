@@ -2,14 +2,14 @@
 if test -f ~/.aliasesrc
   source ~/.aliasesrc
 end
-if test -f ~/aliases.rc
-  source ~/aliases.rc
+if test -f ~/aliases.sh
+  source ~/aliases.sh
 end
-if test -f "$SSHHOME/aliases.rc"
-  source "$SSHHOME/aliases.rc"
+if test -f "$SSHHOME/aliases.sh"
+  source "$SSHHOME/aliases.sh"
 end
-if test -f ~/.sshrc.d/aliases.rc
-  source ~/.sshrc.d/aliases.rc
+if test -f ~/.sshrc.d/aliases.sh
+  source ~/.sshrc.d/aliases.sh
 end
 
 # conditionally load since bat is sometimes batcat on debian systems
@@ -128,6 +128,7 @@ function prompt_login --description "display user name for the prompt"
     set color_at yellow
   end
 
+  # TODO: Unified colors
   if [ (prompt_hostname) = "swervy" -o (prompt_hostname) = "melchior" -o  (prompt_hostname) = "lenny" -o (prompt_hostname) = "clyde" ]
     set color_host brred
   end
@@ -183,11 +184,11 @@ function fish_greeting
     end
 
     set -l ssh_root "/home/$USER/.sshrc.d/"
-    if [ -f "$ssh_root/check.rc" -a -f "$ssh_root/load.sh" ]
+    if [ -f "$ssh_root/check.sh" -a -f "$ssh_root/load.sh" ]
       # TODO: make this prettier/faster
-      set -g systems (bash -c "source $ssh_root/load.sh; source $ssh_root/check.rc; systems")
-      set -g installed (bash -c "source $ssh_root/load.sh; source $ssh_root/check.rc; installed")
-      set -g missing (bash -c "source $ssh_root/load.sh; source $ssh_root/check.rc; missing")
+      set -g systems (bash -c "source $ssh_root/load.sh; source $ssh_root/check.sh; systems")
+      set -g installed (bash -c "source $ssh_root/load.sh; source $ssh_root/check.sh; installed")
+      set -g missing (bash -c "source $ssh_root/load.sh; source $ssh_root/check.sh; missing")
     end
 
     if [ -d "$ssh_root/.git" ]

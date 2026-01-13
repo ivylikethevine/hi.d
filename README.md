@@ -31,7 +31,7 @@ Reminder - place local only changes after the "`# sshrc-config`" comment in the 
 Shell Configurations
 
 - `bash.rc`
-- `zsh.rc`
+- `zsh.zsh`
 - `.config/fish/config.fish`
 
 Editor Configurations
@@ -42,8 +42,8 @@ Editor Configurations
 ##### Other Features
 
 - `load.sh` - chainloader
-- `aliases.rc` - shared aliases between bash, zsh, and fish
-- `check.rc` - check for commonly used commands
+- `aliases.sh` - shared aliases between bash, zsh, and fish
+- `check.sh` - check for commonly used commands
 - `tmux.conf` - tmux configuration/support
 - `install.sh` - configure local shells to use sshrc.d configurations (compare against stubs folder)
 

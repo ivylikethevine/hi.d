@@ -1,19 +1,19 @@
 #!/bin/sh
-start=$(date +%s.%N)
-RED='\e[0;31m'
-GREEN='\e[0;32m'
-YELLOW='\e[0;33m'
-BLUE='\e[0;34m'
-PURPLE='\e[0;35m'
-CYAN='\e[0;36m'
-BRRED='\e[1;31m'
-BRGREEN='\e[1;32m'
-BRYELLOW='\e[1;33m'
-BRBLUE='\e[1;34m'
-BRPURPLE='\e[1;35m'
-BRCYAN='\e[1;36m'
-NC='\e[0m'
+RED='\e[0;31m' # 1
+GREEN='\e[0;32m' # 2
+YELLOW='\e[0;33m' # 3
+BLUE='\e[0;34m' # 4
+PURPLE='\e[0;35m' # 5
+CYAN='\e[0;36m' # 6
+BRRED='\e[1;31m' # 7
+BRGREEN='\e[1;32m' # 8
+BRYELLOW='\e[1;33m' # 9
+BRBLUE='\e[1;34m' # 10
+BRPURPLE='\e[1;35m' # 11
+BRCYAN='\e[1;36m' # 12
+NC='\e[0m' # 13
 
+start=$(date +%s.%N)
 sshrc_start="# sshrc-config-start"
 sshrc_end="# sshrc-config-end"
 
@@ -72,8 +72,8 @@ configure_all() {
   fi
   configure_file ~/.nanorc nano.rc
   configure_file ~/.bashrc bash.rc
-  configure_file ~/.zshrc zsh.rc
-  configure_file ~/.aliasesrc aliases.rc
+  configure_file ~/.zshrc zsh.zsh
+  configure_file ~/.aliasesrc aliases.sh
   if command -v "fish" &>/dev/null; then
     # This path won't exist if fish isn't installed
     configure_file ~/.config/fish/config.fish config.fish
@@ -126,7 +126,7 @@ timers() {
 }
 
 check_packages() {
-  source $SSHHOME/.sshrc.d/check.rc
+  source $SSHHOME/.sshrc.d/check.sh
   spacer
   installed
   spacer
@@ -180,7 +180,7 @@ say_hi() {
     bash -i
   fi
 
-  # sshrc_exclude is adding to load.sh by hi.sh
+  # sshrc_exclude is appended to load.sh by hi.sh during the transfer
   cecho_n " $(du -sh $sshrc_exclude --apparent-size $SSHHOME/.sshrc.d | awk '{ print $1 }') " $NC
   cecho '~~~~~~~~~~~~~~~~~~~~~~~ Disconnected! ~~~~~~~~~~~~~~~~~~~~~~~~~~' $BRRED
   timestamp

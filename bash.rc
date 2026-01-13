@@ -2,14 +2,20 @@
 if [ -f ~/.aliasesrc ]; then
   source ~/.aliasesrc
 fi
-if [ -f ~/aliases.rc ]; then
-  source ~/aliases.rc
+if [ -f ~/aliases.sh ]; then
+  source ~/aliases.sh
 fi
-if [ -f "$SSHHOME/aliases.rc" ]; then
-  source "$SSHHOME/aliases.rc"
+if [ -f "$SSHHOME/aliases.sh" ]; then
+  source "$SSHHOME/aliases.sh"
 fi
-if [ -f ~/.sshrc.d/aliases.rc ]; then
-  source ~/.sshrc.d/aliases.rc
+if [ -f ~/.sshrc.d/aliases.sh ]; then
+  source ~/.sshrc.d/aliases.sh
+fi
+if [ -f "$SSHHOME/.sshrc.d/prompt_colors.sh" ]; then
+  source "$SSHHOME/.sshrc.d/prompt_colors.sh"
+fi
+if [ -f ~/.sshrc.d/prompt_colors.sh ]; then
+  source ~/.sshrc.d/prompt_colors.sh
 fi
 
 # conditionally load since bat is sometimes batcat on debian systems
@@ -70,36 +76,13 @@ if [ -n "$force_color_prompt" ]; then
   fi
 fi
 if [ "$color_prompt" = yes ]; then
-  USER_COLOR='32m'
-  HOST_COLOR='32m'
-  AT_COLOR='32m'
-  if [[ ${SSH_TTY} ]]; then
-    AT_COLOR='33m' # yellow
-  fi
-  if [ "$(hostname)" = "swervy" -o "$(hostname)" = "melchior" -o "$(hostname)" = "lenny" -o "$(hostname)" = "clyde" ]; then
-    HOST_COLOR='31m' # red
-  fi
-  if [ "$(hostname)" = "bertha" -o "$(hostname)" = "liona" -o "$(hostname)" = "mavie" ]; then
-    HOST_COLOR='35m' # purple
-  fi
-  if [ "$(hostname)" = "minty" -o "$(hostname)" = "sherrie" ]; then
-    HOST_COLOR='34m' # blue
-  fi
-  if [ "$(hostname)" = "gendo" -o "$(hostname)" = "ryoji" -o "$(hostname)" = "shinji" -o "$(hostname)" = "edison" ]; then
-    HOST_COLOR='32m' # green
-  fi
-  if [ "$(whoami)" = "root" -o "$(whoami)" = "admin" ]; then
-    USER_COLOR='31m' # red
-  fi
-  if [ "$(whoami)" = "team" -o "$(whoami)" = "edison" ]; then
-    USER_COLOR='34m' # blue
-  fi
-  if [ "$(whoami)" = "ivy" ]; then
-    USER_COLOR='33m' # yellow
-  fi
-  PS1=' ${debian_chroot:+($debian_chroot)}\[\033[01;${USER_COLOR}\]\u\[\033[01;${AT_COLOR}\]@\[\033[01;${HOST_COLOR}\]\h\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]\$ '
+  USER_COLOR=$(user_color "$(whoami)")
+  HOST_COLOR=$(host_color "$(hostname)")
+  AT_COLOR=$(at_color "${SSH_TTY}")
+
+  PS1=" ${debian_chroot:+($debian_chroot)}${USER_COLOR}\u${AT_COLOR}@${HOST_COLOR}\h\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]\$ "
 else
-  PS1=' ${debian_chroot:+($debian_chroot)}\u@\h:\w\$ '
+  PS1=" ${debian_chroot:+($debian_chroot)}\u@\h:\w\$ "
 fi
 unset color_prompt force_color_prompt
 case "$TERM" in

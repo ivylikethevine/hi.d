@@ -1,4 +1,5 @@
 #!/bin/bash
+# shellcheck source=~
 if [ -f ~/.aliasesrc ]; then
   source ~/.aliasesrc
 fi
@@ -18,15 +19,16 @@ if [ -f ~/.sshrc.d/prompt_colors.sh ]; then
   source ~/.sshrc.d/prompt_colors.sh
 fi
 
+bat_opts=${bat_opts:-"--color=always --paging=never"}
 # conditionally load since bat is sometimes batcat on debian systems
 if [ -f "/usr/bin/bat" ]; then
   alias batcat="bat"
-  alias bat="bat $bat_opts"
+  alias bat='bat $bat_opts'
 fi
 
 if [ -f "/usr/bin/batcat" ]; then
   alias bat="batcat"
-  alias batcat="batcat $bat_opts"
+  alias batcat='batcat $bat_opts'
 fi
 
 # Spelled vew to avoid calling vi
@@ -39,7 +41,7 @@ vew() {
   fi
 
   if [[ -f "$p" ]]; then
-    if [ -f "/usr/bin/batcat" -o -f "/usr/bin/bat" ]; then
+    if [ -f "/usr/bin/batcat" ] || [ -f "/usr/bin/bat" ]; then
       bat "$@"
     else
       cat -- "$p"

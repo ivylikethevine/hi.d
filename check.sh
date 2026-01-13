@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 # TODO: Better divide
 # - system (pacman, apt, dnf, nix, etc)
 # - commands
@@ -14,6 +14,9 @@ PACKAGES=(
   vi
   vim
   nano
+  emacs
+  pico
+  neovim
   rsync
   tar
   zip
@@ -44,6 +47,10 @@ PACKAGES=(
   sshm # tool
   sshrc # tool
   command
+  cut
+  find
+  ssh-audit
+  shellcheck
 )
 
 SYSTEMS=(
@@ -77,7 +84,7 @@ installed() {
   # TODO: Display important names from groups of commands based on priority?
   for package in "${PACKAGES[@]}"; do
     if command -v "$package" &>/dev/null; then
-      cecho_n "$package ✓ " $GREEN
+      cecho_n "$package ✓ " "$GREEN"
     fi
   done
   echo
@@ -86,7 +93,7 @@ installed() {
 missing() {
   for package in "${PACKAGES[@]}"; do
     if ! command -v "$package" &>/dev/null; then
-      cecho_n "$package ✗ " $BRYELLOW
+      cecho_n "$package ✗ " "$BRYELLOW"
     fi
   done
   echo
@@ -95,7 +102,7 @@ missing() {
 systems() {
   for system in "${SYSTEMS[@]}"; do
     if command -v "$system" &>/dev/null; then
-      cecho_n "$system ✓ " $BLUE
+      cecho_n "$system ✓ " "$BLUE"
     fi
   done
 }

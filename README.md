@@ -6,7 +6,8 @@ First, `~/.sshrc` is executed, which chainloads `~/.sshrc.d/load.sh`. The second
 configured vim to actually be `ln /home/$USER/.vimrc /home/$USER/sshrc.d/.vimrc`
 `du -sb --exclude .git --exclude .gitignore --exclude README.md --exclude hi.sh --exclude install.sh --exclude stubs --apparent-size` -> filesize (needs to be under 64k)
 
-Built using:
+- shellcheck????
+  Built using:
 
 - sshrc - https://github.com/cdown/sshrc (built into `hi.sh`)
   - bring local configuration to remote hosts
@@ -30,7 +31,7 @@ Reminder - place local only changes after the "`# sshrc-config`" comment in the 
 
 Shell Configurations
 
-- `bash.rc`
+- `bash.sh`
 - `zsh.zsh`
 - `.config/fish/config.fish`
 

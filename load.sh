@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 RED='\e[0;31m' # 1
 GREEN='\e[0;32m' # 2
 YELLOW='\e[0;33m' # 3
@@ -16,6 +16,8 @@ NC='\e[0m' # 13
 start=$(date +%s.%N)
 sshrc_start="# sshrc-config-start"
 sshrc_end="# sshrc-config-end"
+minimal=${minimal:-}
+sshrc_exclude=${sshrc_exclude:-"--exclude .git --exclude stubs --exclude reports --exclude README.md"}
 
 cecho() {
   echo -e "$2$1$NC"
@@ -26,7 +28,7 @@ cecho_n() {
 }
 
 spacer() {
-  cecho_n " | " $NC
+  cecho_n " | " "$NC"
 }
 
 timestamp() {
@@ -36,19 +38,21 @@ timestamp() {
 }
 
 configure_file() {
-  touch $1
-  if test -f $1; then
-    if ! grep -q "$sshrc_start" $1; then
-      echo "$sshrc_start" >>$1
-      cat "$SSHHOME/.sshrc.d/$2" >>$1
-      echo "$sshrc_end" >>$1
+  touch "$1"
+  if test -f "$1"; then
+    if ! grep -q "$sshrc_start" "$1"; then
+      {
+        echo "$sshrc_start";
+        cat "$SSHHOME/.sshrc.d/$2";
+        echo "$sshrc_end";
+      } >>"$1"
     fi
   fi
 }
 
 clean_file() {
-  if test -f $1; then
-    sed -i "/^$sshrc_start/,/^$sshrc_end/d" -- $1
+  if test -f "$1"; then
+    sed -i "/^$sshrc_start/,/^$sshrc_end/d" -- "$1"
   fi
 }
 
@@ -71,7 +75,7 @@ configure_all() {
     export VIMINIT="let \$MYVIMRC='$SSHHOME/.sshrc.d/vim.rc' | source \$MYVIMRC"
   fi
   configure_file ~/.nanorc nano.rc
-  configure_file ~/.bashrc bash.rc
+  configure_file ~/.bashrc bash.sh
   configure_file ~/.zshrc zsh.zsh
   configure_file ~/.aliasesrc aliases.sh
   if command -v "fish" &>/dev/null; then
@@ -81,41 +85,41 @@ configure_all() {
 }
 
 system_info() {
-  cecho_n "$(uname -s)" $YELLOW
+  cecho_n "$(uname -s)" "$YELLOW"
   spacer
-  cecho_n "$(uname -m)" $PURPLE
+  cecho_n "$(uname -m)" "$PURPLE"
   spacer
-  cecho_n "$(cat /etc/os-release | grep PRETTY_NAME | cut -d= -f2 | tr -d '"')" $GREEN
+  cecho_n "$(cat /etc/os-release | grep PRETTY_NAME | cut -d= -f2 | tr -d '"')" "$GREEN"
   spacer
-  cecho_n "CPUs: $(nproc)" $BLUE
+  cecho_n "CPUs: $(nproc)" "$BLUE"
   spacer
-  cecho "RAM: $(free -h --giga | awk '/^Mem:/ {print $2}GB') " $CYAN
+  cecho "RAM: $(free -h --giga | awk '/^Mem:/ {print $2}GB') " "$CYAN"
 }
 
 git_identity() {
   spacer
   if [ -f ~/.gitconfig ]; then
-    cecho_n "Git ID: " $CYAN
-    cecho_n "$(cat ~/.gitconfig | grep email | cut -d= -f2 | tr -d ' ' | awk -F@ '{for(i=0;i<length($2);i++) c=c"●"; print $1"@"c; c=""}')" $YELLOW
+    cecho_n "Git ID: " "$CYAN"
+    cecho_n "$(cat ~/.gitconfig | grep email | cut -d= -f2 | tr -d ' ' | awk -F@ '{for(i=0;i<length($2);i++) c=c"●"; print $1"@"c; c=""}')" "$YELLOW"
   else
-    cecho_n "No Git ID Found..." $YELLOW
+    cecho_n "No Git ID Found..." "$YELLOW"
   fi
 }
 
 docker_count() {
   spacer
   if command -v "docker" &>/dev/null; then
-    cecho_n "Containers: $(docker container ls | wc -l | awk '{print $1 - 1}')" $BLUE
+    cecho_n "Containers: $(docker container ls | wc -l | awk '{print $1 - 1}')" "$BLUE"
   else
-    cecho_n "No docker :(" $BRYELLOW
+    cecho_n "No docker :(" "$BRYELLOW"
   fi
 }
 
 key_count() {
   spacer
-  cecho_n "Auth: $(ls ~/.ssh | grep authorized_keys | wc -l)" $RED
+  cecho_n "Auth: $(wc -l ~/.ssh/authorized_keys | awk '{ print $1 }')" "$RED"
   spacer
-  cecho "Pub: $(ls ~/.ssh | grep .pub | wc -l)" $PURPLE
+  cecho "Pub: $(find ~/.ssh -type f -name "*.pub" | wc -l)" "$PURPLE"
 }
 
 timers() {
@@ -126,12 +130,12 @@ timers() {
 }
 
 check_packages() {
-  source $SSHHOME/.sshrc.d/check.sh
+  source "$SSHHOME"/.sshrc.d/check.sh
   spacer
   installed
   spacer
   systems
-  cecho_n "| " $NC
+  cecho_n "| " "$NC"
   missing
 }
 
@@ -143,8 +147,8 @@ tmuxrc() {
     mkdir -p $TMUXDIR
   fi
   rm -rf $TMUXDIR/.sshrc.d
-  cp -r $SSHHOME/.sshrc $SSHHOME/bashsshrc $SSHHOME/sshrc $SSHHOME/.sshrc.d $TMUXDIR
-  SSHHOME=$TMUXDIR SHELL=$TMUXDIR/bashsshrc /usr/bin/tmux -S $TMUXDIR/tmuxserver $@
+  cp -r "$SSHHOME"/.sshrc "$SSHHOME"/bashsshrc "$SSHHOME"/sshrc "$SSHHOME"/.sshrc.d "$TMUXDIR"
+  SSHHOME="$TMUXDIR" SHELL="$TMUXDIR"/bashsshrc /usr/bin/tmux -S "$TMUXDIR"/tmuxserver "$@"
 }
 # export SHELL=`which bash`
 # tmuxrc
@@ -153,7 +157,7 @@ say_hi() {
   # minimal=false # can also modify in ~/.sshrc
 
   trap 'clean_all' exit
-  cecho '~~~~~~~~~~~~~~~~~~~~~~~~ Connected! ~~~~~~~~~~~~~~~~~~~~~~~~~~~~' $BRGREEN
+  cecho '~~~~~~~~~~~~~~~~~~~~~~~~ Connected! ~~~~~~~~~~~~~~~~~~~~~~~~~~~~' "$BRGREEN"
   timestamp
   system_info
   if [ "$minimal" = false ]; then
@@ -164,26 +168,26 @@ say_hi() {
   fi
   configure_all
   spacer
-  cecho_n "sshrc loaded with... " $PURPLE
+  cecho_n "sshrc loaded with... " "$BRCYAN"
 
   if command -v "fish" &>/dev/null; then
-    cecho_n "fish shell! :^)" $GREEN
+    cecho_n "fish shell! :^)" "$GREEN"
     timers
     fish -C "set fish_greeting ''" -i
   elif command -v "zsh" &>/dev/null; then
-    cecho_n "zsh shell! :)" $PURPLE
+    cecho_n "zsh shell! :)" "$PURPLE"
     timers
     zsh -i
   else
-    cecho_n "only bash today :(" $RED
+    cecho_n "only bash today :(" "$RED"
     timers
     bash -i
   fi
 
   # sshrc_exclude is appended to load.sh by hi.sh during the transfer
-  cecho_n " $(du -sh $sshrc_exclude --apparent-size $SSHHOME/.sshrc.d | awk '{ print $1 }') " $NC
-  cecho '~~~~~~~~~~~~~~~~~~~~~~~ Disconnected! ~~~~~~~~~~~~~~~~~~~~~~~~~~' $BRRED
+  cecho_n " $(du -sh $sshrc_exclude --apparent-size "$SSHHOME"/.sshrc.d | awk '{ print $1 }') " "$NC"
+  cecho '~~~~~~~~~~~~~~~~~~~~~~~ Disconnected! ~~~~~~~~~~~~~~~~~~~~~~~~~~' "$BRRED"
   timestamp
-  cecho_n "sshrc closing! " $BRPURPLE
+  cecho_n "sshrc closing! " "$BRPURPLE"
   exit 0
 }

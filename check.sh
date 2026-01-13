@@ -6,11 +6,26 @@
 # - add-ons (docker, nomad, etc)
 # - tools (jq, yq, zip, tar)
 
-PACKAGES=(
+BASICS=(
   sudo
   curl
   wget
   ping
+  tar
+  zip
+  gpg
+  git
+  htop
+  bc
+  openssl
+  tmux
+  screen
+  command
+  cut
+  find
+)
+
+PACKAGES=(
   vi
   vim
   nano
@@ -18,10 +33,6 @@ PACKAGES=(
   pico
   neovim
   rsync
-  tar
-  zip
-  jq
-  yq
   netstat
   avahi-daemon
   neofetch
@@ -30,27 +41,22 @@ PACKAGES=(
   node
   nomad
   rustup
-  cosign
-  gpg
-  git
-  htop
-  bc
-  sshpass
-  openssl
-  tmux
-  screen
   asdf
   direnv
+)
+
+TOOLS=(
   tldr # tool
   bat # improved cat, tool
   cloc # count lines of code, tool
   sshm # tool
   sshrc # tool
-  command
-  cut
-  find
   ssh-audit
+  sshpass
+  cosign
   shellcheck
+  jq
+  yq
 )
 
 SYSTEMS=(
@@ -71,11 +77,11 @@ SYSTEMS=(
   brew # system
   flatpak # system
   snap # system
-  yay # tool? superset of pacman
-  yum # tool? superset of pacman
-  paru # tool? superset of pacman
+  # yay # tool? superset of pacman
+  # yum # tool? superset of pacman
+  # paru # tool? superset of pacman
   make # Is this a system? Idk but it seems useful to know
-  cmake # Is this a system? Idk but it seems useful to know
+  # cmake # Is this a system? Idk but it seems useful to know
   systemd # system
   systemctl # system
 )
@@ -87,7 +93,6 @@ installed() {
       cecho_n "$package ✓ " "$GREEN"
     fi
   done
-  echo
 }
 
 missing() {
@@ -96,13 +101,28 @@ missing() {
       cecho_n "$package ✗ " "$BRYELLOW"
     fi
   done
-  echo
 }
 
 systems() {
   for system in "${SYSTEMS[@]}"; do
     if command -v "$system" &>/dev/null; then
       cecho_n "$system ✓ " "$BLUE"
+    fi
+  done
+}
+
+tools() {
+  for tool in "${TOOLS[@]}"; do
+    if command -v "$tool" &>/dev/null; then
+      cecho_n "$tool ✓ " "$PURPLE"
+    fi
+  done
+}
+
+basics() {
+  for basic in "${BASICS[@]}"; do
+    if command -v "$basic" &>/dev/null; then
+      cecho_n "$basic ✓ " "$CYAN"
     fi
   done
 }

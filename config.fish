@@ -129,22 +129,22 @@ function prompt_login --description "display user name for the prompt"
   end
 
   # TODO: Unified colors
-  if [ (prompt_hostname) = "swervy" -o (prompt_hostname) = "melchior" -o  (prompt_hostname) = "lenny" -o (prompt_hostname) = "clyde" ]
+  if [ (prompt_hostname) = "swervy" ] || [ (prompt_hostname) = "melchior" ] || [ (prompt_hostname) = "lenny" ] || [ (prompt_hostname) = "clyde" ]
     set color_host brred
   end
-  if [ (prompt_hostname) = "bertha" -o (prompt_hostname) = "liona" -o (prompt_hostname) = "mavie" ]
+  if [ (prompt_hostname) = "bertha" ] || [ (prompt_hostname) = "liona" ] || [ (prompt_hostname) = "mavie" ]
     set color_host brmagenta
   end
-  if [ (prompt_hostname) = "minty" -o (prompt_hostname) = "sherrie" ]
+  if [ (prompt_hostname) = "minty" ] || [ (prompt_hostname) = "sherrie" ]
     set color_host brblue
   end
-  if [ (prompt_hostname) = "gendo" -o (prompt_hostname) = "ryoji" -o (prompt_hostname) = "shinji" -o (prompt_hostname) = "edison" ]
+  if [ (prompt_hostname) = "gendo" ] || [ (prompt_hostname) = "ryoji" ] || [ (prompt_hostname) = "shinji" ] || [ (prompt_hostname) = "edison" ]
     set color_host brgreen
   end
-  if [ $USER = "root" -o $USER = "admin" ]
+  if [ $USER = "root" ] || [ $USER = "admin" ]
     set color_user red
   end
-  if [ $USER = "team" -o $USER = "edison" ]
+  if [ $USER = "team" ] || [ $USER = "edison" ]
     set color_user brblue
   end
   if [ $USER = "ivy" ]
@@ -161,15 +161,19 @@ function fish_greeting
   if not set -q fish_greeting
     set -l spacer (printf (_ '%s|' ) (set_color normal))
     set -l header (printf (_ ' %s%s~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Online! ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~') (set_color brgreen))
+
     set -l utctime (printf (_ '%s' (date -u "+%a %b %e %H:%M:%S %Z %Y")) (set_color brblue))
     set -l localtime (printf (_ '%s' (date "+%a %b %e %H:%M:%S %Z %Y")) (set_color bryellow))
-    set -l distro (printf (_ '%s' (cat /etc/os-release | grep PRETTY_NAME | cut -d= -f2 | tr -d '\"') '%s') (set_color green) (set_color normal))
+
+    set -l distro (printf (_ '%s' (grep PRETTY_NAME /etc/os-release | cut -d= -f2 | tr -d '\"') '%s') (set_color green) (set_color normal))
     set -l arch (printf (_ '%s' (uname -m) ) (set_color brmagenta))
     set -l os_type (printf (_ '%s' (uname -s)) (set_color bryellow))
+
     set -l cpus (printf (_ '%sCPUs: ' (nproc)) (set_color brblue))
     set -l ram (printf  (_ '%sRAM: ' (free -h --giga | awk '/^Mem:/ {print $2}GB')) (set_color cyan))
-    set -l authorized (printf (_ '%sAuth: ' (ls ~/.ssh | grep authorized_keys | wc -l)) (set_color red))
-    set -l public (printf (_ '%sPub: ' (ls ~/.ssh | grep .pub | wc -l)) (set_color magenta) )
+
+    set -l authorized (printf (_ '%sAuth: ' (wc -l ~/.ssh/authorized_keys | awk '{ print $1 }')) (set_color red))
+    set -l public (printf (_ '%sPub: ' (find ~/.ssh -type f -name "*.pub" | wc -l)) (set_color magenta) )
 
     if [ -f "/usr/bin/docker" ]
       set -g containers (printf (_ '%sContainers: ' (docker container ls | wc -l | awk '{print $1 - 1}')) (set_color brblue))
@@ -178,21 +182,23 @@ function fish_greeting
     end
 
     if [ -f "/home/$USER/.gitconfig" ]
-      set -g git_identity (printf (_ '%sGit ID: %s' (cat ~/.gitconfig | grep email | cut -d= -f2 | tr -d ' ' | awk -F@ '{for(i=0;i<length($2);i++) c=c"●"; print $1"@"c; c=""}')) (set_color brcyan) (set_color yellow))
+      set -g git_identity (printf (_ '%sGit ID: %s' (grep email ~/.gitconfig | cut -d= -f2 | tr -d ' ' | awk -F@ '{ for(i=0;i<length($2);i++) c=c"●"; print $1"@"c; c="" }')) (set_color brcyan) (set_color yellow))
     else
       set -g git_identity (printf (_ '%sNo Git ID Found... %s') (set_color yellow) (set_color normal))
     end
 
     set -l ssh_root "/home/$USER/.sshrc.d/"
-    if [ -f "$ssh_root/check.sh" -a -f "$ssh_root/load.sh" ]
+    if [ -f "$ssh_root/check.sh" ] && [ -f "$ssh_root/load.sh" ]
       # TODO: make this prettier/faster
       set -g systems (bash -c "source $ssh_root/load.sh; source $ssh_root/check.sh; systems")
       set -g installed (bash -c "source $ssh_root/load.sh; source $ssh_root/check.sh; installed")
       set -g missing (bash -c "source $ssh_root/load.sh; source $ssh_root/check.sh; missing")
+      set -g basics (bash -c "source $ssh_root/load.sh; source $ssh_root/check.sh; basics")
+      set -g tools (bash -c "source $ssh_root/load.sh; source $ssh_root/check.sh; tools")
     end
 
     if [ -d "$ssh_root/.git" ]
-      set -g sshrc_change_status (printf (_ '%s' (git -C ~/.sshrc.d status --short | wc -l | awk '{print $1}')' ↑') (set_color bryellow))
+      set -g sshrc_change_status (printf (_ '%s' (git -C ~/.sshrc.d status --short | wc -l | awk '{ print $1 }')' ↑') (set_color bryellow))
       set -g sshrc_update_status (printf (_ '%s' (git -C ~/.sshrc.d rev-list --count HEAD..origin/$(git -C ~/.sshrc.d rev-parse --abbrev-ref HEAD))' ↓') (set_color brgreen))
     else
       set -g sshrc_change_status ""
@@ -201,14 +207,17 @@ function fish_greeting
 
     set -l _timer_line $spacer" "$utctime"   "$spacer"   "$localtime
     set -l _git_key_change_line $spacer" "$git_identity" "$spacer" "$containers" "$spacer" "$authorized" "$spacer" "$public
-    set -l _installed $spacer" "$installed
-    set -l _containers_systems_line $spacer" "$systems$spacer" "$missing
+    set -l _installed_line $spacer" "$installed
+    set -l _systems_line $spacer" "$systems
+    set -l _missing_line $spacer" "$missing
+    set -l _basics_line $spacer" "$basics
+    set -l _tools_line $spacer" "$tools
     set -l _system_info_line $spacer" "$os_type" "$spacer" "$arch" "$spacer" "$distro" "$spacer" "$cpus" "$spacer" "$ram
 
     if [ $smaller_header ]
-      set -g fish_greeting $header" "$sshrc_change_status" "$sshrc_update_status\n $_timer_line\n $_git_key_change_line\n $_containers_systems_line
+      set -g fish_greeting $header" "$sshrc_change_status" "$sshrc_update_status\n $_timer_line\n $_git_key_change_line\n $_systems_line\n $_tools_line
     else
-      set -g fish_greeting $header" "$sshrc_change_status" "$sshrc_update_status\n $_timer_line\n $_system_info_line\n $_git_key_change_line\n $_installed\n $_containers_systems_line
+      set -g fish_greeting $header" "$sshrc_change_status" "$sshrc_update_status\n $_timer_line\n $_system_info_line\n $_git_key_change_line\n $_systems_line\n $_tools_line\n $_basics_line\n $_installed_line\n $_missing_line
     end
   end
 

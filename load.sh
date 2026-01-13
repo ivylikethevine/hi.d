@@ -89,7 +89,7 @@ system_info() {
   spacer
   cecho_n "$(uname -m)" "$PURPLE"
   spacer
-  cecho_n "$(cat /etc/os-release | grep PRETTY_NAME | cut -d= -f2 | tr -d '"')" "$GREEN"
+  cecho_n "$(grep PRETTY_NAME /etc/os-release | cut -d= -f2 | tr -d '"')" "$GREEN"
   spacer
   cecho_n "CPUs: $(nproc)" "$BLUE"
   spacer
@@ -100,7 +100,7 @@ git_identity() {
   spacer
   if [ -f ~/.gitconfig ]; then
     cecho_n "Git ID: " "$CYAN"
-    cecho_n "$(cat ~/.gitconfig | grep email | cut -d= -f2 | tr -d ' ' | awk -F@ '{for(i=0;i<length($2);i++) c=c"●"; print $1"@"c; c=""}')" "$YELLOW"
+    cecho_n "$(grep email ~/.gitconfig | cut -d= -f2 | tr -d ' ' | awk -F@ '{ for(i=0;i<length($2);i++) c=c"●"; print $1"@"c; c="" }')" "$YELLOW"
   else
     cecho_n "No Git ID Found..." "$YELLOW"
   fi
@@ -109,7 +109,7 @@ git_identity() {
 docker_count() {
   spacer
   if command -v "docker" &>/dev/null; then
-    cecho_n "Containers: $(docker container ls | wc -l | awk '{print $1 - 1}')" "$BLUE"
+    cecho_n "Containers: $(docker container ls | wc -l | awk '{ print $1 - 1 }')" "$BLUE"
   else
     cecho_n "No docker :(" "$BRYELLOW"
   fi
@@ -124,7 +124,7 @@ key_count() {
 
 timers() {
   spacer
-  cecho_n "load: $(echo "$(date +%s.%N) - $start" | bc -l | awk '{printf "%.3f\n", $1}')s"
+  cecho_n "load: $(echo "$(date +%s.%N) - $start" | bc -l | awk '{ printf "%.3f\n", $1 }')s"
   spacer
   copy_time # created by hi.sh to show time to copy over info
 }
@@ -132,11 +132,20 @@ timers() {
 check_packages() {
   source "$SSHHOME"/.sshrc.d/check.sh
   spacer
-  installed
-  spacer
   systems
-  cecho_n "| " "$NC"
+  echo
+  spacer
+  tools
+  echo
+  spacer
+  basics
+  echo
+  spacer
+  installed
+  echo
+  spacer
   missing
+  echo
 }
 
 # TODO: Add tmux support + handle disconnects/reconnects/older sessions

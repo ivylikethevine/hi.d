@@ -53,6 +53,32 @@ function vew --description 'Cat/bat a file or list a directory in detail | spell
   end
 end
 
+# https://itsfoss.gitlab.io/post/how-to-find-a-package-version-in-linux
+function version --description 'Check if a package/command is installed, then display its version'
+  set item "$argv"
+  if command -v "$item" &>/dev/null
+    echo -n "[$(command -v "$item")]: "
+    if command -v "dpkg" &>/dev/null
+      dpkg -s "$item" | grep Version | awk '{ print $2 }'
+    else if command -v "pacman" &>/dev/null
+      pacman -Qi "$item" | grep Version | awk '{ print $3 }'
+    else if command -v "dnf" &>/dev/null
+      dnf info "$item" | grep Version
+    else if command -v "rpm" &>/dev/null
+      rpm -qi "$item" | grep Version
+    else if command -v "zypper" &>/dev/null
+      zypper info "$item" | grep Version
+    else if command -v "apk" &>/dev/null
+      apk info "$item" | grep Version
+    end
+    return 0
+  end
+
+  echo "Error: '$item' is not a command or program."
+  return 1
+end
+
+
 bind \cH backward-kill-word
 bind ctrl-delete kill-word
 bind \e\[3\;5~ kill-word

@@ -52,6 +52,38 @@ vew() {
   fi
 }
 
+# https://itsfoss.gitlab.io/post/how-to-find-a-package-version-in-linux
+version() {
+  # 'Check if a package/command is installed, then display its version'
+  local item="${1:-}"
+
+  if command -v "$item" &>/dev/null; then
+    echo -n "[$(command -v "$item")]: "
+    if command -v "dpkg" &>/dev/null; then
+      dpkg -s "$item" | grep Version | awk '{ print $2 }'
+    fi
+    if command -v "pacman" &>/dev/null; then
+      pacman -Qi "$item" | grep Version | awk '{ print $3 }'
+    fi
+    if command -v "dnf" &>/dev/null; then
+      dnf info "$item" | grep Version
+    fi
+    if command -v "rpm" &>/dev/null; then
+      rpm -qi "$item" | grep Version
+    fi
+    if command -v "zypper" &>/dev/null; then
+      zypper info "$item" | grep Version
+    fi
+    if command -v "apk" &>/dev/null; then
+      apk info "$item" | grep Version
+    fi
+    return 0
+  fi
+
+  echo "Error: '$item' is not a command or program."
+  return 1
+}
+
 HISTFILE=~/.zsh_history
 HISTSIZE=2000
 SAVEHIST=2000

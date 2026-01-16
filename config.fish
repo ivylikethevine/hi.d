@@ -53,6 +53,7 @@ function vew --description 'Cat/bat a file or list a directory in detail | spell
   end
 end
 
+# TODO: handle when the input is a command via a script, not an installed package
 # https://itsfoss.gitlab.io/post/how-to-find-a-package-version-in-linux
 function version --description 'Check if a package/command is installed, then display its version'
   set item "$argv"
@@ -198,8 +199,12 @@ function fish_greeting
 
     set -l cpus (printf (_ '%sCPUs: ' (nproc)) (set_color brblue))
     set -l ram (printf  (_ '%sRAM: ' (free -h --giga | awk '/^Mem:/ {print $2}GB')) (set_color cyan))
+    if [ -f ~/.ssh/authorized_keys ]
+      set -g authorized (printf (_ '%sAuth: ' (wc -l ~/.ssh/authorized_keys | awk '{ print $1 }')) (set_color red))
+    else
+      set -g authorized (printf (_ '%sAuth: 0!') (set_color red))
+    end
 
-    set -l authorized (printf (_ '%sAuth: ' (wc -l ~/.ssh/authorized_keys | awk '{ print $1 }')) (set_color red))
     set -l public (printf (_ '%sPub: ' (find ~/.ssh -type f -name "*.pub" | wc -l)) (set_color magenta) )
 
     if [ -f "/usr/bin/docker" ]

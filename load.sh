@@ -1,17 +1,17 @@
 #!/bin/bash
-RED='\e[0;31m' # 1
-GREEN='\e[0;32m' # 2
-YELLOW='\e[0;33m' # 3
-BLUE='\e[0;34m' # 4
-PURPLE='\e[0;35m' # 5
-CYAN='\e[0;36m' # 6
-BRRED='\e[1;31m' # 7
-BRGREEN='\e[1;32m' # 8
+RED='\e[0;31m'      # 1
+GREEN='\e[0;32m'    # 2
+YELLOW='\e[0;33m'   # 3
+BLUE='\e[0;34m'     # 4
+PURPLE='\e[0;35m'   # 5
+CYAN='\e[0;36m'     # 6
+BRRED='\e[1;31m'    # 7
+BRGREEN='\e[1;32m'  # 8
 BRYELLOW='\e[1;33m' # 9
-BRBLUE='\e[1;34m' # 10
+BRBLUE='\e[1;34m'   # 10
 BRPURPLE='\e[1;35m' # 11
-BRCYAN='\e[1;36m' # 12
-NC='\e[0m' # 13
+BRCYAN='\e[1;36m'   # 12
+NC='\e[0m'          # 13
 
 sshrc_start="# sshrc-config-start"
 sshrc_end="# sshrc-config-end"
@@ -43,9 +43,9 @@ configure_file() {
   if test -f "$1"; then
     if ! grep -q "$sshrc_start" "$1"; then
       {
-        echo "$sshrc_start";
-        cat "$SSHHOME/.sshrc.d/$2";
-        echo "$sshrc_end";
+        echo "$sshrc_start"
+        cat "$SSHHOME/.sshrc.d/$2"
+        echo "$sshrc_end"
       } >>"$1"
     fi
   fi
@@ -118,14 +118,18 @@ docker_count() {
 
 key_count() {
   spacer
-  cecho_n "Auth: $(wc -l ~/.ssh/authorized_keys | awk '{ print $1 }')" "$RED"
+  if [ -f ~/.ssh/authorized_keys ]; then
+    cecho_n "Auth: $(wc -l ~/.ssh/authorized_keys | awk '{ print $1 }')" "$RED"
+  else
+    cecho_n "Auth: 0!" "$RED"
+  fi
   spacer
   cecho "Pub: $(find ~/.ssh -type f -name "*.pub" | wc -l)" "$PURPLE"
 }
 
 timers() {
   spacer
-  cecho_n "load: $(echo "$(date +%s.%N) - $start" | bc -l | awk '{ printf "%.3f\n", $1 }')s"
+  cecho_n "load: $(echo "$(date +%s.%N) $start" | awk '{ printf "%.3f\n", $1 - $2 }')s"
   spacer
   copy_time # created by hi.sh to show time to copy over info
 }

@@ -44,6 +44,7 @@ PACKAGES=(
   rustup
   asdf
   direnv
+  nmap
 )
 
 TOOLS=(

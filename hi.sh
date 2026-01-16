@@ -64,7 +64,7 @@ EOF
             echo $DIVIDER'"$(tar czf - -h -C "$SSHHOME" $sshrc_exclude $files | $OPENSSL_COMMAND)"' | $TR_COMMAND | $OPENSSL_COMMAND -d | tar mxzf - -C \$SSHHOME
             export SSHHOME=\$SSHHOME
             echo \"$CMDARG\" >> \$SSHHOME/sshrc.bashrc
-            echo \"copy_time () { echo \"copy: $(echo "$(date +%s.%N) - $start" | bc -l | awk '{printf "%.3f\n", $1}')s\"; } \" >> \$SSHHOME/.sshrc.d/load.sh
+            echo \"copy_time () { echo \"copy: $(echo "$(date +%s.%N) $start" | awk '{ printf "%.3f\n", $1 - $2 }')s\"; } \" >> \$SSHHOME/.sshrc.d/load.sh
             echo \"sshrc_exclude='$sshrc_exclude'\" >> \$SSHHOME/.sshrc.d/load.sh
             bash --rcfile \$SSHHOME/sshrc.bashrc
             "

@@ -2,8 +2,11 @@
 sshrc_exclude="--exclude .git --exclude .gitignore \
   --exclude README.md --exclude hi.sh --exclude install.sh \
   --exclude stubs --exclude reports.sh --exclude reports \
+  --exclude tests \
   --exclude *.pem --exclude *.pub --exclude *.rsa --exclude *.key"
 start=$(date +%s.%N)
+
+# ignore warnings about quotes - shellcheck is confused because of the horrors below but fixing it breaks the functionality so :(
 
 function sshrc() {
   local SSHHOME=${SSHHOME:=~}

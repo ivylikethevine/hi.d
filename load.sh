@@ -17,7 +17,7 @@ sshrc_start="# sshrc-config-start"
 sshrc_end="# sshrc-config-end"
 
 minimal=${minimal:-}
-sshrc_exclude=${sshrc_exclude:-"--exclude .git --exclude stubs --exclude reports --exclude README.md"}
+sshrc_exclude=${sshrc_exclude:-'--exclude .git --exclude stubs --exclude reports --exclude README.md --exclude tests'}
 start=$(date +%s.%N)
 
 cecho() {
@@ -202,6 +202,7 @@ say_hi() {
   fi
 
   # sshrc_exclude is appended to load.sh by hi.sh during the transfer
+  # can't fix the shellcheck error below
   cecho_n " $(du -sh $sshrc_exclude --apparent-size "$SSHHOME"/.sshrc.d | awk '{ print $1 }') " "$NC"
   cecho '~~~~~~~~~~~~~~~~~~~~~~~ Disconnected! ~~~~~~~~~~~~~~~~~~~~~~~~~~' "$BRRED"
   timestamp

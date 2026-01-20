@@ -11,6 +11,9 @@ elif [ -f ~/.sshrc.d/prompt_colors.sh ]; then
   source ~/.sshrc.d/prompt_colors.sh
 fi
 
+# TODO: zsh header
+# user customization goes below =============
+
 # conditionally load since bat is sometimes batcat on debian systems
 if [ -f "/usr/bin/bat" ]; then
   alias batcat="bat"

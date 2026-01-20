@@ -5,3 +5,6 @@ rm -rf .git
 rm -rf reports
 rm .gitignore
 rm README.md
+
+
+# TODO: Modify prompt_colors to anonymize

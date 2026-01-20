@@ -17,7 +17,9 @@ sshrc_start="# sshrc-config-start"
 sshrc_end="# sshrc-config-end"
 
 minimal=${minimal:-}
-sshrc_exclude=${sshrc_exclude:-'--exclude .git --exclude stubs --exclude reports --exclude README.md --exclude tests'}
+
+SSHHOME=${SSHHOME:-$HOME/.sshrc.d}
+sshrc_exclude=${sshrc_exclude:-'--exclude .git --exclude .gitignore --exclude README.md --exclude stubs --exclude reports --exclude scripts'}
 start=$(date +%s.%N)
 
 cecho() {
@@ -62,12 +64,6 @@ clean_all() {
   clean_file ~/.zshrc
   clean_file ~/.nanorc
   clean_file ~/.config/fish/config.fish
-  if [ -f ~/.aliasesrc ]; then
-    rm -f ~/.aliasesrc
-  fi
-  if [ -f ~/.hushlogin ]; then
-    rm -f ~/.hushlogin
-  fi
 }
 
 configure_all() {
@@ -78,7 +74,7 @@ configure_all() {
   configure_file ~/.nanorc nano.rc
   configure_file ~/.bashrc bash.sh
   configure_file ~/.zshrc zsh.zsh
-  configure_file ~/.aliasesrc aliases.sh
+  # configure_file ~/.aliasesrc aliases.sh
   if command -v "fish" &>/dev/null; then
     # This path won't exist if fish isn't installed
     configure_file ~/.config/fish/config.fish config.fish

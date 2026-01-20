@@ -5,7 +5,8 @@
 **private**
 **key**
 
-links/
+links/*
+reports/*
 
 *.png
 *.jpg

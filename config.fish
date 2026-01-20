@@ -1,12 +1,6 @@
 #!/bin/fish
-if test -f ~/.aliasesrc
-  source ~/.aliasesrc
-end
-if test -f ~/aliases.sh
-  source ~/aliases.sh
-end
-if test -f "$SSHHOME/aliases.sh"
-  source "$SSHHOME/aliases.sh"
+if test -f "$SSHHOME/.sshrc.d/aliases.sh"
+  source "$SSHHOME/.sshrc.d/aliases.sh"
 end
 if test -f ~/.sshrc.d/aliases.sh
   source ~/.sshrc.d/aliases.sh

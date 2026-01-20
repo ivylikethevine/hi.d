@@ -1,8 +1,6 @@
 #!/bin/bash
-sshrc_exclude="--exclude .git --exclude .gitignore \
-  --exclude README.md --exclude hi.sh --exclude install.sh \
-  --exclude stubs --exclude reports.sh --exclude reports \
-  --exclude tests \
+sshrc_exclude="--exclude .git --exclude .gitignore --exclude README.md \
+  --exclude stubs --exclude reports --exclude scripts \
   --exclude *.pem --exclude *.pub --exclude *.rsa --exclude *.key"
 start=$(date +%s.%N)
 

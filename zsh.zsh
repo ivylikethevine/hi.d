@@ -1,20 +1,13 @@
 #!/bin/zsh
-if [ -f ~/.aliasesrc ]; then
-  source ~/.aliasesrc
-fi
-if [ -f ~/aliases.sh ]; then
-  source ~/aliases.sh
-fi
-if [ -f "$SSHHOME/aliases.sh" ]; then
-  source "$SSHHOME/aliases.sh"
-fi
-if [ -f ~/.sshrc.d/aliases.sh ]; then
+if [ -f "$SSHHOME/.sshrc.d/aliases.sh" ]; then
+  source "$SSHHOME/.sshrc.d/aliases.sh"
+elif [ -f ~/.sshrc.d/aliases.sh ]; then
   source ~/.sshrc.d/aliases.sh
 fi
+
 if [ -f "$SSHHOME/.sshrc.d/prompt_colors.sh" ]; then
   source "$SSHHOME/.sshrc.d/prompt_colors.sh"
-fi
-if [ -f ~/.sshrc.d/prompt_colors.sh ]; then
+elif [ -f ~/.sshrc.d/prompt_colors.sh ]; then
   source ~/.sshrc.d/prompt_colors.sh
 fi
 

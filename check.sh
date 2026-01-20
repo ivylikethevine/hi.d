@@ -45,6 +45,7 @@ PACKAGES=(
   asdf
   direnv
   nmap
+  just
 )
 
 TOOLS=(

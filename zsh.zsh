@@ -56,7 +56,15 @@ version() {
       echo "script/alias, no version found!"
     else
       if command -v "dpkg" &>/dev/null; then
-        dpkg -s "$item" | grep Version | awk '{ print $2 }';
+        if dpkg -s "$item" &>/dev/null; then
+          dpkg -s "$item" | grep Version | awk '{ print $2 }';
+        else
+          if "$item" --version &>/dev/null; then
+            echo -n "$("$item" --version)"
+          elif "$item" -V &>/dev/null; then
+            echo -n "$("$item" -V)"
+          fi
+        fi
       elif command -v "pacman" &>/dev/null; then
         pacman -Qi "$item" | grep Version | awk '{ print $3 }';
       elif command -v "dnf" &>/dev/null; then
@@ -72,7 +80,7 @@ version() {
     return 0
   fi
 
-  echo "Error: '$item' is not a command or program."
+  echo "[$item]: not a command or program."
   return 1
 }
 

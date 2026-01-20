@@ -49,31 +49,41 @@ end
 
 # https://itsfoss.gitlab.io/post/how-to-find-a-package-version-in-linux
 function version --description 'Check if a package/command is installed, then display its version'
-  set item "$argv"
+  set -l item "$argv"
 
-  if command -v "$item" &>/dev/null
+ if command -v "$item" &>/dev/null
     echo -n "[$(command -v "$item")]: "
-    if not which "$item" &>/dev/null
-      echo "script/alias, no version found!"
-    else
-      if command -v "dpkg" &>/dev/null
-        dpkg -s "$item" | grep Version | awk '{ print $2 }'
-      else if command -v "pacman" &>/dev/null
-        pacman -Qi "$item" | grep Version | awk '{ print $3 }'
-      else if command -v "dnf" &>/dev/null
-        dnf info "$item" | grep Version
-      else if command -v "rpm" &>/dev/null
-        rpm -qi "$item" | grep Version
-      else if command -v "zypper" &>/dev/null
-        zypper info "$item" | grep Version
-      else if command -v "apk" &>/dev/null
-        apk info "$item" | grep Version
+    if command -v "dpkg" &>/dev/null
+      if dpkg -s "$item" &>/dev/null
+        dpkg -s "$item" | grep Version | awk '{ print $2 }';
+      else
+        if "$item" --version &>/dev/null
+          echo -n "$("$item" --version)"
+        else if "$item" -V &>/dev/null
+          echo -n "$("$item" -V)"
+        end
       end
+    else if command -v "pacman" &>/dev/null
+      pacman -Qi "$item" | grep Version | awk '{ print $3 }'
+    else if command -v "dnf" &>/dev/null
+      dnf info "$item" | grep Version
+    else if command -v "rpm" &>/dev/null
+      rpm -qi "$item" | grep Version
+    else if command -v "zypper" &>/dev/null
+      zypper info "$item" | grep Version
+    else if command -v "apk" &>/dev/null
+      apk info "$item" | grep Version
     end
     return 0
+  else
+    set -l item_type (type "$item" 2>/dev/null | grep 'function')
+    if set item_type
+      echo "[$item]: function/script/alias, no version found!"
+      return 0
+    end
   end
 
-  echo "Error: '$item' is not a command or program."
+  echo "[$item]: not a command or program."
   return 1
 end
 

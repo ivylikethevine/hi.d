@@ -23,4 +23,6 @@ link_configs() {
   sudo ln ~/.sshrc.d/vim.rc ~/.vimrc
 }
 
+# TODO: Detect asdf, then list plugins, versions, and default/system versions used (or missing!)
+
 check_stubs

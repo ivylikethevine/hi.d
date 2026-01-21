@@ -183,39 +183,53 @@ end
 function version --description 'Check if a package/command is installed, then display its version'
   set -l item "$argv"
 
- if command -v "$item" &>/dev/null
+  if command -v "$item" &>/dev/null
     echo -n "[$(command -v "$item")]: "
     if command -v "dpkg" &>/dev/null
       if dpkg -s "$item" &>/dev/null
         dpkg -s "$item" | grep Version | awk '{ print $2 }';
-      else
-        if "$item" --version &>/dev/null
-          echo -n "$("$item" --version)"
-        else if "$item" -V &>/dev/null
-          echo -n "$("$item" -V)"
-        end
+        return 0
       end
     else if command -v "pacman" &>/dev/null
-      pacman -Qi "$item" | grep Version | awk '{ print $3 }'
+      if pacman -Qi "$item" &>/dev/null
+        pacman -Qi "$item" | grep Version | awk '{ print $3 }'
+        return 0
+      end
     else if command -v "dnf" &>/dev/null
-      dnf info "$item" | grep Version
+      if dnf info "$item" &>/dev/null
+        dnf info "$item" | grep Version
+        return 0
+      end
     else if command -v "rpm" &>/dev/null
-      rpm -qi "$item" | grep Version
+      if rpm -qi "$item" &>/dev/null
+        rpm -qi "$item" | grep Version
+        return 0
+      end
     else if command -v "zypper" &>/dev/null
-      zypper info "$item" | grep Version
+      if zypper info "$item" &>/dev/null
+        zypper info "$item" | grep Version
+        return 0
+      end
     else if command -v "apk" &>/dev/null
-      apk info "$item" | grep Version
+      if apk info "$item" &>/dev/null
+        apk info "$item" | grep Version
+        return 0
+      end
+    end
+    if "$item" --version &>/dev/null
+      echo -n "$("$item" --version)"
+    else if "$item" -V &>/dev/null
+      echo -n "$("$item" -V)"
     end
     return 0
-  else
-    set -l item_type (type "$item" 2>/dev/null | grep 'function')
-    if set item_type
-      echo "[$item]: function/script/alias, no version found!"
-      return 0
+  end
+  if [ "$item" &>/dev/null ]
+    if [ (type -t "$item") = "function" ]
+      echo "[$item]: Local function/alias, version unknowable..."
+    else
+      echo "[$item]: Package/command not installed!"
     end
   end
-
-  echo "[$item]: not a command or program."
   return 1
 end
 

@@ -223,9 +223,13 @@ function version --description 'Check if a package/command is installed, then di
     end
     return 0
   end
+  # Messy but weird workaround required for fish shell
   if [ "$item" &>/dev/null ]
-    if [ (type -t "$item") = "function" ]
-      echo "[$item]: Local function/alias, version unknowable..."
+    if command -v "$item" &>/dev/null
+      if [ (type -t "$item") &>/dev/null = "function" ]
+        echo "[$item]: Local function/alias, version unknowable..."
+        return 0
+      end
     else
       echo "[$item]: Package/command not installed!"
     end

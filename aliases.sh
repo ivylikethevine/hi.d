@@ -42,7 +42,11 @@ alias gi="git"
 alias gp="git pull"
 alias gf="git fetch -a"
 alias gs="git status"
+alias gps="gf && gp && gs"
 alias gd="git diff --color=always"
+
+# ping
+alias ping="ping -O"
 
 # for timestamping
 alias now="date -u '+%a %b %e %H:%M:%S %Z %Y'; date '+%a %b %e %H:%M:%S %Z %Y'; date +%s"

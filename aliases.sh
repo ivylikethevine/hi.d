@@ -33,6 +33,7 @@ alias dcd="docker compose down"
 # ls
 alias ls="ls -lh --color=auto"
 alias lsa="ls -alh --color=auto"
+alias lsd='ls -ld .* --color=auto'
 
 # grep
 alias grep="grep --color=auto"
@@ -47,6 +48,11 @@ alias gd="git diff --color=always"
 
 # ping
 alias ping="ping -O"
+
+# ip
+alias ip="ip -color=always"
+alias ips="ip -br a"
+alias myip="ip route get 1.1.1.1"
 
 # for timestamping
 alias now="date -u '+%a %b %e %H:%M:%S %Z %Y'; date '+%a %b %e %H:%M:%S %Z %Y'; date +%s"
@@ -64,9 +70,6 @@ alias yayc="yay -Sc"
 
 # editing this folder
 alias esshrc="zed ~/.sshrc.d"
-
-# status of a node (currently in trial on multiple machines)
-alias glance="glances --fetch"
 
 # in trial
 alias nollama='docker compose -f /home/$USER/projects/csd-selfhost/ollama/compose.yml down'

@@ -131,6 +131,7 @@ timers() {
 }
 
 check_packages() {
+  # shellcheck source=./check.sh
   source "$SSHHOME"/.sshrc.d/check.sh
   spacer
   systems
@@ -198,7 +199,7 @@ say_hi() {
   fi
 
   # sshrc_exclude is appended to load.sh by hi.sh during the transfer
-  # can't fix the shellcheck error below
+  # shellcheck disable=SC2086
   cecho_n " $(du -sh $sshrc_exclude --apparent-size "$SSHHOME"/.sshrc.d | awk '{ print $1 }') " "$NC"
   cecho '~~~~~~~~~~~~~~~~~~~~~~~ Disconnected! ~~~~~~~~~~~~~~~~~~~~~~~~~~' "$BRRED"
   timestamp

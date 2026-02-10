@@ -60,7 +60,6 @@ TOOLS=(
   shellcheck
   jq
   yq
-  glances
 )
 
 SYSTEMS=(

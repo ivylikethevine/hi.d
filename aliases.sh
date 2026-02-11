@@ -68,6 +68,11 @@ alias vs="version"
 alias yayy="yay -Syyu"
 alias yayc="yay -Sc"
 
+# apt updates
+alias aptu="sudo apt update"
+alias aptup="sudo apt upgrade"
+alias aptuc="sudo apt update && sudo apt upgrade"
+
 # editing this folder
 alias esshrc="zed ~/.sshrc.d"
 

@@ -99,7 +99,7 @@ version() {
     echo "Local function/alias, version unknowable..."
     return 0
   fi
-  if [ "$item" &>/dev/null ]; then
+  if "$item" &>/dev/null; then
     echo "[$item]: Package/command not installed!"
   fi
   return 1

@@ -21,6 +21,8 @@ minimal=${minimal:-}
 SSHHOME=${SSHHOME:-$HOME/.sshrc.d}
 sshrc_exclude=${sshrc_exclude:-'--exclude .git --exclude .gitignore --exclude README.md --exclude stubs --exclude reports --exclude scripts'}
 start=$(date +%s.%N)
+SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+INSTALL_PATH="$(readlink -f "$SCRIPT_DIR/../")"
 
 cecho() {
   echo -e "$2$1$NC"

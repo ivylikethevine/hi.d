@@ -45,12 +45,14 @@ timestamp() {
 configure_file() {
   touch "$1"
   if test -f "$1"; then
-    if ! grep -q "$sshrc_start" "$1"; then
-      {
-        echo "$sshrc_start"
-        cat "$SSHHOME/.sshrc.d/$2"
-        echo "$sshrc_end"
-      } >>"$1"
+    if test -f "$SSHHOME/.sshrc.d/$2"; then
+      if ! grep -q "$sshrc_start" "$1"; then
+        {
+          echo "$sshrc_start"
+          cat "$SSHHOME/.sshrc.d/$2"
+          echo "$sshrc_end"
+        } >>"$1"
+      fi
     fi
   fi
 }
@@ -129,7 +131,7 @@ timers() {
   spacer
   cecho_n "load: $(echo "$(date +%s.%N) $start" | awk '{ printf "%.3f\n", $1 - $2 }')s"
   spacer
-  copy_time # created by hi.sh to show time to copy over info
+  echo "copy: ${copy_time}s"
 }
 
 check_packages() {
@@ -169,8 +171,8 @@ tmuxrc() {
 # export SHELL=`which bash`
 # tmuxrc
 
-say_hi() {
-  # minimal=false # can also modify in ~/.sshrc
+load() {
+  # minimal=false
 
   trap 'clean_all' exit
   cecho '~~~~~~~~~~~~~~~~~~~~~~~~ Connected! ~~~~~~~~~~~~~~~~~~~~~~~~~~~~' "$BRGREEN"
@@ -208,3 +210,5 @@ say_hi() {
   cecho_n "sshrc closing! " "$BRPURPLE"
   exit 0
 }
+
+load

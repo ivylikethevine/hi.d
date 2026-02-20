@@ -53,7 +53,7 @@ TOOLS=(
   bat   # improved cat, tool
   cloc  # count lines of code, tool
   sshm  # tool
-  sshrc # tool
+  # sshrc # tool
   ssh-audit
   sshpass
   cosign
@@ -88,6 +88,11 @@ SYSTEMS=(
   systemd   # system
   systemctl # system
 )
+
+# TODO: Dedupe
+cecho_n() {
+  echo -ne "$2$1$NC"
+}
 
 installed() {
   # TODO: Display important names from groups of commands based on priority?

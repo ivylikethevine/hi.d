@@ -14,8 +14,7 @@ export BRPURPLE='\e[1;35m' # 11
 export BRCYAN='\e[1;36m'   # 12
 export NC='\e[0m'          # 13
 
-# hi/sshrc custom aliases
-alias hi="sshrc" # wraps our override function
+# ssh custom aliases
 alias hii="ssh"
 alias hey="hii"
 

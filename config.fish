@@ -100,12 +100,12 @@ function fish_greeting
 
     set -l ssh_root "/home/$USER/.sshrc.d/"
     if [ -f "$ssh_root/check.sh" ] && [ -f "$ssh_root/load.sh" ]
-      # TODO: make this prettier/faster
-      set -g systems (bash -c "source $ssh_root/load.sh; source $ssh_root/check.sh; systems")
-      set -g installed (bash -c "source $ssh_root/load.sh; source $ssh_root/check.sh; installed")
-      set -g missing (bash -c "source $ssh_root/load.sh; source $ssh_root/check.sh; missing")
-      set -g basics (bash -c "source $ssh_root/load.sh; source $ssh_root/check.sh; basics")
-      set -g tools (bash -c "source $ssh_root/load.sh; source $ssh_root/check.sh; tools")
+      # TODO: use an array or similar to avoid reloading check.sh
+      set -g systems (bash -c "source $ssh_root/check.sh; systems")
+      set -g installed (bash -c "source $ssh_root/check.sh; installed")
+      set -g missing (bash -c "source $ssh_root/check.sh; missing")
+      set -g basics (bash -c "source $ssh_root/check.sh; basics")
+      set -g tools (bash -c "source $ssh_root/check.sh; tools")
     end
 
     if [ -d "$ssh_root/.git" ]
@@ -245,8 +245,7 @@ bind \e\[1\;5H beginning-of-line
 bind \e\[1\;5F end-of-line
 bind \e\[2\;5~ ''
 
-complete sshrc --wraps ssh
-complete hi --wraps sshrc
+complete hi --wraps ssh
 
 set -gx fish_color_autosuggestion brblack
 set -gx fish_color_cancel --reverse

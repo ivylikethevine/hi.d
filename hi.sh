@@ -1,24 +1,21 @@
 #!/bin/bash
+# forked from sshrc: https://github.com/danrabinowitz/sshrc
 sshrc_exclude="--exclude .git --exclude .gitignore --exclude README.md \
   --exclude stubs --exclude reports --exclude scripts \
   --exclude *.pem --exclude *.pub --exclude *.rsa --exclude *.key"
 start=$(date +%s.%N)
 
-# ignore warnings about quotes - shellcheck is confused because of the horrors below but fixing it breaks the functionality so :(
 # shellcheck disable=SC2086
 # shellcheck disable=SC2046
 # shellcheck disable=SC2027
 # shellcheck disable=SC1078
 # shellcheck disable=SC1079
-function sshrc() {
+function hi() {
   local SSHHOME=${SSHHOME:=~}
 
   echo -ne "\r $(du -sh $sshrc_exclude --apparent-size ~/.sshrc.d | awk '{ print $1 }') "
-  if [ -f "$SSHHOME"/.sshrc ]; then
-    local files=.sshrc
-    if [ -d "$SSHHOME"/.sshrc.d ]; then
-      files="$files .sshrc.d"
-    fi
+  if [ -d "$SSHHOME"/.sshrc.d ]; then
+    local files=".sshrc.d"
     local SIZE=0
     SIZE=$(tar cfz - -h -C "$SSHHOME" $sshrc_exclude $files | wc -c)
     if [ "$SIZE" -gt 65536 ]; then
@@ -47,7 +44,7 @@ function sshrc() {
                 elif [ -r ~/.profile ]; then source ~/.profile
                 fi
                 export PATH=$PATH:$SSHHOME
-                source $SSHHOME/.sshrc;
+                source $SSHHOME/.sshrc.d/load.sh;
 EOF
     )"' | $TR_COMMAND | $OPENSSL_COMMAND -d > \$SSHHOME/sshrc.bashrc
 
@@ -60,7 +57,7 @@ EOF
                 elif [ -r ~/.bash_login ]; then source ~/.bash_login
                 elif [ -r ~/.profile ]; then source ~/.profile
                 fi
-                source '$SSHHOME'/.sshrc;
+                source '$SSHHOME'/.sshrc.d/load.sh;
                 export PATH=$PATH:'$SSHHOME'
                 ') "$@"
 EOF
@@ -69,7 +66,7 @@ EOF
             echo $DIVIDER'"$(tar czf - -h -C "$SSHHOME" $sshrc_exclude $files | $OPENSSL_COMMAND)"' | $TR_COMMAND | $OPENSSL_COMMAND -d | tar mxzf - -C \$SSHHOME
             export SSHHOME=\$SSHHOME
             echo \"$CMDARG\" >> \$SSHHOME/sshrc.bashrc
-            echo \"copy_time () { echo \"copy: $(echo "$(date +%s.%N) $start" | awk '{ printf "%.3f\n", $1 - $2 }')s\"; } \" >> \$SSHHOME/.sshrc.d/load.sh
+            echo \"copy_time='$(echo "$(date +%s.%N) $start" | awk '{ printf "%.3f\n", $1 - $2 }')'\" >> \$SSHHOME/.sshrc.d/load.sh
             echo \"sshrc_exclude='$sshrc_exclude'\" >> \$SSHHOME/.sshrc.d/load.sh
             bash --rcfile \$SSHHOME/sshrc.bashrc
             "
@@ -79,7 +76,7 @@ EOF
   fi
 }
 
-function sshrc_parse() {
+function hi_parse() {
   while [[ -n $1 ]]; do
     case $1 in
     -b | -c | -D | -E | -e | -F | -I | -i | -L | -l | -m | -O | -o | -p | -Q | -R | -S | -W | -w)
@@ -109,18 +106,14 @@ function sshrc_parse() {
 }
 
 command -v openssl >/dev/null 2>&1 || {
-  echo >&2 "sshrc requires openssl to be installed locally, but it's not. Aborting."
+  echo >&2 "hi requires openssl to be installed locally, but it's not. Aborting."
   exit 1
 }
 
-sshrc_parse "$@"
-
-if ! sshrc "$@"; then
+hi_parse "$@"
+if ! hi "$@"; then
   echo -e "\n\033[01;31m=======================================\033[00;0m"
-  echo -e "\033[01;33msshrc failed, falling back to sh + ssh...\033[00;0m"
+  echo -e "\033[01;33mhi failed, falling back to sh + ssh...\033[00;0m"
   echo -e "\033[01;31m=======================================\033[00;0m\n"
-  # aliases=$(sed '/# end sh-compatible aliases/Q' ~/.sshrc.d/aliases.sh | tr '\n' '; ' | tr ';' ';;')
-  # copy to .profile? .shrc?
-  # ssh -t "$DOMAIN" $SSHARGS "sh -i <<<'$aliases'"
   ssh "$@"
 fi

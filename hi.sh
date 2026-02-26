@@ -110,6 +110,9 @@ command -v openssl >/dev/null 2>&1 || {
   exit 1
 }
 
+# TODO: Better handle various ssh errors
+# # identify broken pipe/timeout
+# # better resolve failed ssh hosts
 hi_parse "$@"
 if ! hi "$@"; then
   echo -e "\n\033[01;31m=======================================\033[00;0m"

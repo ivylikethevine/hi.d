@@ -46,6 +46,7 @@ PACKAGES=(
   direnv
   nmap
   just
+  sponge
 )
 
 TOOLS=(

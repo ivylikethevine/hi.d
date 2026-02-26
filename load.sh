@@ -137,24 +137,12 @@ timers() {
 check_packages() {
   # shellcheck source=./check.sh
   source "$SSHHOME"/.sshrc.d/check.sh
-  spacer
-  systems
-  echo
-  spacer
-  tools
-  echo
-
   if [ "$minimal" = false ]; then
-    spacer
+    packages
     basics
-    echo
-    spacer
-    installed
-    echo
-    spacer
-    missing
-    echo
   fi
+  systems
+  tools
 }
 
 # TODO: Add tmux support + handle disconnects/reconnects/older sessions

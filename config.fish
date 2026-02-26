@@ -99,15 +99,6 @@ function fish_greeting
     end
 
     set -l ssh_root "/home/$USER/.sshrc.d/"
-    if [ -f "$ssh_root/check.sh" ] && [ -f "$ssh_root/load.sh" ]
-      # TODO: use an array or similar to avoid reloading check.sh
-      set -g systems (bash -c "source $ssh_root/check.sh; systems")
-      set -g installed (bash -c "source $ssh_root/check.sh; installed")
-      set -g missing (bash -c "source $ssh_root/check.sh; missing")
-      set -g basics (bash -c "source $ssh_root/check.sh; basics")
-      set -g tools (bash -c "source $ssh_root/check.sh; tools")
-    end
-
     if [ -d "$ssh_root/.git" ]
       set -g sshrc_change_status (printf (_ '%s' (git -C ~/.sshrc.d status --short | wc -l | awk '{ print $1 }')' ↑') (set_color bryellow))
       set -g sshrc_update_status (printf (_ '%s' (git -C ~/.sshrc.d rev-list --count HEAD..origin/$(git -C ~/.sshrc.d rev-parse --abbrev-ref HEAD))' ↓') (set_color brgreen))
@@ -118,18 +109,21 @@ function fish_greeting
 
     set -l _timer_line $spacer" "$utctime"   "$spacer"   "$localtime
     set -l _git_key_change_line $spacer" "$git_identity" "$spacer" "$containers" "$spacer" "$authorized" "$spacer" "$public
-    set -l _installed_line $spacer" "$installed
-    set -l _systems_line $spacer" "$systems
-    set -l _missing_line $spacer" "$missing
-    set -l _basics_line $spacer" "$basics
-    set -l _tools_line $spacer" "$tools
     set -l _system_info_line $spacer" "$os_type" "$spacer" "$arch" "$spacer" "$distro" "$spacer" "$cpus" "$spacer" "$ram
 
+    # # TODO: DEDUPE
+    set -l _systems (bash -c "source $ssh_root/check.sh; systems")
+    set -l _tools (bash -c "source $ssh_root/check.sh; tools")
     if [ $smaller_header ]
-      set -g fish_greeting $header" "$sshrc_change_status" "$sshrc_update_status\n $_timer_line\n $_git_key_change_line\n $_systems_line\n $_tools_line
+      set -g _check_header_lines $_systems\n$_tools
     else
-      set -g fish_greeting $header" "$sshrc_change_status" "$sshrc_update_status\n $_timer_line\n $_system_info_line\n $_git_key_change_line\n $_systems_line\n $_tools_line\n $_basics_line\n $_installed_line\n $_missing_line
+      set -l _packages (bash -c "source $ssh_root/check.sh; packages")
+      set -l _basics (bash -c "source $ssh_root/check.sh; basics")
+      set -g _check_header_lines $_packages\n$_basics\n$_systems\n$_tools
     end
+
+    set -g fish_greeting $header" "$sshrc_change_status" "$sshrc_update_status\n $_timer_line\n $_git_key_change_line\n$_check_header_lines
+
   end
 
   test -n "$fish_greeting"

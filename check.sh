@@ -1,137 +1,147 @@
 #!/bin/bash
-# TODO: Better divide
-# - system (pacman, apt, dnf, nix, etc)
-# - commands
-# - convenience (bat, tldr, sshm, etc.)
-# - add-ons (docker, nomad, etc)
-# - tools (jq, yq, zip, tar)
+# # [0] -> display only if missing (yellow)
+# # [1] -> display only if installed (blue)
+# # [2] -> display for either of above (purple/green)
 
-BASICS=(
-  sudo
-  curl
-  wget
-  ping
-  tar
-  zip
-  gpg
-  git
-  htop
-  bc
-  openssl
-  tmux
-  screen
-  command
-  cut
-  find
-)
+# TODO: Priority grouping
 
 PACKAGES=(
-  vi
-  vim
-  nano
-  emacs
-  micro
-  pico
-  neovim
-  rsync
-  netstat
-  avahi-daemon
-  neofetch
-  docker
-  python
-  node
-  nomad
-  rustup
-  asdf
-  direnv
-  nmap
-  just
-  sponge
+  vim:2
+  docker:2
+
+  vi:1
+  node:1
+  nomad:1
+  rustup:1
+  rust:1
+  asdf:1
+  direnv:1
+  nmap:1
+  just:1
+)
+
+BASICS=(
+  nano:0
+  emacs:0
+  micro:0
+  pico:0
+  neovim:0
+  rsync:0
+  netstat:0
+  avahi-daemon:0
+  neofetch:0
+  python:0
+  sponge:0
+  sudo:0
+  curl:0
+  wget:0
+  ping:0
+  tar:0
+  zip:0
+  gpg:0
+  git:0
+  htop:0
+  openssl:0
+  screen:0
+  command:0
+  cut:0
+  find:0
 )
 
 TOOLS=(
-  tldr  # tool
-  bat   # improved cat, tool
-  cloc  # count lines of code, tool
-  sshm  # tool
-  # sshrc # tool
-  ssh-audit
-  sshpass
-  cosign
-  shellcheck
-  jq
-  yq
+  ssh-audit:1
+  sshpass:1
+  yq:1
+  bc:1
+  tmux:1
+  bat:2
+
+  cat:0
+  tldr:0
+  cloc:0
+  sshm:0
+  cosign:0
+  shellcheck:0
+  jq:0
 )
 
 SYSTEMS=(
-  apt        # system
-  pacman     # system
-  apk        # system
-  nix        # system
-  dpkg       # system
-  rpm        # system
-  dnf        # system
-  zypper     # tool?
-  pkgconf    # tool?
-  chocolatey # system
-  choco      # system
-  wpkg       # ?
-  appimage   # ?
-  fusermount # ? Surrogate for appimage
-  brew       # system
-  flatpak    # system
-  snap       # system
-  # yay # tool? superset of pacman
-  # yum # tool? superset of pacman
-  # paru # tool? superset of pacman
-  make # Is this a system? Idk but it seems useful to know
-  # cmake # Is this a system? Idk but it seems useful to know
-  systemd   # system
-  systemctl # system
+  choco:2
+  apt:2
+  yay:2
+  apk:2
+  nix:2
+  dpkg:2
+  rpm:2
+  dnf:2
+  zypper:2
+  pkgconf:2
+  wpkg:2
+  appimage:2
+  fusermount:2
+  brew:2
+  flatpak:2
+  snap:2
+  make:2
+  systemctl:2
+
+  systemd:1
+
+  pacman:1
+  paru:1
+  chocolatey:1
 )
 
-# TODO: Dedupe
-cecho_n() {
-  echo -ne "$2$1$NC"
-}
+check_commands() {
+  local cmd_list=("$@")
+  echo -ne " $NC|"
 
-installed() {
-  # TODO: Display important names from groups of commands based on priority?
-  for package in "${PACKAGES[@]}"; do
-    if command -v "$package" &>/dev/null; then
-      cecho_n "$package ✓ " "$GREEN"
+  for item in "${cmd_list[@]}"; do
+    cmd="${item%:*}"
+    value="${item#*:}"
+
+    if command -v "$cmd" &>/dev/null; then
+      if [[ "$value" == "1" ]]; then
+        echo -ne " $BLUE$cmd ✓$NC"
+      elif [[ "$value" == "2" ]]; then
+        echo -ne " $GREEN$cmd ✓$NC"
+      fi
+    else
+      if [[ "$value" == "0" ]]; then
+        echo -ne " $BRYELLOW$cmd ✗$NC"
+      elif [[ "$value" == "2" ]]; then
+        echo -ne " $BRPURPLE$cmd ✗$NC"
+      fi
     fi
   done
+  echo
 }
 
-missing() {
-  for package in "${PACKAGES[@]}"; do
-    if ! command -v "$package" &>/dev/null; then
-      cecho_n "$package ✗ " "$BRYELLOW"
-    fi
-  done
-}
-
-systems() {
-  for system in "${SYSTEMS[@]}"; do
-    if command -v "$system" &>/dev/null; then
-      cecho_n "$system ✓ " "$BLUE"
-    fi
-  done
-}
-
-tools() {
-  for tool in "${TOOLS[@]}"; do
-    if command -v "$tool" &>/dev/null; then
-      cecho_n "$tool ✓ " "$PURPLE"
-    fi
-  done
+packages() {
+  check_commands "${PACKAGES[@]}"
 }
 
 basics() {
-  for basic in "${BASICS[@]}"; do
-    if command -v "$basic" &>/dev/null; then
-      cecho_n "$basic ✓ " "$CYAN"
-    fi
-  done
+  check_commands "${BASICS[@]}"
+}
+
+systems() {
+  check_commands "${SYSTEMS[@]}"
+}
+
+tools() {
+  check_commands "${TOOLS[@]}"
+}
+
+header() {
+  local full="$1"
+  if [[ "$full" -eq 1 ]]; then
+    packages
+    basics
+    systems
+    tools
+  else
+    systems
+    tools
+  fi
 }

@@ -160,7 +160,7 @@ tmuxrc() {
 # tmuxrc
 
 load() {
-  # minimal=false
+  minimal=false
 
   trap 'clean_all' exit
   cecho '~~~~~~~~~~~~~~~~~~~~~~~~ Connected! ~~~~~~~~~~~~~~~~~~~~~~~~~~~~' "$BRGREEN"

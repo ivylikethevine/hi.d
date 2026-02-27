@@ -1,116 +1,148 @@
 #!/bin/bash
-# # [0] -> display only if missing (yellow)
-# # [1] -> display only if installed (blue)
-# # [2] -> display for either of above (purple/green)
-
-# TODO: Priority grouping
 
 PACKAGES=(
-  vim:2
-  docker:2
-
-  vi:1
-  node:1
-  nomad:1
-  rustup:1
-  rust:1
-  asdf:1
-  direnv:1
-  nmap:1
-  just:1
-)
+  top:0,btop:2,htop:2
+  openssl:2
+  git:2
+  vi:0,vim:1,nvim:2
+  cat:1,bat:2
+  man:1,tldr:2
+  tar:0,zip:2
+  bc:1
+  jq:1,yq:1
+  gpg:0
+  sudo:0
+  ping:0
+) # 12
 
 BASICS=(
-  nano:0
-  emacs:0
-  micro:0
-  pico:0
-  neovim:0
-  rsync:0
-  netstat:0
-  avahi-daemon:0
-  neofetch:0
-  python:0
-  sponge:0
-  sudo:0
-  curl:0
-  wget:0
-  ping:0
-  tar:0
-  zip:0
-  gpg:0
-  git:0
-  htop:0
-  openssl:0
-  screen:0
-  command:0
-  cut:0
-  find:0
-)
-
-TOOLS=(
+  nmap:2
+  just:2
+  hi:2
+  screen:1,tmux:2
+  nano:1,pico:1,micro:1
+  emacs:1
+  scp:1,rsync:1
+  python:1
   ssh-audit:1
   sshpass:1
-  yq:1
-  bc:1
-  tmux:1
-  bat:2
+  sponge:0
+  netstat:0
+  neofetch:0
+) # 13
 
-  cat:0
-  tldr:0
-  cloc:0
-  sshm:0
-  cosign:0
-  shellcheck:0
-  jq:0
-)
+TOOLS=(
+  node:1,npx:2,npm:2
+  nomad:2
+  asdf:2
+  rust:1,rustc:1,rustup:2
+  cmake:2,make:1
+  sshm:1,sshrc:2
+  cloc:1
+  cosign:1
+  shellcheck:1
+  systemctl:1
+  curl:0
+  wget:0
+) # 12
 
 SYSTEMS=(
-  choco:2
-  apt:2
-  yay:2
-  apk:2
-  nix:2
-  dpkg:2
-  rpm:2
-  dnf:2
-  zypper:2
-  pkgconf:2
-  wpkg:2
-  appimage:2
-  fusermount:2
-  brew:2
-  flatpak:2
   snap:2
-  make:2
-  systemctl:2
+  apk:2,nix:2
+  apt:1,pacman:1,dnf:1,rpm:1,zypper:1,brew:1
+  paru:1,yay:1
+  dpkg:1,wpkg:1
+  chocolatey:1,choco:1
+  pkgconf:1
+  appimage:1
+  fusermount:1
+  flatpak:1
+  docker:0
+  direnv:0
+) # 12
 
-  systemd:1
+command_exists() {
+  command -v "$1" &>/dev/null
+}
 
-  pacman:1
-  paru:1
-  chocolatey:1
-)
+# Sort commands by existence and priority
+sort_commands() {
+  local cmd_list=("$@")
+  local installed=()
+  local not_installed=()
+  local priority_zero_installed=()
+  local priority_zero_not_installed=()
+
+  for item in "${cmd_list[@]}"; do
+    # Handle multiple pairs in one entry (comma-separated)
+    IFS=',' read -ra pairs <<< "$item"
+    local highest_priority_cmd=""
+    local highest_priority=0
+    local found_installed=false
+
+    # Find the highest priority installed command
+    for pair in "${pairs[@]}"; do
+      cmd="${pair%:*}"
+      priority="${pair#*:}"
+
+      if command_exists "$cmd"; then
+        if [[ "$priority" -gt "$highest_priority" ]] || [[ "$highest_priority" -eq 0 ]]; then
+          highest_priority=$priority
+          highest_priority_cmd=$cmd
+          found_installed=true
+        fi
+      fi
+    done
+
+    # If we found an installed command, add it to installed list
+    if [[ "$found_installed" == true ]]; then
+      if [[ "$highest_priority" -eq 0 ]]; then
+        # Add to priority_zero_installed list if priority is 0
+        priority_zero_installed+=("$highest_priority_cmd:$highest_priority:installed")
+      else
+        installed+=("$highest_priority_cmd:$highest_priority:installed")
+      fi
+    else
+      # If no installed command found, add the first one in the list
+      first_cmd="${pairs[0]%:*}"
+      first_priority="${pairs[0]#*:}"
+      if [[ "$first_priority" -eq 0 ]]; then
+        # Add to priority_zero_not_installed list if priority is 0
+        priority_zero_not_installed+=("$first_cmd:$first_priority:not_installed")
+      else
+        not_installed+=("$first_cmd:$first_priority:not_installed")
+      fi
+    fi
+  done
+
+  # Combine lists with priority 0 commands first (both installed and not installed),
+  # then installed commands, then not installed commands
+  local sorted=("${priority_zero_installed[@]}" "${priority_zero_not_installed[@]}" "${installed[@]}" "${not_installed[@]}")
+  printf '%s\n' "${sorted[@]}"
+}
 
 check_commands() {
   local cmd_list=("$@")
   echo -ne " $NC|"
 
-  for item in "${cmd_list[@]}"; do
-    cmd="${item%:*}"
-    value="${item#*:}"
+  local sorted_cmd_list=($(sort_commands "${cmd_list[@]}"))
 
-    if command -v "$cmd" &>/dev/null; then
-      if [[ "$value" == "1" ]]; then
+  for item in "${sorted_cmd_list[@]}"; do
+    cmd="${item%:*:*}"
+    inner="${item#*:}"
+    priority="${inner%:*}"
+    status="${item##*:}"
+    if [[ "$status" == "installed" ]]; then
+      if [[ "$priority" == "1" ]]; then
         echo -ne " $BLUE$cmd ✓$NC"
-      elif [[ "$value" == "2" ]]; then
+      elif [[ "$priority" == "2" ]]; then
         echo -ne " $GREEN$cmd ✓$NC"
       fi
     else
-      if [[ "$value" == "0" ]]; then
+      if [[ "$priority" == "0" ]]; then
+        echo -ne " $YELLOW$cmd ✗$NC"
+      elif [[ "$priority" == "2" ]]; then
         echo -ne " $BRYELLOW$cmd ✗$NC"
-      elif [[ "$value" == "2" ]]; then
-        echo -ne " $BRPURPLE$cmd ✗$NC"
       fi
     fi
   done

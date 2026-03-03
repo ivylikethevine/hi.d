@@ -37,7 +37,7 @@ TOOLS=(
   asdf:2
   rust:1,rustc:1,rustup:2
   cmake:2,make:1
-  sshm:1,sshrc:2
+  sshm:1,sshrc:2,hi:2
   cloc:1
   cosign:1
   shellcheck:1

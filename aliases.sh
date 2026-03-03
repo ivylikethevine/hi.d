@@ -73,7 +73,8 @@ alias aptup="sudo apt upgrade"
 alias aptuc="sudo apt update && sudo apt upgrade"
 
 # editing this folder
-alias esshrc="zed ~/.sshrc.d"
+alias esshrc="zed ~/.hi.d"
+alias ehi="zed ~/.hi.d"
 
 # in trial
 alias nollama='docker compose -f /home/$USER/projects/csd-selfhost/ollama/compose.yml down'

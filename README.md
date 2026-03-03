@@ -1,9 +1,9 @@
 # hi.sh -> sshrc superset
 
 Chainloader to unify local configuration with portable variations for ssh hosts. Order of execution:
-First, `~/.sshrc` is executed, which chainloads `~/.sshrc.d/load.sh`. The second loader determines the shell, loads aliases, and then starts a session. For local configurations, stubs are used to load the shared files under `~/.sshrc.d/`. Local-only changes should remain in `~/.bashrc, ~/.zshrc, ~/.config/fish/config.fish`, etc.
+First, `~/.hi.d/hi.sh` is executed, which chainloads `~/.hi.d/load.sh`. The second loader determines the shell, loads aliases, and then starts a session. For local configurations, stubs are used to load the shared files under `~/.hi.d/`. Local-only changes should remain in `~/.bashrc, ~/.zshrc, ~/.config/fish/config.fish`, etc.
 
-configured vim to actually be `ln /home/$USER/.vimrc /home/$USER/sshrc.d/.vimrc`
+configured vim to actually be `ln /home/$USER/.vimrc /home/$USER/hi.d/.vimrc`
 `du -sb --exclude .git --exclude .gitignore --exclude README.md --exclude hi.sh --exclude install.sh --exclude stubs --apparent-size` -> filesize (needs to be under 64k)
 
 - shellcheck????
@@ -25,7 +25,7 @@ Possible features:
 
 ## Required Stubs (view stubs folder)
 
-Reminder - place local only changes after the "`# sshrc-config`" comment in the local files. **Anything in this directory will be copied to all hosts connected to via `sshrc` (or the "hi" alias).**
+Reminder - place local only changes after the "`# hi-config`" comment in the local files. **Anything in this directory will be copied to all hosts connected to via `hi`.**
 
 #### Supported Configs
 
@@ -46,7 +46,7 @@ Editor Configurations
 - `aliases.sh` - shared aliases between bash, zsh, and fish
 - `check.sh` - check for commonly used commands
 - `tmux.conf` - tmux configuration/support
-- `install.sh` - configure local shells to use sshrc.d configurations (compare against stubs folder)
+- `install.sh` - configure local shells to use hi.d configurations (compare against stubs folder)
 
 Goals:
 

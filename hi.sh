@@ -1,6 +1,6 @@
 #!/bin/bash
 # forked from sshrc: https://github.com/danrabinowitz/sshrc
-sshrc_exclude="--exclude .git --exclude .gitignore --exclude README.md \
+hi_exclude="--exclude .git --exclude .gitignore --exclude README.md \
   --exclude stubs --exclude reports --exclude scripts \
   --exclude *.pem --exclude *.pub --exclude *.rsa --exclude *.key"
 start=$(date +%s.%N)
@@ -11,15 +11,15 @@ start=$(date +%s.%N)
 # shellcheck disable=SC1078
 # shellcheck disable=SC1079
 function hi() {
-  local SSHHOME=${SSHHOME:=~}
+  local HI_HOME=${HI_HOME:=~}
 
-  echo -ne "\r $(du -sh $sshrc_exclude --apparent-size ~/.sshrc.d | awk '{ print $1 }') "
-  if [ -d "$SSHHOME"/.sshrc.d ]; then
-    local files=".sshrc.d"
+  echo -ne "\r $(du -sh $hi_exclude --apparent-size ~/.hi.d | awk '{ print $1 }') "
+  if [ -d "$HI_HOME"/.hi.d ]; then
+    local files=".hi.d"
     local SIZE=0
-    SIZE=$(tar cfz - -h -C "$SSHHOME" $sshrc_exclude $files | wc -c)
+    SIZE=$(tar cfz - -h -C "$HI_HOME" $hi_exclude $files | wc -c)
     if [ "$SIZE" -gt 65536 ]; then
-      echo >&2 $'.sshrc.d and .sshrc files must be less than 64kb\ncurrent size: '"$SIZE"' bytes'
+      echo >&2 $'.hi.d files must be less than 64kb\ncurrent size: '"$SIZE"' bytes'
       exit 1
     fi
     local DIVIDER="$"
@@ -29,12 +29,12 @@ function hi() {
     local TR_COMMAND="tr -s ' ' $DIVIDER'\n'"
     local OPENSSL_COMMAND="openssl enc -base64"
     ssh -t "$DOMAIN" "$SSHARGS" "
-            command -v openssl >/dev/null 2>&1 || { echo >&2 \"sshrc requires openssl to be installed on the server, but it's not. Aborting.\"; exit 1; }
-            export SSHHOME=\$(mktemp -d -t .$(whoami).sshrc.XXXX)
-            export SSHRCCLEANUP=\$SSHHOME
-            trap \"rm -rf \$SSHRCCLEANUP; exit\" exit
-            echo $DIVIDER'"$(cat "$0" | $OPENSSL_COMMAND)"' | $TR_COMMAND | $OPENSSL_COMMAND -d > \$SSHHOME/sshrc
-            chmod +x \$SSHHOME/sshrc
+            command -v openssl >/dev/null 2>&1 || { echo >&2 \"hi requires openssl to be installed on the server, but it's not. Aborting.\"; exit 1; }
+            export HI_HOME=\$(mktemp -d -t .$(whoami).hi.XXXX)
+            export HI_CLEANUP=\$HI_HOME
+            trap \"rm -rf \$HI_CLEANUP; exit\" exit
+            echo $DIVIDER'"$(cat "$0" | $OPENSSL_COMMAND)"' | $TR_COMMAND | $OPENSSL_COMMAND -d > \$HI_HOME/hi
+            chmod +x \$HI_HOME/hi
 
             echo $DIVIDER'"$(
       cat <<'EOF' | $OPENSSL_COMMAND
@@ -43,10 +43,10 @@ function hi() {
                 elif [ -r ~/.bash_login ]; then source ~/.bash_login
                 elif [ -r ~/.profile ]; then source ~/.profile
                 fi
-                export PATH=$PATH:$SSHHOME
-                source $SSHHOME/.sshrc.d/load.sh;
+                export PATH=$PATH:$HI_HOME
+                source $HI_HOME/.hi.d/load.sh;
 EOF
-    )"' | $TR_COMMAND | $OPENSSL_COMMAND -d > \$SSHHOME/sshrc.bashrc
+    )"' | $TR_COMMAND | $OPENSSL_COMMAND -d > \$HI_HOME/hi.bashrc
 
             echo $DIVIDER'"$(
       cat <<'EOF' | $OPENSSL_COMMAND
@@ -57,21 +57,21 @@ EOF
                 elif [ -r ~/.bash_login ]; then source ~/.bash_login
                 elif [ -r ~/.profile ]; then source ~/.profile
                 fi
-                source '$SSHHOME'/.sshrc.d/load.sh;
-                export PATH=$PATH:'$SSHHOME'
+                source '$HI_HOME'/.hi.d/load.sh;
+                export PATH=$PATH:'$HI_HOME'
                 ') "$@"
 EOF
-    )"' | $TR_COMMAND | $OPENSSL_COMMAND -d > \$SSHHOME/bashsshrc
-            chmod +x \$SSHHOME/bashsshrc
-            echo $DIVIDER'"$(tar czf - -h -C "$SSHHOME" $sshrc_exclude $files | $OPENSSL_COMMAND)"' | $TR_COMMAND | $OPENSSL_COMMAND -d | tar mxzf - -C \$SSHHOME
-            export SSHHOME=\$SSHHOME
-            echo \"$CMDARG\" >> \$SSHHOME/sshrc.bashrc
-            echo \"copy_time='$(echo "$(date +%s.%N) $start" | awk '{ printf "%.3f\n", $1 - $2 }')'\" >> \$SSHHOME/.sshrc.d/load.sh
-            echo \"sshrc_exclude='$sshrc_exclude'\" >> \$SSHHOME/.sshrc.d/load.sh
-            bash --rcfile \$SSHHOME/sshrc.bashrc
+    )"' | $TR_COMMAND | $OPENSSL_COMMAND -d > \$HI_HOME/bashhi
+            chmod +x \$HI_HOME/bashhi
+            echo $DIVIDER'"$(tar czf - -h -C "$HI_HOME" $hi_exclude $files | $OPENSSL_COMMAND)"' | $TR_COMMAND | $OPENSSL_COMMAND -d | tar mxzf - -C \$HI_HOME
+            export HI_HOME=\$HI_HOME
+            echo \"$CMDARG\" >> \$HI_HOME/hi.bashrc
+            echo \"copy_time='$(echo "$(date +%s.%N) $start" | awk '{ printf "%.3f\n", $1 - $2 }')'\" >> \$HI_HOME/.hi.d/load.sh
+            echo \"hi_exclude='$hi_exclude'\" >> \$HI_HOME/.hi.d/load.sh
+            bash --rcfile \$HI_HOME/hi.bashrc
             "
   else
-    echo "No such file: $SSHHOME/.sshrc" >&2
+    echo "No such file: $HI_HOME/.hi" >&2
     exit 1
   fi
 }

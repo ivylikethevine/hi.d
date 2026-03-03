@@ -1,6 +1,6 @@
 #!/bin/bash
 
-cd /home/"$USER"/.sshrc.d/ || exit 1
+cd /home/"$USER"/.hi.d/ || exit 1
 rm -rf .git
 rm -rf reports
 rm .gitignore

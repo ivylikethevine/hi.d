@@ -1,14 +1,14 @@
 #!/bin/zsh
-if [ -f "$SSHHOME/.sshrc.d/aliases.sh" ]; then
-  source "$SSHHOME/.sshrc.d/aliases.sh"
-elif [ -f ~/.sshrc.d/aliases.sh ]; then
-  source ~/.sshrc.d/aliases.sh
+if [ -f "$HI_HOME/.hi.d/aliases.sh" ]; then
+  source "$HI_HOME/.hi.d/aliases.sh"
+elif [ -f ~/.hi.d/aliases.sh ]; then
+  source ~/.hi.d/aliases.sh
 fi
 
-if [ -f "$SSHHOME/.sshrc.d/prompt_colors.sh" ]; then
-  source "$SSHHOME/.sshrc.d/prompt_colors.sh"
-elif [ -f ~/.sshrc.d/prompt_colors.sh ]; then
-  source ~/.sshrc.d/prompt_colors.sh
+if [ -f "$HI_HOME/.hi.d/prompt_colors.sh" ]; then
+  source "$HI_HOME/.hi.d/prompt_colors.sh"
+elif [ -f ~/.hi.d/prompt_colors.sh ]; then
+  source ~/.hi.d/prompt_colors.sh
 fi
 
 # TODO: zsh header
@@ -108,7 +108,7 @@ SAVEHIST=2000
 
 autoload -Uz compinit
 compinit
-compdef sshrc=ssh
+compdef hi=ssh
 
 autoload -Uz promptinit
 promptinit

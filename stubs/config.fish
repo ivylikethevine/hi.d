@@ -1,3 +1,5 @@
-# LOCAL
-source ~/.sshrc.d/config.fish
-# sshrc-config
+# hi-config start
+if status is-interactive
+  source ~/.hi.d/config.fish
+end
+# hi-config end

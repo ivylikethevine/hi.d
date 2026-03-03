@@ -13,13 +13,13 @@ BRPURPLE='\e[1;35m' # 11
 BRCYAN='\e[1;36m'   # 12
 NC='\e[0m'          # 13
 
-sshrc_start="# sshrc-config-start"
-sshrc_end="# sshrc-config-end"
+hi_start="# hi-config-start"
+hi_end="# hi-config-end"
 
 minimal=${minimal:-}
 
-SSHHOME=${SSHHOME:-$HOME/.sshrc.d}
-sshrc_exclude=${sshrc_exclude:-'--exclude .git --exclude .gitignore --exclude README.md --exclude stubs --exclude reports --exclude scripts'}
+HI_HOME=${HI_HOME:-$HOME/.hi.d}
+hi_exclude=${hi_exclude:-'--exclude .git --exclude .gitignore --exclude README.md --exclude stubs --exclude reports --exclude scripts'}
 start=$(date +%s.%N)
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 INSTALL_PATH="$(readlink -f "$SCRIPT_DIR/../")"
@@ -45,12 +45,12 @@ timestamp() {
 configure_file() {
   touch "$1"
   if test -f "$1"; then
-    if test -f "$SSHHOME/.sshrc.d/$2"; then
-      if ! grep -q "$sshrc_start" "$1"; then
+    if test -f "$HI_HOME/.hi.d/$2"; then
+      if ! grep -q "$hi_start" "$1"; then
         {
-          echo "$sshrc_start"
-          cat "$SSHHOME/.sshrc.d/$2"
-          echo "$sshrc_end"
+          echo "$hi_start"
+          cat "$HI_HOME/.hi.d/$2"
+          echo "$hi_end"
         } >>"$1"
       fi
     fi
@@ -59,7 +59,7 @@ configure_file() {
 
 clean_file() {
   if test -f "$1"; then
-    sed -i "/^$sshrc_start/,/^$sshrc_end/d" -- "$1"
+    sed -i "/^$hi_start/,/^$hi_end/d" -- "$1"
   fi
 }
 
@@ -73,7 +73,7 @@ clean_all() {
 configure_all() {
   if command -v "vim" &>/dev/null; then
     # Will cause errors if we load this with only VI
-    export VIMINIT="let \$MYVIMRC='$SSHHOME/.sshrc.d/vim.rc' | source \$MYVIMRC"
+    export VIMINIT="let \$MYVIMRC='$HI_HOME/.hi.d/vim.rc' | source \$MYVIMRC"
   fi
   configure_file ~/.nanorc nano.rc
   configure_file ~/.bashrc bash.sh
@@ -136,7 +136,7 @@ timers() {
 
 check_packages() {
   # shellcheck source=./check.sh
-  source "$SSHHOME"/.sshrc.d/check.sh
+  source "$HI_HOME"/.hi.d/check.sh
   if [ "$minimal" = false ]; then
     packages
     basics
@@ -152,9 +152,9 @@ tmuxrc() {
     rm -rf $TMUXDIR
     mkdir -p $TMUXDIR
   fi
-  rm -rf $TMUXDIR/.sshrc.d
-  cp -r "$SSHHOME"/.sshrc "$SSHHOME"/bashsshrc "$SSHHOME"/sshrc "$SSHHOME"/.sshrc.d "$TMUXDIR"
-  SSHHOME="$TMUXDIR" SHELL="$TMUXDIR"/bashsshrc /usr/bin/tmux -S "$TMUXDIR"/tmuxserver "$@"
+  rm -rf $TMUXDIR/.hi.d
+  cp -r "$HI_HOME"/.hi "$HI_HOME"/bashhi "$HI_HOME"/hi "$HI_HOME"/.hi.d "$TMUXDIR"
+  HI_HOME="$TMUXDIR" SHELL="$TMUXDIR"/bashhi /usr/bin/tmux -S "$TMUXDIR"/tmuxserver "$@"
 }
 # export SHELL=`which bash`
 # tmuxrc
@@ -174,7 +174,7 @@ load() {
   check_packages
   configure_all
   spacer
-  cecho_n "sshrc loaded with... " "$BRCYAN"
+  cecho_n "hi loaded with... " "$BRCYAN"
 
   if command -v "fish" &>/dev/null; then
     cecho_n "fish shell! :^)" "$GREEN"
@@ -190,12 +190,12 @@ load() {
     bash -i
   fi
 
-  # sshrc_exclude is appended to load.sh by hi.sh during the transfer
+  # hi_exclude is appended to load.sh by hi.sh during the transfer
   # shellcheck disable=SC2086
-  cecho_n " $(du -sh $sshrc_exclude --apparent-size "$SSHHOME"/.sshrc.d | awk '{ print $1 }') " "$NC"
+  cecho_n " $(du -sh $hi_exclude --apparent-size "$HI_HOME"/.hi.d | awk '{ print $1 }') " "$NC"
   cecho '~~~~~~~~~~~~~~~~~~~~~~~ Disconnected! ~~~~~~~~~~~~~~~~~~~~~~~~~~' "$BRRED"
   timestamp
-  cecho_n "sshrc closing! " "$BRPURPLE"
+  cecho_n "hi closing! " "$BRPURPLE"
   exit 0
 }
 

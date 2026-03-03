@@ -1,9 +1,9 @@
 #!/bin/fish
-if test -f "$SSHHOME/.sshrc.d/aliases.sh"
-  source "$SSHHOME/.sshrc.d/aliases.sh"
+if test -f "$HI_HOME/.hi.d/aliases.sh"
+  source "$HI_HOME/.hi.d/aliases.sh"
 end
-if test -f ~/.sshrc.d/aliases.sh
-  source ~/.sshrc.d/aliases.sh
+if test -f ~/.hi.d/aliases.sh
+  source ~/.hi.d/aliases.sh
 end
 
 # prompt
@@ -98,13 +98,13 @@ function fish_greeting
       set -g git_identity (printf (_ '%sNo Git ID Found... %s') (set_color yellow) (set_color normal))
     end
 
-    set -l ssh_root "/home/$USER/.sshrc.d/"
-    if [ -d "$ssh_root/.git" ]
-      set -g sshrc_change_status (printf (_ '%s' (git -C ~/.sshrc.d status --short | wc -l | awk '{ print $1 }')' ↑') (set_color bryellow))
-      set -g sshrc_update_status (printf (_ '%s' (git -C ~/.sshrc.d rev-list --count HEAD..origin/$(git -C ~/.sshrc.d rev-parse --abbrev-ref HEAD))' ↓') (set_color brgreen))
+    set -l hi_root "/home/$USER/.hi.d/"
+    if [ -d "$hi_root/.git" ]
+      set -g hi_change_status (printf (_ '%s' (git -C ~/.hi.d status --short | wc -l | awk '{ print $1 }')' ↑') (set_color bryellow))
+      set -g hi_update_status (printf (_ '%s' (git -C ~/.hi.d rev-list --count HEAD..origin/$(git -C ~/.hi.d rev-parse --abbrev-ref HEAD))' ↓') (set_color brgreen))
     else
-      set -g sshrc_change_status ""
-      set -g sshrc_update_status ""
+      set -g hi_change_status ""
+      set -g hi_update_status ""
     end
 
     set -l _timer_line $spacer" "$utctime"   "$spacer"   "$localtime
@@ -112,17 +112,17 @@ function fish_greeting
     set -l _system_info_line $spacer" "$os_type" "$spacer" "$arch" "$spacer" "$distro" "$spacer" "$cpus" "$spacer" "$ram
 
     # # TODO: DEDUPE
-    set -l _systems (bash -c "source $ssh_root/check.sh; systems")
-    set -l _tools (bash -c "source $ssh_root/check.sh; tools")
+    set -l _systems (bash -c "source $hi_root/check.sh; systems")
+    set -l _tools (bash -c "source $hi_root/check.sh; tools")
     if [ $smaller_header ]
       set -g _check_header_lines $_systems\n$_tools
     else
-      set -l _packages (bash -c "source $ssh_root/check.sh; packages")
-      set -l _basics (bash -c "source $ssh_root/check.sh; basics")
+      set -l _packages (bash -c "source $hi_root/check.sh; packages")
+      set -l _basics (bash -c "source $hi_root/check.sh; basics")
       set -g _check_header_lines $_packages\n$_basics\n$_systems\n$_tools
     end
 
-    set -g fish_greeting $header" "$sshrc_change_status" "$sshrc_update_status\n $_timer_line\n $_git_key_change_line\n$_check_header_lines
+    set -g fish_greeting $header" "$hi_change_status" "$hi_update_status\n $_timer_line\n $_git_key_change_line\n$_check_header_lines
 
   end
 

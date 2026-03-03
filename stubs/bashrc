@@ -1,3 +1,5 @@
-# LOCAL
-source ~/.sshrc.d/bash.sh
-# sshrc-config
+# hi-config start
+# If not running interactively, exit
+[[ $- != *i* ]] && return
+source ~/.hi.d/bash.sh
+# hi-config end

@@ -1,25 +1,22 @@
 #!/bin/sh
 
 setup_hi() {
+  mv ~/sshrc.d ~/.hi.d
+  mv ~/.sshrc.d ~/.hi.d
   chmod +x ~/.hi.d/hi.sh
   sudo ln ~/.hi.d/hi.sh /usr/bin/hi
-}
 
-# for each of the stubs in the stubs directory, diff it against the local version (but only
-# for the parts of the local files that have the hi-start and end flags)
-check_stubs() {
   diff --color=always -w -u ~/.hi.d/stubs/bashrc ~/.bashrc
-  diff --color=always -w -u ~/.hi.d/stubs/zshrc ~/.zshrc
-  diff --color=always -w -u ~/.hi.d/stubs/config.fish ~/.config/fish/config.fish
-  # also need to check permissions on these files!
-}
+  cat ~/.hi.d/stubs/bashrc >> ~/.bashrc
 
-# use hi.d configs for source tracking
-link_configs() {
+  diff --color=always -w -u ~/.hi.d/stubs/zshrc ~/.zshrc
+  cat ~/.hi.d/stubs/zshrc >> ~/.zshrc
+
+  diff --color=always -w -u ~/.hi.d/stubs/config.fish ~/.config/fish/config.fish
+  cat ~/.hi.d/stubs/config.fish >> ~/.config/fish/config.fish
+
   sudo ln ~/.hi.d/nano.rc ~/.nanorc
   sudo ln ~/.hi.d/vim.rc ~/.vimrc
 }
 
-# TODO: Detect asdf, then list plugins, versions, and default/system versions used (or missing!)
-
-check_stubs
+setup_hi

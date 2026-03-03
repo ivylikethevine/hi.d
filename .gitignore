@@ -1,5 +1,5 @@
-**pem**
-**pub**
+**.pem**
+**.pub**
 **output**
 **secret**
 **private**
@@ -10,5 +10,6 @@ reports/*
 
 *.png
 *.jpg
+*.jpeg
 *.log
 *.txt

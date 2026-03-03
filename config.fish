@@ -62,9 +62,6 @@ end
 
 # header
 function fish_greeting
-  if not [ (prompt_hostname) = "mavie" ]
-    set -g smaller_header true
-  end
   if not set -q fish_greeting
     set -l spacer (printf (_ '%s|' ) (set_color normal))
     set -l header (printf (_ ' %s%s~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Online! ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~') (set_color brgreen))
@@ -111,18 +108,12 @@ function fish_greeting
     set -l _git_key_change_line $spacer" "$git_identity" "$spacer" "$containers" "$spacer" "$authorized" "$spacer" "$public
     set -l _system_info_line $spacer" "$os_type" "$spacer" "$arch" "$spacer" "$distro" "$spacer" "$cpus" "$spacer" "$ram
 
-    # # TODO: DEDUPE
+    # TODO: DEDUPE
+    set -l _packages (bash -c "source $hi_root/check.sh; packages")
+    set -l _basics (bash -c "source $hi_root/check.sh; basics")
     set -l _systems (bash -c "source $hi_root/check.sh; systems")
     set -l _tools (bash -c "source $hi_root/check.sh; tools")
-    if [ $smaller_header ]
-      set -g _check_header_lines $_systems\n$_tools
-    else
-      set -l _packages (bash -c "source $hi_root/check.sh; packages")
-      set -l _basics (bash -c "source $hi_root/check.sh; basics")
-      set -g _check_header_lines $_packages\n$_basics\n$_systems\n$_tools
-    end
-
-    set -g fish_greeting $header" "$hi_change_status" "$hi_update_status\n $_timer_line\n $_git_key_change_line\n$_check_header_lines
+    set -g fish_greeting $header" "$hi_change_status" "$hi_update_status\n $_timer_line\n $_git_key_change_line\n$_packages\n$_basics\n$_systems\n$_tools
 
   end
 

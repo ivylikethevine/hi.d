@@ -17,7 +17,11 @@ export NC='\e[0m'          # 13
 # ssh custom aliases
 alias hii="ssh"
 alias hey="hii"
-
+alias ssh-keys="ls -alhR --color=auto ~/.ssh"
+alias ssh-authorized="nano ~/.ssh/authorized_keys"
+alias ssh-known="bat ~/.ssh/known_hosts"
+alias ssh-config="bat ~/.ssh/config"
+alias newkey="ssh-keygen -t ed25519 -f "/home/.ssh/$USER/$(date -I)" -P '' -C ''"
 # user customization goes below =============
 
 # exported here since we have to wrap the bat/batcat call per shell
@@ -51,10 +55,12 @@ alias ping="ping -O"
 # ip
 alias ip="ip -color=always"
 alias ips="ip -br a"
-alias myip="ip route get 1.1.1.1"
+export internet_check_ip="1.1.1.1"
+alias myip="ip route get $internet_check_ip"
 
 # for timestamping
-alias now="date -u '+%a %b %e %H:%M:%S %Z %Y'; date '+%a %b %e %H:%M:%S %Z %Y'; date +%s"
+export date_string='+%a %b %e %H:%M:%S %Z %Y'
+alias now="date -u $date_string; date $date_string; date +%s"
 
 # prevent mispellings
 alias chron="cron"
@@ -75,9 +81,3 @@ alias aptuc="sudo apt update && sudo apt upgrade"
 # editing this folder
 alias esshrc="zed ~/.hi.d"
 alias ehi="zed ~/.hi.d"
-
-# in trial
-alias nollama='docker compose -f /home/$USER/projects/csd-selfhost/ollama/compose.yml down'
-alias yollama='docker compose -f /home/$USER/projects/csd-selfhost/ollama/compose.yml up -d'
-alias zy="yollama && zed"
-alias zn="nollama && killall zed-editor"

@@ -21,7 +21,7 @@ alias ssh-keys="ls -alhR --color=auto ~/.ssh"
 alias ssh-authorized="nano ~/.ssh/authorized_keys"
 alias ssh-known="bat ~/.ssh/known_hosts"
 alias ssh-config="bat ~/.ssh/config"
-alias newkey="ssh-keygen -t ed25519 -f "/home/$USER/.ssh/$(date -Is)" -P '' -C ''"
+alias newkey='ssh-keygen -t ed25519 -f "/home/$USER/.ssh/$(date -Is)" -P '' -C '''
 # user customization goes below =============
 
 # exported here since we have to wrap the bat/batcat call per shell
@@ -55,12 +55,7 @@ alias ping="ping -O"
 # ip
 alias ip="ip -color=always"
 alias ips="ip -br a"
-export internet_check_ip="1.1.1.1"
-alias myip="ip route get $internet_check_ip"
-
-# for timestamping
-export date_string='+%a %b %e %H:%M:%S %Z %Y'
-alias now="date -u $date_string; date $date_string; date +%s"
+alias myip='ip route get 1.1.1.1'
 
 # prevent mispellings
 alias chron="cron"

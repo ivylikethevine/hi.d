@@ -1,8 +1,6 @@
 #!/bin/bash
 # forked from sshrc: https://github.com/danrabinowitz/sshrc
-hi_exclude="--exclude .git --exclude .gitignore --exclude README.md \
-  --exclude stubs --exclude reports --exclude scripts \
-  --exclude *.pem --exclude *.pub --exclude *.rsa --exclude *.key"
+hi_exclude="--exclude .git --exclude .gitignore --exclude README.md --exclude stubs --exclude reports --exclude scripts"
 start=$(date +%s.%N)
 
 # shellcheck disable=SC2086
@@ -66,8 +64,9 @@ EOF
             echo $DIVIDER'"$(tar czf - -h -C "$HI_HOME" $hi_exclude $files | $OPENSSL_COMMAND)"' | $TR_COMMAND | $OPENSSL_COMMAND -d | tar mxzf - -C \$HI_HOME
             export HI_HOME=\$HI_HOME
             echo \"$CMDARG\" >> \$HI_HOME/hi.bashrc
-            echo \"copy_time='$(echo "$(date +%s.%N) $start" | awk '{ printf "%.3f\n", $1 - $2 }')'\" >> \$HI_HOME/.hi.d/load.sh
+            echo \"export copy_time='$(echo "$(date +%s.%N) $start" | awk '{ printf "%.3f\n", $1 - $2 }')'\" >> \$HI_HOME/.hi.d/load.sh
             echo \"hi_exclude='$hi_exclude'\" >> \$HI_HOME/.hi.d/load.sh
+            echo \"load\" >> \$HI_HOME/.hi.d/load.sh
             bash --rcfile \$HI_HOME/hi.bashrc
             "
   else

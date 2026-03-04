@@ -23,22 +23,29 @@ hi_exclude=${hi_exclude:-'--exclude .git --exclude .gitignore --exclude README.m
 start=$(date +%s.%N)
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 INSTALL_PATH="$(readlink -f "$SCRIPT_DIR/../")"
+export INSTALL_PATH
+
+header_date_format="+%a %b %e %H:%M:%S %Z %Y"
+copy_time=-1
 
 cecho() {
-  echo -e "$2$1$NC"
-}
+  local formatted_text="$2$1$NC"
+  local disable_newline="$3"
 
-cecho_n() {
-  echo -ne "$2$1$NC"
+  if [[ -n "$disable_newline" ]]; then
+    echo -e -n "$formatted_text";
+  else
+    echo -e "$formatted_text";
+  fi
 }
 
 spacer() {
-  cecho_n " | " "$NC"
+  cecho " | " "$NC" 1
 }
 
 timestamp() {
   spacer
-  echo -e "$BRBLUE$(date -u "+%a %b %e %H:%M:%S %Z %Y")   $NC|$BRYELLOW   $(date "+%a %b %e %H:%M:%S %Z %Y")$NC"
+  echo -e "$BRBLUE$(date -u "$header_date_format")   $NC|$BRYELLOW   $(date "$header_date_format")$NC"
   spacer
 }
 
@@ -57,12 +64,16 @@ configure_file() {
   fi
 }
 
+# false positive?
+# shellcheck disable=SC2329
 clean_file() {
   if test -f "$1"; then
     sed -i "/^$hi_start/,/^$hi_end/d" -- "$1"
   fi
 }
 
+# false positive?
+# shellcheck disable=SC2329
 clean_all() {
   clean_file ~/.bashrc
   clean_file ~/.zshrc
@@ -78,21 +89,20 @@ configure_all() {
   configure_file ~/.nanorc nano.rc
   configure_file ~/.bashrc bash.sh
   configure_file ~/.zshrc zsh.zsh
-  # configure_file ~/.aliasesrc aliases.sh
-  if command -v "fish" &>/dev/null; then
+  if [ -f ~/.config/fish/config.fish ]; then
     # This path won't exist if fish isn't installed
     configure_file ~/.config/fish/config.fish config.fish
   fi
 }
 
 system_info() {
-  cecho_n "$(uname -s)" "$YELLOW"
+  cecho "$(uname -s)" "$YELLOW" 1
   spacer
-  cecho_n "$(uname -m)" "$PURPLE"
+  cecho "$(uname -m)" "$PURPLE" 1
   spacer
-  cecho_n "$(grep PRETTY_NAME /etc/os-release | cut -d= -f2 | tr -d '"')" "$GREEN"
+  cecho "$(grep PRETTY_NAME /etc/os-release | cut -d= -f2 | tr -d '"')" "$GREEN" 1
   spacer
-  cecho_n "CPUs: $(nproc)" "$BLUE"
+  cecho "CPUs: $(nproc)" "$BLUE" 1
   spacer
   cecho "RAM: $(free -h --giga | awk '/^Mem:/ {print $2}GB') " "$CYAN"
 }
@@ -100,28 +110,28 @@ system_info() {
 git_identity() {
   spacer
   if [ -f ~/.gitconfig ]; then
-    cecho_n "Git ID: " "$CYAN"
-    cecho_n "$(grep email ~/.gitconfig | cut -d= -f2 | tr -d ' ' | awk -F@ '{ for(i=0;i<length($2);i++) c=c"●"; print $1"@"c; c="" }')" "$YELLOW"
+    cecho "Git ID: " "$CYAN" 1
+    cecho "$(grep email ~/.gitconfig | cut -d= -f2 | tr -d ' ' | awk -F@ '{ for(i=0;i<length($2);i++) c=c"●"; print $1"@"c; c="" }')" "$YELLOW" 1
   else
-    cecho_n "No Git ID Found..." "$YELLOW"
+    cecho "No Git ID Found..." "$YELLOW" 1
   fi
 }
 
 docker_count() {
   spacer
   if command -v "docker" &>/dev/null; then
-    cecho_n "Containers: $(docker container ls | wc -l | awk '{ print $1 - 1 }')" "$BLUE"
+    cecho "Containers: $(docker container ls | wc -l | awk '{ print $1 - 1 }')" "$BLUE" 1
   else
-    cecho_n "No docker :(" "$BRYELLOW"
+    cecho "No docker :(" "$BRYELLOW" 1
   fi
 }
 
 key_count() {
   spacer
   if [ -f ~/.ssh/authorized_keys ]; then
-    cecho_n "Auth: $(wc -l ~/.ssh/authorized_keys | awk '{ print $1 }')" "$RED"
+    cecho "Auth: $(wc -l ~/.ssh/authorized_keys | awk '{ print $1 }')" "$RED" 1
   else
-    cecho_n "Auth: 0!" "$RED"
+    cecho "Auth: 0!" "$RED" 1
   fi
   spacer
   cecho "Pub: $(find ~/.ssh -type f -name "*.pub" | wc -l)" "$PURPLE"
@@ -129,9 +139,7 @@ key_count() {
 
 timers() {
   spacer
-  cecho_n "load: $(echo "$(date +%s.%N) $start" | awk '{ printf "%.3f\n", $1 - $2 }')s"
-  spacer
-  echo "copy: ${copy_time}s"
+  cecho "load: $(echo "$(date +%s.%N) $start" | awk '{ printf "%.3f\n", $1 - $2 }')s | copy: ${copy_time}s"
 }
 
 check_packages() {
@@ -146,18 +154,19 @@ check_packages() {
 }
 
 # TODO: Add tmux support + handle disconnects/reconnects/older sessions
+# shellcheck disable=SC2329
 tmuxrc() {
-  local TMUXDIR=/tmp/tmuxrc
-  if ! [ -d $TMUXDIR ]; then
-    rm -rf $TMUXDIR
-    mkdir -p $TMUXDIR
+  local TMUXDIR="/tmp/tmuxrc"
+  if ! [ -d "$TMUXDIR" ]; then
+    rm -rf "$TMUXDIR"
+    mkdir -p "$TMUXDIR"
   fi
-  rm -rf $TMUXDIR/.hi.d
+  rm -rf "$TMUXDIR"/.hi.d
   cp -r "$HI_HOME"/.hi "$HI_HOME"/bashhi "$HI_HOME"/hi "$HI_HOME"/.hi.d "$TMUXDIR"
   HI_HOME="$TMUXDIR" SHELL="$TMUXDIR"/bashhi /usr/bin/tmux -S "$TMUXDIR"/tmuxserver "$@"
+  # export SHELL=`which bash`
+  # tmuxrc
 }
-# export SHELL=`which bash`
-# tmuxrc
 
 load() {
   minimal=false
@@ -174,29 +183,27 @@ load() {
   check_packages
   configure_all
   spacer
-  cecho_n "hi loaded with... " "$BRCYAN"
+  cecho "hi loaded with... " "$BRCYAN" 1
 
   if command -v "fish" &>/dev/null; then
-    cecho_n "fish shell! :^)" "$GREEN"
+    cecho "fish shell! :^)" "$GREEN" 1
     timers
     fish -C "set fish_greeting ''" -i
   elif command -v "zsh" &>/dev/null; then
-    cecho_n "zsh shell! :)" "$PURPLE"
+    cecho "zsh shell! :)" "$PURPLE" 1
     timers
     zsh -i
   else
-    cecho_n "only bash today :(" "$RED"
+    cecho "only bash today :(" "$RED" 1
     timers
     bash -i
   fi
 
   # hi_exclude is appended to load.sh by hi.sh during the transfer
   # shellcheck disable=SC2086
-  cecho_n " $(du -sh $hi_exclude --apparent-size "$HI_HOME"/.hi.d | awk '{ print $1 }') " "$NC"
+  cecho " $(du -sh $hi_exclude --apparent-size "$HI_HOME"/.hi.d | awk '{ print $1 }') " "$NC" 1
   cecho '~~~~~~~~~~~~~~~~~~~~~~~ Disconnected! ~~~~~~~~~~~~~~~~~~~~~~~~~~' "$BRRED"
   timestamp
-  cecho_n "hi closing! " "$BRPURPLE"
+  cecho "hi closing! " "$BRPURPLE" 1
   exit 0
 }
-
-load

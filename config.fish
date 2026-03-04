@@ -64,9 +64,9 @@ function fish_greeting
   if not set -q fish_greeting
     set -l spacer (printf (_ '%s|' ) (set_color normal))
     set -l header (printf (_ ' %s%s~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Online! ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~') (set_color brgreen))
-
-    set -l utctime (printf (_ '%s' (date -u "+%a %b %e %H:%M:%S %Z %Y")) (set_color brblue))
-    set -l localtime (printf (_ '%s' (date "+%a %b %e %H:%M:%S %Z %Y")) (set_color bryellow))
+    set -l date_format "+%a %b %e %H:%M:%S %Z %Y"
+    set -l utctime (printf (_ '%s' (date -u $date_format)) (set_color brblue))
+    set -l localtime (printf (_ '%s' (date $date_format)) (set_color bryellow))
 
     set -l distro (printf (_ '%s' (grep PRETTY_NAME /etc/os-release | cut -d= -f2 | tr -d '\"') '%s') (set_color green) (set_color normal))
     set -l arch (printf (_ '%s' (uname -m) ) (set_color brmagenta))

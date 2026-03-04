@@ -1,8 +1,7 @@
 #!/bin/fish
 if test -f "$HI_HOME/.hi.d/aliases.sh"
   source "$HI_HOME/.hi.d/aliases.sh"
-end
-if test -f ~/.hi.d/aliases.sh
+else if test -f ~/.hi.d/aliases.sh
   source ~/.hi.d/aliases.sh
 end
 

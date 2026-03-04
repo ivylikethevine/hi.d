@@ -21,7 +21,7 @@ alias ssh-keys="ls -alhR --color=auto ~/.ssh"
 alias ssh-authorized="nano ~/.ssh/authorized_keys"
 alias ssh-known="bat ~/.ssh/known_hosts"
 alias ssh-config="bat ~/.ssh/config"
-alias newkey="ssh-keygen -t ed25519 -f "/home/.ssh/$USER/$(date -I)" -P '' -C ''"
+alias newkey="ssh-keygen -t ed25519 -f "/home/$USER/.ssh/$(date -Is)" -P '' -C ''"
 # user customization goes below =============
 
 # exported here since we have to wrap the bat/batcat call per shell

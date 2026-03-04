@@ -25,7 +25,13 @@ SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 INSTALL_PATH="$(readlink -f "$SCRIPT_DIR/../")"
 export INSTALL_PATH
 
-header_date_format="+%a %b %e %H:%M:%S %Z %Y"
+human_centric_date_format="+%a %b %-e %Y %H:%M:%S %Z"
+human_short_date_format="+%b %-e %y %H:%M %Z"
+human_precise_date_format="+%a %b %-e %Y %H:%M:%S.%3N %Z"
+file_short_date_format="+%m-%d-%Y-%H:%M-%Z"
+file_verbose_date_format="+%a-%m-%d-%Y-%H:%M:%S-%Z"
+file_precise_date_format="+%a-%m-%d-%Y-%H:%M:%S.%3N-%Z"
+
 copy_time=-1
 
 cecho() {
@@ -45,7 +51,7 @@ spacer() {
 
 timestamp() {
   spacer
-  echo -e "$BRBLUE$(date -u "$header_date_format")   $NC|$BRYELLOW   $(date "$header_date_format")$NC"
+  echo -e "$BRBLUE$(date -u "$human_centric_date_format")   $NC|$BRYELLOW   $(date "$human_centric_date_format")$NC"
   spacer
 }
 

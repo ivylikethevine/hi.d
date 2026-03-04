@@ -25,12 +25,12 @@ SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 INSTALL_PATH="$(readlink -f "$SCRIPT_DIR/../")"
 export INSTALL_PATH
 
-human_centric_date_format="+%a %b %-e %Y %H:%M:%S %Z"
-human_short_date_format="+%b %-e %y %H:%M %Z"
-human_precise_date_format="+%a %b %-e %Y %H:%M:%S.%3N %Z"
-file_short_date_format="+%m-%d-%Y-%H:%M-%Z"
-file_verbose_date_format="+%a-%m-%d-%Y-%H:%M:%S-%Z"
-file_precise_date_format="+%a-%m-%d-%Y-%H:%M:%S.%3N-%Z"
+export human_centric_date_format="+%a %b %-e %Y %H:%M:%S %Z"
+export human_short_date_format="+%b %-e %y %H:%M %Z"
+export human_precise_date_format="+%a %b %-e %Y %H:%M:%S.%3N %Z"
+export file_short_date_format="+%m-%d-%Y-%H:%M-%Z"
+export file_verbose_date_format="+%a-%m-%d-%Y-%H:%M:%S-%Z"
+export file_precise_date_format="+%a-%m-%d-%Y-%H:%M:%S.%3N-%Z"
 
 copy_time=-1
 
@@ -117,7 +117,7 @@ git_identity() {
   spacer
   if [ -f ~/.gitconfig ]; then
     cecho "Git ID: " "$CYAN" 1
-    cecho "$(grep email ~/.gitconfig | cut -d= -f2 | tr -d ' ' | awk -F@ '{ for(i=0;i<length($2);i++) c=c"●"; print $1"@"c; c="" }')" "$YELLOW" 1
+    cecho "$(grep email ~/.gitconfig | tail -n1 | cut -d= -f2 | tr -d ' ' | awk -F@ '{ for(i=0;i<length($2);i++) c=c"●"; print $1"@"c; c="" }')" "$YELLOW" 1
   else
     cecho "No Git ID Found..." "$YELLOW" 1
   fi

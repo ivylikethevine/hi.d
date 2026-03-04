@@ -90,7 +90,7 @@ function fish_greeting
     end
 
     if [ -f "/home/$USER/.gitconfig" ]
-      set -g git_identity (printf (_ '%sGit ID: %s' (grep email ~/.gitconfig | cut -d= -f2 | tr -d ' ' | awk -F@ '{ for(i=0;i<length($2);i++) c=c"●"; print $1"@"c; c="" }')) (set_color brcyan) (set_color yellow))
+      set -g git_identity (printf (_ '%sGit ID: %s' (grep email ~/.gitconfig | tail -n1 | cut -d= -f2 | tr -d ' ' | awk -F@ '{ for(i=0;i<length($2);i++) c=c"●"; print $1"@"c; c="" }')) (set_color brcyan) (set_color yellow))
     else
       set -g git_identity (printf (_ '%sNo Git ID Found... %s') (set_color yellow) (set_color normal))
     end

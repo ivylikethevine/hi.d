@@ -20,14 +20,16 @@ function hi() {
       echo >&2 $'.hi.d files must be less than 64kb\ncurrent size: '"$SIZE"' bytes'
       exit 1
     fi
-    local DIVIDER="$"
-    if [ "$SHELL" = "/usr/bin/fish" ]; then
+    local DIVIDER
+    if [ "$SHELL" = "/usr/bin/fish" ] || [ -z "$FISH_VERSION" ]; then
       DIVIDER=""
+    else
+      DIVIDER="$"
     fi
     local TR_COMMAND="tr -s ' ' $DIVIDER'\n'"
     local OPENSSL_COMMAND="openssl enc -base64"
     ssh -t "$DOMAIN" "$SSHARGS" "
-            command -v openssl >/dev/null 2>&1 || { echo >&2 \"hi requires openssl to be installed on the server, but it's not. Aborting.\"; exit 1; }
+            command -v openssl >/dev/null 2>&1 || { echo >&2 \"hi requires openssl to be installed on $DOMAIN, but it's not. Aborting.\"; exit 1; }
             export HI_HOME=\$(mktemp -d -t .$(whoami).hi.XXXX)
             export HI_CLEANUP=\$HI_HOME
             trap \"rm -rf \$HI_CLEANUP; exit\" exit
@@ -105,17 +107,30 @@ function hi_parse() {
 }
 
 command -v openssl >/dev/null 2>&1 || {
-  echo >&2 "hi requires openssl to be installed locally, but it's not. Aborting."
+  echo >&2 "hi requires openssl to be installed on $(hostname), but it's not. Aborting."
   exit 1
 }
 
-# TODO: Better handle various ssh errors
-# # identify broken pipe/timeout
-# # better resolve failed ssh hosts
-hi_parse "$@"
-if ! hi "$@"; then
-  echo -e "\n\033[01;31m=======================================\033[00;0m"
-  echo -e "\033[01;33mhi failed, falling back to sh + ssh...\033[00;0m"
-  echo -e "\033[01;31m=======================================\033[00;0m\n"
-  ssh "$@"
-fi
+run() {
+  hi_parse "$@"
+  hi "$@" 2>/dev/null
+  hi_exit_code="$?"
+
+  if [ "$hi_exit_code" -eq 255 ]; then
+    echo -e "\r\r\r\r hi: unknown host - check your ssh config?"
+    exit 255
+  elif [ "$hi_exit_code" -eq 22 ]; then
+    echo -e "\r\r\r\r hi: timeout, exiting..."
+    exit 22
+  elif [ "$hi_exit_code" -eq 0 ]; then
+    exit 0
+  else
+    echo -e "\n\033[01;31m=======================================\033[00;0m"
+    echo -e "\033[01;33mhi failed [code: $hi_exit_code], falling back to sh + ssh...\033[00;0m"
+    echo -e "\033[01;31m=======================================\033[00;0m\n"
+    ssh "$@"
+    exit 1
+  fi
+}
+
+run "$@"

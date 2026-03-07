@@ -19,6 +19,7 @@ hi_end="# hi-config-end"
 minimal=${minimal:-}
 
 HI_HOME=${HI_HOME:-$HOME/.hi.d}
+# TODO: Dedupe hi_exclude
 hi_exclude=${hi_exclude:-'--exclude .git --exclude .gitignore --exclude README.md --exclude stubs --exclude reports --exclude scripts'}
 start=$(date +%s.%N)
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )

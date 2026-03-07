@@ -3,6 +3,11 @@
 hi_exclude="--exclude .git --exclude .gitignore --exclude README.md --exclude stubs --exclude reports --exclude scripts"
 start=$(date +%s.%N)
 
+command -v openssl >/dev/null 2>&1 || {
+  echo >&2 "hi requires openssl to be installed on $(hostname), but it's not. Aborting."
+  exit 1
+}
+
 # shellcheck disable=SC2086
 # shellcheck disable=SC2046
 # shellcheck disable=SC2027
@@ -106,26 +111,20 @@ function hi_parse() {
   fi
 }
 
-command -v openssl >/dev/null 2>&1 || {
-  echo >&2 "hi requires openssl to be installed on $(hostname), but it's not. Aborting."
-  exit 1
-}
-
 run() {
   tmp="/tmp/$(date +%s).hi"
-  touch $tmp
+  touch "$tmp"
   hi_parse "$@"
-  hi "$@" 2>$tmp
+  hi "$@" 2>"$tmp"
   hi_exit_code="$?"
-  hi_errors="$(cat $tmp)"
-  rm $tmp
+  hi_errors="$(cat "$tmp")"
+  rm "$tmp"
   if [ "$hi_exit_code" -ne 0 ]; then
-    echo -ne "\r\r\r\r"
-    if [[ "$hi_errors" == *"Could not resolve hostname"* ]]; then
-      echo -e "hi: ${hi_errors#*ssh: }"
-    elif [[ "$hi_errors" == *"Broken pipe"* ]]; then
-      echo -e "hi: ${hi_errors#*ssh: }"
-    elif [[ "$hi_errors" == *"no such identity"* ]]; then
+    echo -ne "\r\r\r\r | "
+    if [[ "$hi_errors" == *"Could not resolve hostname"* ]] \
+      || [[ "$hi_errors" == *"Broken pipe"* ]] \
+      || [[ "$hi_errors" == *"no such identity"* ]] \
+      || [[ "$hi_errors" == *"Permission denied"* ]]; then
       echo -e "hi: ${hi_errors#*ssh: }"
     else
       echo -e "hi: $hi_errors"
@@ -135,9 +134,8 @@ run() {
       ssh "$@"
       exit 1
     fi
-    exit "$hi_exit_code"
   fi
-  exit 0
+  exit "$hi_exit_code"
 }
 
 run "$@"

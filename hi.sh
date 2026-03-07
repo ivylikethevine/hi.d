@@ -112,25 +112,32 @@ command -v openssl >/dev/null 2>&1 || {
 }
 
 run() {
+  tmp="/tmp/$(date +%s).hi"
+  touch $tmp
   hi_parse "$@"
-  hi "$@" 2>/dev/null
+  hi "$@" 2>$tmp
   hi_exit_code="$?"
-
-  if [ "$hi_exit_code" -eq 255 ]; then
-    echo -e "\r\r\r\r hi: unknown host - check your ssh config?"
-    exit 255
-  elif [ "$hi_exit_code" -eq 22 ]; then
-    echo -e "\r\r\r\r hi: timeout, exiting..."
-    exit 22
-  elif [ "$hi_exit_code" -eq 0 ]; then
-    exit 0
-  else
-    echo -e "\n\033[01;31m=======================================\033[00;0m"
-    echo -e "\033[01;33mhi failed [code: $hi_exit_code], falling back to sh + ssh...\033[00;0m"
-    echo -e "\033[01;31m=======================================\033[00;0m\n"
-    ssh "$@"
-    exit 1
+  hi_errors="$(cat $tmp)"
+  rm $tmp
+  if [ "$hi_exit_code" -ne 0 ]; then
+    echo -ne "\r\r\r\r"
+    if [[ "$hi_errors" == *"Could not resolve hostname"* ]]; then
+      echo -e "hi: ${hi_errors#*ssh: }"
+    elif [[ "$hi_errors" == *"Broken pipe"* ]]; then
+      echo -e "hi: ${hi_errors#*ssh: }"
+    elif [[ "$hi_errors" == *"no such identity"* ]]; then
+      echo -e "hi: ${hi_errors#*ssh: }"
+    else
+      echo -e "hi: $hi_errors"
+      echo -e "\n\033[01;31m=======================================\033[00;0m"
+      echo -e "\033[01;33mhi failed [code: $hi_exit_code], falling back to ssh...\033[00;0m"
+      echo -e "\033[01;31m=======================================\033[00;0m\n"
+      ssh "$@"
+      exit 1
+    fi
+    exit "$hi_exit_code"
   fi
+  exit 0
 }
 
 run "$@"

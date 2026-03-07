@@ -19,8 +19,6 @@ hi_end="# hi-config-end"
 minimal=${minimal:-}
 
 HI_HOME=${HI_HOME:-$HOME/.hi.d}
-# TODO: Dedupe hi_exclude
-hi_exclude=${hi_exclude:-'--exclude .git --exclude .gitignore --exclude README.md --exclude stubs --exclude reports --exclude scripts'}
 start=$(date +%s.%N)
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 INSTALL_PATH="$(readlink -f "$SCRIPT_DIR/../")"
@@ -170,8 +168,8 @@ tmuxrc() {
     mkdir -p "$TMUXDIR"
   fi
   rm -rf "$TMUXDIR"/.hi.d
-  cp -r "$HI_HOME"/.hi "$HI_HOME"/bashhi "$HI_HOME"/hi "$HI_HOME"/.hi.d "$TMUXDIR"
-  HI_HOME="$TMUXDIR" SHELL="$TMUXDIR"/bashhi /usr/bin/tmux -S "$TMUXDIR"/tmuxserver "$@"
+  # cp -r "$HI_HOME"/.hi "$HI_HOME"/bashrc.hi "$HI_HOME"/hi "$HI_HOME"/.hi.d "$TMUXDIR"
+  # HI_HOME="$TMUXDIR" SHELL="$TMUXDIR"/bashrc.hi /usr/bin/tmux -S "$TMUXDIR"/tmuxserver "$@"
   # export SHELL=`which bash`
   # tmuxrc
 }
@@ -207,9 +205,7 @@ load() {
     bash -i
   fi
 
-  # hi_exclude is appended to load.sh by hi.sh during the transfer
-  # shellcheck disable=SC2086
-  cecho " $(du -sh $hi_exclude --apparent-size "$HI_HOME"/.hi.d | awk '{ print $1 }') " "$NC" 1
+  cecho " $(du -sh --apparent-size "$HI_HOME"/.hi.d | awk '{ print $1 }') " "$NC" 1
   cecho '~~~~~~~~~~~~~~~~~~~~~~~ Disconnected! ~~~~~~~~~~~~~~~~~~~~~~~~~~' "$BRRED"
   timestamp
   cecho "hi closing! " "$BRPURPLE" 1

@@ -116,14 +116,11 @@ function fish_greeting
     set -l _systems (bash -c "source $hi_root/common/check.sh; systems")
     set -l _tools (bash -c "source $hi_root/common/check.sh; tools")
     set -g fish_greeting $hi_change_status" "$hi_update_status" "$header\n $_timer_line\n $_git_key_change_line\n$_packages\n$_basics\n$_systems\n$_tools
-
   end
 
   test -n "$fish_greeting"
   and echo $fish_greeting
 end
-
-# user customization goes below =============
 
 # conditionally load since bat is sometimes batcat on debian systems
 if [ -f "/usr/bin/bat" ]

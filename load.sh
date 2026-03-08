@@ -81,8 +81,8 @@ configure_all() {
   configure_file ~/.nanorc optional/nano.rc
   configure_file ~/.bashrc shells/bash.sh
   configure_file ~/.zshrc shells/zsh.zsh
-  if [ -f ~/.config/fish/shells/config.fish ]; then
-    # This path won't exist if fish isn't installed
+  if [ -d ~/.config/fish ]; then
+    # This directory won't exist if fish isn't installed
     configure_file ~/.config/fish/config.fish shells/config.fish
   fi
 }

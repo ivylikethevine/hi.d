@@ -1,7 +1,9 @@
 #!/bin/fish
-if test -f "$HI_HOME/.hi.d/common/aliases.sh"
-  source "$HI_HOME/.hi.d/common/aliases.sh"
+if test -f "$HI_ROOT/.hi.d/common/aliases.sh"
+  # remote
+  source "$HI_ROOT/.hi.d/common/aliases.sh"
 else if test -f ~/.hi.d/common/aliases.sh
+  # local
   source ~/.hi.d/common/aliases.sh
 end
 
@@ -63,7 +65,7 @@ end
 function fish_greeting
   if not set -q fish_greeting
     set -l spacer (printf (_ '%s|' ) (set_color normal))
-    set -l header (printf (_ ' %s%s~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Online! ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~') (set_color brgreen))
+    set -l header (printf (_ '%s~~~~~~~~~~~~~~~~~~ Online [%s]! ~~~~~~~~~~~~~~~~~~~~~~~~~') (set_color brcyan) (prompt_hostname))
 
     set -l human_centric_date_format "+%a %b %-e %Y %H:%M:%S %Z"
     set -l utctime (printf (_ '%s' (date -u $human_centric_verbose)) (set_color brblue))
@@ -97,7 +99,7 @@ function fish_greeting
 
     set -l hi_root "/home/$USER/.hi.d/"
     if [ -d "$hi_root/.git" ]
-      set -g hi_change_status (printf (_ '%s' (git -C ~/.hi.d status --short | wc -l | awk '{ print $1 }')' ↑') (set_color bryellow))
+      set -g hi_change_status (printf (_ ' %s' (git -C ~/.hi.d status --short | wc -l | awk '{ print $1 }')' ↑') (set_color bryellow))
       set -g hi_update_status (printf (_ '%s' (git -C ~/.hi.d rev-list --count HEAD..origin/$(git -C ~/.hi.d rev-parse --abbrev-ref HEAD))' ↓') (set_color brgreen))
     else
       set -g hi_change_status ""
@@ -113,7 +115,7 @@ function fish_greeting
     set -l _basics (bash -c "source $hi_root/common/check.sh; basics")
     set -l _systems (bash -c "source $hi_root/common/check.sh; systems")
     set -l _tools (bash -c "source $hi_root/common/check.sh; tools")
-    set -g fish_greeting $header" "$hi_change_status" "$hi_update_status\n $_timer_line\n $_git_key_change_line\n$_packages\n$_basics\n$_systems\n$_tools
+    set -g fish_greeting $hi_change_status" "$hi_update_status" "$header\n $_timer_line\n $_git_key_change_line\n$_packages\n$_basics\n$_systems\n$_tools
 
   end
 

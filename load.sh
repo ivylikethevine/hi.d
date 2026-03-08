@@ -15,23 +15,12 @@ NC='\e[0m'          # 13
 
 hi_start="# hi-config-start"
 hi_end="# hi-config-end"
-
-minimal=${minimal:-}
-
-HI_HOME=${HI_HOME:-$HOME/.hi.d}
-start=$(date +%s.%N)
-SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
-INSTALL_PATH="$(readlink -f "$SCRIPT_DIR/../")"
-export INSTALL_PATH
-
-export human_centric_date_format="+%a %b %-e %Y %H:%M:%S %Z"
-export human_short_date_format="+%b %-e %y %H:%M %Z"
-export human_precise_date_format="+%a %b %-e %Y %H:%M:%S.%3N %Z"
-export file_short_date_format="+%m-%d-%Y-%H:%M-%Z"
-export file_verbose_date_format="+%a-%m-%d-%Y-%H:%M:%S-%Z"
-export file_precise_date_format="+%a-%m-%d-%Y-%H:%M:%S.%3N-%Z"
-
 copy_time=-1
+
+# # # See: hi.sh/say_hi()
+# # On local machines, ~/.hi.d has our configs.
+# # On remote machines, we need to go to /tmp/.(whoami).hi.XXXX/.hi.d
+HI_ROOT=${HI_ROOT:-~/.hi.d}
 
 cecho() {
   local formatted_text="$2$1$NC"
@@ -50,6 +39,7 @@ spacer() {
 
 timestamp() {
   spacer
+  local human_centric_date_format="+%a %b %-e %Y %H:%M:%S %Z"
   echo -e "$BRBLUE$(date -u "$human_centric_date_format")   $NC|$BRYELLOW   $(date "$human_centric_date_format")$NC"
   spacer
 }
@@ -57,11 +47,11 @@ timestamp() {
 configure_file() {
   touch "$1"
   if test -f "$1"; then
-    if test -f "$HI_HOME/.hi.d/$2"; then
+    if test -f "$HI_ROOT/.hi.d/$2"; then
       if ! grep -q "$hi_start" "$1"; then
         {
           echo "$hi_start"
-          cat "$HI_HOME/.hi.d/$2"
+          cat "$HI_ROOT/.hi.d/$2"
           echo "$hi_end"
         } >>"$1"
       fi
@@ -69,16 +59,12 @@ configure_file() {
   fi
 }
 
-# false positive?
-# shellcheck disable=SC2329
 clean_file() {
   if test -f "$1"; then
     sed -i "/^$hi_start/,/^$hi_end/d" -- "$1"
   fi
 }
 
-# false positive?
-# shellcheck disable=SC2329
 clean_all() {
   clean_file ~/.bashrc
   clean_file ~/.zshrc
@@ -90,7 +76,7 @@ clean_all() {
 configure_all() {
   if command -v "vim" &>/dev/null; then
     # Will cause errors if we load this with only VI
-    export VIMINIT="let \$MYVIMRC='$HI_HOME/.hi.d/optional/vim.rc' | source \$MYVIMRC"
+    export VIMINIT="let \$MYVIMRC='$HI_ROOT/.hi.d/optional/vim.rc' | source \$MYVIMRC"
   fi
   configure_file ~/.nanorc optional/nano.rc
   configure_file ~/.bashrc bash.sh
@@ -145,22 +131,19 @@ key_count() {
 
 timers() {
   spacer
-  cecho "load: $(echo "$(date +%s.%N) $start" | awk '{ printf "%.3f\n", $1 - $2 }')s | copy: ${copy_time}s"
+  cecho "load: $(echo "$(date +%s.%N) $load_start_time" | awk '{ printf "%.3f\n", $1 - $2 }')s | copy: ${copy_time}s"
 }
 
 check_packages() {
   # shellcheck source=./common/check.sh
-  source "$HI_HOME"/.hi.d/common/check.sh
-  if [ "$minimal" = false ]; then
-    packages
-    basics
-  fi
+  source "$HI_ROOT"/.hi.d/common/check.sh
+  packages
+  basics
   systems
   tools
 }
 
 # TODO: Add tmux support + handle disconnects/reconnects/older sessions
-# shellcheck disable=SC2329
 tmuxrc() {
   local TMUXDIR="/tmp/tmuxrc"
   if ! [ -d "$TMUXDIR" ]; then
@@ -168,24 +151,22 @@ tmuxrc() {
     mkdir -p "$TMUXDIR"
   fi
   rm -rf "$TMUXDIR"/.hi.d
-  # cp -r "$HI_HOME"/.hi "$HI_HOME"/bashrc.hi "$HI_HOME"/hi "$HI_HOME"/.hi.d "$TMUXDIR"
-  # HI_HOME="$TMUXDIR" SHELL="$TMUXDIR"/bashrc.hi /usr/bin/tmux -S "$TMUXDIR"/tmuxserver "$@"
+  # cp -r "$HI_ROOT"/.hi "$HI_ROOT"/bashrc.hi "$HI_ROOT"/hi "$HI_ROOT"/.hi.d "$TMUXDIR"
+  # HI_ROOT="$TMUXDIR" SHELL="$TMUXDIR"/bashrc.hi /usr/bin/tmux -S "$TMUXDIR"/tmuxserver "$@"
   # export SHELL=`which bash`
   # tmuxrc
 }
 
 load() {
-  minimal=false
+  load_start_time=$(date +%s.%N)
 
   trap 'clean_all' exit
-  cecho '~~~~~~~~~~~~~~~~~~~~~~~~ Connected! ~~~~~~~~~~~~~~~~~~~~~~~~~~~~' "$BRGREEN"
+  cecho "~~~~~~~~~~~~~~~~~~~ Connected to [$(hostname)]! ~~~~~~~~~~~~~~~~~~~~~~~" "$BRGREEN"
   timestamp
   system_info
-  if [ "$minimal" = false ]; then
-    git_identity
-    docker_count
-    key_count
-  fi
+  git_identity
+  docker_count
+  key_count
   check_packages
   configure_all
   spacer
@@ -205,9 +186,9 @@ load() {
     bash -i
   fi
 
-  cecho " $(du -sh --apparent-size "$HI_HOME"/.hi.d | awk '{ print $1 }') " "$NC" 1
-  cecho '~~~~~~~~~~~~~~~~~~~~~~~ Disconnected! ~~~~~~~~~~~~~~~~~~~~~~~~~~' "$BRRED"
+  cecho " $(du -sh --apparent-size "$HI_ROOT"/.hi.d | awk '{ print $1 }') " "$NC" 1
+  cecho "~~~~~~~~~~~~~~~~~ Disconnected from [$(hostname)]! ~~~~~~~~~~~~~~~~~~~~" "$BRRED"
   timestamp
-  cecho "hi closing! " "$BRPURPLE" 1
+  cecho "hi closing! " "$BRPURPLE"
   exit 0
 }

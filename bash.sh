@@ -2,21 +2,23 @@
 
 # shellcheck disable=SC1090
 # shellcheck disable=SC1091
-if [ -f "$HI_HOME/.hi.d/common/aliases.sh" ]; then
-  source "$HI_HOME/.hi.d/common/aliases.sh"
+if [ -f "$HI_ROOT/.hi.d/common/aliases.sh" ]; then
+  # remote
+  source "$HI_ROOT/.hi.d/common/aliases.sh"
 elif [ -f ~/.hi.d/common/aliases.sh ]; then
+  # local
   source ~/.hi.d/common/aliases.sh
 fi
 
-if [ -f "$HI_HOME/.hi.d/common/prompt_colors.sh" ]; then
-  source "$HI_HOME/.hi.d/common/prompt_colors.sh"
+if [ -f "$HI_ROOT/.hi.d/common/prompt_colors.sh" ]; then
+  # remote
+  source "$HI_ROOT/.hi.d/common/prompt_colors.sh"
 elif [ -f ~/.hi.d/common/prompt_colors.sh ]; then
+  # local
   source ~/.hi.d/common/prompt_colors.sh
 fi
 
-# user customization goes below =============
-
-bat_opts=${bat_opts:-"--color=always --paging=never"}
+export bat_opts=${bat_opts:-"--color=always --paging=never"}
 # conditionally load since bat is sometimes batcat on debian systems
 if [ -f "/usr/bin/bat" ]; then
   alias batcat="bat"

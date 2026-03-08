@@ -37,22 +37,21 @@ alias dcd="docker compose down"
 
 # ls
 alias ls="ls -lh --color=auto"
-alias lsa="ls -alh --color=auto"
-alias lsd="ls -ld .* --color=auto"
+alias lsa="ls -lha --color=auto"
+alias lsd="ls -lhd .* --color=auto"
+alias lsr="ls -lhaR --color=auto"
 
 # grep
 alias grep="grep --color=auto"
 
 # git
-alias gi="git"
 alias gl="git log -1"
-alias gp="git pull"
 alias gf="git fetch -a"
+alias gp="git fetch -a && git pull"
 alias gs="git status"
 alias gst="git stash"
-alias gps="git fetch && git pull && git status"
 alias gd="git diff --color=always"
-alias gps="echo where are we going?"
+alias gps="echo ' Okay. Where are we going?'"
 alias gpsh='git push --set-upstream origin $(git rev-parse --abbrev-ref HEAD)'
 
 # ping
@@ -76,9 +75,9 @@ alias yayc="yay -Sc"
 alias yaycc="sudo rm -rf '/var/cache/pacman/pkg/download-*'"
 
 # apt updates
-alias aptu="sudo apt update"
-alias aptup="sudo apt upgrade"
-alias aptuc="sudo apt update && sudo apt upgrade"
+alias aptup="sudo apt update"
+alias aptug="sudo apt upgrade"
+alias aptupg="sudo apt update && sudo apt upgrade"
 alias aptac="sudo apt autoclean && sudo apt autoremove"
 
 # save my fingers

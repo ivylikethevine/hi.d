@@ -1,18 +1,19 @@
 #!/bin/zsh
-if [ -f "$HI_HOME/.hi.d/common/aliases.sh" ]; then
-  source "$HI_HOME/.hi.d/common/aliases.sh"
+if [ -f "$HI_ROOT/.hi.d/common/aliases.sh" ]; then
+  # remote
+  source "$HI_ROOT/.hi.d/common/aliases.sh"
 elif [ -f ~/.hi.d/common/aliases.sh ]; then
+   # local
   source ~/.hi.d/common/aliases.sh
 fi
 
-if [ -f "$HI_HOME/.hi.d/common/prompt_colors.sh" ]; then
-  source "$HI_HOME/.hi.d/common/prompt_colors.sh"
+if [ -f "$HI_ROOT/.hi.d/common/prompt_colors.sh" ]; then
+  # remote
+  source "$HI_ROOT/.hi.d/common/prompt_colors.sh"
 elif [ -f ~/.hi.d/common/prompt_colors.sh ]; then
+  # local
   source ~/.hi.d/common/prompt_colors.sh
 fi
-
-# TODO: zsh header
-# user customization goes below =============
 
 # conditionally load since bat is sometimes batcat on debian systems
 if [ -f "/usr/bin/bat" ]; then

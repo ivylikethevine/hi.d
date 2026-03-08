@@ -17,7 +17,7 @@ cat <<'EOF' >> "$_tmp/bashrc"
 # hi-config-start
 # If not running interactively, exit
 [[ $- != *i* ]] && return
-source ~/.hi.d/bash.sh
+source ~/.hi.d/shells/bash.sh
 # hi-config-end
 EOF
 diff --color=always -w -u "$_tmp"/bashrc ~/.bashrc
@@ -27,7 +27,7 @@ echo
 echo "Checking zshrc ========"
 cat <<'EOF' >> "$_tmp/zshrc"
 # hi-config-start
-source ~/.hi.d/zsh.zsh
+source ~/.hi.d/shells/zsh.zsh
 # hi-config-end
 EOF
 diff --color=always -w -u "$_tmp"/zshrc ~/.zshrc
@@ -38,7 +38,7 @@ echo "Checking config.fish ========"
 cat <<'EOF' >> "$_tmp/config.fish"
 # hi-config-start
 if status is-interactive
-  source ~/.hi.d/config.fish
+  source ~/.hi.d/shells/config.fish
 end
 # hi-config-end
 EOF

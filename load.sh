@@ -79,11 +79,11 @@ configure_all() {
     export VIMINIT="let \$MYVIMRC='$HI_ROOT/.hi.d/optional/vim.rc' | source \$MYVIMRC"
   fi
   configure_file ~/.nanorc optional/nano.rc
-  configure_file ~/.bashrc bash.sh
-  configure_file ~/.zshrc zsh.zsh
-  if [ -f ~/.config/fish/config.fish ]; then
+  configure_file ~/.bashrc shells/bash.sh
+  configure_file ~/.zshrc shells/zsh.zsh
+  if [ -f ~/.config/fish/shells/config.fish ]; then
     # This path won't exist if fish isn't installed
-    configure_file ~/.config/fish/config.fish config.fish
+    configure_file ~/.config/fish/config.fish shells/config.fish
   fi
 }
 

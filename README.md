@@ -1,13 +1,9 @@
 # hi.sh -> sshrc superset
 
 Chainloader to unify local configuration with portable variations for ssh hosts. Order of execution:
-First, `~/.hi.d/hi.sh` is executed, which chainloads `~/.hi.d/load.sh`. The second loader determines the shell, loads aliases, and then starts a session. For local configurations, stubs are used to load the shared files under `~/.hi.d/`. Local-only changes should remain in `~/.bashrc, ~/.zshrc, ~/.config/fish/config.fish`, etc.
+First, `~/.hi.d/hi.sh` is executed on the client, which ssh's into the target device, sends and chainloads `~/.hi.d/load.sh`. The second loader determines the shell, loads aliases, and then starts a session on the target device. For local configurations on the client device, stubs are used to load the shared files under `~/.hi.d/`. Local-only changes should remain in `~/.bashrc, ~/.zshrc, ~/.config/fish/config.fish`, etc.
 
 configured vim to actually be `ln /home/$USER/.vimrc /home/$USER/hi.d/.vimrc`
-`du -sb --exclude .git --exclude .gitignore --exclude README.md --exclude hi.sh --exclude install.sh --exclude stubs --apparent-size` -> filesize (needs to be under 64k)
-
-- shellcheck????
-  Built using:
 
 - sshrc - https://github.com/cdown/sshrc (built into `hi.sh`)
   - bring local configuration to remote hosts

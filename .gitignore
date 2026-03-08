@@ -5,9 +5,9 @@
 **private**
 **key**
 
-links/*
-reports/*
-
+*.bmp
+*.cert
+*.key
 *.png
 *.jpg
 *.jpeg

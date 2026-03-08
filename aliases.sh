@@ -1,28 +1,30 @@
 #!/bin/sh
+
 # colors
-export RED='\e[0;31m'      # 1
-export GREEN='\e[0;32m'    # 2
-export YELLOW='\e[0;33m'   # 3
-export BLUE='\e[0;34m'     # 4
-export PURPLE='\e[0;35m'   # 5
-export CYAN='\e[0;36m'     # 6
-export BRRED='\e[1;31m'    # 7
-export BRGREEN='\e[1;32m'  # 8
-export BRYELLOW='\e[1;33m' # 9
-export BRBLUE='\e[1;34m'   # 10
-export BRPURPLE='\e[1;35m' # 11
-export BRCYAN='\e[1;36m'   # 12
-export NC='\e[0m'          # 13
+export RED='\e[0;31m'
+export GREEN='\e[0;32m'
+export YELLOW='\e[0;33m'
+export BLUE='\e[0;34m'
+export PURPLE='\e[0;35m'
+export CYAN='\e[0;36m'
+export BRRED='\e[1;31m'
+export BRGREEN='\e[1;32m'
+export BRYELLOW='\e[1;33m'
+export BRBLUE='\e[1;34m'
+export BRPURPLE='\e[1;35m'
+export BRCYAN='\e[1;36m'
+export NC='\e[0m'
 
 # ssh custom aliases
 alias hii="ssh"
 alias hey="hii"
+
+alias newkey='ssh-keygen -t ed25519 -f "/home/$USER/.ssh/$(date -Is)" -P '' -C '''
+
 alias ssh-keys="ls -alhR --color=auto ~/.ssh"
 alias ssh-authorized="nano ~/.ssh/authorized_keys"
 alias ssh-known="cat ~/.ssh/known_hosts"
 alias ssh-config="cat ~/.ssh/config"
-alias newkey='ssh-keygen -t ed25519 -f "/home/$USER/.ssh/$(date -Is)" -P '' -C '''
-# user customization goes below =============
 
 # exported here since we have to wrap the bat/batcat call per shell
 export bat_opts="-P --tabs 2 --theme Monokai\ Extended\ Bright --style changes,grid,numbers"
@@ -69,7 +71,7 @@ alias vs="version"
 # pacman/yay updates
 alias yayy="yay -Syyu"
 alias yayc="yay -Sc"
-alias yayc="sudo rm -rf /var/cache/pacman/pkg/download-*"
+alias yaycc="sudo rm -rf '/var/cache/pacman/pkg/download-*'"
 
 # apt updates
 alias aptu="sudo apt update"
@@ -86,3 +88,4 @@ alias now='date $human_short_date_format && date -u $human_short_date_format'
 
 # editing this folder
 alias ehi="zed ~/.hi.d"
+alias essh="zed ~/.ssh"

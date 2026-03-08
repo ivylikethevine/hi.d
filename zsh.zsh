@@ -1,14 +1,14 @@
 #!/bin/zsh
-if [ -f "$HI_HOME/.hi.d/aliases.sh" ]; then
-  source "$HI_HOME/.hi.d/aliases.sh"
-elif [ -f ~/.hi.d/aliases.sh ]; then
-  source ~/.hi.d/aliases.sh
+if [ -f "$HI_HOME/.hi.d/common/aliases.sh" ]; then
+  source "$HI_HOME/.hi.d/common/aliases.sh"
+elif [ -f ~/.hi.d/common/aliases.sh ]; then
+  source ~/.hi.d/common/aliases.sh
 fi
 
-if [ -f "$HI_HOME/.hi.d/prompt_colors.sh" ]; then
-  source "$HI_HOME/.hi.d/prompt_colors.sh"
-elif [ -f ~/.hi.d/prompt_colors.sh ]; then
-  source ~/.hi.d/prompt_colors.sh
+if [ -f "$HI_HOME/.hi.d/common/prompt_colors.sh" ]; then
+  source "$HI_HOME/.hi.d/common/prompt_colors.sh"
+elif [ -f ~/.hi.d/common/prompt_colors.sh ]; then
+  source ~/.hi.d/common/prompt_colors.sh
 fi
 
 # TODO: zsh header

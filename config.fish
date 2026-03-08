@@ -1,8 +1,8 @@
 #!/bin/fish
-if test -f "$HI_HOME/.hi.d/aliases.sh"
-  source "$HI_HOME/.hi.d/aliases.sh"
-else if test -f ~/.hi.d/aliases.sh
-  source ~/.hi.d/aliases.sh
+if test -f "$HI_HOME/.hi.d/common/aliases.sh"
+  source "$HI_HOME/.hi.d/common/aliases.sh"
+else if test -f ~/.hi.d/common/aliases.sh
+  source ~/.hi.d/common/aliases.sh
 end
 
 # prompt
@@ -109,10 +109,10 @@ function fish_greeting
     set -l _system_info_line $spacer" "$os_type" "$spacer" "$arch" "$spacer" "$distro" "$spacer" "$cpus" "$spacer" "$ram
 
     # TODO: DEDUPE
-    set -l _packages (bash -c "source $hi_root/check.sh; packages")
-    set -l _basics (bash -c "source $hi_root/check.sh; basics")
-    set -l _systems (bash -c "source $hi_root/check.sh; systems")
-    set -l _tools (bash -c "source $hi_root/check.sh; tools")
+    set -l _packages (bash -c "source $hi_root/common/check.sh; packages")
+    set -l _basics (bash -c "source $hi_root/common/check.sh; basics")
+    set -l _systems (bash -c "source $hi_root/common/check.sh; systems")
+    set -l _tools (bash -c "source $hi_root/common/check.sh; tools")
     set -g fish_greeting $header" "$hi_change_status" "$hi_update_status\n $_timer_line\n $_git_key_change_line\n$_packages\n$_basics\n$_systems\n$_tools
 
   end
@@ -269,4 +269,3 @@ set -gx fish_pager_color_selected_background --reverse
 set -gx fish_pager_color_selected_completion
 set -gx fish_pager_color_selected_description
 set -gx fish_pager_color_selected_prefix
-# set -gx fish_color_search_match --background='333'

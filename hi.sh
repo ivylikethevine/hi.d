@@ -1,7 +1,7 @@
 #!/bin/bash
 # forked from sshrc: https://github.com/danrabinowitz/sshrc
 
-hi_exclude=(--exclude README.md --exclude .git --exclude .gitignore --exclude stubs --exclude scripts --exclude Justfile --exclude .tool-versions)
+hi_exclude=(--exclude Justfile --exclude README.md --exclude .git --exclude .gitignore --exclude scripts --exclude --exclude hi.sh)
 start=$(date +%s.%N)
 
 command -v openssl >/dev/null 2>&1 || {

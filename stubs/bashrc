@@ -1,5 +1,0 @@
-# hi-config start
-# If not running interactively, exit
-[[ $- != *i* ]] && return
-source ~/.hi.d/bash.sh
-# hi-config end

@@ -45,6 +45,7 @@ alias grep="grep --color=auto"
 
 # git
 alias gi="git"
+alias gl="git log -1"
 alias gp="git pull"
 alias gf="git fetch -a"
 alias gs="git status"
@@ -52,6 +53,7 @@ alias gst="git stash"
 alias gps="git fetch && git pull && git status"
 alias gd="git diff --color=always"
 alias gps="echo where are we going?"
+alias gpsh='git push --set-upstream origin $(git rev-parse --abbrev-ref HEAD)'
 
 # ping
 alias ping="ping -O"
@@ -87,5 +89,6 @@ export human_short_date_format="+%b %-e %y %H:%M %Z"
 alias now='date $human_short_date_format && date -u $human_short_date_format'
 
 # editing this folder
+alias rehi="sudo rm /usr/bin/hi && sudo ln ~/.hi.d/hi.sh /usr/bin/hi"
 alias ehi="zed ~/.hi.d"
 alias essh="zed ~/.ssh"

@@ -90,9 +90,9 @@ clean_all() {
 configure_all() {
   if command -v "vim" &>/dev/null; then
     # Will cause errors if we load this with only VI
-    export VIMINIT="let \$MYVIMRC='$HI_HOME/.hi.d/vim.rc' | source \$MYVIMRC"
+    export VIMINIT="let \$MYVIMRC='$HI_HOME/.hi.d/optional/vim.rc' | source \$MYVIMRC"
   fi
-  configure_file ~/.nanorc nano.rc
+  configure_file ~/.nanorc optional/nano.rc
   configure_file ~/.bashrc bash.sh
   configure_file ~/.zshrc zsh.zsh
   if [ -f ~/.config/fish/config.fish ]; then
@@ -149,8 +149,8 @@ timers() {
 }
 
 check_packages() {
-  # shellcheck source=./check.sh
-  source "$HI_HOME"/.hi.d/check.sh
+  # shellcheck source=./common/check.sh
+  source "$HI_HOME"/.hi.d/common/check.sh
   if [ "$minimal" = false ]; then
     packages
     basics

@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# always present?
+# cat. tar, vi, top
+
 # shellcheck disable=SC2054
 PACKAGES=(
   top:0,btop:2,htop:2
@@ -31,23 +34,21 @@ BASICS=(
 
 TOOLS=(
   node:1,npx:2,npm:2
-  nomad:2
+  nomad:1
   asdf:2
   cmake:2,make:1
   sshm:1,sshrc:2,hi:2
   rust:1,rustc:1,rustup:2
-  cloc:1
   cosign:1
   shellcheck:1
-  systemctl:1
+  systemctl:0
   curl:0
   wget:0
 )
 
 SYSTEMS=(
-  snap:2
-  apk:2,nix:2
-  apt:1,pacman:1,dnf:1,rpm:1,zypper:1,brew:1
+  snap:1
+  apt:1,pacman:1,dnf:1,rpm:1,zypper:1,brew:1,apk:2,nix:2
   paru:1,yay:1
   dpkg:1,wpkg:1
   chocolatey:1,choco:1
@@ -143,17 +144,4 @@ systems() {
 
 tools() {
   check_commands "${TOOLS[@]}"
-}
-
-header() {
-  local full="$1"
-  if [[ "$full" -eq 1 ]]; then
-    packages
-    basics
-    systems
-    tools
-  else
-    systems
-    tools
-  fi
 }

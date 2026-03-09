@@ -1,6 +1,5 @@
 # username color_bash color_fish
-root,\e[0;31m,red
-admin,\e[0;31m,red
 team,\e[0;34m,brblue
-edison,\e[0;34m,brblue
+root,\e[0;31m,red
 ivy,\e[1;33m,bryellow
+admin,\e[0;31m,red

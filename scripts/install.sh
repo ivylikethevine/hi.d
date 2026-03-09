@@ -65,11 +65,17 @@ function config_hi() {
   fi
 }
 
+function generate_colors() {
+  echo "Generating colors for users and hosts"
+  sh /home/"$USER"/.hi.d/scripts/create_host_colors.sh
+}
+
 function main() {
   bashrc
   zshrc
   config_fish
   config_hi
+  generate_colors
   rm -rf "$_tmp"
   echo "Done!"
 }

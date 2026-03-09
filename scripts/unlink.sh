@@ -22,12 +22,6 @@ EOF
 root,\e[0;31m,red
 EOF
 
-  echo "Anonymizing dynamic group colors"
-  cat <<'EOF' >> /home/"$USER"/.hi.d/scripts/group_colors
-# username color_bash color_fish
-hostname,work,\e[0;31m,red
-EOF
-
   chown -R "$USER:$USER" /home/"$USER"/.hi.d
 }
 

@@ -1,20 +1,12 @@
 #!/bin/zsh
-if [ -f "$HI_ROOT/.hi.d/common/aliases.sh" ]; then
-  # remote
-  source "$HI_ROOT/.hi.d/common/aliases.sh"
-elif [ -f ~/.hi.d/common/aliases.sh ]; then
-   # local
-  source ~/.hi.d/common/aliases.sh
-fi
 
-if [ -f "$HI_ROOT/.hi.d/common/prompt_colors.sh" ]; then
-  # remote
-  source "$HI_ROOT/.hi.d/common/prompt_colors.sh"
-elif [ -f ~/.hi.d/common/prompt_colors.sh ]; then
-  # local
-  source ~/.hi.d/common/prompt_colors.sh
-fi
+hi_root=${HI_ROOT:=~}
+# shellcheck source=./common/prompt_colors.sh
+source "$hi_root/.hi.d/common/prompt_colors.sh"
+# shellcheck source=./common/aliases.sh
+source "$hi_root/.hi.d/common/aliases.sh"
 
+export bat_opts=${bat_opts:-"--color=always --paging=never"}
 # conditionally load since bat is sometimes batcat on debian systems
 if [ -f "/usr/bin/bat" ]; then
   alias batcat="bat"

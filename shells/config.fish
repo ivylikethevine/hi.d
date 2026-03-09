@@ -1,11 +1,12 @@
 #!/bin/fish
-if test -f "$HI_ROOT/.hi.d/common/aliases.sh"
-  # remote
-  source "$HI_ROOT/.hi.d/common/aliases.sh"
-else if test -f ~/.hi.d/common/aliases.sh
-  # local
-  source ~/.hi.d/common/aliases.sh
+
+if set -q HI_ROOT
+  set -g hi_root $HI_ROOT
+else
+  set -g hi_root $HOME
 end
+
+source $hi_root/.hi.d/common/aliases.sh
 
 # prompt
 function prompt_login --description "display user name for the prompt"

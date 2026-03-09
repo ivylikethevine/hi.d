@@ -29,6 +29,8 @@ alias now='date $human_short_date_format && date -u $human_short_date_format'
 
 # editing this folder
 alias rehi="sudo rm /usr/bin/hi && sudo ln ~/.hi.d/hi.sh /usr/bin/hi"
+# shellcheck disable=SC2139
+alias hi_colorgen="$HI_ROOT/.hi.d/scripts/create_host_colors.sh"
 alias ehi="zed ~/.hi.d"
 alias essh="zed ~/.ssh"
 

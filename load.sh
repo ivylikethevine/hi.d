@@ -1,17 +1,17 @@
 #!/bin/bash
-RED='\e[0;31m'      # 1
-GREEN='\e[0;32m'    # 2
-YELLOW='\e[0;33m'   # 3
-BLUE='\e[0;34m'     # 4
-PURPLE='\e[0;35m'   # 5
-CYAN='\e[0;36m'     # 6
-BRRED='\e[1;31m'    # 7
-BRGREEN='\e[1;32m'  # 8
-BRYELLOW='\e[1;33m' # 9
-BRBLUE='\e[1;34m'   # 10
-BRPURPLE='\e[1;35m' # 11
-BRCYAN='\e[1;36m'   # 12
-NC='\e[0m'          # 13
+RED='\e[0;31m'
+GREEN='\e[0;32m'
+YELLOW='\e[0;33m'
+BLUE='\e[0;34m'
+PURPLE='\e[0;35m'
+CYAN='\e[0;36m'
+BRRED='\e[1;31m'
+BRGREEN='\e[1;32m'
+BRYELLOW='\e[1;33m'
+BRBLUE='\e[1;34m'
+BRPURPLE='\e[1;35m'
+BRCYAN='\e[1;36m'
+NC='\e[0m'
 
 hi_start="# hi-config-start"
 hi_end="# hi-config-end"

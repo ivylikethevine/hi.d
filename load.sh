@@ -71,7 +71,6 @@ clean_all() {
   clean_file ~/.config/fish/config.fish
 }
 
-# TODO: Support /etc/profile + similar for root accounts (only when logging in as root)
 configure_all() {
   if command -v "vim" &>/dev/null; then
     # Will cause errors if we load this with only VI

@@ -85,43 +85,43 @@ end
 # header
 function fish_greeting
   if not set -q fish_greeting
-    set -l spacer (printf (_ '%s|' ) (set_color normal))
-    set -l header (printf (_ '%s~~~~~~~~~~~~~~~~~~ Online [%s]! ~~~~~~~~~~~~~~~~~~~~~~~~~') (set_color brcyan) (prompt_hostname))
+    set -l spacer (printf '%s|' (set_color normal))
+    set -l header (printf '%s~~~~~~~~~~~~~~~~~~ Online [%s]! ~~~~~~~~~~~~~~~~~~~~~~~~~' (set_color brcyan) (prompt_hostname))
 
     set -l human_centric_date_format "+%a %b %-e %Y %H:%M:%S %Z"
-    set -l utctime (printf (_ '%s' (date -u $human_centric_verbose)) (set_color brblue))
-    set -l localtime (printf (_ '%s' (date $human_centric_verbose)) (set_color bryellow))
+    set -l utctime (printf '%s%s' (set_color brblue) (date -u $human_centric_verbose))
+    set -l localtime (printf '%s%s' (set_color bryellow) (date $human_centric_verbose))
 
-    set -l distro (printf (_ '%s' (grep PRETTY_NAME /etc/os-release | cut -d= -f2 | tr -d '\"') '%s') (set_color green) (set_color normal))
-    set -l arch (printf (_ '%s' (uname -m) ) (set_color brmagenta))
-    set -l os_type (printf (_ '%s' (uname -s)) (set_color bryellow))
+    set -l distro (printf '%s%s' (set_color green) (grep PRETTY_NAME /etc/os-release | cut -d= -f2 | tr -d '\"'))
+    set -l arch (printf '%s%s' (set_color brmagenta) (uname -m))
+    set -l os_type (printf '%s%s' (set_color bryellow) (uname -s))
 
-    set -l cpus (printf (_ '%sCPUs: ' (nproc)) (set_color brblue))
-    set -l ram (printf  (_ '%sRAM: ' (free -h --giga | awk '/^Mem:/ {print $2}GB')) (set_color cyan))
+    set -l cpus (printf '%sCPUs: %s' (set_color brblue) (nproc))
+    set -l ram (printf '%sRAM: %s' (set_color cyan) (free -h --giga | awk '/^Mem:/ {print $2}GB'))
     if [ -f ~/.ssh/authorized_keys ]
-      set -g authorized (printf (_ '%sAuth: ' (wc -l ~/.ssh/authorized_keys | awk '{ print $1 }')) (set_color red))
+      set -g authorized (printf '%sAuth: %s' (set_color red) (wc -l ~/.ssh/authorized_keys | awk '{ print $1 }'))
     else
-      set -g authorized (printf (_ '%sAuth: 0!') (set_color red))
+      set -g authorized (printf '%sAuth: 0!' (set_color red))
     end
 
-    set -l public (printf (_ '%sPub: ' (find ~/.ssh -type f -name "*.pub" | wc -l)) (set_color magenta) )
+    set -l public (printf '%sPub: %s' (set_color magenta) (find ~/.ssh -type f -name "*.pub" | wc -l))
 
     if [ -f "/usr/bin/docker" ]
-      set -g containers (printf (_ '%sContainers: ' (docker container ls | wc -l | awk '{print $1 - 1}')) (set_color brblue))
+      set -g containers (printf '%sContainers: %s' (set_color brblue) (docker container ls | wc -l | awk '{print $1 - 1}'))
     else
-      set -g containers (printf (_ '%sCounting impossible, no docker :(' ) (set_color bryellow))
+      set -g containers (printf '%sCounting impossible, no docker :(' (set_color bryellow))
     end
 
     if [ -f "/home/$USER/.gitconfig" ]
-      set -g git_identity (printf (_ '%sGit ID: %s' (grep email ~/.gitconfig | tail -n1 | cut -d= -f2 | tr -d ' ' | awk -F@ '{ for(i=0;i<length($2);i++) c=c"●"; print $1"@"c; c="" }')) (set_color brcyan) (set_color yellow))
+      set -g git_identity (printf '%sGit ID: %s%s' (set_color brcyan) (set_color yellow) (grep email ~/.gitconfig | tail -n1 | cut -d= -f2 | tr -d ' ' | awk -F@ '{ for(i=0;i<length($2);i++) c=c"●"; print $1"@"c; c="" }'))
     else
-      set -g git_identity (printf (_ '%sNo Git ID Found... %s') (set_color yellow) (set_color normal))
+      set -g git_identity (printf '%sNo Git ID Found...' (set_color yellow))
     end
 
     set -l hi_root "/home/$USER/.hi.d/"
     if [ -d "$hi_root/.git" ]
-      set -g hi_change_status (printf (_ ' %s' (git -C ~/.hi.d status --short | wc -l | awk '{ print $1 }')' ↑') (set_color bryellow))
-      set -g hi_update_status (printf (_ '%s' (git -C ~/.hi.d rev-list --count HEAD..origin/$(git -C ~/.hi.d rev-parse --abbrev-ref HEAD))' ↓') (set_color brgreen))
+      set -g hi_change_status (printf ' %s%s' (set_color bryellow) (git -C ~/.hi.d status --short | wc -l | awk '{ print $1 }')' ↑')
+      set -g hi_update_status (printf '%s%s' (set_color brgreen) (git -C ~/.hi.d rev-list --count HEAD..origin/$(git -C ~/.hi.d rev-parse --abbrev-ref HEAD))' ↓')
     else
       set -g hi_change_status ""
       set -g hi_update_status ""
@@ -136,6 +136,7 @@ function fish_greeting
     set -l _basics (bash -c "source $hi_root/common/check.sh; basics")
     set -l _systems (bash -c "source $hi_root/common/check.sh; systems")
     set -l _tools (bash -c "source $hi_root/common/check.sh; tools")
+    # set -g fish_greeting $hi_change_status" "$hi_update_status" "$header\n $_timer_line\n $_system_info_line\n $_git_key_change_line\n$_packages\n$_basics\n$_systems\n$_tools
     set -g fish_greeting $hi_change_status" "$hi_update_status" "$header\n $_timer_line\n $_git_key_change_line\n$_packages\n$_basics\n$_systems\n$_tools
   end
 

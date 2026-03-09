@@ -1,0 +1,16 @@
+# hostname color_bash color_fish
+swervy,\e[0;31m,brred
+melchior,\e[0;31m,brred
+lenny,\e[0;31m,brred
+clyde,\e[0;31m,brred
+bertha,\e[0;35m,brmagenta
+liona,\e[0;35m,brmagenta
+mavie,\e[0;35m,brmagenta
+minty,\e[0;34m,brblue
+sherrie,\e[0;34m,brblue
+bernie,\e[0;34m,brblue
+gendo,\e[0;32m,brgreen
+ryoji,\e[0;32m,brgreen
+shinji,\e[0;32m,brgreen
+edison,\e[0;32m,brgreen
+office,\e[0;32m,brblue

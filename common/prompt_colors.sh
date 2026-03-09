@@ -1,9 +1,5 @@
 #!/bin/bash
-plain() {
-  echo "$NC"
-}
 
-# Genericize colors by groupings
 at_color() {
   local AT_COLOR=$NC
   if [[ $1 ]]; then
@@ -12,40 +8,42 @@ at_color() {
   echo "$AT_COLOR"
 }
 
-user_color() {
-  local USER_COLOR=$GREEN
-  # superadmin -> red
-  if [ "$1" = "root" ] || [ "$1" = "admin" ]; then
-    USER_COLOR=$RED
+read_color_file() {
+  local search_val="$1"
+  local color_file="$2"
+  local is_fish="$3"
+
+  while IFS=$',' read -r -a dataArray; do
+      current_val="${dataArray[0]}"
+      [[ "$current_val" =~ ^[[:space:]]*# ]] && continue
+      [[ -z "$current_val" ]] && continue
+
+      if [ "$search_val" = "$current_val" ]; then
+        if [[ -z "$is_fish" ]]; then
+          echo "${dataArray[2]}"
+        else
+          echo "${dataArray[1]}"
+        fi
+        return 0
+      fi
+  done < "$color_file"
+  if [[ -z "$is_fish" ]]; then
+    echo "brgreen"
+  else
+    # shellcheck disable=SC2028
+    echo "\e[0;32m"
   fi
-  # work -> blue
-  if [ "$1" = "team" ] || [ "$1" = "edison" ]; then
-    USER_COLOR=$BLUE
-  fi
-  # me -> yellow
-  if [ "$1" = "ivy" ]; then
-    USER_COLOR=$BRYELLOW
-  fi
-  echo "$USER_COLOR"
+  return 1
 }
 
 host_color() {
-  local HOST_COLOR=$GREEN
-  # superadmin/superadmin at work -> red
-  if [ "$1" = "swervy" ] || [ "$1" = "melchior" ] || [ "$1" = "lenny" ] || [ "$1" = "clyde" ]; then
-    HOST_COLOR=$RED
-  fi
-  # personal -> purple
-  if [ "$1" = "bertha" ] || [ "$1" = "liona" ] || [ "$1" = "mavie" ]; then
-    HOST_COLOR=$PURPLE
-  fi
-  # edenlabs -> blue
-  if [ "$1" = "minty" ] || [ "$1" = "sherrie" ]; then
-    HOST_COLOR=$BLUE
-  fi
-  # work -> green
-  if [ "$1" = "gendo" ] || [ "$1" = "ryoji" ] || [ "$1" = "shinji" ] || [ "$1" = "edison" ]; then
-    HOST_COLOR=$GREEN
-  fi
-  echo "$HOST_COLOR"
+  local hi_root=${HI_ROOT:-~}
+  local is_fish="$1"
+  read_color_file "$(hostname)" "$hi_root/.hi.d/common/host_colors" "$is_fish"
+}
+
+user_color() {
+  local hi_root=${HI_ROOT:-~}
+  local is_fish="$1"
+  read_color_file "$(whoami)" "$hi_root/.hi.d/common/user_colors" "$is_fish"
 }

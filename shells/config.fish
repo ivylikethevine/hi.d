@@ -56,28 +56,9 @@ function prompt_login --description "display user name for the prompt"
     set color_at yellow
   end
 
-  # TODO: Unified colors
-  if [ (prompt_hostname) = "swervy" ] || [ (prompt_hostname) = "melchior" ] || [ (prompt_hostname) = "lenny" ] || [ (prompt_hostname) = "clyde" ]
-    set color_host brred
-  end
-  if [ (prompt_hostname) = "bertha" ] || [ (prompt_hostname) = "liona" ] || [ (prompt_hostname) = "mavie" ]
-    set color_host brmagenta
-  end
-  if [ (prompt_hostname) = "minty" ] || [ (prompt_hostname) = "sherrie" ]
-    set color_host brblue
-  end
-  if [ (prompt_hostname) = "gendo" ] || [ (prompt_hostname) = "ryoji" ] || [ (prompt_hostname) = "shinji" ] || [ (prompt_hostname) = "edison" ]
-    set color_host brgreen
-  end
-  if [ $USER = "root" ] || [ $USER = "admin" ]
-    set color_user red
-  end
-  if [ $USER = "team" ] || [ $USER = "edison" ]
-    set color_user brblue
-  end
-  if [ $USER = "ivy" ]
-    set color_user bryellow
-  end
+  # TODO: Dedupe into 1 call
+  set -l color_user (bash -c "source $hi_root/.hi.d/common/prompt_colors.sh; user_color")
+  set -l color_host (bash -c "source $hi_root/.hi.d/common/prompt_colors.sh; host_color")
 
   echo -ns (set_color $color_user) " $USER" (set_color $color_at) @ (set_color $color_host) (prompt_hostname) (set_color normal)
 end

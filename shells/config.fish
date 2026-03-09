@@ -3,11 +3,9 @@
 if set -q HI_ROOT
   set -g hi_root $HI_ROOT
   set -g HI_ROOT $HI_ROOT
-
 else
   set -g hi_root $HOME
   set -g HI_ROOT $HOME
-
 end
 
 source $hi_root/.hi.d/common/aliases.sh
@@ -223,7 +221,6 @@ function version --description 'Check if a package/command is installed, then di
   end
   return 1
 end
-
 
 bind \cH backward-kill-word
 bind ctrl-delete kill-word

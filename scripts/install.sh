@@ -46,20 +46,6 @@ diff --color=always -w -u "$_tmp"/config.fish ~/.config/fish/config.fish
 append "$_tmp"/config.fish ~/.config/fish/config.fish
 
 echo
-echo "Checking nanorc ========"
-if [ ! -f ~/.nanorc ]; then
-  # TODO: also enable for root
-  ln ~/.hi.d/optional/nano.rc ~/.nanorc
-fi
-
-echo
-echo "Checking vimrc ========"
-if [ ! -f ~/.vimrc ]; then
-  # TODO: also enable for root
-  ln ~/.hi.d/optional/vim.rc ~/.vimrc
-fi
-
-echo
 echo "Checking hi.sh ========"
 chmod +x ~/.hi.d/hi.sh
 # if these are different, delete the /usr/bin/hi, then relink

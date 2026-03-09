@@ -2,11 +2,31 @@
 
 if set -q HI_ROOT
   set -g hi_root $HI_ROOT
+  set -g HI_ROOT $HI_ROOT
+
 else
   set -g hi_root $HOME
+  set -g HI_ROOT $HOME
+
 end
 
 source $hi_root/.hi.d/common/aliases.sh
+
+# wrapper for aliases to work in fish shell under sudo
+function sudo
+  if functions -q -- "$argv[1]"
+    set cmdline (
+      for arg in $argv
+        printf "\"%s\" " $arg
+      end
+    )
+    set -x function_src (string join "\n" (string escape --style=var (functions "$argv[1]")))
+    set argv fish -c 'string unescape --style=var (string split "\n" $function_src) | source; '$cmdline
+    command sudo -E $argv
+  else
+    command sudo $argv
+  end
+end
 
 # prompt
 function prompt_login --description "display user name for the prompt"

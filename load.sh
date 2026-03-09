@@ -20,7 +20,7 @@ copy_time=-1
 # # # See: hi.sh/say_hi()
 # # On local machines, ~/.hi.d has our configs.
 # # On remote machines, we need to go to /tmp/.(whoami).hi.XXXX/.hi.d
-HI_ROOT=${HI_ROOT:-~/.hi.d}
+hi_root=${HI_ROOT:-~/.hi.d}
 
 cecho() {
   local formatted_text="$2$1$NC"
@@ -47,11 +47,11 @@ timestamp() {
 configure_file() {
   touch "$1"
   if test -f "$1"; then
-    if test -f "$HI_ROOT/.hi.d/$2"; then
+    if test -f "$hi_root/.hi.d/$2"; then
       if ! grep -q "$hi_start" "$1"; then
         {
           echo "$hi_start"
-          cat "$HI_ROOT/.hi.d/$2"
+          cat "$hi_root/.hi.d/$2"
           echo "$hi_end"
         } >>"$1"
       fi
@@ -68,7 +68,6 @@ clean_file() {
 clean_all() {
   clean_file ~/.bashrc
   clean_file ~/.zshrc
-  clean_file ~/.nanorc
   clean_file ~/.config/fish/config.fish
 }
 
@@ -76,9 +75,8 @@ clean_all() {
 configure_all() {
   if command -v "vim" &>/dev/null; then
     # Will cause errors if we load this with only VI
-    export VIMINIT="let \$MYVIMRC='$HI_ROOT/.hi.d/optional/vim.rc' | source \$MYVIMRC"
+    export VIMINIT="let \$MYVIMRC='$hi_root/.hi.d/optional/vim.rc' | source \$MYVIMRC"
   fi
-  configure_file ~/.nanorc optional/nano.rc
   configure_file ~/.bashrc shells/bash.sh
   configure_file ~/.zshrc shells/zsh.zsh
   if [ -d ~/.config/fish ]; then
@@ -136,7 +134,7 @@ timers() {
 
 check_packages() {
   # shellcheck source=./common/check.sh
-  source "$HI_ROOT"/.hi.d/common/check.sh
+  source "$hi_root"/.hi.d/common/check.sh
   packages
   basics
   systems
@@ -151,8 +149,8 @@ tmuxrc() {
     mkdir -p "$TMUXDIR"
   fi
   rm -rf "$TMUXDIR"/.hi.d
-  # cp -r "$HI_ROOT"/.hi "$HI_ROOT"/bashrc.hi "$HI_ROOT"/hi "$HI_ROOT"/.hi.d "$TMUXDIR"
-  # HI_ROOT="$TMUXDIR" SHELL="$TMUXDIR"/bashrc.hi /usr/bin/tmux -S "$TMUXDIR"/tmuxserver "$@"
+  # cp -r "$hi_root"/.hi "$hi_root"/bashrc.hi "$hi_root"/hi "$hi_root"/.hi.d "$TMUXDIR"
+  # hi_root="$TMUXDIR" SHELL="$TMUXDIR"/bashrc.hi /usr/bin/tmux -S "$TMUXDIR"/tmuxserver "$@"
   # export SHELL=`which bash`
   # tmuxrc
 }

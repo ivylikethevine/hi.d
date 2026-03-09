@@ -91,3 +91,10 @@ alias now='date $human_short_date_format && date -u $human_short_date_format'
 alias rehi="sudo rm /usr/bin/hi && sudo ln ~/.hi.d/hi.sh /usr/bin/hi"
 alias ehi="zed ~/.hi.d"
 alias essh="zed ~/.ssh"
+
+# works in bash, fish has a wrapper for sudo in config.fish
+alias sudo="command sudo "
+# shellcheck disable=SC2139
+alias nano="nano --rcfile $HI_ROOT/.hi.d/optional/nano.rc"
+# shellcheck disable=SC2139
+alias vim="vim -u $HI_ROOT/.hi.d/optional/vim.rc"

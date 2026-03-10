@@ -17,11 +17,9 @@ function bashrc() {
   echo
   echo "Checking bashrc ========"
   cat <<'EOF' >> "$_tmp/bashrc"
-# hi-config-start
-# If not running interactively, exit
-[[ $- != *i* ]] && return
-source ~/.hi.d/shells/bash.sh
-# hi-config-end
+# If not running interactively, exit   # added by hi during install
+[[ $- != *i* ]] && return              # added by hi during install
+source ~/.hi.d/shells/bash.sh          # added by hi during install
 EOF
   append "$_tmp"/bashrc ~/.bashrc
 }
@@ -30,9 +28,7 @@ function zshrc() {
   echo
   echo "Checking zshrc ========"
   cat <<'EOF' >> "$_tmp/zshrc"
-# hi-config-start
-source ~/.hi.d/shells/zsh.zsh
-# hi-config-end
+source ~/.hi.d/shells/zsh.zsh          # added by hi during install
 EOF
   append "$_tmp"/zshrc ~/.zshrc
 }
@@ -41,11 +37,9 @@ function config_fish() {
   echo
   echo "Checking config.fish ========"
   cat <<'EOF' >> "$_tmp/config.fish"
-# hi-config-start
-if status is-interactive
-  source ~/.hi.d/shells/config.fish
-end
-# hi-config-end
+if status is-interactive               # added by hi during install
+  source ~/.hi.d/shells/config.fish    # added by hi during install
+end                                    # added by hi during install
 EOF
   append "$_tmp"/config.fish ~/.config/fish/config.fish
 }
@@ -60,7 +54,9 @@ function config_hi() {
     return 0
   else
     echo "/usr/bin/hi out of date, updating..."
+    echo "Removing old /usr/bin/hi... [password required]"
     sudo rm /usr/bin/hi
+    echo "Linking /usr/bin/hi to latest hi.sh... [password required]"
     sudo ln ~/.hi.d/hi.sh /usr/bin/hi
   fi
 }

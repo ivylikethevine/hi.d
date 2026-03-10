@@ -13,3 +13,6 @@
 *.jpeg
 *.log
 *.txt
+
+common/host_colors
+common/user_colors

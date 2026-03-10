@@ -84,4 +84,4 @@ colorgen() {
 }
 
 colorgen
-exit 0
+# exit 0

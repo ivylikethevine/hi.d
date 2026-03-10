@@ -23,6 +23,7 @@ copy_time=-1
 # # On remote machines, we need to go to /tmp/.(whoami).hi.XXXX/.hi.d
 hi_root=${HI_ROOT:-~/.hi.d}
 
+# required
 cecho() {
   local formatted_text="$2$1$NC"
   local disable_newline="$3"
@@ -34,10 +35,12 @@ cecho() {
   fi
 }
 
+# required
 spacer() {
   cecho " | " "$NC" 1
 }
 
+# required
 timestamp() {
   spacer
   local human_centric_date_format="+%a %b %-e %Y %H:%M:%S %Z"
@@ -45,33 +48,33 @@ timestamp() {
   spacer
 }
 
+# required
 configure_file() {
-  touch "$1"
-  if test -f "$1"; then
-    if test -f "$hi_root/.hi.d/$2"; then
-      if ! grep -q "$hi_start" "$1"; then
-        {
-          echo "$hi_start"
-          cat "$hi_root/.hi.d/$2"
-          echo "$hi_end"
-        } >>"$1"
-      fi
+  local target="$1"
+  local source="$2"
+  touch "$target"
+  if test -f "$hi_root/.hi.d/$source"; then
+    if ! grep -q "$hi_start" "$target"; then
+      {
+        echo "$hi_start"
+        cat "$hi_root/.hi.d/$source"
+        echo "$hi_end"
+      } >>"$target"
     fi
   fi
 }
 
-clean_file() {
-  if test -f "$1"; then
-    sed -i "/^$hi_start/,/^$hi_end/d" -- "$1"
-  fi
-}
-
+# required
 clean_all() {
-  clean_file ~/.bashrc
-  clean_file ~/.zshrc
-  clean_file ~/.config/fish/config.fish
+  shells=(~/.bashrc ~/.zshrc ~/.config/fish/config.fish)
+  for shell in "${shells[@]}"; do
+    if test -f "$shell"; then
+      sed -i "/^$hi_start/,/^$hi_end/d" -- "$shell"
+    fi
+  done
 }
 
+# required
 configure_all() {
   if command -v "vim" &>/dev/null; then
     # Will cause errors if we load this with only VI
@@ -83,6 +86,21 @@ configure_all() {
     # This directory won't exist if fish isn't installed
     configure_file ~/.config/fish/config.fish shells/config.fish
   fi
+}
+
+# required
+timers() {
+  spacer
+  cecho "load: $(echo "$(date +%s.%N) $load_start_time" | awk '{ printf "%.3f\n", $1 - $2 }')s | copy: ${copy_time}s"
+}
+
+check_packages() {
+  # shellcheck source=./common/check.sh
+  source "$hi_root"/.hi.d/common/check.sh
+  packages
+  basics
+  systems
+  tools
 }
 
 system_info() {
@@ -127,21 +145,8 @@ key_count() {
   cecho "Pub: $(find ~/.ssh -type f -name "*.pub" | wc -l)" "$PURPLE"
 }
 
-timers() {
-  spacer
-  cecho "load: $(echo "$(date +%s.%N) $load_start_time" | awk '{ printf "%.3f\n", $1 - $2 }')s | copy: ${copy_time}s"
-}
-
-check_packages() {
-  # shellcheck source=./common/check.sh
-  source "$hi_root"/.hi.d/common/check.sh
-  packages
-  basics
-  systems
-  tools
-}
-
 # TODO: Test
+# shellcheck disable=SC2329
 tmuxrc() {
   local TMUXDIR="/tmp/tmuxrc"
   if ! [ -d "$TMUXDIR" ]; then
@@ -155,18 +160,22 @@ tmuxrc() {
   export SHELL
 }
 
+# required
 load() {
   load_start_time=$(date +%s.%N)
 
   trap 'clean_all' exit
   cecho "~~~~~~~~~~~~~~~~~~~ Connected to [$(hostname)]! ~~~~~~~~~~~~~~~~~~~~~~~" "$BRGREEN"
   timestamp
+
+  # optional header items
   system_info
   git_identity
   docker_count
   key_count
   check_packages
   configure_all
+
   spacer
   cecho "hi loaded with... " "$BRCYAN" 1
 

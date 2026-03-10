@@ -1,37 +1,23 @@
 #!/bin/sh
 
 # === start required variables/aliases ===
-export RED='\e[0;31m'
-export GREEN='\e[0;32m'
-export YELLOW='\e[0;33m'
-export BLUE='\e[0;34m'
-export PURPLE='\e[0;35m'
-export CYAN='\e[0;36m'
-export BRRED='\e[1;31m'
-export BRGREEN='\e[1;32m'
-export BRYELLOW='\e[1;33m'
-export BRBLUE='\e[1;34m'
-export BRPURPLE='\e[1;35m'
-export BRCYAN='\e[1;36m'
-export NC='\e[0m'
-
-export human_short_date_format="+%b %-e %y %H:%M %Z"
-alias now='date $human_short_date_format && date -u $human_short_date_format'
-
-# shellcheck disable=SC2139
-alias bat="$(command -v bat || command -v batcat) -P --tabs 2 --theme Monokai\ Extended\ Bright --style changes,grid,numbers"
+alias hi_colorgen="~/.hi.d/local/create_host_colors.sh"
+alias hi_reinstall="~/.hi.d/local/install.sh"
+alias hi_relink="sudo rm /usr/bin/hi && sudo ln ~/.hi.d/hi.sh /usr/bin/hi"
 
 # works in bash, fish has a wrapper for sudo in config.fish
 alias sudo="command sudo "
 # shellcheck disable=SC2139
-alias nano="nano --rcfile $HI_ROOT/.hi.d/optional/nano.rc"
+alias nano="nano --rcfile $HI_ROOT/.hi.d/misc/nano.rc"
 # shellcheck disable=SC2139
-alias vim="vim -u $HI_ROOT/.hi.d/optional/vim.rc"
+alias vim="vim -u $HI_ROOT/.hi.d/misc/vim.rc"
 
-alias hi_colorgen="~/.hi.d/local/create_host_colors.sh"
-alias hi_reinstall="~/.hi.d/local/install.sh"
-alias hi_relink="sudo rm /usr/bin/hi && sudo ln ~/.hi.d/hi.sh /usr/bin/hi"
+# shellcheck disable=SC2139
+alias bat="$(command -v bat || command -v batcat) -P --tabs 2 --theme Monokai\ Extended\ Bright --style changes,grid,numbers"
 # === end required variables/aliases ===
+
+export human_short_date_format="+%b %-e %y %H:%M %Z"
+alias now='date $human_short_date_format && date -u $human_short_date_format'
 
 alias hey="ssh"
 alias zed="zeditor"

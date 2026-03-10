@@ -1,5 +1,6 @@
 #!/bin/fish
 
+# === start required configuration ===
 if set -q HI_ROOT
   set -g hi_root $HI_ROOT
   set -g HI_ROOT $HI_ROOT
@@ -9,6 +10,7 @@ else
 end
 
 source $hi_root/.hi.d/common/aliases.sh
+complete hi --wraps ssh
 
 # wrapper for aliases to work in fish shell under sudo
 function sudo
@@ -65,7 +67,9 @@ end
 function fish_greeting
   if not set -q fish_greeting
     set -l spacer (printf '%s|' (set_color normal))
-    set -l header (printf '%s~~~~~~~~~~~~~~~~~~ Online [%s]! ~~~~~~~~~~~~~~~~~~~~~~~~~' (set_color brcyan) (prompt_hostname))
+    # TODO: Dedupe into 1 call
+    set -l color_host (bash -c "source $hi_root/.hi.d/common/prompt_colors.sh; host_color")
+    set -l header (printf '%s~~~~~~~~~~~~~~~~~~ Online %s[%s%s%s]%s ~~~~~~~~~~~~~~~~~~~~~~~~~~%s' (set_color brcyan) (set_color normal) (set_color $color_host) (prompt_hostname) (set_color normal) (set_color brcyan) (set_color normal))
 
     set -l human_centric_date_format "+%a %b %-e %Y %H:%M:%S %Z"
     set -l utctime (printf '%s%s' (set_color brblue) (date -u $human_centric_verbose))
@@ -122,6 +126,7 @@ function fish_greeting
   test -n "$fish_greeting"
   and echo $fish_greeting
 end
+# === end required configurations ===
 
 function vew --description 'Cat/bat a file or list a directory in detail | spelled vew to avoid calling vi'
   set args (count $argv)
@@ -151,7 +156,6 @@ function vew --description 'Cat/bat a file or list a directory in detail | spell
   end
 end
 
-# https://itsfoss.gitlab.io/post/how-to-find-a-package-version-in-linux
 function version --description 'Check if a package/command is installed, then display its version'
   set -l item "$argv"
 
@@ -209,6 +213,7 @@ function version --description 'Check if a package/command is installed, then di
   return 1
 end
 
+# keybinds
 bind \cH backward-kill-word
 bind ctrl-delete kill-word
 bind \e\[3\;5~ kill-word
@@ -216,8 +221,7 @@ bind \e\[1\;5H beginning-of-line
 bind \e\[1\;5F end-of-line
 bind \e\[2\;5~ ''
 
-complete hi --wraps ssh
-
+# color/themeing
 set -gx fish_color_autosuggestion brblack
 set -gx fish_color_cancel --reverse
 set -gx fish_color_command blue

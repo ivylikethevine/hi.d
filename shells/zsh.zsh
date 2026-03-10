@@ -1,10 +1,37 @@
 #!/bin/zsh
 
+# === start required configuration ===
 hi_root=${HI_ROOT:=~}
 # shellcheck source=./common/prompt_colors.sh
 source "$hi_root/.hi.d/common/prompt_colors.sh"
 # shellcheck source=./common/aliases.sh
 source "$hi_root/.hi.d/common/aliases.sh"
+
+# header/coloring
+[ -x /usr/bin/lesspipe ] && eval "$(SHELL=/bin/sh lesspipe)"
+if [ -z "${debian_chroot:-}" ] && [ -r /etc/debian_chroot ]; then
+  debian_chroot=$(cat /etc/debian_chroot)
+fi
+case "$TERM" in
+xterm-color | *-256color) color_prompt=yes ;;
+esac
+force_color_prompt=yes
+if [ -n "$force_color_prompt" ]; then
+  if [ -x /usr/bin/tput ] && tput setaf 1 >&/dev/null; then
+    color_prompt=yes
+  else
+    color_prompt=
+  fi
+fi
+if [ "$color_prompt" = yes ]; then
+  USER_COLOR=$(user_color "$(whoami)")
+  HOST_COLOR=$(host_color "$(hostname)")
+  AT_COLOR=$(at_color "${SSH_TTY}")
+  PLAIN_COLOR=$(plain)
+
+  PS1=" ${debian_chroot:+($debian_chroot)}${USER_COLOR}%n${AT_COLOR}@${HOST_COLOR}%m:${PLAIN_COLOR}%1~\$ "
+fi
+# === end required configuration ===
 
 # Spelled vew to avoid calling vi
 vew() {
@@ -29,7 +56,6 @@ vew() {
   fi
 }
 
-# https://itsfoss.gitlab.io/post/how-to-find-a-package-version-in-linux
 version() {
   # 'Check if a package/command is installed, then display its version'
   local item="${1:-}"
@@ -93,8 +119,9 @@ compdef hi=ssh
 
 autoload -Uz promptinit
 promptinit
-# prompt adam1
 
+setopt histignorealldups sharehistory
+unsetopt beep
 bindkey -e
 
 # homekey
@@ -112,15 +139,12 @@ bindkey "^[[1;5C" forward-word
 # delkey
 bindkey "^[[3;5~" delete-word
 
-setopt histignorealldups sharehistory
-unsetopt beep
-
+# completion
 zstyle ':completion:*' auto-description 'specify: %d'
 zstyle ':completion:*' completer _expand _complete _correct _approximate
 zstyle ':completion:*' format 'Completing %d'
 zstyle ':completion:*' group-name ''
 zstyle ':completion:*' menu select=2
-
 eval "$(dircolors -b)"
 zstyle ':completion:*:default' list-colors ${(s.:.)LS_COLORS}
 zstyle ':completion:*' list-colors ''
@@ -132,27 +156,3 @@ zstyle ':completion:*' use-compctl false
 zstyle ':completion:*' verbose true
 zstyle ':completion:*:*:kill:*:processes' list-colors '=(#b) #([0-9]#)*=0=01;31'
 zstyle ':completion:*:kill:*' command 'ps -u $USER -o pid,%cpu,tty,cputime,cmd'
-
-[ -x /usr/bin/lesspipe ] && eval "$(SHELL=/bin/sh lesspipe)"
-if [ -z "${debian_chroot:-}" ] && [ -r /etc/debian_chroot ]; then
-  debian_chroot=$(cat /etc/debian_chroot)
-fi
-case "$TERM" in
-xterm-color | *-256color) color_prompt=yes ;;
-esac
-force_color_prompt=yes
-if [ -n "$force_color_prompt" ]; then
-  if [ -x /usr/bin/tput ] && tput setaf 1 >&/dev/null; then
-    color_prompt=yes
-  else
-    color_prompt=
-  fi
-fi
-if [ "$color_prompt" = yes ]; then
-  USER_COLOR=$(user_color "$(whoami)")
-  HOST_COLOR=$(host_color "$(hostname)")
-  AT_COLOR=$(at_color "${SSH_TTY}")
-  PLAIN_COLOR=$(plain)
-
-  PS1=" ${debian_chroot:+($debian_chroot)}${USER_COLOR}%n${AT_COLOR}@${HOST_COLOR}%m:${PLAIN_COLOR}%1~\$ "
-fi

@@ -1,7 +1,9 @@
 #!/bin/bash
-
-# always present?
-# cat. tar, vi, top
+SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+if [[ -z "$NC" ]]; then
+  # shellcheck source=./prompt_colors.sh
+  source "$SCRIPT_DIR/prompt_colors.sh"
+fi
 
 # # Format - package:priority,similar_package
 # # Sort highest priorities to top of each list
@@ -21,6 +23,7 @@ PACKAGES=(
   sudo:0
 )
 
+# shellcheck disable=SC2054
 BASICS=(
   nmap:2
   just:2
@@ -35,6 +38,7 @@ BASICS=(
   ping:0
 )
 
+# shellcheck disable=SC2054
 TOOLS=(
   node:1,npx:2,npm:2
   nomad:1
@@ -49,6 +53,7 @@ TOOLS=(
   wget:0
 )
 
+# shellcheck disable=SC2054
 SYSTEMS=(
   snap:1
   apt:1,pacman:1,dnf:1,rpm:1,zypper:1,brew:1,apk:2,nix:2

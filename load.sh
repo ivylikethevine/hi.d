@@ -1,18 +1,9 @@
 #!/bin/bash
-
-RED='\e[0;31m'
-GREEN='\e[0;32m'
-YELLOW='\e[0;33m'
-BLUE='\e[0;34m'
-PURPLE='\e[0;35m'
-CYAN='\e[0;36m'
-BRRED='\e[1;31m'
-BRGREEN='\e[1;32m'
-BRYELLOW='\e[1;33m'
-BRBLUE='\e[1;34m'
-BRPURPLE='\e[1;35m'
-BRCYAN='\e[1;36m'
-NC='\e[0m'
+SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+if [[ -z "$NC" ]]; then
+  # shellcheck source=./common/prompt_colors.sh
+  source "$SCRIPT_DIR/common/prompt_colors.sh"
+fi
 
 hi_start="# hi-config-start"
 hi_end="# hi-config-end"
@@ -22,18 +13,6 @@ copy_time=-1
 # # On local machines, ~/.hi.d has our configs.
 # # On remote machines, we need to go to /tmp/.(whoami).hi.XXXX/.hi.d
 hi_root=${HI_ROOT:-~/.hi.d}
-
-# required
-cecho() {
-  local formatted_text="$2$1$NC"
-  local disable_newline="$3"
-
-  if [[ -n "$disable_newline" ]]; then
-    echo -e -n "$formatted_text";
-  else
-    echo -e "$formatted_text";
-  fi
-}
 
 # required
 spacer() {
@@ -78,7 +57,7 @@ clean_all() {
 configure_all() {
   if command -v "vim" &>/dev/null; then
     # Will cause errors if we load this with only VI
-    export VIMINIT="let \$MYVIMRC='$hi_root/.hi.d/optional/vim.rc' | source \$MYVIMRC"
+    export VIMINIT="let \$MYVIMRC='$hi_root/.hi.d/misc/vim.rc' | source \$MYVIMRC"
   fi
   configure_file ~/.bashrc shells/bash.sh
   configure_file ~/.zshrc shells/zsh.zsh
@@ -165,7 +144,9 @@ load() {
   load_start_time=$(date +%s.%N)
 
   trap 'clean_all' exit
-  cecho "~~~~~~~~~~~~~~~~~~~ Connected to [$(hostname)]! ~~~~~~~~~~~~~~~~~~~~~~~" "$BRGREEN"
+
+  HOST_COLOR=$(host_color "$(hostname)")
+  echo -e "$BRGREEN~~~~~~~~~~~~~~~~~~~ Connected to ${NC}[$HOST_COLOR$(hostname)${NC}]$BRGREEN ~~~~~~~~~~~~~~~~~~~~~~~~$NC"
   timestamp
 
   # optional header items
@@ -194,7 +175,7 @@ load() {
   fi
 
   cecho " $(du -sh --apparent-size "$HI_ROOT"/.hi.d | awk '{ print $1 }') " "$NC" 1
-  cecho "~~~~~~~~~~~~~~~~~ Disconnected from [$(hostname)]! ~~~~~~~~~~~~~~~~~~~~" "$BRRED"
+  echo -e "$BRRED~~~~~~~~~~~~~~~~~ Disconnected from ${NC}[$HOST_COLOR$(hostname)${NC}]$BRRED ~~~~~~~~~~~~~~~~~~~~~$NC"
   timestamp
   cecho "hi closing! " "$BRPURPLE"
   exit 0

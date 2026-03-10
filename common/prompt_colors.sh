@@ -1,6 +1,34 @@
 #!/bin/bash
 
-at_color() {
+# required
+export RED='\e[0;31m'
+export GREEN='\e[0;32m'
+export YELLOW='\e[0;33m'
+export BLUE='\e[0;34m'
+export PURPLE='\e[0;35m'
+export CYAN='\e[0;36m'
+export BRRED='\e[1;31m'
+export BRGREEN='\e[1;32m'
+export BRYELLOW='\e[1;33m'
+export BRBLUE='\e[1;34m'
+export BRPURPLE='\e[1;35m'
+export BRCYAN='\e[1;36m'
+export NC='\e[0m'
+
+# required
+cecho() {
+  local formatted_text="$2$1$NC"
+  local disable_newline="$3"
+
+  if [[ -n "$disable_newline" ]]; then
+    echo -e -n "$formatted_text";
+  else
+    echo -e "$formatted_text";
+  fi
+}
+
+# required
+function at_color() {
   local AT_COLOR=$NC
   if [[ $1 ]]; then
     AT_COLOR=$YELLOW
@@ -8,7 +36,8 @@ at_color() {
   echo "$AT_COLOR"
 }
 
-read_color_file() {
+# required
+function read_color_file() {
   local search_val="$1"
   local color_file="$2"
   local is_fish="$3"
@@ -36,13 +65,15 @@ read_color_file() {
   return 1
 }
 
-host_color() {
+# required
+function host_color() {
   local hi_root=${HI_ROOT:-~}
   local is_fish="$1"
   read_color_file "$(hostname)" "$hi_root/.hi.d/common/host_colors" "$is_fish"
 }
 
-user_color() {
+# required
+function user_color() {
   local hi_root=${HI_ROOT:-~}
   local is_fish="$1"
   read_color_file "$(whoami)" "$hi_root/.hi.d/common/user_colors" "$is_fish"

@@ -1,11 +1,23 @@
-set tabsize 2
-set linenumbers
-set mouse
-set softwrap
+include "/usr/share/nano/*.nanorc"
+include "/usr/share/nano/extra/*.nanorc"
+
 set atblanks
 set autoindent
 set breaklonglines
+set constantshow
 set indicator
+set linenumbers
+set mouse
+set softwrap
+set tabsize 2
+set tabstospaces
+set whitespace "·»"
+set zap
 
-include "/usr/share/nano/*.nanorc"
-include "/usr/share/nano/extra/*.nanorc"
+set titlecolor brightwhite,blue
+set statuscolor brightwhite,magenta
+set selectedcolor black,green
+set errorcolor brightwhite,red
+set numbercolor black,white
+set functioncolor cyan
+set scrollercolor brightcyan

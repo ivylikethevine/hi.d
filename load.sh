@@ -1,4 +1,5 @@
 #!/bin/bash
+
 RED='\e[0;31m'
 GREEN='\e[0;32m'
 YELLOW='\e[0;33m'
@@ -140,7 +141,7 @@ check_packages() {
   tools
 }
 
-# TODO: Add tmux support + handle disconnects/reconnects/older sessions
+# TODO: Test
 tmuxrc() {
   local TMUXDIR="/tmp/tmuxrc"
   if ! [ -d "$TMUXDIR" ]; then
@@ -148,10 +149,10 @@ tmuxrc() {
     mkdir -p "$TMUXDIR"
   fi
   rm -rf "$TMUXDIR"/.hi.d
-  # cp -r "$hi_root"/.hi "$hi_root"/bashrc.hi "$hi_root"/hi "$hi_root"/.hi.d "$TMUXDIR"
-  # hi_root="$TMUXDIR" SHELL="$TMUXDIR"/bashrc.hi /usr/bin/tmux -S "$TMUXDIR"/tmuxserver "$@"
-  # export SHELL=`which bash`
-  # tmuxrc
+  cp -r "$hi_root"/bashrc.hi "$hi_root"/hi "$hi_root"/.hi.d "$TMUXDIR"
+  hi_root="$TMUXDIR" SHELL="$TMUXDIR"/bashrc.hi /usr/bin/tmux -S "$TMUXDIR"/tmuxserver "$@"
+  SHELL=$(which bash)
+  export SHELL
 }
 
 load() {

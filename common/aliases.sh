@@ -41,7 +41,7 @@ alias hi_reinstall="~/.hi.d/scripts/install.sh"
 alias hi_relink="sudo rm /usr/bin/hi && sudo ln ~/.hi.d/hi.sh /usr/bin/hi"
 # === end required variables/aliases ===
 
-alias newkey='ssh-keygen -t ed25519 -f "/home/$USER/.ssh/$(date -Is)" -P '' -C '''
+alias newkey='ssh-keygen -t ed25519 -f "/home/$USER/.ssh/$(hostname)-$USER-$(date -Im)" -P '' -C '''
 alias ssh-keys="ls -alhR --color=auto ~/.ssh"
 alias ssh-authorized="nano ~/.ssh/authorized_keys"
 alias ssh-known="cat ~/.ssh/known_hosts"

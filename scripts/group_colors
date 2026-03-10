@@ -1,4 +1,4 @@
-# hostname/username tag/username color_bash color_fish
+# hostname ssh-tag color_bash color_fish
 hostname,proxmox,\e[0;31m,brred
 hostname,edenlabs,\e[0;34m,brblue
 hostname,laptop,\e[0;35m,brmagenta
@@ -6,8 +6,10 @@ hostname,desktop,\e[0;35m,brmagenta
 hostname,AWS,\e[0;31m,brred
 hostname,csd,\e[0;32m,brgreen
 hostname,macOS,\e[0;32m,brblue
+hostname,garden,\e[0;34m,brred
 
-username,ivy,\e[1;33m,bryellow
-username,admin,\e[0;31m,red
+# username name color_bash color_fish
 username,root,\e[0;31m,red
+username,admin,\e[0;31m,red
 username,team,\e[0;34m,brblue
+username,ivy,\e[1;33m,bryellow

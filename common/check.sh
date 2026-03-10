@@ -113,16 +113,22 @@ check_commands() {
     inner="${item#*:}"
     priority="${inner%:*}"
     is_installed="${item##*:}"
-    if [[ "$is_installed" == "yes" ]]; then
-      if [[ "$priority" == "1" ]]; then
-        echo -ne " $BLUE$cmd ✓$NC"
-      elif [[ "$priority" == "2" ]]; then
-        echo -ne " $GREEN$cmd ✓$NC"
-      fi
-    else
-      if [[ "$priority" == "0" ]]; then
+    if [[ "$priority" == "0" ]]; then
+      if [[ "$is_installed" == "yes" ]]; then
+        echo -ne ""
+      else
         echo -ne " $YELLOW$cmd ✗$NC"
-      elif [[ "$priority" == "2" ]]; then
+      fi
+    elif [[ "$priority" == "1" ]]; then
+      if [[ "$is_installed" == "yes" ]]; then
+        echo -ne " $BLUE$cmd ✓$NC"
+      else
+        echo -ne ""
+      fi
+    elif [[ "$priority" == "2" ]]; then
+      if [[ "$is_installed" == "yes" ]]; then
+        echo -ne " $GREEN$cmd ✓$NC"
+      else
         echo -ne " $BRYELLOW$cmd ✗$NC"
       fi
     fi

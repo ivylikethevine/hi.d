@@ -3,6 +3,9 @@
 # always present?
 # cat. tar, vi, top
 
+# # Format - package:priority,similar_package
+# # Sort highest priorities to top of each list
+
 # shellcheck disable=SC2054
 PACKAGES=(
   top:0,btop:2,htop:2

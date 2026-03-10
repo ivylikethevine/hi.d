@@ -8,7 +8,7 @@ unlink_hi() {
 
   rm /home/"$USER"/.hi.d/common/user_colors
   rm /home/"$USER"/.hi.d/common/host_colors
-  rm /home/"$USER"/.hi.d/scripts/group_colors
+  rm /home/"$USER"/.hi.d/local/group_colors
 
   echo "Anonymizing host colors"
   cat <<'EOF' >> /home/"$USER"/.hi.d/common/host_colors

@@ -63,7 +63,7 @@ function config_hi() {
 
 function generate_colors() {
   echo "Generating colors for users and hosts"
-  sh /home/"$USER"/.hi.d/scripts/create_host_colors.sh
+  sh /home/"$USER"/.hi.d/local/create_host_colors.sh
 }
 
 function main() {

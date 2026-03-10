@@ -1,7 +1,7 @@
 #!/bin/bash
 # Define input and output files
 hi_root=${HI_ROOT:-~}
-GROUP_COLORS="$hi_root/.hi.d/scripts/group_colors"
+GROUP_COLORS="$hi_root/.hi.d/local/group_colors"
 HOST_OUTPUT_FILE="$hi_root/.hi.d/common/host_colors"
 USER_OUTPUT_FILE="$hi_root/.hi.d/common/user_colors"
 

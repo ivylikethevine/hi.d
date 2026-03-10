@@ -28,24 +28,19 @@ alias nano="nano --rcfile $HI_ROOT/.hi.d/optional/nano.rc"
 # shellcheck disable=SC2139
 alias vim="vim -u $HI_ROOT/.hi.d/optional/vim.rc"
 
-alias hey="ssh"
-alias zed="zeditor"
-alias view="vew" # here to prevent calling vi
-alias vw="vew"
-alias vs="version"
-
-alias ehi="zed ~/.hi.d"
-alias essh="zed ~/.ssh"
-alias hi_colorgen="~/.hi.d/scripts/create_host_colors.sh"
-alias hi_reinstall="~/.hi.d/scripts/install.sh"
+alias hi_colorgen="~/.hi.d/local/create_host_colors.sh"
+alias hi_reinstall="~/.hi.d/local/install.sh"
 alias hi_relink="sudo rm /usr/bin/hi && sudo ln ~/.hi.d/hi.sh /usr/bin/hi"
 # === end required variables/aliases ===
 
+alias hey="ssh"
+alias zed="zeditor"
+alias ehi="zed ~/.hi.d"
+alias essh="zed ~/.ssh"
+alias view="vew" # here to prevent calling vi
+alias vw="vew"
+alias vs="version"
 alias newkey='ssh-keygen -t ed25519 -f "/home/$USER/.ssh/$(hostname)-$USER-$(date -Im)" -P '' -C '''
-alias ssh-keys="ls -alhR --color=auto ~/.ssh"
-alias ssh-authorized="nano ~/.ssh/authorized_keys"
-alias ssh-known="cat ~/.ssh/known_hosts"
-alias ssh-config="cat ~/.ssh/config"
 
 alias dcl="docker container ls && docker compose ls"
 alias dcu="docker compose up"

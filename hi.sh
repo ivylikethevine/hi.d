@@ -34,11 +34,11 @@ function say_hi() {
   # # On local machines, ~/.hi.d has our configs.
   # # On remote machines, we need to go to /tmp/.(whoami).hi.XXXX/.hi.d
   local hi_root=${HI_ROOT:=~}
-  local hi_exclude=(--exclude README.md --exclude .git --exclude .gitignore --exclude scripts --exclude hi.sh)
+  local hi_exclude=(--exclude README.md --exclude .git --exclude .gitignore --exclude local --exclude hi.sh)
 
   if [ ! -f "$hi_root"/.hi.d/common/host_colors ] || [ ! -f "$hi_root"/.hi.d/common/user_colors ]; then
-    # shellcheck source=./scripts/create_host_colors.sh
-    source "$hi_root/.hi.d/scripts/create_host_colors.sh"
+    # shellcheck source=./local/create_host_colors.sh
+    source "$hi_root/.hi.d/local/create_host_colors.sh"
     # This will autogenerate the colors if we don't have any yet.
   fi
 

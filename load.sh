@@ -178,5 +178,6 @@ load() {
   echo -e "$BRRED~~~~~~~~~~~~~~~~~ Disconnected from ${NC}[$HOST_COLOR$(hostname)${NC}]$BRRED ~~~~~~~~~~~~~~~~~~~~~$NC"
   timestamp
   cecho "hi closing! " "$BRPURPLE"
+  clean_all
   exit 0
 }

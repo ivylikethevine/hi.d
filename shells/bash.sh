@@ -44,6 +44,7 @@ if ! shopt -oq posix; then
   if [[ -f /usr/share/bash-completion/bash_completion ]]; then
     . /usr/share/bash-completion/bash_completion
   elif [[ -f /etc/bash_completion ]]; then
+    # shellcheck disable=SC1091
     . /etc/bash_completion
   fi
 fi
@@ -73,7 +74,6 @@ vew() {
   fi
 }
 
-# https://itsfoss.gitlab.io/post/how-to-find-a-package-version-in-linux
 version() {
   # 'Check if a package/command is installed, then display its version'
   local item="${1:-}"

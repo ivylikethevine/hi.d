@@ -1,6 +1,7 @@
 #!/bin/bash
+
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
-if [[ -z "$NC" ]]; then
+if ! command cecho 2>/dev/null; then
   # shellcheck source=./prompt_colors.sh
   source "$SCRIPT_DIR/prompt_colors.sh"
 fi
@@ -68,7 +69,7 @@ SYSTEMS=(
   direnv:0
 )
 
-sort_commands() {
+function sort_commands() {
   local cmd_list=("$@")
   local present=()
   local absent=()
@@ -111,7 +112,7 @@ sort_commands() {
   printf '%s\n' "${sorted[@]}"
 }
 
-check_commands() {
+function check_commands() {
   local cmd_list=("$@")
   echo -ne " $NC|"
   # shellcheck disable=SC2207
@@ -144,18 +145,18 @@ check_commands() {
   echo
 }
 
-packages() {
+function packages() {
   check_commands "${PACKAGES[@]}"
 }
 
-basics() {
+function basics() {
   check_commands "${BASICS[@]}"
 }
 
-systems() {
+function systems() {
   check_commands "${SYSTEMS[@]}"
 }
 
-tools() {
+function tools() {
   check_commands "${TOOLS[@]}"
 }

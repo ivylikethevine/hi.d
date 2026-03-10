@@ -1,6 +1,6 @@
 #!/bin/bash
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
-if [[ -z "$NC" ]]; then
+if ! command cecho 2>/dev/null; then
   # shellcheck source=./common/prompt_colors.sh
   source "$SCRIPT_DIR/common/prompt_colors.sh"
 fi

@@ -18,8 +18,8 @@ export NC='\e[0m'
 export human_short_date_format="+%b %-e %y %H:%M %Z"
 alias now='date $human_short_date_format && date -u $human_short_date_format'
 
-# exported here since we have to wrap the bat/batcat call per shell
-export bat_opts="-P --tabs 2 --theme Monokai\ Extended\ Bright --style changes,grid,numbers"
+# shellcheck disable=SC2139
+alias bat="$(command -v bat || command -v batcat) -P --tabs 2 --theme Monokai\ Extended\ Bright --style changes,grid,numbers"
 
 # works in bash, fish has a wrapper for sudo in config.fish
 alias sudo="command sudo "
@@ -31,6 +31,7 @@ alias vim="vim -u $HI_ROOT/.hi.d/optional/vim.rc"
 alias hey="ssh"
 alias zed="zeditor"
 alias view="vew" # here to prevent calling vi
+alias vw="vew"
 alias vs="version"
 
 alias ehi="zed ~/.hi.d"

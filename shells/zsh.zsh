@@ -6,18 +6,6 @@ source "$hi_root/.hi.d/common/prompt_colors.sh"
 # shellcheck source=./common/aliases.sh
 source "$hi_root/.hi.d/common/aliases.sh"
 
-export bat_opts=${bat_opts:-"--color=always --paging=never"}
-# conditionally load since bat is sometimes batcat on debian systems
-if [ -f "/usr/bin/bat" ]; then
-  alias batcat="bat"
-  alias bat="bat $bat_opts"
-fi
-
-if [ -f "/usr/bin/batcat" ]; then
-  alias bat="batcat"
-  alias batcat="batcat $bat_opts"
-fi
-
 # Spelled vew to avoid calling vi
 vew() {
   local p="${1:-}"

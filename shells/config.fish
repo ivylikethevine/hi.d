@@ -123,19 +123,6 @@ function fish_greeting
   and echo $fish_greeting
 end
 
-# conditionally load since bat is sometimes batcat on debian systems
-if [ -f "/usr/bin/bat" ]
-  alias batcat="bat"
-  alias bat="bat $bat_opts"
-  complete batcat --wraps bat
-end
-
-if [ -f "/usr/bin/batcat" ]
-  alias bat="batcat"
-  alias batcat="batcat $bat_opts"
-  complete bat --wraps batcat
-end
-
 function vew --description 'Cat/bat a file or list a directory in detail | spelled vew to avoid calling vi'
   set args (count $argv)
   set path "$argv[$args]"

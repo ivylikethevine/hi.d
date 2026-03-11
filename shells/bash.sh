@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # === start required configuration ===
-hi_root=${HI_ROOT:=~}
+hi_root=${HI_ROOT:-~}
 # shellcheck source=./common/prompt_colors.sh
 source "$hi_root/.hi.d/common/prompt_colors.sh"
 # shellcheck source=./common/aliases.sh

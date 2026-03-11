@@ -33,20 +33,21 @@ function hi_parse() {
 function say_hi() {
   # # On local machines, ~/.hi.d has our configs.
   # # On remote machines, we need to go to /tmp/.(whoami).hi.XXXX/.hi.d
-  local hi_root=${HI_ROOT:=~}
-  local hi_exclude=(--exclude README.md --exclude .git --exclude .gitignore --exclude local --exclude hi.sh)
+  local hi_root_old=${HI_ROOT:-~}
+  local hi_root=${HI_ROOT:-~}/.hi.d
 
-  if [ ! -f "$hi_root"/.hi.d/common/host_colors ] || [ ! -f "$hi_root"/.hi.d/common/user_colors ]; then
+  local hi_exclude=(--exclude README.md --exclude .git --exclude .gitignore --exclude local --exclude hi.bashrc)
+
+  if [ ! -f "$hi_root"/common/host_colors ] || [ ! -f "$hi_root"/common/user_colors ]; then
     # shellcheck source=./local/create_host_colors.sh
-    source "$hi_root/.hi.d/local/create_host_colors.sh"
+    source "$hi_root/local/create_host_colors.sh"
     # This will autogenerate the colors if we don't have any yet.
   fi
 
-  if [ -d "$hi_root"/.hi.d ]; then
-    cecho "\r $(du -sh "${hi_exclude[@]}" --apparent-size ~/.hi.d | awk '{ print $1 }') " "$CYAN" 1
-    local files=".hi.d"
+  if [ -d "$hi_root" ]; then
+    cecho "\r $(du -sh "${hi_exclude[@]}" --apparent-size "$hi_root" | awk '{ print $1 }') " "$CYAN" 1
     local size=0
-    size="$(tar cfz - -h -C "$hi_root" "${hi_exclude[@]}" $files | wc -c)"
+    size="$(tar cfz - -h -C "${hi_exclude[@]}" .hi.d | wc -c)"
     if [ "$size" -gt 65536 ]; then
       cecho >&2 $'.hi.d files must be less than 64kb. Current size: '"$size"' bytes' "$RED"
       return 10
@@ -54,7 +55,7 @@ function say_hi() {
     local TR_CMD="tr -s ' ' '\n'"
     local OPENSSL_CMD="openssl enc -base64"
     ssh -t "$DOMAIN" "$SSHARGS" "
-            command -v openssl >/dev/null 2>&1 || { echo >&2 \"hi requires openssl to be installed on $DOMAIN, but it is not. Aborting.\"; exit 1; }
+            command -v openssl >/dev/null 2>&1 || { echo >&2 \"hi requires openssl to be installed on [$DOMAIN], but it is not. Aborting.\"; exit 1; }
             export HI_ROOT=\$(mktemp -d -t .$(whoami).hi.XXXX)
             export HI_CLEANUP=\$HI_ROOT
             trap \"rm -rf \$HI_CLEANUP; exit\" exit
@@ -69,17 +70,17 @@ function say_hi() {
                 fi
                 export PATH=$PATH:$HI_ROOT
                 source $HI_ROOT/.hi.d/load.sh
+                load
 EOF
     )\" | $TR_CMD | $OPENSSL_CMD -d > \$HI_ROOT/hi.bashrc
-            echo \"$(tar czf - -h -C "$hi_root" "${hi_exclude[@]}" $files | $OPENSSL_CMD)\" | $TR_CMD | $OPENSSL_CMD -d | tar mxzf - -C \$HI_ROOT
+            echo \"$(tar czf - -h -C "$hi_root_old" "${hi_exclude[@]}" .hi.d | $OPENSSL_CMD)\" | $TR_CMD | $OPENSSL_CMD -d | tar mxzf - -C \$HI_ROOT
             export HI_ROOT=\$HI_ROOT
             echo \"$CMDARG\" >> \$HI_ROOT/hi.bashrc
-            echo \"export copy_time='$(echo "$(date +%s.%N) $copy_start_time" | awk '{ printf "%.3f\n", $1 - $2 }')'\" >> \$HI_ROOT/.hi.d/load.sh
-            echo \"load\" >> \$HI_ROOT/.hi.d/load.sh
+            echo \"export hi_copy_time='$(echo "$(date +%s.%N) $copy_start_time" | awk '{ printf "%.3f\n", $1 - $2 }')'\" >> \$HI_ROOT/.hi.d/load.sh
             bash --rcfile \$HI_ROOT/hi.bashrc
             "
   else
-    cecho "No such directory: $hi_root/.hi.d" "$RED" >&2
+    cecho "No such directory: $hi_root" "$RED" >&2
     return 1
   fi
 }
@@ -87,18 +88,20 @@ EOF
 function run() {
   copy_start_time=$(date +%s.%N)
 
-  local hi_root=${HI_ROOT:=~}
+  local hi_root=${HI_ROOT:-~}/.hi.d
+
   if ! command cecho 2>/dev/null; then
     # shellcheck source=./common/prompt_colors.sh
-    source "$hi_root/.hi.d/common/prompt_colors.sh"
+    source "$hi_root/common/prompt_colors.sh"
   fi
 
   command -v openssl >/dev/null 2>&1 || {
-    cecho >&2 "hi requires openssl to be installed on $(hostname), but it is not. Aborting." "$RED"
+    cecho >&2 "hi requires openssl to be installed on [$(hostname)], but it is not. Aborting..." "$RED"
     exit 1
   }
 
   tmp="/tmp/$(date +%s).hi"
+  trap 'rm $tmp &>/dev/null' exit
 
   hi_parse "$@"
   say_hi "$@" 2>"$tmp"
@@ -106,8 +109,6 @@ function run() {
   local _exit_code="$?"
   local _errors
   _errors="$(cat "$tmp")"
-
-  rm "$tmp"
 
   if [ "$_exit_code" -ne 0 ]; then
     echo -ne "\r\r\r\r"

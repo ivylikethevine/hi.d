@@ -174,7 +174,7 @@ load() {
     bash -i
   fi
 
-  cecho " $(du -sh --apparent-size "$HI_ROOT"/.hi.d | awk '{ print $1 }') " "$NC" 1
+  cecho " $(du -sh --apparent-size "$HI_ROOT"/.hi.d | awk '{ print $1 }') " "$YELLOW" 1
   echo -e "$BRRED~~~~~~~~~~~~~~~~~ Disconnected from ${NC}[$HOST_COLOR$(hostname)${NC}]$BRRED ~~~~~~~~~~~~~~~~~~~~~$NC"
   timestamp
   cecho "hi closing! " "$BRPURPLE"

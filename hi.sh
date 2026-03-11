@@ -43,12 +43,12 @@ function say_hi() {
   fi
 
   if [ -d "$hi_root"/.hi.d ]; then
-    echo -ne "\r $(du -sh "${hi_exclude[@]}" --apparent-size ~/.hi.d | awk '{ print $1 }') "
+    cecho "\r $(du -sh "${hi_exclude[@]}" --apparent-size ~/.hi.d | awk '{ print $1 }') " "$CYAN" 1
     local files=".hi.d"
     local size=0
     size="$(tar cfz - -h -C "$hi_root" "${hi_exclude[@]}" $files | wc -c)"
     if [ "$size" -gt 65536 ]; then
-      echo >&2 $'.hi.d files must be less than 64kb. Current size: '"$size"' bytes'
+      cecho >&2 $'.hi.d files must be less than 64kb. Current size: '"$size"' bytes' "$RED"
       return 10
     fi
     local TR_CMD="tr -s ' ' '\n'"
@@ -79,7 +79,7 @@ EOF
             bash --rcfile \$HI_ROOT/hi.bashrc
             "
   else
-    echo "No such directory: $hi_root/.hi.d" >&2
+    cecho "No such directory: $hi_root/.hi.d" "$RED" >&2
     return 1
   fi
 }
@@ -87,8 +87,14 @@ EOF
 function run() {
   copy_start_time=$(date +%s.%N)
 
+  local hi_root=${HI_ROOT:=~}
+  if ! command cecho 2>/dev/null; then
+    # shellcheck source=./common/prompt_colors.sh
+    source "$hi_root/.hi.d/common/prompt_colors.sh"
+  fi
+
   command -v openssl >/dev/null 2>&1 || {
-    echo >&2 "hi requires openssl to be installed on $(hostname), but it is not. Aborting."
+    cecho >&2 "hi requires openssl to be installed on $(hostname), but it is not. Aborting." "$RED"
     exit 1
   }
 
@@ -109,12 +115,12 @@ function run() {
       || [[ "$_errors" == *"Broken pipe"* ]] \
       || [[ "$_errors" == *"no such identity"* ]] \
       || [[ "$_errors" == *"Permission denied"* ]]; then
-      echo -e "| hi: ${_errors#*ssh: }"
+      cecho "| hi: ${_errors#*ssh: }" "$RED"
     else
-      echo -e "\033[01;31m=======================================\033[00;0m"
-      echo -e "\033[01;33mhi failed [code: $_exit_code], falling back to ssh...\033[00;0m"
-      echo -e "\033[01;33m[$_errors]\033[00;0m"
-      echo -e "\033[01;31m=======================================\033[00;0m\n"
+      cecho "==============================================================================" "$BRYELLOW"
+      cecho "hi failed [code: $_exit_code], falling back to ssh..." "$BRRED"
+      cecho "$_errors" "$BRRED"
+      cecho "==============================================================================" "$BRYELLOW"
       ssh "$@"
       exit 1
     fi

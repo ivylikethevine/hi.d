@@ -1,5 +1,6 @@
 #!/bin/bash
 
+# TODO: Swap to cecho
 unlink_hi() {
   cd /home/"$USER"/.hi.d/ || exit 1
   rm -rf .git

@@ -2,9 +2,8 @@
 # forked from sshrc: https://github.com/danrabinowitz/sshrc
 
 HI_TMPDIR=${HI_TMPDIR:-~}
-HI_ROOT="$HI_TMPDIR/.hi.d"
 # shellcheck source=./common/paths.sh
-source "$HI_ROOT/common/paths.sh"
+source "$HI_TMPDIR/.hi.d/common/paths.sh"
 
 hi_config_start="# hi-config-start"
 hi_config_end="# hi-config-end"

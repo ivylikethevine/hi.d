@@ -1,14 +1,12 @@
 #!/bin/fish
 
 # === start required configuration ===
-# TODO: unify paths
-if set -q HI_TMPDIR
-  set -g HI_TMPDIR $HI_TMPDIR
-else
+if not set -q HI_TMPDIR
   set -g HI_TMPDIR ~
 end
-set -g HI_ROOT "$HI_TMPDIR/.hi.d"
-source $HI_ROOT/common/aliases.sh
+source $HI_TMPDIR/.hi.d/common/paths.sh
+source $_HI_ALIASES_PATH;
+
 complete hi --wraps ssh
 
 # wrapper for aliases to work in fish shell under sudo
@@ -55,10 +53,6 @@ function prompt_login --description "display user name for the prompt"
     set color_at yellow
   end
 
-  # TODO: Dedupe into 1 call
-  set -l color_user (bash -c "source $HI_ROOT/common/prompt_colors.sh; user_color")
-  set -l color_host (bash -c "source $HI_ROOT/common/prompt_colors.sh; host_color")
-
   echo -ns (set_color $color_user) " $USER" (set_color $color_at) @ (set_color $color_host) (prompt_hostname) (set_color normal)
 end
 
@@ -66,9 +60,7 @@ end
 function fish_greeting
   if not set -q fish_greeting
     set -l spacer (printf '%s|' (set_color normal))
-    # TODO: Dedupe into 1 call
-    set -l color_host (bash -c "source $HI_ROOT/common/prompt_colors.sh; host_color")
-    set -l header (printf '%s~~~~~~~~~~~~~~~~~~ Online %s[%s%s%s]%s ~~~~~~~~~~~~~~~~~~~~~~~~~~%s' (set_color brcyan) (set_color normal) (set_color $color_host) (prompt_hostname) (set_color normal) (set_color brcyan) (set_color normal))
+    set -l header (printf '%s~~~~~~~~~~~~~~~~~~ Online %s[%s%s%s]%s ~~~~~~~~~~~~~~~~~~~~~~~~~~%s' (set_color brcyan) (set_color normal) (set_color $fish_color_host) (prompt_hostname) (set_color normal) (set_color brcyan) (set_color normal))
 
     set -l human_centric_date_format "+%a %b %-e %Y %H:%M:%S %Z"
     set -l utctime (printf '%s%s' (set_color brblue) (date -u $human_centric_verbose))
@@ -80,8 +72,8 @@ function fish_greeting
 
     set -l cpus (printf '%sCPUs: %s' (set_color brblue) (nproc))
     set -l ram (printf '%sRAM: %s' (set_color cyan) (free -h --giga | awk '/^Mem:/ {print $2}GB'))
-    if [ -f ~/.ssh/authorized_keys ]
-      set -g authorized (printf '%sAuth: %s' (set_color red) (wc -l ~/.ssh/authorized_keys | awk '{ print $1 }'))
+    if [ -f "$_HI_SSH_AUTHORIZED_KEYS" ]
+      set -g authorized (printf '%sAuth: %s' (set_color red) (wc -l "$_HI_SSH_AUTHORIZED_KEYS" | awk '{ print $1 }'))
     else
       set -g authorized (printf '%sAuth: 0!' (set_color red))
     end
@@ -94,8 +86,8 @@ function fish_greeting
       set -g containers (printf '%sCounting impossible, no docker :(' (set_color bryellow))
     end
 
-    if [ -f "/home/$USER/.gitconfig" ]
-      set -g git_identity (printf '%sGit ID: %s%s' (set_color brcyan) (set_color yellow) (grep email ~/.gitconfig | tail -n1 | cut -d= -f2 | tr -d ' ' | awk -F@ '{ for(i=0;i<length($2);i++) c=c"●"; print $1"@"c; c="" }'))
+    if [ -f "$_HI_GIT_CONFIG_PATH" ]
+      set -g git_identity (printf '%sGit ID: %s%s' (set_color brcyan) (set_color yellow) (grep email "$_HI_GIT_CONFIG_PATH" | tail -n1 | cut -d= -f2 | tr -d ' ' | awk -F@ '{ for(i=0;i<length($2);i++) c=c"●"; print $1"@"c; c="" }'))
     else
       set -g git_identity (printf '%sNo Git ID Found...' (set_color yellow))
     end
@@ -113,12 +105,14 @@ function fish_greeting
     set -l _system_info_line $spacer" "$os_type" "$spacer" "$arch" "$spacer" "$distro" "$spacer" "$cpus" "$spacer" "$ram
 
     # TODO: DEDUPE
-    set -l _packages (bash -c "source $HI_ROOT/common/check.sh; packages")
-    set -l _basics (bash -c "source $HI_ROOT/common/check.sh; basics")
-    set -l _systems (bash -c "source $HI_ROOT/common/check.sh; systems")
-    set -l _tools (bash -c "source $HI_ROOT/common/check.sh; tools")
+    set -l _packages (bash -c "source $_HI_CHECK_PATH; packages")
+    set -l _basics (bash -c "source $_HI_CHECK_PATH; basics")
+    set -l _systems (bash -c "source $_HI_CHECK_PATH; systems")
+    set -l _tools (bash -c "source $_HI_CHECK_PATH; tools")
+
     # set -g fish_greeting $hi_change_status" "$hi_update_status" "$header\n $_timer_line\n $_system_info_line\n $_git_key_change_line\n$_packages\n$_basics\n$_systems\n$_tools
     set -g fish_greeting $hi_change_status" "$hi_update_status" "$header\n $_timer_line\n $_git_key_change_line\n$_packages\n$_basics\n$_systems\n$_tools
+    # set -g fish_greeting $hi_change_status $hi_update_status $header\n $_timer_line\n $_git_key_change_line\n $_unified_checks
   end
 
   test -n "$fish_greeting"
@@ -230,8 +224,6 @@ set -gx fish_color_end green
 set -gx fish_color_error brred
 set -gx fish_color_escape brcyan
 set -gx fish_color_history_current --bold
-set -gx fish_color_host normal
-set -gx fish_color_host_remote yellow
 set -gx fish_color_keyword
 set -gx fish_color_normal normal
 set -gx fish_color_operator brcyan
@@ -242,7 +234,6 @@ set -gx fish_color_redirection cyan --bold
 set -gx fish_color_search_match white --background=brblack
 set -gx fish_color_selection white --bold --background=brblack
 set -gx fish_color_status red
-set -gx fish_color_user brgreen
 set -gx fish_color_valid_path --underline=single
 set -gx fish_pager_color_background
 set -gx fish_pager_color_completion normal
@@ -257,3 +248,8 @@ set -gx fish_pager_color_selected_background --reverse
 set -gx fish_pager_color_selected_completion
 set -gx fish_pager_color_selected_description
 set -gx fish_pager_color_selected_prefix
+
+# TODO: dedupe
+set -gx fish_color_user (bash -c "source $_HI_PROMPT_COLORS_PATH; user_color")
+set -gx fish_color_host (bash -c "source $_HI_PROMPT_COLORS_PATH; host_color")
+set -gx fish_color_host_remote $fish_color_host

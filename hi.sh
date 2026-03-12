@@ -1,10 +1,28 @@
 #!/bin/bash
 # forked from sshrc: https://github.com/danrabinowitz/sshrc
 
-HI_ROOT=${HI_TMPDIR:-~}/.hi.d
 HI_TMPDIR=${HI_TMPDIR:-~}
-HI_ROOT=${HI_TMPDIR:-~}/.hi.d
-hi_exclude=(--exclude README.md --exclude .git --exclude .gitignore --exclude local --exclude hi.sh)
+HI_ROOT="$HI_TMPDIR/.hi.d"
+# shellcheck source=./common/paths.sh
+source "$HI_ROOT/common/paths.sh"
+
+if ! command cecho 2>/dev/null; then
+  # shellcheck source=./common/prompt_colors.sh
+  source "$_HI_PROMPT_COLORS_PATH"
+fi
+
+if [ ! -f "$_HI_HOST_COLOR_FILE" ] || [ ! -f "$_HI_USER_COLOR_FILE" ]; then
+  # shellcheck source=./local/create_host_colors.sh
+  source "$_HI_CREATE_COLORS"
+  # This will autogenerate the colors if we don't have any yet.
+fi
+
+command -v openssl >/dev/null 2>&1 || {
+  cecho >&2 "hi requires openssl to be installed on [$(hostname)], but it is not. Aborting..." "$RED"
+  exit 1
+}
+
+hi_exclude=(--exclude README.md --exclude .git --exclude .gitignore --exclude local --exclude hi.sh --exclude hi.bashrc)
 
 function hi_parse() {
   while [[ -n $1 ]]; do
@@ -36,12 +54,6 @@ function hi_parse() {
 }
 
 function say_hi() {
-  if [ ! -f "$HI_ROOT"/common/host_colors ] || [ ! -f "$HI_ROOT"/common/user_colors ]; then
-    # shellcheck source=./local/create_host_colors.sh
-    source "$HI_ROOT/local/create_host_colors.sh"
-    # This will autogenerate the colors if we don't have any yet.
-  fi
-
   if [ -d "$HI_ROOT" ]; then
     cecho "\r $(du -sh "${hi_exclude[@]}" --apparent-size "$HI_ROOT" | awk '{ print $1 }') " "$CYAN" 1
     local size=0
@@ -88,17 +100,6 @@ EOF
 
 function run() {
   copy_start_time=$(date +%s.%N)
-
-  if ! command cecho 2>/dev/null; then
-    # shellcheck source=./common/prompt_colors.sh
-    source "$HI_ROOT/common/prompt_colors.sh"
-  fi
-
-  command -v openssl >/dev/null 2>&1 || {
-    cecho >&2 "hi requires openssl to be installed on [$(hostname)], but it is not. Aborting..." "$RED"
-    exit 1
-  }
-
   tmp="/tmp/$(date +%s).hi"
   trap 'rm $tmp &>/dev/null' exit
 

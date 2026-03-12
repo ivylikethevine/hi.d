@@ -1,19 +1,19 @@
 #!/bin/bash
-SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+# forked from sshrc: https://github.com/danrabinowitz/sshrc
+
+HI_TMPDIR=${HI_TMPDIR:-~}
+HI_ROOT="$HI_TMPDIR/.hi.d"
+# shellcheck source=./common/paths.sh
+source "$HI_ROOT/common/paths.sh"
+
+hi_config_start="# hi-config-start"
+hi_config_end="# hi-config-end"
+hi_copy_time=-1
+
 if ! command cecho 2>/dev/null; then
   # shellcheck source=./common/prompt_colors.sh
-  source "$SCRIPT_DIR/common/prompt_colors.sh"
+  source "$_HI_PROMPT_COLORS_PATH"
 fi
-
-export hi_config_start="# hi-config-start"
-export hi_config_end="# hi-config-end"
-export hi_copy_time=-1
-
-# # # See: hi.sh/say_hi()
-# # On local machines, ~/.hi.d has our configs.
-# # On remote machines, we need to go to /tmp/.(whoami).hi.XXXX/.hi.d
-HI_TMPDIR=${HI_TMPDIR:-~}
-HI_ROOT=${HI_TMPDIR:-~}/.hi.d
 
 # required
 function spacer() {
@@ -30,14 +30,14 @@ function timestamp() {
 
 # required
 function configure_file() {
-  local target="$1"
-  local source="$2"
+  local source="$1"
+  local target="$2"
   touch "$target"
-  if test -f "$HI_ROOT/$source"; then
+  if test -f "$source"; then
     if ! grep -q "$hi_config_start" "$target"; then
       {
         echo "$hi_config_start"
-        cat "$HI_ROOT/$source"
+        cat "$source"
         echo "$hi_config_end"
       } >>"$target"
     fi
@@ -46,7 +46,7 @@ function configure_file() {
 
 # required
 function clean_all() {
-  local shells=(~/.bashrc ~/.zshrc ~/.config/fish/config.fish)
+  local shells=("$_HI_HOME_BASHRC" "$_HI_HOME_ZSHRC" "$_HI_HOME_FISH_CONFIG")
   for shell in "${shells[@]}"; do
     if test -f "$shell"; then
       sed -i "/^$hi_config_start/,/^$hi_config_end/d" -- "$shell"
@@ -62,7 +62,7 @@ function timers() {
 
 function check_packages() {
   # shellcheck source=./common/check.sh
-  source "$HI_ROOT"/common/check.sh
+  source "$_HI_CHECK_PATH"
   packages
   basics
   systems
@@ -83,9 +83,9 @@ function system_info() {
 
 function git_identity() {
   spacer
-  if [ -f ~/.gitconfig ]; then
+  if [ -f "$_HI_GIT_CONFIG_PATH" ]; then
     cecho "Git ID: " "$CYAN" 1
-    cecho "$(grep email ~/.gitconfig | tail -n1 | cut -d= -f2 | tr -d ' ' | awk -F@ '{ for(i=0;i<length($2);i++) c=c"●"; print $1"@"c; c="" }')" "$YELLOW" 1
+    cecho "$(grep email "$_HI_GIT_CONFIG_PATH" | tail -n1 | cut -d= -f2 | tr -d ' ' | awk -F@ '{ for(i=0;i<length($2);i++) c=c"●"; print $1"@"c; c="" }')" "$YELLOW" 1
   else
     cecho "No Git ID Found..." "$YELLOW" 1
   fi
@@ -102,29 +102,29 @@ function docker_count() {
 
 function key_count() {
   spacer
-  if [ -f ~/.ssh/authorized_keys ]; then
-    cecho "Auth: $(wc -l ~/.ssh/authorized_keys | awk '{ print $1 }')" "$RED" 1
+  if [ -f "$_HI_SSH_AUTHORIZED_KEYS" ]; then
+    cecho "Auth: $(wc -l "$_HI_SSH_AUTHORIZED_KEYS" | awk '{ print $1 }')" "$RED" 1
   else
     cecho "Auth: 0!" "$RED" 1
   fi
   spacer
-  cecho "Pub: $(find ~/.ssh -type f -name "*.pub" | wc -l)" "$PURPLE"
+  cecho "Pub: $(find "$_HI_SSH_KEY_DIR" -type f -name "*.pub" | wc -l)" "$PURPLE"
 }
 
 # TODO: Test
 # shellcheck disable=SC2329
-function tmuxrc() {
-  local TMUXDIR="/tmp/tmuxrc"
-  if ! [ -d "$TMUXDIR" ]; then
-    rm -rf "$TMUXDIR"
-    mkdir -p "$TMUXDIR"
-  fi
-  rm -rf "$TMUXDIR"/.hi.d
-  cp -r "$HI_ROOT"/bashrc.hi "$HI_ROOT"/hi "$HI_ROOT"/.hi.d "$TMUXDIR"
-  HI_ROOT="$TMUXDIR" SHELL="$TMUXDIR"/bashrc.hi /usr/bin/tmux -S "$TMUXDIR"/tmuxserver "$@"
-  SHELL=$(which bash)
-  export SHELL
-}
+# function tmuxrc() {
+#   local TMUXDIR="/tmp/tmuxrc"
+#   if ! [ -d "$TMUXDIR" ]; then
+#     rm -rf "$TMUXDIR"
+#     mkdir -p "$TMUXDIR"
+#   fi
+#   rm -rf "$TMUXDIR"/.hi.d
+#   cp -r "$HI_ROOT"/bashrc.hi "$HI_ROOT"/hi "$HI_ROOT"/.hi.d "$TMUXDIR"
+#   HI_ROOT="$TMUXDIR" SHELL="$TMUXDIR"/bashrc.hi /usr/bin/tmux -S "$TMUXDIR"/tmuxserver "$@"
+#   SHELL=$(which bash)
+#   export SHELL
+# }
 
 # required
 function load() {
@@ -148,13 +148,14 @@ function load() {
   # back to required configuration
   if command -v "vim" &>/dev/null; then
     # Will cause errors if we load this with only VI
-    export VIMINIT="let \$MYVIMRC='$HI_ROOT/misc/vim.rc' | source \$MYVIMRC"
+    export VIMINIT="let \$MYVIMRC='$_HI_VIMRC' | source \$MYVIMRC"
   fi
-  configure_file ~/.bashrc shells/bash.sh
-  configure_file ~/.zshrc shells/zsh.zsh
-  if [ -d ~/.config/fish ]; then
+
+  configure_file "$_HI_BASHRC" "$_HI_HOME_BASHRC"
+  configure_file "$_HI_ZSHRC" "$_HI_HOME_ZSHRC"
+  if [ -d "$_HI_FISH_DIR" ]; then
     # This directory won't exist if fish isn't installed
-    configure_file ~/.config/fish/config.fish shells/config.fish
+    configure_file "$_HI_FISH_CONFIG" "$_HI_HOME_FISH_CONFIG"
   fi
 
   spacer

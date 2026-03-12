@@ -1,52 +1,52 @@
 #!/bin/bash
 
-SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+# Define input and output files
+
+HI_TMPDIR=${HI_TMPDIR:-~}
+HI_ROOT="$HI_TMPDIR/.hi.d"
+# shellcheck source=./common/paths.sh
+source "$HI_ROOT/common/paths.sh"
+# shellcheck source=./common/aliases.sh
+source "$_HI_ALIASES_PATH"
+
 if ! command cecho 2>/dev/null; then
   # shellcheck source=./../common/prompt_colors.sh
-  source "$SCRIPT_DIR/../common/prompt_colors.sh"
+  source "$_HI_PROMPT_COLORS_PATH"
 fi
-
-# Define input and output files
-HI_TMPDIR=${HI_TMPDIR:-~}
-HI_ROOT=${HI_TMPDIR:-~/.hi.d}
-echo "load HI_ROOT: $HI_ROOT and HI_TMPDIR: $HI_TMPDIR"
-GROUP_COLORS="$HI_ROOT/local/group_colors"
-HOST_OUTPUT_FILE="$HI_ROOT/common/host_colors"
-USER_OUTPUT_FILE="$HI_ROOT/common/user_colors"
 
 declare -A host_or_user bash_colors fish_colors tag_or_name
 
 function cleanup() {
-  cecho "Creating: $HOST_OUTPUT_FILE" "$CYAN"
-  if [ -f "$HOST_OUTPUT_FILE" ]; then
-    rm "$HOST_OUTPUT_FILE"
-    touch "$HOST_OUTPUT_FILE"
-    printf '%s\n' "# hostname color_bash color_fish" >> "$HOST_OUTPUT_FILE"
-    printf '%s\n' "$(hostname),\e[0;35m,brmagenta" >> "$HOST_OUTPUT_FILE"
+  cecho "Creating: $_HI_HOST_COLOR_FILE" "$CYAN"
+  if [ -f "$_HI_HOST_COLOR_FILE" ]; then
+    rm "$_HI_HOST_COLOR_FILE"
+    touch "$_HI_HOST_COLOR_FILE"
+    printf '%s\n' "# hostname color_bash color_fish" >> "$_HI_HOST_COLOR_FILE"
+    printf '%s\n' "$(hostname),\e[0;35m,brmagenta" >> "$_HI_HOST_COLOR_FILE"
   fi
 
-  cecho "Creating: $USER_OUTPUT_FILE" "$CYAN"
-  if [ -f "$USER_OUTPUT_FILE" ]; then
-    rm "$USER_OUTPUT_FILE"
-    touch "$USER_OUTPUT_FILE"
-    printf '%s\n' "# username color_bash color_fish" >> "$USER_OUTPUT_FILE"
-    printf '%s\n' "username,root,\e[0;31m,red" >> "$HOST_OUTPUT_FILE"
+  cecho "Creating: $_HI_USER_COLOR_FILE" "$CYAN"
+  if [ -f "$_HI_USER_COLOR_FILE" ]; then
+    rm "$_HI_USER_COLOR_FILE"
+    touch "$_HI_USER_COLOR_FILE"
+    printf '%s\n' "# username color_bash color_fish" >> "$_HI_USER_COLOR_FILE"
+    printf '%s\n' "username,root,\e[0;31m,red" >> "$_HI_USER_COLOR_FILE"
   fi
 
-  cecho "Generating: $GROUP_COLORS [if not found]" "$CYAN"
-  if [ ! -f "$GROUP_COLORS" ]; then
-    touch "$GROUP_COLORS"
+  cecho "Generating: $_HI_GROUP_COLORS [if not found]" "$CYAN"
+  if [ ! -f "$_HI_GROUP_COLORS" ]; then
+    touch "$_HI_GROUP_COLORS"
     {
       printf '%s\n' "# hostname tag color_bash color_fish";
       printf '%s\n' "hostname,laptop,\e[0;35m,brmagenta";
       printf '%s\n' "# username name color_bash color_fish";
       printf '%s\n' "username,root,\e[0;31m,red";
-    } >> "$GROUP_COLORS"
+    } >> "$_HI_GROUP_COLORS"
   fi
 }
 
 function read_colors() {
-  cecho "Reading group color config from: $GROUP_COLORS" "$CYAN"
+  cecho "Reading group color config from: $_HI_GROUP_COLORS" "$CYAN"
   while IFS=',' read -r type tag color_bash color_fish; do
     [[ -z "$type" ]] && continue
     [[ "$type" =~ "#" ]] && continue
@@ -54,13 +54,12 @@ function read_colors() {
     bash_colors["$tag"]="$color_bash"
     fish_colors["$tag"]="$color_fish"
     tag_or_name["$tag-$type"]="$tag"
-  done < "$GROUP_COLORS"
+  done < "$_HI_GROUP_COLORS"
 }
 
 function ssh_hosts() {
-  cecho "Reading ssh hosts from: $HOME/.ssh/config" "$CYAN"
+  cecho "Reading ssh hosts from: $_HI_SSH_CONFIG_FILE" "$CYAN"
   prev_line=""
-  config_file="$HOME/.ssh/config"
   while IFS=' ' read -r line; do
     [[ -z "$line" ]] && continue
     if [[ $line =~ ^Host[[:space:]]+([^#]+) ]]; then
@@ -76,21 +75,21 @@ function ssh_hosts() {
       [[ -z "$current" ]] && continue
       [[ -z "${host_or_user[$current]}" ]] && continue
       if [[ "${host_or_user[$current]}" =~ hostname ]]; then
-        printf '%s\n' "$host,${bash_colors[$current]},${fish_colors[$current]}" >> "$HOST_OUTPUT_FILE"
+        printf '%s\n' "$host,${bash_colors[$current]},${fish_colors[$current]}" >> "$_HI_HOST_COLOR_FILE"
       fi
     fi
     prev_line="$line"
-  done < "$config_file"
-  cecho "Generated color entries for: $(wc -l "$HOST_OUTPUT_FILE" | awk '{ print $1 }') hosts" "$GREEN"
+  done < "$_HI_SSH_CONFIG_FILE"
+  cecho "Generated color entries for: $(wc -l "$_HI_HOST_COLOR_FILE" | awk '{ print $1 }') hosts" "$GREEN"
 }
 
 function ssh_users() {
   for tag in "${tag_or_name[@]}"; do
     if [[ "${host_or_user[$tag]}" =~ username ]]; then
-      printf '%s\n' "$tag,${bash_colors[$tag]},${fish_colors[$tag]}" >> "$USER_OUTPUT_FILE"
+      printf '%s\n' "$tag,${bash_colors[$tag]},${fish_colors[$tag]}" >> "$_HI_USER_COLOR_FILE"
     fi
   done
-  cecho "Generated color entries for: $(wc -l "$USER_OUTPUT_FILE" | awk '{ print $1 }') users" "$GREEN"
+  cecho "Generated color entries for: $(wc -l "$_HI_USER_COLOR_FILE" | awk '{ print $1 }') users" "$GREEN"
 }
 
 function colorgen() {

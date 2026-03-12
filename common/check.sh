@@ -1,9 +1,13 @@
 #!/bin/bash
 
-SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+HI_TMPDIR=${HI_TMPDIR:-~}
+HI_ROOT="$HI_TMPDIR/.hi.d"
+# shellcheck source=./common/paths.sh
+source "$HI_ROOT/common/paths.sh"
+
 if ! command cecho 2>/dev/null; then
   # shellcheck source=./prompt_colors.sh
-  source "$SCRIPT_DIR/prompt_colors.sh"
+  source "$_HI_PROMPT_COLORS_PATH"
 fi
 
 # # Format - package:priority,similar_package

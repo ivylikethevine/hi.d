@@ -1,6 +1,7 @@
 #!/bin/bash
 
 # TODO: Swap to cecho
+# TODO: Update pathing
 unlink_hi() {
   cd /home/"$USER"/.hi.d/ || exit 1
   rm -rf .git

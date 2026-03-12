@@ -1,5 +1,12 @@
 #!/bin/bash
 
+HI_TMPDIR=${HI_TMPDIR:-~}
+HI_ROOT="$HI_TMPDIR/.hi.d"
+# shellcheck source=./common/paths.sh
+source "$HI_ROOT/common/paths.sh"
+# shellcheck source=./common/aliases.sh
+source "$_HI_ALIASES_PATH"
+
 # required
 export RED='\e[0;31m'
 export GREEN='\e[0;32m'
@@ -15,9 +22,6 @@ export BRPURPLE='\e[1;35m'
 export BRCYAN='\e[1;36m'
 export NC='\e[0m'
 
-HI_TMPDIR=${HI_TMPDIR:-~}
-HI_ROOT=${HI_TMPDIR:-~}/.hi.d
-
 # required
 cecho() {
   local formatted_text="$2$1$NC"
@@ -32,11 +36,12 @@ cecho() {
 
 # required
 function at_color() {
-  local AT_COLOR=$NC
-  if [[ $1 ]]; then
-    AT_COLOR=$YELLOW
+  local ssh_tty="$1"
+  if [[ $ssh_tty ]]; then
+    printf '%s' "$YELLOW"
+  else
+    printf '%s' "$NC"
   fi
-  echo "$AT_COLOR"
 }
 
 # required
@@ -60,32 +65,21 @@ function read_color_file() {
       fi
   done < "$color_file"
   if [[ -z "$is_fish" ]]; then
-    echo "brgreen"
+    printf '%s' "brgreen"
   else
-    # shellcheck disable=SC2028
-    echo "\e[0;32m"
+    printf '%s' "\e[0;32m"
   fi
   return 1
 }
 
 # required
 function host_color() {
-  local HI_TMPDIR=${HI_TMPDIR:-~}
   local is_fish="$1"
-  if [ "$HI_TMPDIR" = "$HOME" ]; then
-    read_color_file "$(hostname)" "$HOME/.hi.d/common/host_colors" "$is_fish"
-  else
-    read_color_file "$(hostname)" "$HI_ROOT/common/host_colors" "$is_fish"
-  fi
+  read_color_file "$(hostname)" "$_HI_HOST_COLOR_FILE" "$is_fish"
 }
 
 # required
 function user_color() {
-  local HI_TMPDIR=${HI_TMPDIR:-~}
   local is_fish="$1"
-  if [ "$HI_TMPDIR" = "$HOME" ]; then
-    read_color_file "$(whoami)" "$HOME/.hi.d/common/user_colors" "$is_fish"
-  else
-    read_color_file "$(whoami)" "$HI_ROOT/common/user_colors" "$is_fish"
-  fi
+  read_color_file "$(whoami)" "$_HI_USER_COLOR_FILE" "$is_fish"
 }

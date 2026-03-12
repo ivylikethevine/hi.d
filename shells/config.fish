@@ -1,6 +1,7 @@
 #!/bin/fish
 
 # === start required configuration ===
+# TODO: unify paths
 if set -q HI_TMPDIR
   set -g HI_TMPDIR $HI_TMPDIR
 else

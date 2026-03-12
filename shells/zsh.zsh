@@ -1,11 +1,14 @@
 #!/bin/zsh
 
 # === start required configuration ===
-HI_ROOT=${HI_TMPDIR-=~}
+HI_TMPDIR=${HI_TMPDIR:-~}
+HI_ROOT="$HI_TMPDIR/.hi.d"
+# shellcheck source=./common/paths.sh
+source "$HI_ROOT/common/paths.sh"
 # shellcheck source=./common/prompt_colors.sh
-source "$HI_ROOT/.hi.d/common/prompt_colors.sh"
+source "$_HI_PROMPT_COLORS_PATH"
 # shellcheck source=./common/aliases.sh
-source "$HI_ROOT/.hi.d/common/aliases.sh"
+source "$_HI_ALIASES_PATH"
 
 # header/coloring
 [ -x /usr/bin/lesspipe ] && eval "$(SHELL=/bin/sh lesspipe)"

@@ -3,7 +3,7 @@
 # === start required configuration ===
 HI_TMPDIR=${HI_TMPDIR:-~}
 # shellcheck source=./common/paths.sh
-source "$HI_TMPDIR/.hi.d/common/paths.sh"
+source "$HI_TMPDIR/hi.d/common/paths.sh"
 # shellcheck source=./common/prompt_colors.sh
 source "$_HI_PROMPT_COLORS_PATH"
 # shellcheck source=./common/aliases.sh

@@ -2,7 +2,7 @@
 
 HI_TMPDIR=${HI_TMPDIR:-~}
 # shellcheck source=./common/paths.sh
-source "$HI_TMPDIR/.hi.d/common/paths.sh"
+source "$HI_TMPDIR/hi.d/common/paths.sh"
 
 if ! command cecho 2>/dev/null; then
   # shellcheck source=./prompt_colors.sh

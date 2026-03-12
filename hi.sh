@@ -2,7 +2,7 @@
 # forked from sshrc: https://github.com/danrabinowitz/sshrc
 
 HI_TMPDIR=${HI_TMPDIR:-~}
-HI_ROOT="$HI_TMPDIR/.hi.d"
+HI_ROOT="$HI_TMPDIR/hi.d"
 # shellcheck source=./common/paths.sh
 source "$HI_ROOT/common/paths.sh"
 
@@ -12,7 +12,7 @@ if ! command cecho 2>/dev/null; then
 fi
 
 if [ ! -f "$_HI_HOST_COLOR_FILE" ] || [ ! -f "$_HI_USER_COLOR_FILE" ]; then
-  # shellcheck source=./local/create_host_colors.sh
+  # shellcheck source=./scripts/create_host_colors.sh
   source "$_HI_CREATE_COLORS"
   # This will autogenerate the colors if we don't have any yet.
 fi
@@ -22,7 +22,7 @@ command -v openssl >/dev/null 2>&1 || {
   exit 1
 }
 
-hi_exclude=(--exclude README.md --exclude .git --exclude .gitignore --exclude local --exclude hi.sh --exclude hi.bashrc)
+hi_exclude=(--exclude README.md --exclude .git --exclude .gitignore --exclude scripts --exclude hi.sh --exclude hi.bashrc --exclude data/group_colors --exclude .zed)
 
 function hi_parse() {
   while [[ -n $1 ]]; do
@@ -57,18 +57,18 @@ function say_hi() {
   if [ -d "$HI_ROOT" ]; then
     cecho "\r $(du -sh "${hi_exclude[@]}" --apparent-size "$HI_ROOT" | awk '{ print $1 }') " "$CYAN" 1
     local size=0
-    size="$(tar cfz - -h -C "${hi_exclude[@]}" .hi.d | wc -c)"
+    size="$(tar cfz - -h -C "${hi_exclude[@]}" hi.d | wc -c)"
     if [ "$size" -gt 65536 ]; then
-      cecho >&2 $'.hi.d files must be less than 64kb. Current size: '"$size"' bytes' "$RED"
+      cecho >&2 $'hi.d files must be less than 64kb. Current size: '"$size"' bytes' "$RED"
       return 10
     fi
     local TR_CMD="tr -s ' ' '\n'"
     local OPENSSL_CMD="openssl enc -base64"
     ssh -t "$DOMAIN" "$SSHARGS" "
             command -v openssl >/dev/null 2>&1 || { echo >&2 \"hi requires openssl to be installed on [$DOMAIN], but it is not. Aborting.\"; exit 1; }
-            export HI_TMPDIR=\$(mktemp -d -t .$(whoami).hi.XXXX)
-            mkdir \$HI_TMPDIR/.hi.d
-            export HI_ROOT=\$HI_TMPDIR/.hi.d
+            export HI_TMPDIR=\$(mktemp -d -t $(whoami).hi.XXXX)
+            mkdir \$HI_TMPDIR/hi.d
+            export HI_ROOT=\$HI_TMPDIR/hi.d
             export HI_CLEANUP=\$HI_TMPDIR
             trap \"rm -rf \$HI_CLEANUP; exit\" exit
             echo \"$(cat "$0" | $OPENSSL_CMD)\" | $TR_CMD | $OPENSSL_CMD -d > \$HI_ROOT/hi
@@ -85,7 +85,7 @@ function say_hi() {
                 load
 EOF
     )\" | $TR_CMD | $OPENSSL_CMD -d > \$HI_ROOT/hi.bashrc
-            echo \"$(tar czf - -h -C "$HI_TMPDIR" "${hi_exclude[@]}" .hi.d | $OPENSSL_CMD)\" | $TR_CMD | $OPENSSL_CMD -d | tar mxzf - -C \$HI_TMPDIR
+            echo \"$(tar czf - -h -C "$HI_TMPDIR" "${hi_exclude[@]}" hi.d | $OPENSSL_CMD)\" | $TR_CMD | $OPENSSL_CMD -d | tar mxzf - -C \$HI_TMPDIR
             export HI_TMPDIR=\$HI_TMPDIR
             export HI_ROOT=\$HI_ROOT
             echo \"$CMDARG\" >> \$HI_ROOT/hi.bashrc

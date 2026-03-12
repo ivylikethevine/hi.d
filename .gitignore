@@ -13,8 +13,17 @@
 *.jpeg
 *.log
 *.txt
+*.tsv
+*.csv
+*.sql
+*.json
+*.toml
+*.yaml
+*.yml
 
-common/host_colors
-common/user_colors
+*docker*
 
-local/group_colors
+**/travel_config
+**/host_colors
+**/user_colors
+**/group_colors

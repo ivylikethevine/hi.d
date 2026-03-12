@@ -3,7 +3,7 @@
 
 HI_TMPDIR=${HI_TMPDIR:-~}
 # shellcheck source=./common/paths.sh
-source "$HI_TMPDIR/.hi.d/common/paths.sh"
+source "$HI_TMPDIR/hi.d/common/paths.sh"
 
 hi_config_start="# hi-config-start"
 hi_config_end="# hi-config-end"
@@ -118,8 +118,8 @@ function key_count() {
 #     rm -rf "$TMUXDIR"
 #     mkdir -p "$TMUXDIR"
 #   fi
-#   rm -rf "$TMUXDIR"/.hi.d
-#   cp -r "$HI_ROOT"/bashrc.hi "$HI_ROOT"/hi "$HI_ROOT"/.hi.d "$TMUXDIR"
+#   rm -rf "$TMUXDIR"/hi.d
+#   cp -r "$HI_ROOT"/bashrc.hi "$HI_ROOT"/hi "$HI_ROOT"/hi.d "$TMUXDIR"
 #   HI_ROOT="$TMUXDIR" SHELL="$TMUXDIR"/bashrc.hi /usr/bin/tmux -S "$TMUXDIR"/tmuxserver "$@"
 #   SHELL=$(which bash)
 #   export SHELL

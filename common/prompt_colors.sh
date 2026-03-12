@@ -2,7 +2,7 @@
 
 HI_TMPDIR=${HI_TMPDIR:-~}
 # shellcheck source=./common/paths.sh
-source "$HI_TMPDIR/.hi.d/common/paths.sh"
+source "$HI_TMPDIR/hi.d/common/paths.sh"
 # shellcheck source=./common/aliases.sh
 source "$_HI_ALIASES_PATH"
 
@@ -24,7 +24,7 @@ export NC='\e[0m'
 # required
 cecho() {
   local formatted_text="$2$1$NC"
-  local disable_newline="$3"
+  local disable_newline="${3}"
 
   if [[ -n "$disable_newline" ]]; then
     echo -e -n "$formatted_text";
@@ -73,12 +73,10 @@ function read_color_file() {
 
 # required
 function host_color() {
-  local is_fish="$1"
-  read_color_file "$(hostname)" "$_HI_HOST_COLOR_FILE" "$is_fish"
+  read_color_file "$(hostname)" "$_HI_HOST_COLOR_FILE" "${1:-}"
 }
 
 # required
 function user_color() {
-  local is_fish="$1"
-  read_color_file "$(whoami)" "$_HI_USER_COLOR_FILE" "$is_fish"
+  read_color_file "$(whoami)" "$_HI_USER_COLOR_FILE"  "${1:-}"
 }

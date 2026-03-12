@@ -4,7 +4,7 @@
 if not set -q HI_TMPDIR
   set -g HI_TMPDIR ~
 end
-source $HI_TMPDIR/.hi.d/common/paths.sh
+source $HI_TMPDIR/hi.d/common/paths.sh
 source $_HI_ALIASES_PATH;
 
 complete hi --wraps ssh
@@ -93,8 +93,8 @@ function fish_greeting
     end
 
     if [ -d "$HI_ROOT/.git" ]
-      set -g hi_change_status (printf ' %s%s' (set_color bryellow) (git -C ~/.hi.d status --short | wc -l | awk '{ print $1 }')' ↑')
-      set -g hi_update_status (printf '%s%s' (set_color brgreen) (git -C ~/.hi.d rev-list --count HEAD..origin/$(git -C ~/.hi.d rev-parse --abbrev-ref HEAD))' ↓')
+      set -g hi_change_status (printf ' %s%s' (set_color bryellow) (git -C ~/hi.d status --short | wc -l | awk '{ print $1 }')' ↑')
+      set -g hi_update_status (printf '%s%s' (set_color brgreen) (git -C ~/hi.d rev-list --count HEAD..origin/$(git -C ~/hi.d rev-parse --abbrev-ref HEAD))' ↓')
     else
       set -g hi_change_status ""
       set -g hi_update_status ""

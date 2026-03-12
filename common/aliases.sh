@@ -1,16 +1,16 @@
 #!/bin/sh
 
 # === start required variables/aliases ===
-alias hi_colorgen="~/.hi.d/local/create_host_colors.sh"
-alias hi_reinstall="~/.hi.d/local/install.sh"
-alias hi_relink="sudo rm /usr/bin/hi && sudo ln ~/.hi.d/hi.sh /usr/bin/hi"
+alias hi_colorgen="~/hi.d/scripts/create_host_colors.sh"
+alias hi_reinstall="~/hi.d/scripts/install.sh"
+alias hi_relink="sudo rm /usr/bin/hi && sudo ln ~/hi.d/hi.sh /usr/bin/hi"
 
 # works in bash, fish has a wrapper for sudo in config.fish
 alias sudo="command sudo "
 # shellcheck disable=SC2139
-alias nano="nano --rcfile $HI_TMPDIR/.hi.d/misc/nano.rc"
+alias nano="nano --rcfile $HI_TMPDIR/hi.d/misc/nano.rc"
 # shellcheck disable=SC2139
-alias vim="vim -u $HI_TMPDIR/.hi.d/misc/vim.rc"
+alias vim="vim -u $HI_TMPDIR/hi.d/misc/vim.rc"
 
 # shellcheck disable=SC2139
 alias bat="$(command -v bat || command -v batcat) -P --tabs 2 --theme Monokai\ Extended\ Bright --style changes,grid,numbers"
@@ -21,7 +21,7 @@ alias now='date $human_short_date_format && date -u $human_short_date_format'
 
 alias hey="ssh"
 alias zed="zeditor"
-alias ehi="zed ~/.hi.d"
+alias ehi="zed ~/hi.d"
 alias essh="zed ~/.ssh"
 alias view="vew" # here to prevent calling vi
 alias vw="vew"

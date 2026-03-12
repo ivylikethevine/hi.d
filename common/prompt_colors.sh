@@ -15,6 +15,9 @@ export BRPURPLE='\e[1;35m'
 export BRCYAN='\e[1;36m'
 export NC='\e[0m'
 
+HI_TMPDIR=${HI_TMPDIR:-~}
+HI_ROOT=${HI_TMPDIR:-~}/.hi.d
+
 # required
 cecho() {
   local formatted_text="$2$1$NC"
@@ -67,14 +70,22 @@ function read_color_file() {
 
 # required
 function host_color() {
-  local hi_root=${HI_ROOT:-~}
+  local HI_TMPDIR=${HI_TMPDIR:-~}
   local is_fish="$1"
-  read_color_file "$(hostname)" "$hi_root/.hi.d/common/host_colors" "$is_fish"
+  if [ "$HI_TMPDIR" = "$HOME" ]; then
+    read_color_file "$(hostname)" "$HOME/.hi.d/common/host_colors" "$is_fish"
+  else
+    read_color_file "$(hostname)" "$HI_ROOT/common/host_colors" "$is_fish"
+  fi
 }
 
 # required
 function user_color() {
-  local hi_root=${HI_ROOT:-~}
+  local HI_TMPDIR=${HI_TMPDIR:-~}
   local is_fish="$1"
-  read_color_file "$(whoami)" "$hi_root/.hi.d/common/user_colors" "$is_fish"
+  if [ "$HI_TMPDIR" = "$HOME" ]; then
+    read_color_file "$(whoami)" "$HOME/.hi.d/common/user_colors" "$is_fish"
+  else
+    read_color_file "$(whoami)" "$HI_ROOT/common/user_colors" "$is_fish"
+  fi
 }

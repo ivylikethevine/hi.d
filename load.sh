@@ -12,7 +12,8 @@ export hi_copy_time=-1
 # # # See: hi.sh/say_hi()
 # # On local machines, ~/.hi.d has our configs.
 # # On remote machines, we need to go to /tmp/.(whoami).hi.XXXX/.hi.d
-hi_root=${HI_ROOT:-~/.hi.d}
+HI_TMPDIR=${HI_TMPDIR:-~}
+HI_ROOT=${HI_TMPDIR:-~}/.hi.d
 
 # required
 function spacer() {
@@ -32,11 +33,11 @@ function configure_file() {
   local target="$1"
   local source="$2"
   touch "$target"
-  if test -f "$hi_root/.hi.d/$source"; then
+  if test -f "$HI_ROOT/$source"; then
     if ! grep -q "$hi_config_start" "$target"; then
       {
         echo "$hi_config_start"
-        cat "$hi_root/.hi.d/$source"
+        cat "$HI_ROOT/$source"
         echo "$hi_config_end"
       } >>"$target"
     fi
@@ -61,7 +62,7 @@ function timers() {
 
 function check_packages() {
   # shellcheck source=./common/check.sh
-  source "$hi_root"/.hi.d/common/check.sh
+  source "$HI_ROOT"/common/check.sh
   packages
   basics
   systems
@@ -119,8 +120,8 @@ function tmuxrc() {
     mkdir -p "$TMUXDIR"
   fi
   rm -rf "$TMUXDIR"/.hi.d
-  cp -r "$hi_root"/bashrc.hi "$hi_root"/hi "$hi_root"/.hi.d "$TMUXDIR"
-  hi_root="$TMUXDIR" SHELL="$TMUXDIR"/bashrc.hi /usr/bin/tmux -S "$TMUXDIR"/tmuxserver "$@"
+  cp -r "$HI_ROOT"/bashrc.hi "$HI_ROOT"/hi "$HI_ROOT"/.hi.d "$TMUXDIR"
+  HI_ROOT="$TMUXDIR" SHELL="$TMUXDIR"/bashrc.hi /usr/bin/tmux -S "$TMUXDIR"/tmuxserver "$@"
   SHELL=$(which bash)
   export SHELL
 }
@@ -130,7 +131,7 @@ function load() {
   local load_start_time
   load_start_time=$(date +%s.%N)
 
-  trap clean_all exit
+  trap 'clean_all' exit
 
   local HOST_COLOR
   HOST_COLOR=$(host_color "$(hostname)")
@@ -147,7 +148,7 @@ function load() {
   # back to required configuration
   if command -v "vim" &>/dev/null; then
     # Will cause errors if we load this with only VI
-    export VIMINIT="let \$MYVIMRC='$hi_root/.hi.d/misc/vim.rc' | source \$MYVIMRC"
+    export VIMINIT="let \$MYVIMRC='$HI_ROOT/misc/vim.rc' | source \$MYVIMRC"
   fi
   configure_file ~/.bashrc shells/bash.sh
   configure_file ~/.zshrc shells/zsh.zsh
@@ -173,7 +174,7 @@ function load() {
     bash -i
   fi
 
-  cecho " $(du -sh --apparent-size "$HI_ROOT"/.hi.d | awk '{ print $1 }') " "$YELLOW" 1
+  cecho " $(du -sh --apparent-size "$HI_ROOT" | awk '{ print $1 }') " "$YELLOW" 1
   echo -e "$BRRED~~~~~~~~~~~~~~~~~ Disconnected from ${NC}[$HOST_COLOR$(hostname)${NC}]$BRRED ~~~~~~~~~~~~~~~~~~~~~$NC"
   timestamp
   cecho "hi closing! " "$BRPURPLE"

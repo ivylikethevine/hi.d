@@ -1,15 +1,13 @@
 #!/bin/fish
 
 # === start required configuration ===
-if set -q HI_ROOT
-  set -g hi_root $HI_ROOT
-  set -g HI_ROOT $HI_ROOT
+if set -q HI_TMPDIR
+  set -g HI_TMPDIR $HI_TMPDIR
 else
-  set -g hi_root $HOME
-  set -g HI_ROOT $HOME
+  set -g HI_TMPDIR ~
 end
-
-source $hi_root/.hi.d/common/aliases.sh
+set -g HI_ROOT "$HI_TMPDIR/.hi.d"
+source $HI_ROOT/common/aliases.sh
 complete hi --wraps ssh
 
 # wrapper for aliases to work in fish shell under sudo
@@ -57,8 +55,8 @@ function prompt_login --description "display user name for the prompt"
   end
 
   # TODO: Dedupe into 1 call
-  set -l color_user (bash -c "source $hi_root/.hi.d/common/prompt_colors.sh; user_color")
-  set -l color_host (bash -c "source $hi_root/.hi.d/common/prompt_colors.sh; host_color")
+  set -l color_user (bash -c "source $HI_ROOT/common/prompt_colors.sh; user_color")
+  set -l color_host (bash -c "source $HI_ROOT/common/prompt_colors.sh; host_color")
 
   echo -ns (set_color $color_user) " $USER" (set_color $color_at) @ (set_color $color_host) (prompt_hostname) (set_color normal)
 end
@@ -68,7 +66,7 @@ function fish_greeting
   if not set -q fish_greeting
     set -l spacer (printf '%s|' (set_color normal))
     # TODO: Dedupe into 1 call
-    set -l color_host (bash -c "source $hi_root/.hi.d/common/prompt_colors.sh; host_color")
+    set -l color_host (bash -c "source $HI_ROOT/common/prompt_colors.sh; host_color")
     set -l header (printf '%s~~~~~~~~~~~~~~~~~~ Online %s[%s%s%s]%s ~~~~~~~~~~~~~~~~~~~~~~~~~~%s' (set_color brcyan) (set_color normal) (set_color $color_host) (prompt_hostname) (set_color normal) (set_color brcyan) (set_color normal))
 
     set -l human_centric_date_format "+%a %b %-e %Y %H:%M:%S %Z"
@@ -101,8 +99,7 @@ function fish_greeting
       set -g git_identity (printf '%sNo Git ID Found...' (set_color yellow))
     end
 
-    set -l hi_root "/home/$USER/.hi.d/"
-    if [ -d "$hi_root/.git" ]
+    if [ -d "$HI_ROOT/.git" ]
       set -g hi_change_status (printf ' %s%s' (set_color bryellow) (git -C ~/.hi.d status --short | wc -l | awk '{ print $1 }')' ↑')
       set -g hi_update_status (printf '%s%s' (set_color brgreen) (git -C ~/.hi.d rev-list --count HEAD..origin/$(git -C ~/.hi.d rev-parse --abbrev-ref HEAD))' ↓')
     else
@@ -115,10 +112,10 @@ function fish_greeting
     set -l _system_info_line $spacer" "$os_type" "$spacer" "$arch" "$spacer" "$distro" "$spacer" "$cpus" "$spacer" "$ram
 
     # TODO: DEDUPE
-    set -l _packages (bash -c "source $hi_root/common/check.sh; packages")
-    set -l _basics (bash -c "source $hi_root/common/check.sh; basics")
-    set -l _systems (bash -c "source $hi_root/common/check.sh; systems")
-    set -l _tools (bash -c "source $hi_root/common/check.sh; tools")
+    set -l _packages (bash -c "source $HI_ROOT/common/check.sh; packages")
+    set -l _basics (bash -c "source $HI_ROOT/common/check.sh; basics")
+    set -l _systems (bash -c "source $HI_ROOT/common/check.sh; systems")
+    set -l _tools (bash -c "source $HI_ROOT/common/check.sh; tools")
     # set -g fish_greeting $hi_change_status" "$hi_update_status" "$header\n $_timer_line\n $_system_info_line\n $_git_key_change_line\n$_packages\n$_basics\n$_systems\n$_tools
     set -g fish_greeting $hi_change_status" "$hi_update_status" "$header\n $_timer_line\n $_git_key_change_line\n$_packages\n$_basics\n$_systems\n$_tools
   end

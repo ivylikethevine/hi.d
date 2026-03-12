@@ -1,6 +1,11 @@
 #!/bin/bash
 # forked from sshrc: https://github.com/danrabinowitz/sshrc
 
+HI_ROOT=${HI_TMPDIR:-~}/.hi.d
+HI_TMPDIR=${HI_TMPDIR:-~}
+HI_ROOT=${HI_TMPDIR:-~}/.hi.d
+hi_exclude=(--exclude README.md --exclude .git --exclude .gitignore --exclude local --exclude hi.sh)
+
 function hi_parse() {
   while [[ -n $1 ]]; do
     case $1 in
@@ -31,21 +36,14 @@ function hi_parse() {
 }
 
 function say_hi() {
-  # # On local machines, ~/.hi.d has our configs.
-  # # On remote machines, we need to go to /tmp/.(whoami).hi.XXXX/.hi.d
-  local hi_root_old=${HI_ROOT:-~}
-  local hi_root=${HI_ROOT:-~}/.hi.d
-
-  local hi_exclude=(--exclude README.md --exclude .git --exclude .gitignore --exclude local --exclude hi.bashrc)
-
-  if [ ! -f "$hi_root"/common/host_colors ] || [ ! -f "$hi_root"/common/user_colors ]; then
+  if [ ! -f "$HI_ROOT"/common/host_colors ] || [ ! -f "$HI_ROOT"/common/user_colors ]; then
     # shellcheck source=./local/create_host_colors.sh
-    source "$hi_root/local/create_host_colors.sh"
+    source "$HI_ROOT/local/create_host_colors.sh"
     # This will autogenerate the colors if we don't have any yet.
   fi
 
-  if [ -d "$hi_root" ]; then
-    cecho "\r $(du -sh "${hi_exclude[@]}" --apparent-size "$hi_root" | awk '{ print $1 }') " "$CYAN" 1
+  if [ -d "$HI_ROOT" ]; then
+    cecho "\r $(du -sh "${hi_exclude[@]}" --apparent-size "$HI_ROOT" | awk '{ print $1 }') " "$CYAN" 1
     local size=0
     size="$(tar cfz - -h -C "${hi_exclude[@]}" .hi.d | wc -c)"
     if [ "$size" -gt 65536 ]; then
@@ -56,8 +54,10 @@ function say_hi() {
     local OPENSSL_CMD="openssl enc -base64"
     ssh -t "$DOMAIN" "$SSHARGS" "
             command -v openssl >/dev/null 2>&1 || { echo >&2 \"hi requires openssl to be installed on [$DOMAIN], but it is not. Aborting.\"; exit 1; }
-            export HI_ROOT=\$(mktemp -d -t .$(whoami).hi.XXXX)
-            export HI_CLEANUP=\$HI_ROOT
+            export HI_TMPDIR=\$(mktemp -d -t .$(whoami).hi.XXXX)
+            mkdir \$HI_TMPDIR/.hi.d
+            export HI_ROOT=\$HI_TMPDIR/.hi.d
+            export HI_CLEANUP=\$HI_TMPDIR
             trap \"rm -rf \$HI_CLEANUP; exit\" exit
             echo \"$(cat "$0" | $OPENSSL_CMD)\" | $TR_CMD | $OPENSSL_CMD -d > \$HI_ROOT/hi
             chmod +x \$HI_ROOT/hi
@@ -69,18 +69,19 @@ function say_hi() {
                 elif [ -r ~/.profile ]; then source ~/.profile
                 fi
                 export PATH=$PATH:$HI_ROOT
-                source $HI_ROOT/.hi.d/load.sh
+                source $HI_ROOT/load.sh
                 load
 EOF
     )\" | $TR_CMD | $OPENSSL_CMD -d > \$HI_ROOT/hi.bashrc
-            echo \"$(tar czf - -h -C "$hi_root_old" "${hi_exclude[@]}" .hi.d | $OPENSSL_CMD)\" | $TR_CMD | $OPENSSL_CMD -d | tar mxzf - -C \$HI_ROOT
+            echo \"$(tar czf - -h -C "$HI_TMPDIR" "${hi_exclude[@]}" .hi.d | $OPENSSL_CMD)\" | $TR_CMD | $OPENSSL_CMD -d | tar mxzf - -C \$HI_TMPDIR
+            export HI_TMPDIR=\$HI_TMPDIR
             export HI_ROOT=\$HI_ROOT
             echo \"$CMDARG\" >> \$HI_ROOT/hi.bashrc
-            echo \"export hi_copy_time='$(echo "$(date +%s.%N) $copy_start_time" | awk '{ printf "%.3f\n", $1 - $2 }')'\" >> \$HI_ROOT/.hi.d/load.sh
+            echo \"export hi_copy_time='$(echo "$(date +%s.%N) $copy_start_time" | awk '{ printf "%.3f\n", $1 - $2 }')'\" >> \$HI_ROOT/load.sh
             bash --rcfile \$HI_ROOT/hi.bashrc
             "
   else
-    cecho "No such directory: $hi_root" "$RED" >&2
+    cecho "No such directory: $HI_ROOT" "$RED" >&2
     return 1
   fi
 }
@@ -88,11 +89,9 @@ EOF
 function run() {
   copy_start_time=$(date +%s.%N)
 
-  local hi_root=${HI_ROOT:-~}/.hi.d
-
   if ! command cecho 2>/dev/null; then
     # shellcheck source=./common/prompt_colors.sh
-    source "$hi_root/common/prompt_colors.sh"
+    source "$HI_ROOT/common/prompt_colors.sh"
   fi
 
   command -v openssl >/dev/null 2>&1 || {

@@ -8,9 +8,9 @@ alias hi_relink="sudo rm /usr/bin/hi && sudo ln ~/.hi.d/hi.sh /usr/bin/hi"
 # works in bash, fish has a wrapper for sudo in config.fish
 alias sudo="command sudo "
 # shellcheck disable=SC2139
-alias nano="nano --rcfile $HI_ROOT/.hi.d/misc/nano.rc"
+alias nano="nano --rcfile $HI_TMPDIR/.hi.d/misc/nano.rc"
 # shellcheck disable=SC2139
-alias vim="vim -u $HI_ROOT/.hi.d/misc/vim.rc"
+alias vim="vim -u $HI_TMPDIR/.hi.d/misc/vim.rc"
 
 # shellcheck disable=SC2139
 alias bat="$(command -v bat || command -v batcat) -P --tabs 2 --theme Monokai\ Extended\ Bright --style changes,grid,numbers"

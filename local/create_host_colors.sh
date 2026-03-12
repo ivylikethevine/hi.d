@@ -7,10 +7,12 @@ if ! command cecho 2>/dev/null; then
 fi
 
 # Define input and output files
-hi_root=${HI_ROOT:-~}
-GROUP_COLORS="$hi_root/.hi.d/local/group_colors"
-HOST_OUTPUT_FILE="$hi_root/.hi.d/common/host_colors"
-USER_OUTPUT_FILE="$hi_root/.hi.d/common/user_colors"
+HI_TMPDIR=${HI_TMPDIR:-~}
+HI_ROOT=${HI_TMPDIR:-~/.hi.d}
+echo "load HI_ROOT: $HI_ROOT and HI_TMPDIR: $HI_TMPDIR"
+GROUP_COLORS="$HI_ROOT/local/group_colors"
+HOST_OUTPUT_FILE="$HI_ROOT/common/host_colors"
+USER_OUTPUT_FILE="$HI_ROOT/common/user_colors"
 
 declare -A host_or_user bash_colors fish_colors tag_or_name
 

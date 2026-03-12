@@ -4,9 +4,9 @@
 
 ## How it works:
 
-1. `~/.hi.d/hi.sh` is executed on the client, which archives (tar) and sends `~/.hi.d/` (except for .git files, this README, and the `local` directory) to the target via ssh/openssl. The target unarchives these files to a `/tmp` directory. (known as `$hi_root` or `$HI_ROOT`)
-2. On the target, `$HI_ROOT/bash.hi` is executed.
-3. On the target, `~/.hi.d/load.sh` is executed. `load.sh` determines the shells available on the target, loads `aliases.sh`, runs `check.sh`, copies the configurations for shells from the `/tmp` folder to the host, and then starts a session on the target in the highest priority shell (fish > zsh > bash).
+1. `~/.hi.d/hi.sh` is executed on the client, which archives (tar) and sends `~/.hi.d/` (except for .git files, this README, and the `local` directory) to the target via ssh/openssl. The target unarchives these files to a `/tmp` directory. (known as `$HI_TMPDIR`) `HI_ROOT` will be `~/.hi.d` on the client and `$HI_TMPDIR/.hi.d` on the target.
+2. On the target, `$HI_ROOT/hi.bashrc` is executed, which runs `$HI_ROOT/load.sh`
+3. `load.sh` determines the shells available on the target, loads `aliases.sh`, runs `check.sh`, copies the configurations for shells from the `$HI_ROOT` folder to the host, and then starts a session on the target in the highest priority shell (fish > zsh > bash).
 4. When the ssh session is broken, the `load.sh` changes are cleaned up automatically via a `trap`, and the `/tmp` directory itself is deleted by part of the code copied from the client to the target in `hi.sh`.
 
 **_IMPORTANT: Local-only changes MUST remain in `~/.bashrc, ~/.zshrc, ~/.config/fish/config.fish`, etc._**

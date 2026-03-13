@@ -9,6 +9,7 @@ command -v cecho >/dev/null || source "$_HI_COLORS"
 
 # shellcheck source=./common/check.sh
 source "$_HI_CHECK"
+load_packages
 
 hi_config_start="# hi-config-start"
 hi_config_end="# hi-config-end"
@@ -57,18 +58,6 @@ function clean_all() {
 function timers() {
   spacer
   cecho "load: $(echo "$(date +%s.%N) $load_start_time" | awk '{ printf "%.3f\n", $1 - $2 }')s | copy: ${hi_copy_time}s"
-}
-
-function check_packages() {
-  echo -ne " "
-  packages
-  echo -ne "\n "
-  basics
-  echo -ne "\n "
-  systems
-  echo -ne "\n "
-  tools
-  echo -ne "\n"
 }
 
 function system_info() {
@@ -145,7 +134,7 @@ function load() {
   git_identity
   docker_count
   key_count
-  check_packages
+  printf '%b\n' "$(full_check)"
 
   # back to required configuration
   if command -v "vim" &>/dev/null; then

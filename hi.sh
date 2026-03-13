@@ -18,7 +18,7 @@ command -v openssl >/dev/null 2>&1 || {
   exit 1
 }
 
-hi_exclude=(--exclude README.md --exclude .git --exclude .gitignore --exclude scripts --exclude hi.sh --exclude hi.bashrc --exclude data/group_colors --exclude .zed)
+hi_exclude=(--exclude README.md --exclude .git --exclude .gitignore --exclude scripts --exclude hi.sh --exclude hi.bashrc --exclude data/group_colors --exclude .zed --exclude data/.gitkeep --exclude *private*)
 
 function hi_parse() {
   while [[ -n $1 ]]; do

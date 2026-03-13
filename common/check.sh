@@ -11,37 +11,38 @@ basic_commands=()
 system_commands=()
 tool_commands=()
 
-while IFS=' ' read -r line; do
-  if [[ "$line" =~ ^packages ]]; then
-    package_commands+=("$line")
-  elif [[ "$line" =~ ^basics ]]; then
-    basic_commands+=("$line")
-  elif [[ "$line" =~ ^systems ]]; then
-    system_commands+=("$line")
-  elif [[ "$line" =~ ^tools ]]; then
-    tool_commands+=("$line")
-  fi
-done < "$_HI_CHECK_PACKAGES"
-
 declare -A color_yes
 declare -A color_no
+# Cache command existence to avoid repeated command -v lookups
+declare -g -A _HI_CMD_CACHE 2>/dev/null
+if [[ -z ${_HI_CMD_CACHE+x} ]]; then
+  declare -g -A _HI_CMD_CACHE
+fi
 
-while IFS=',' read -r priority yescol nocol; do
-  [[ -z "$priority" ]] && continue
-  [[ "$priority" =~ ^[0-9] ]] || continue
-  color_yes["$priority"]="$yescol"
-  color_no["$priority"]="$nocol"
-done < "$_HI_CHECK_PACKAGES"
+load_packages() {
+  while read -r line; do
+    if [[ "$line" =~ ^packages ]]; then
+      package_commands+=("$line")
+    elif [[ "$line" =~ ^basics ]]; then
+      basic_commands+=("$line")
+    elif [[ "$line" =~ ^systems ]]; then
+      system_commands+=("$line")
+    elif [[ "$line" =~ ^tools ]]; then
+      tool_commands+=("$line")
+    elif [[ "$line" =~ ^[0-9] ]]; then
+      priority=${line%%,*}
+      inner=${line#*,}
+      yescol=${inner%%,*}
+      nocol=${line##*,}
+      color_yes["$priority"]="$yescol"
+      color_no["$priority"]="$nocol"
+    fi
+  done < "$_HI_CHECK_PACKAGES"
+}
 
 function sort_commands() {
  local cmd_list=("$@")
  local result=()
-
- # Cache command existence to avoid repeated command -v lookups
- declare -g -A _HI_CMD_CACHE 2>/dev/null
- if [[ -z ${_HI_CMD_CACHE+x} ]]; then
-  declare -g -A _HI_CMD_CACHE
- fi
 
  for item in "${cmd_list[@]}"; do
   IFS=',' read -ra pairs <<< "$item"
@@ -136,32 +137,27 @@ function process_commands() {
   done
 }
 
-function packages() {
+function full_check() {
+  echo -ne " "
   process_commands package_commands
-}
-
-function basics() {
+  echo -ne "\n "
   process_commands basic_commands
-}
-
-function systems() {
+  echo -ne "\n "
   process_commands system_commands
+  echo -ne "\n "
+  process_commands tool_commands
+  echo -ne "\n"
 }
 
-function tools() {
-  process_commands tool_commands
-}
 
 function full_check_fish {
-  packages
+  load_packages
+  process_commands package_commands
   echo -n "newline"
-
-  basics
+  process_commands basic_commands
   echo -n "newline"
-
-  systems
+  process_commands system_commands
   echo -n "newline"
-
-  tools
+  process_commands tool_commands
   echo -n "newline"
 }

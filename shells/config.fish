@@ -103,7 +103,7 @@ function fish_greeting
 
     set -l _full_check_formatted (string split "newline" (bash -c "source $_HI_CHECK; full_check_fish"))
 
-    echo -n "$hi_change_status $hi_update_status"
+    echo -n "$hi_change_status $hi_update_status "
     echo (printf '%s~~~~~~~~~~~~~~~~~~ Online %s[%s%s%s]%s ~~~~~~~~~~~~~~~~~~~~~~~~~~%s' (set_color brcyan) (set_color normal) (set_color $fish_color_host) (prompt_hostname) (set_color normal) (set_color brcyan) (set_color normal))
     echo $spacer" "$utctime"   "$spacer"   "$localtime
     echo $spacer" "$git_identity" "$spacer" "$containers" "$spacer" "$authorized" "$spacer" "$public

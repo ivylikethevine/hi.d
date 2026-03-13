@@ -1,0 +1,5 @@
+# Proxy: foo@bar
+Host jar@head
+  HostName head
+  User jar
+  IdentityFile /home/foo/.ssh/id_ed25519

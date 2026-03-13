@@ -11,7 +11,7 @@ basic_commands=()
 system_commands=()
 tool_commands=()
 
-while IFS= read -r line; do
+while IFS=' ' read -r line; do
   if [[ "$line" =~ ^packages ]]; then
     package_commands+=("$line")
   elif [[ "$line" =~ ^basics ]]; then
@@ -21,6 +21,16 @@ while IFS= read -r line; do
   elif [[ "$line" =~ ^tools ]]; then
     tool_commands+=("$line")
   fi
+done < "$_HI_CHECK_PACKAGES"
+
+declare -A color_yes
+declare -A color_no
+
+while IFS=',' read -r priority yescol nocol; do
+  [[ -z "$priority" ]] && continue
+  [[ "$priority" =~ ^[0-9] ]] || continue
+  color_yes["$priority"]="$yescol"
+  color_no["$priority"]="$nocol"
 done < "$_HI_CHECK_PACKAGES"
 
 function sort_commands() {
@@ -85,16 +95,6 @@ function check_commands() {
   fi
   IFS=',' read -ra cmd_list <<< "$raw"
   cmd_list=("${cmd_list[@]:1}") # remove the grouping
-
-  declare -A color_yes
-  declare -A color_no
-
-  while IFS=',' read -r priority yescol nocol; do
-    [[ -z "$priority" ]] && continue
-    [[ "$priority" =~ ^[0-9] ]] || continue
-    color_yes["$priority"]="$yescol"
-    color_no["$priority"]="$nocol"
-  done < "$_HI_CHECK_PACKAGES"
 
   # shellcheck disable=SC2207
   local sorted_cmd_list=($(sort_commands "${cmd_list[@]}"))

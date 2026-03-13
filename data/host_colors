@@ -1,0 +1,3 @@
+# hostname color_bash color_fish
+prod,\e[0;33m,yellow
+HOSTNAME,\e[0;35m,magenta

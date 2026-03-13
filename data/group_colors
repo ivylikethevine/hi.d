@@ -1,0 +1,6 @@
+# username/hostname/hosttag color_bash color_fish
+hosttag,desktop,\e[0;32m,green
+username,root,\e[0;31m,red
+username,USER,\e[0;36m,blue
+hostname,prod,\e[0;33m,yellow
+hostname,HOSTNAME,\e[0;35m,magenta

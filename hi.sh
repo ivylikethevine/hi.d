@@ -1,15 +1,11 @@
 #!/bin/bash
 # forked from sshrc: https://github.com/danrabinowitz/sshrc
 
-HI_TMPDIR=${HI_TMPDIR:-~}
-HI_ROOT="$HI_TMPDIR/hi.d"
+HI_TMPDIR=${HI_TMPDIR:-$HOME}
 # shellcheck source=./common/paths.sh
-source "$HI_ROOT/common/paths.sh"
-
-if ! command cecho 2>/dev/null; then
-  # shellcheck source=./common/prompt_colors.sh
-  source "$_HI_PROMPT_COLORS_PATH"
-fi
+source "$HI_TMPDIR/hi.d/common/paths.sh"
+# shellcheck source=./common/prompt_colors.sh
+command -v cecho >/dev/null || source "$_HI_PROMPT_COLORS_PATH"
 
 if [ ! -f "$_HI_HOST_COLOR_FILE" ] || [ ! -f "$_HI_USER_COLOR_FILE" ]; then
   # shellcheck source=./scripts/create_host_colors.sh

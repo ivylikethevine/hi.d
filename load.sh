@@ -1,18 +1,15 @@
 #!/bin/bash
 # forked from sshrc: https://github.com/danrabinowitz/sshrc
 
-HI_TMPDIR=${HI_TMPDIR:-~}
+HI_TMPDIR=${HI_TMPDIR:-$HOME}
 # shellcheck source=./common/paths.sh
 source "$HI_TMPDIR/hi.d/common/paths.sh"
+# shellcheck source=./common/prompt_colors.sh
+command -v cecho >/dev/null || source "$_HI_PROMPT_COLORS_PATH"
 
 hi_config_start="# hi-config-start"
 hi_config_end="# hi-config-end"
 hi_copy_time=-1
-
-if ! command cecho 2>/dev/null; then
-  # shellcheck source=./common/prompt_colors.sh
-  source "$_HI_PROMPT_COLORS_PATH"
-fi
 
 # required
 function spacer() {

@@ -1,15 +1,10 @@
 #!/bin/bash
 
-HI_TMPDIR=${HI_TMPDIR:-~}
-# shellcheck source=./common/paths.sh
+HI_TMPDIR=${HI_TMPDIR:-$HOME}
+# shellcheck source=./../common/paths.sh
 source "$HI_TMPDIR/hi.d/common/paths.sh"
-# shellcheck source=./common/aliases.sh
-source "$_HI_ALIASES_PATH"
-
-if ! command cecho 2>/dev/null; then
-  # shellcheck source=./../common/prompt_colors.sh
-  source "$_HI_PROMPT_COLORS_PATH"
-fi
+# shellcheck source=./../common/prompt_colors.sh
+command -v cecho >/dev/null || source "$_HI_PROMPT_COLORS_PATH"
 
 declare -A host_or_user bash_colors fish_colors
 

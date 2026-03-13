@@ -1,10 +1,9 @@
 #!/bin/bash
 
-HI_TMPDIR=${HI_TMPDIR:-~}
-# shellcheck source=./common/paths.sh
+HI_TMPDIR=${HI_TMPDIR:-$HOME}
+# shellcheck source=./paths.sh
 source "$HI_TMPDIR/hi.d/common/paths.sh"
 # shellcheck source=./common/aliases.sh
-source "$_HI_ALIASES_PATH"
 
 # required
 export RED='\e[0;31m'

@@ -1,13 +1,10 @@
 #!/bin/bash
 
-HI_TMPDIR=${HI_TMPDIR:-~}
-# shellcheck source=./common/paths.sh
+HI_TMPDIR=${HI_TMPDIR:-$HOME}
+# shellcheck source=./paths.sh
 source "$HI_TMPDIR/hi.d/common/paths.sh"
-
-if ! command cecho 2>/dev/null; then
-  # shellcheck source=./prompt_colors.sh
-  source "$_HI_PROMPT_COLORS_PATH"
-fi
+# shellcheck source=./prompt_colors.sh
+command -v cecho >/dev/null || source "$_HI_PROMPT_COLORS_PATH"
 
 # # Format - package:priority,similar_package
 # # Sort highest priorities to top of each list

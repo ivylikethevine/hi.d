@@ -1,19 +1,17 @@
 #!/bin/bash
-HI_TMPDIR=${HI_TMPDIR:-~}
-# shellcheck source=./common/paths.sh
+
+HI_TMPDIR=${HI_TMPDIR:-$HOME}
+# shellcheck source=./../common/paths.sh
 source "$HI_TMPDIR/hi.d/common/paths.sh"
-# shellcheck source=./common/aliases.sh
-source "$_HI_ALIASES_PATH"
+# shellcheck source=./../common/prompt_colors.sh
+command -v cecho >/dev/null || source "$_HI_PROMPT_COLORS_PATH"
 
 install_tmpdir=$(mktemp -d)
 tmp_bashrc="$install_tmpdir/bashrc"
 tmp_zshrc="$install_tmpdir/zshrc"
 tmp_fish="$install_tmpdir/config.fish"
 
-if ! command cecho 2>/dev/null; then
-  # shellcheck source=./../common/prompt_colors.sh
-  source "$_HI_PROMPT_COLORS_PATH"
-fi
+HI_TMPDIR=${HI_TMPDIR:-$HOME}
 
 function append() {
   local input="$1"

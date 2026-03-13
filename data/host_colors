@@ -1,3 +1,14 @@
 # hostname color_bash color_fish
 prod,\e[0;33m,yellow
-HOSTNAME,\e[0;35m,magenta
+liona,\e[0;35m,magenta
+prod,\e[0;33m,yellow
+liona,\e[0;35m,magenta
+prod,\e[0;33m,yellow
+liona,\e[0;35m,magenta
+ryoji,\e[0;33m,blue
+gendo,\e[0;33m,blue
+shinji,\e[0;33m,blue
+edison,\e[0;33m,blue
+bernie,\e[0;34m,yellow
+minty,\e[0;34m,yellow
+mavie,\e[0;32m,green

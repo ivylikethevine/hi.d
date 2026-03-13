@@ -13,11 +13,6 @@ tool_commands=()
 
 declare -A color_yes
 declare -A color_no
-# Cache command existence to avoid repeated command -v lookups
-declare -g -A _HI_CMD_CACHE 2>/dev/null
-if [[ -z ${_HI_CMD_CACHE+x} ]]; then
-  declare -g -A _HI_CMD_CACHE
-fi
 
 load_packages() {
   while read -r line; do
@@ -41,52 +36,44 @@ load_packages() {
 }
 
 function sort_commands() {
- local cmd_list=("$@")
- local result=()
+  local cmd_list=("$@")
+  local result=()
 
- for item in "${cmd_list[@]}"; do
-  IFS=',' read -ra pairs <<< "$item"
+  for item in "${cmd_list[@]}"; do
+    IFS=',' read -ra pairs <<< "$item"
 
-  local max_priority=-1
-  local max_cmd
-  local is_installed=0
-  local first_cmd
-  local first_priority
+    local max=-1
+    local max_cmd
+    local is_installed=0
+    local first_cmd
+    local first_priority
 
-  for pair in "${pairs[@]}"; do
-   local cmd="${pair%:*}"
-   local priority="${pair#*:}"
+    for pair in "${pairs[@]}"; do
+      local cmd="${pair%:*}"
+      local current="${pair#*:}"
 
-   if [[ -z ${_HI_CMD_CACHE[$cmd]+_} ]]; then
-    if command -v "$cmd" &>/dev/null; then
-     _HI_CMD_CACHE["$cmd"]=1
+      if command -v "$cmd" &>/dev/null; then
+        if (( current > max )); then
+          max=$current
+          max_cmd=$cmd
+          is_installed=1
+        fi
+      fi
+
+      if [[ -z $first_cmd ]]; then
+        first_cmd=$cmd
+        first_priority=$current
+      fi
+    done
+
+    if (( is_installed )); then
+      result+=("$max_cmd:$max:yes")
     else
-     _HI_CMD_CACHE["$cmd"]=0
+      result+=("$first_cmd:$first_priority:no")
     fi
-   fi
-
-   if [[ ${_HI_CMD_CACHE[$cmd]} -eq 1 ]]; then
-    if (( priority > max_priority )); then
-     max_priority=$priority
-     max_cmd=$cmd
-     is_installed=1
-    fi
-   fi
-
-   if [[ -z $first_cmd ]]; then
-    first_cmd=$cmd
-    first_priority=$priority
-   fi
   done
 
-  if (( is_installed )); then
-   result+=("$max_cmd:$max_priority:yes")
-  else
-   result+=("$first_cmd:$first_priority:no")
-  fi
- done
-
- printf '%s\n' "${result[@]}" | sort -t':' -k2,2n -k3,3r
+  printf '%s\n' "${result[@]}" | sort -t':' -k2,2n -k3,3r
 }
 
 function check_commands() {
@@ -99,7 +86,13 @@ function check_commands() {
 
   # shellcheck disable=SC2207
   local sorted_cmd_list=($(sort_commands "${cmd_list[@]}"))
+  if (( ${#sorted_cmd_list[@]} == 0 )); then
+    return
+  fi
 
+  # Find the first command whose color is not empty and not "hide".
+  local item
+  local found=0
   for item in "${sorted_cmd_list[@]}"; do
     cmd="${item%:*:*}"
     inner="${item#*:}"
@@ -113,20 +106,24 @@ function check_commands() {
       color="${color_no[$priority]}"
     fi
 
-    # Skip if color is empty or set to "hide"
-    if [[ -z "$color" || "$color" == "hide" ]]; then
-      continue
+    if [[ -n "$color" && "$color" != "hide" ]]; then
+      found=1
+      break
     fi
-
-    local symbol
-    if [[ "$is_installed" == "yes" ]]; then
-      symbol="✓"
-    else
-      symbol="✗"
-    fi
-
-    printf '%b' "$color $cmd $symbol$NC"
   done
+
+  if (( found == 0 )); then
+    return
+  fi
+
+  local symbol
+  if [[ "$is_installed" == "yes" ]]; then
+    symbol="✓"
+  else
+    symbol="✗"
+  fi
+
+  printf '%b' "$color $cmd $symbol$NC"
 }
 
 function process_commands() {
@@ -148,7 +145,6 @@ function full_check() {
   process_commands tool_commands
   echo -ne "\n"
 }
-
 
 function full_check_fish {
   load_packages

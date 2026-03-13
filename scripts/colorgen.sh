@@ -8,8 +8,6 @@ command -v cecho >/dev/null || source "$_HI_COLORS"
 
 declare -A host_or_user bash_colors fish_colors
 
-
-
 function create_basic_group_colors() {
   touch "$_HI_GROUP_COLORS"
   {
@@ -93,6 +91,11 @@ function read_ssh_hosts() {
   cecho "Generated color entries for: $(wc -l "$_HI_HOST_COLORS" | awk '{ print $1 }') hosts" "$GREEN"
 }
 
+function intial_colorgen() {
+  rm "$_HI_GROUP_COLORS"
+  colorgen
+}
+
 function colorgen() {
   cecho "~~~~~ Generating user & host colors for hi.sh! ~~~~~" "$BRGREEN"
 
@@ -110,7 +113,6 @@ function colorgen() {
 
   cecho "=== Generating: $_HI_GROUP_COLORS ===" "$YELLOW"
   if [ -f "$_HI_GROUP_COLORS" ]; then
-    rm "$_HI_GROUP_COLORS"
     create_basic_group_colors
   fi
 
@@ -119,5 +121,3 @@ function colorgen() {
   cecho "~~~~~ Colors generated! ~~~~~ " "$BRGREEN"
   return 0
 }
-
-colorgen

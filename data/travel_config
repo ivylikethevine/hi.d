@@ -1,5 +1,5 @@
-# Proxy: foo@bar
-Host jar@head
-  HostName head
-  User jar
-  IdentityFile /home/foo/.ssh/id_ed25519
+# Proxy: shinji
+Host officespace
+  HostName office-space.lan
+  User team
+  IdentityFile ~/.ssh/self_hosting

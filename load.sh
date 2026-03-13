@@ -9,7 +9,6 @@ command -v cecho >/dev/null || source "$_HI_COLORS"
 
 # shellcheck source=./common/check.sh
 source "$_HI_CHECK"
-load_packages
 
 hi_config_start="# hi-config-start"
 hi_config_end="# hi-config-end"
@@ -121,6 +120,7 @@ function key_count() {
 function load() {
   local load_start_time
   load_start_time=$(date +%s.%N)
+  load_packages
 
   trap 'clean_all' exit
 

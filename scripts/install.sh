@@ -97,6 +97,7 @@ function main() {
   cecho "===== Running hi_colorgen =====" "$BRCYAN"
   # shellcheck source=./colorgen.sh
   source "$_HI_COLORGEN"
+  initial_colorgen
   rm -rf "$TMP"
 
   cecho "~~~~~ Installed! ~~~~~ " "$BRGREEN"

@@ -11,6 +11,7 @@ if [ ! -f "$_HI_HOST_COLORS" ] || [ ! -f "$_HI_USER_COLORS" ]; then
   # shellcheck source=./scripts/colorgen.sh
   source "$_HI_COLORGEN"
   # This will autogenerate the colors if we don't have any yet.
+  initial_colorgen
 fi
 
 command -v openssl >/dev/null 2>&1 || {

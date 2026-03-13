@@ -19,6 +19,8 @@
 - reload your shell!
 - configure `~/.ssh/config` tags via sshm
 - configure `~/hi.d/data/group_colors` to preferences
+  - then run `hi_colorgen` to regenerate colors
+- configure `~/hi.d/data/packages_config` to preferences
 - say `hi`!
 - [optional] `~/hi.d/scripts/unlink.sh` to remove git tracking, etc.
 - [optional] modify `~/hi.d/aliases.sh`, `~/hi.d/common/check.sh`, `~/hi.d/misc/*`, and `~/hi.d/shells/*` to your liking! (required parts of those files are commented as such)
@@ -49,56 +51,7 @@ Reminder - place local only changes after the "`# hi-config-end`" comment in the
 
 ##### Hostname, Username, and Group/Tag Colors
 
-`hi` uses the _leftmost_ tag in your `~/.ssh/config` tags for each host to determine which color to apply to the prompt hostname in all 3 shells on the client device, but will use `$HI_ROOT/data/travel_config` (in the context of the target filesystem) on the target.
-
-The following will apply the `laptop` tag coloring to the hostname `foo` and the `root` username coloring as defined in `data/group_colors`. (This file will be automatically generated on first use of `hi`, or manually via `hi_colorgen` after installation).
-
-`~/.ssh/config` example
-
-# TODO: update this area
-
-```bash
-# Tags: laptop, work
-Host foo
-  HostName bar.com
-  User root
-```
-
-`~/hi.d/data/travel_config` example
-
-```bash
-# Tags: laptop, work
-Host meow
-  HostName cat.com
-  IdentityFile /root/.ssh/meowcat.pem
-  User root
-```
-
-`~/hi.d/data/group_colors` example
-
-```csv
-# hostname tag color_bash color_fish
-hostname,laptop,\e[0;34m,brred
-
-# username name color_bash color_fish
-username,root,\e[0;31m,red
-```
-
-The above `~/.ssh/config` and `~/hi.d/data/group_colors` will generate the following
-
-`~/hi.d/data/host_colors` result
-
-```csv
-# hostname color_bash color_fish
-laptop,\e[0;34m,brred
-```
-
-`~/hi.d/data/user_colors` result
-
-```csv
-# username color_bash color_fish
-root,\e[0;31m,red
-```
+`hi` uses the _leftmost_ tag in your `~/.ssh/config` tags for each host to determine which color to apply to the prompt hostname in all 3 shells on the client device, but will use `$HI_ROOT/data/travel_config` (in the context of the target filesystem) on the target (in-progress).
 
 ###### Built from/with:
 

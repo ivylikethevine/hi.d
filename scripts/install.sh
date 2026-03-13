@@ -78,7 +78,7 @@ function config_hi() {
     cecho "Removing old $INSTALLED_HI... [password required]" "$BLUE"
     sudo rm "$INSTALLED_HI"
     cecho "Linking $INSTALLED_HI to latest hi.sh... [password required]" "$BLUE"
-    sudo ln "$NEW_HI" "$INSTALLED_HI"
+    sudo ln -s "$NEW_HI" "$INSTALLED_HI"
   fi
 }
 
@@ -87,6 +87,8 @@ function main() {
 
   local TMP
   TMP=$(mktemp -d)
+  trap 'rm -rf $TMP' exit
+
   config_bashrc "$TMP"
   config_zshrc "$TMP"
   config_fish "$TMP"

@@ -5,11 +5,11 @@ HI_TMPDIR=${HI_TMPDIR:-$HOME}
 # shellcheck source=./common/paths.sh
 source "$HI_TMPDIR/hi.d/common/paths.sh"
 # shellcheck source=./common/prompt_colors.sh
-command -v cecho >/dev/null || source "$_HI_PROMPT_COLORS_PATH"
+command -v cecho >/dev/null || source "$_HI_PROMPT_COLORS"
 
-if [ ! -f "$_HI_HOST_COLOR_FILE" ] || [ ! -f "$_HI_USER_COLOR_FILE" ]; then
-  # shellcheck source=./scripts/create_host_colors.sh
-  source "$_HI_CREATE_COLORS"
+if [ ! -f "$_HI_HOST_COLORS" ] || [ ! -f "$_HI_USER_COLORS" ]; then
+  # shellcheck source=./scripts/colorgen.sh
+  source "$_HI_COLORGEN"
   # This will autogenerate the colors if we don't have any yet.
 fi
 

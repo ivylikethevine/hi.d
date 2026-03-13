@@ -41,10 +41,10 @@ Reminder - place local only changes after the "`# hi-config-end`" comment in the
 - `load.sh` - chainloader executed on target
 - `common/aliases.sh` - shared aliases between bash, zsh, and fish
 - `common/check.sh` - check for commonly used commands and displays results in header
-- `common/prompt_colors.sh` - unified coloration for usernames & hosts (see `scripts/create_host_colors`)
+- `common/prompt_colors.sh` - unified coloration for usernames & hosts (see `scripts/colorgen`)
 - `scripts/install.sh` - configure local shells to use hi.d configurations, install, and update
 - `scripts/unlink.sh` - remove identifiable information
-- `scripts/create_host_colors.sh` - generates `data/user_colors` and `data/host_colors` from `~/.ssh/config`, `data/travel_config`, and `data/group_colors`
+- `scripts/colorgen.sh` - generates `data/user_colors` and `data/host_colors` from `~/.ssh/config`, `data/travel_config`, and `data/group_colors`
 - `data/group_colors` - user defined coloration for hostnames/usernames (not copied to targets)
 
 ##### Hostname, Username, and Group/Tag Colors

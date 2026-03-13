@@ -5,7 +5,7 @@ HI_TMPDIR=${HI_TMPDIR:-$HOME}
 # shellcheck source=./common/paths.sh
 source "$HI_TMPDIR/hi.d/common/paths.sh"
 # shellcheck source=./common/prompt_colors.sh
-command -v cecho >/dev/null || source "$_HI_PROMPT_COLORS_PATH"
+command -v cecho >/dev/null || source "$_HI_PROMPT_COLORS"
 
 hi_config_start="# hi-config-start"
 hi_config_end="# hi-config-end"
@@ -58,7 +58,7 @@ function timers() {
 
 function check_packages() {
   # shellcheck source=./common/check.sh
-  source "$_HI_CHECK_PATH"
+  source "$_HI_CHECK"
   packages
   basics
   systems
@@ -147,7 +147,7 @@ function load() {
     export VIMINIT="let \$MYVIMRC='$_HI_VIMRC' | source \$MYVIMRC"
   fi
 
-  configure_file "$_HI_BASHRC" "$_HI_HOME_BASHRC"
+  configure_file "$_HI_BASH_CONFIG" "$_HI_HOME_BASHRC"
   configure_file "$_HI_ZSHRC" "$_HI_HOME_ZSHRC"
   if [ -d "$_HI_FISH_DIR" ]; then
     # This directory won't exist if fish isn't installed

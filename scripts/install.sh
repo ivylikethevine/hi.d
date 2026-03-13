@@ -4,7 +4,7 @@ HI_TMPDIR=${HI_TMPDIR:-$HOME}
 # shellcheck source=./../common/paths.sh
 source "$HI_TMPDIR/hi.d/common/paths.sh"
 # shellcheck source=./../common/prompt_colors.sh
-command -v cecho >/dev/null || source "$_HI_PROMPT_COLORS_PATH"
+command -v cecho >/dev/null || source "$_HI_PROMPT_COLORS"
 
 install_tmpdir=$(mktemp -d)
 tmp_bashrc="$install_tmpdir/bashrc"
@@ -80,8 +80,8 @@ function main() {
   config_fish
   config_hi
   cecho "Generating colors for users and hosts" "$CYAN"
-  # shellcheck source=./create_host_colors.sh
-  source "$_HI_CREATE_COLORS"  rm -rf "$install_tmpdir"
+  # shellcheck source=./colorgen.sh
+  source "$_HI_COLORGEN"  rm -rf "$install_tmpdir"
   cecho "Done!" "$GREEN"
 }
 

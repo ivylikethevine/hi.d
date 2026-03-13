@@ -4,7 +4,7 @@ HI_TMPDIR=${HI_TMPDIR:-$HOME}
 # shellcheck source=./paths.sh
 source "$HI_TMPDIR/hi.d/common/paths.sh"
 # shellcheck source=./prompt_colors.sh
-command -v cecho >/dev/null || source "$_HI_PROMPT_COLORS_PATH"
+command -v cecho >/dev/null || source "$_HI_PROMPT_COLORS"
 
 # Format - package:priority,similar_package:priority
 # priority | installed | hidden | color

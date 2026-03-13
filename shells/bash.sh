@@ -5,9 +5,9 @@ HI_TMPDIR=${HI_TMPDIR:-$HOME}
 # shellcheck source=./../common/paths.sh
 source "$HI_TMPDIR/hi.d/common/paths.sh"
 # shellcheck source=./../common/prompt_colors.sh
-source "$_HI_PROMPT_COLORS_PATH"
+source "$_HI_PROMPT_COLORS"
 # shellcheck source=./../common/aliases.sh
-source "$_HI_ALIASES_PATH"
+source "$_HI_ALIASES"
 
 # header/coloring
 [ -x /usr/bin/lesspipe ] && eval "$(SHELL=/bin/sh lesspipe)"

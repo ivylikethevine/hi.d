@@ -5,7 +5,7 @@ if not set -q HI_TMPDIR
   set -g HI_TMPDIR ~
 end
 source $HI_TMPDIR/hi.d/common/paths.sh
-source $_HI_ALIASES_PATH;
+source $_HI_ALIASES;
 
 complete hi --wraps ssh
 
@@ -105,10 +105,10 @@ function fish_greeting
     set -l _system_info_line $spacer" "$os_type" "$spacer" "$arch" "$spacer" "$distro" "$spacer" "$cpus" "$spacer" "$ram
 
     # TODO: DEDUPE
-    set -l _packages (bash -c "source $_HI_CHECK_PATH; packages")
-    set -l _basics (bash -c "source $_HI_CHECK_PATH; basics")
-    set -l _systems (bash -c "source $_HI_CHECK_PATH; systems")
-    set -l _tools (bash -c "source $_HI_CHECK_PATH; tools")
+    set -l _packages (bash -c "source $_HI_CHECK; packages")
+    set -l _basics (bash -c "source $_HI_CHECK; basics")
+    set -l _systems (bash -c "source $_HI_CHECK; systems")
+    set -l _tools (bash -c "source $_HI_CHECK; tools")
 
     # set -g fish_greeting $hi_change_status" "$hi_update_status" "$header\n $_timer_line\n $_system_info_line\n $_git_key_change_line\n$_packages\n$_basics\n$_systems\n$_tools
     set -g fish_greeting $hi_change_status" "$hi_update_status" "$header\n $_timer_line\n $_git_key_change_line\n$_packages\n$_basics\n$_systems\n$_tools
@@ -250,6 +250,6 @@ set -gx fish_pager_color_selected_description
 set -gx fish_pager_color_selected_prefix
 
 # TODO: dedupe
-set -gx fish_color_user (bash -c "source $_HI_PROMPT_COLORS_PATH; user_color")
-set -gx fish_color_host (bash -c "source $_HI_PROMPT_COLORS_PATH; host_color")
+set -gx fish_color_user (bash -c "source $_HI_PROMPT_COLORS; user_color")
+set -gx fish_color_host (bash -c "source $_HI_PROMPT_COLORS; host_color")
 set -gx fish_color_host_remote $fish_color_host

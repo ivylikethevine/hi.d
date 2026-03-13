@@ -4,7 +4,7 @@ HI_TMPDIR=${HI_TMPDIR:-$HOME}
 # shellcheck source=./../common/paths.sh
 source "$HI_TMPDIR/hi.d/common/paths.sh"
 # shellcheck source=./../common/prompt_colors.sh
-command -v cecho >/dev/null || source "$_HI_PROMPT_COLORS_PATH"
+command -v cecho >/dev/null || source "$_HI_PROMPT_COLORS"
 
 unlink_hi() {
   cd "$HI_ROOT" || exit 1
@@ -13,19 +13,19 @@ unlink_hi() {
   rm .gitignore
   rm README.md
 
-  rm "$_HI_USER_COLOR_FILE"
-  rm "$_HI_HOST_COLOR_FILE"
+  rm "$_HI_USER_COLORS"
+  rm "$_HI_HOST_COLORS"
   rm "$_HI_TRAVEL_CONFIG"
   rm "$_HI_GROUP_COLORS"
 
   echo "Anonymizing host colors"
-  cat <<'EOF' >> "$_HI_HOST_COLOR_FILE"
+  cat <<'EOF' >> "$_HI_HOST_COLORS"
 # hostname color_bash color_fish
 192.168.1.1,\e[0;31m,brred
 EOF
 
   echo "Anonymizing user colors"
-  cat <<'EOF' >> "$_HI_USER_COLOR_FILE"
+  cat <<'EOF' >> "$_HI_USER_COLORS"
 # username color_bash color_fish
 root,\e[0;31m,red
 EOF

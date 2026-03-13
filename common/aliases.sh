@@ -2,7 +2,7 @@
 
 # === start required variables/aliases ===
 # TODO: Hide/shadow these aliases when on a remote device...
-alias hi_colorgen="~/hi.d/scripts/create_host_colors.sh"
+alias hi_colorgen="~/hi.d/scripts/colorgen.sh"
 alias hi_reinstall="~/hi.d/scripts/install.sh"
 alias hi_relink="sudo rm /usr/bin/hi && sudo ln ~/hi.d/hi.sh /usr/bin/hi"
 
@@ -63,7 +63,7 @@ alias chrontab="crontab"
 # pacman/yay updates
 alias yayy="yay -Syyu"
 alias yayc="yay -Sc"
-alias yaycc="sudo rm -rf '/var/cache/pacman/pkg/download-*'"
+alias yaycc="sudo rm -rf /var/cache/pacman/pkg/download-*"
 
 # apt updates
 alias aptup="sudo apt update"

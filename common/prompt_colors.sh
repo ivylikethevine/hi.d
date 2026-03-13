@@ -72,10 +72,10 @@ function read_color_file() {
 
 # required
 function host_color() {
-  read_color_file "$(hostname)" "$_HI_HOST_COLOR_FILE" "${1:-}"
+  read_color_file "$(hostname)" "$_HI_HOST_COLORS" "${1:-}"
 }
 
 # required
 function user_color() {
-  read_color_file "$(whoami)" "$_HI_USER_COLOR_FILE"  "${1:-}"
+  read_color_file "$(whoami)" "$_HI_USER_COLORS"  "${1:-}"
 }

@@ -3,8 +3,8 @@
 HI_TMPDIR=${HI_TMPDIR:-$HOME}
 # shellcheck source=./../common/paths.sh
 source "$HI_TMPDIR/hi.d/common/paths.sh"
-# shellcheck source=./../common/prompt_colors.sh
-command -v cecho >/dev/null || source "$_HI_PROMPT_COLORS"
+# shellcheck source=./../common/colors.sh
+command -v cecho >/dev/null || source "$_HI_COLORS"
 
 install_tmpdir=$(mktemp -d)
 tmp_bashrc="$install_tmpdir/bashrc"

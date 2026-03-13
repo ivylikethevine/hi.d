@@ -250,6 +250,6 @@ set -gx fish_pager_color_selected_description
 set -gx fish_pager_color_selected_prefix
 
 # TODO: dedupe
-set -gx fish_color_user (bash -c "source $_HI_PROMPT_COLORS; user_color")
-set -gx fish_color_host (bash -c "source $_HI_PROMPT_COLORS; host_color")
+set -gx fish_color_user (bash -c "source $_HI_COLORS; user_color")
+set -gx fish_color_host (bash -c "source $_HI_COLORS; host_color")
 set -gx fish_color_host_remote $fish_color_host

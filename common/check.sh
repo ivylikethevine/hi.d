@@ -3,81 +3,12 @@
 HI_TMPDIR=${HI_TMPDIR:-$HOME}
 # shellcheck source=./paths.sh
 source "$HI_TMPDIR/hi.d/common/paths.sh"
-# shellcheck source=./prompt_colors.sh
-command -v cecho >/dev/null || source "$_HI_PROMPT_COLORS"
-
-# Format - package:priority,similar_package:priority
-# priority | installed | hidden | color
-#    0     |    yes    |   X    |
-#    0     |    no     |        | yellow
-#    1     |    yes    |        | blue
-#    1     |    no     |   X    |
-#    2     |    yes    |        | green
-#    2     |    no     |        | bright yellow
-# highest priority on left
-
-# shellcheck disable=SC2054
-PACKAGES=(
-  top:0,btop:2,htop:2
-  openssl:2
-  git:2
-  vi:0,vim:1,nvim:2,nano:2,pico:1,micro:1
-  cat:1,bat:2
-  man:1,tldr:2
-  tar:0,zip:2
-  bc:1
-  jq:1,yq:1
-  gpg:0
-  sudo:0
-)
-
-# shellcheck disable=SC2054
-BASICS=(
-  nmap:2
-  just:2
-  screen:1,tmux:2
-  emacs:1
-  scp:1,rsync:1
-  python:1
-  ssh-audit:1
-  sshpass:1
-  sponge:0
-  netstat:0
-  ping:0
-)
-
-# shellcheck disable=SC2054
-TOOLS=(
-  node:1,npx:2,npm:2
-  nomad:1
-  asdf:2
-  cmake:2,make:1
-  sshm:1,sshrc:2,hi:2
-  rust:1,rustc:1,rustup:2
-  cosign:1
-  shellcheck:1
-  systemctl:0
-  curl:0
-  wget:0
-)
-
-# shellcheck disable=SC2054
-SYSTEMS=(
-  snap:1
-  apt:1,pacman:1,dnf:1,rpm:1,zypper:1,brew:1,apk:2,nix:2
-  paru:1,yay:1
-  dpkg:1,wpkg:1
-  chocolatey:1,choco:1
-  pkgconf:1
-  appimage:1
-  fusermount:1
-  flatpak:1
-  docker:0
-  direnv:0
-)
+# shellcheck source=./colors.sh
+command -v cecho >/dev/null || source "$_HI_COLORS"
 
 function sort_commands() {
   local cmd_list=("$@")
+
   local result=()
 
   for item in "${cmd_list[@]}"; do
@@ -109,13 +40,28 @@ function sort_commands() {
     fi
   done
 
-  # Sort by priority (0=low, 1=medium, 2=high)
   printf '%s\n' "${result[@]}" | sort -t':' -k2,2n -k3,3r
 }
 
 function check_commands() {
-  local cmd_list=("$@")
-  echo -ne " $NC|"
+  local raw="${1:-}"
+  if [[ -z "$raw" ]]; then
+    return
+  fi
+  IFS=',' read -ra cmd_list <<< "$raw"
+  cmd_list=("${cmd_list[@]:1}") # remove the grouping
+
+  echo -ne "$NC"
+
+  declare -A color_yes
+  declare -A color_no
+
+  while IFS=',' read -r priority yescol nocol; do
+    [[ -z "$priority" ]] && continue
+    [[ "$priority" =~ ^[0-9] ]] || continue
+    color_yes["$priority"]="$yescol"
+    color_no["$priority"]="$nocol"
+  done < "$_HI_CHECK_PACKAGES"
 
   # shellcheck disable=SC2207
   local sorted_cmd_list=($(sort_commands "${cmd_list[@]}"))
@@ -126,43 +72,81 @@ function check_commands() {
     priority="${inner%:*}"
     is_installed="${item##*:}"
 
-    case "$priority:$is_installed" in
-      "0:yes")
-        # Print nothing for priority 0 when installed
-        ;;
-      "0:no")
-        cecho " $cmd ✗" "$YELLOW" 1
-        ;;
-      "1:yes")
-        cecho " $cmd ✓" "$BLUE" 1
-        ;;
-      "1:no")
-        # Print nothing for priority 1 when not installed
-        ;;
-      "2:yes")
-        cecho " $cmd ✓" "$GREEN" 1
-        ;;
-      "2:no")
-        cecho " $cmd ✗" "$BRYELLOW" 1
-        ;;
-    esac
-  done
+    local color
+    if [[ "$is_installed" == "yes" ]]; then
+      color="${color_yes[$priority]}"
+    else
+      color="${color_no[$priority]}"
+    fi
 
-  echo
+    # Skip if color is empty or set to "hide"
+    if [[ -z "$color" || "$color" == "hide" ]]; then
+      continue
+    fi
+
+    local symbol
+    if [[ "$is_installed" == "yes" ]]; then
+      symbol="✓"
+    else
+      symbol="✗"
+    fi
+
+    cecho " $cmd $symbol" "$color" 1
+  done
 }
 
 function packages() {
-  check_commands "${PACKAGES[@]}"
+  echo -ne " $NC|"
+
+  local package_commands
+  package_commands=$(grep -E '^packages' "$_HI_CHECK_PACKAGES")
+  [[ -z $package_commands ]] && return 1
+  package_commands=${package_commands#packages:}
+  local -a cmd_arr
+  readarray -t cmd_arr <<< "$package_commands"
+  for line in "${cmd_arr[@]}"; do
+    check_commands "$line"
+  done
 }
 
 function basics() {
-  check_commands "${BASICS[@]}"
+  echo -ne " $NC|"
+
+  local basic_commands
+  basic_commands=$(grep -E '^basics' "$_HI_CHECK_PACKAGES")
+  [[ -z $basic_commands ]] && return 1
+  basic_commands=${basic_commands#basics:}
+  local -a cmd_arr
+  readarray -t cmd_arr <<< "$basic_commands"
+  for line in "${cmd_arr[@]}"; do
+    check_commands "$line"
+  done
 }
 
 function systems() {
-  check_commands "${SYSTEMS[@]}"
+  echo -ne " $NC|"
+
+  local system_commands
+  system_commands=$(grep -E '^systems' "$_HI_CHECK_PACKAGES")
+  [[ -z $system_commands ]] && return 1
+  system_commands=${system_commands#systems:}
+  local -a cmd_arr
+  readarray -t cmd_arr <<< "$system_commands"
+  for line in "${cmd_arr[@]}"; do
+    check_commands "$line"
+  done
 }
 
 function tools() {
-  check_commands "${TOOLS[@]}"
+  echo -ne " $NC|"
+
+  local tool_commands
+  tool_commands=$(grep -E '^tools' "$_HI_CHECK_PACKAGES")
+  [[ -z $tool_commands ]] && return 1
+  tool_commands=${tool_commands#tools:}
+  local -a cmd_arr
+  readarray -t cmd_arr <<< "$tool_commands"
+  for line in "${cmd_arr[@]}"; do
+    check_commands "$line"
+  done
 }

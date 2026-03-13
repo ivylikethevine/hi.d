@@ -4,8 +4,8 @@
 HI_TMPDIR=${HI_TMPDIR:-$HOME}
 # shellcheck source=./common/paths.sh
 source "$HI_TMPDIR/hi.d/common/paths.sh"
-# shellcheck source=./common/prompt_colors.sh
-command -v cecho >/dev/null || source "$_HI_PROMPT_COLORS"
+# shellcheck source=./common/colors.sh
+command -v cecho >/dev/null || source "$_HI_COLORS"
 
 if [ ! -f "$_HI_HOST_COLORS" ] || [ ! -f "$_HI_USER_COLORS" ]; then
   # shellcheck source=./scripts/colorgen.sh

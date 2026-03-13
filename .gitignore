@@ -23,6 +23,8 @@
 
 *docker*
 
+data/
+
 **/travel_config
 **/host_colors
 **/user_colors

@@ -60,7 +60,6 @@ end
 function fish_greeting
   if not set -q fish_greeting
     set -l spacer (printf '%s|' (set_color normal))
-    set -l header (printf '%s~~~~~~~~~~~~~~~~~~ Online %s[%s%s%s]%s ~~~~~~~~~~~~~~~~~~~~~~~~~~%s' (set_color brcyan) (set_color normal) (set_color $fish_color_host) (prompt_hostname) (set_color normal) (set_color brcyan) (set_color normal))
 
     set -l human_centric_date_format "+%a %b %-e %Y %H:%M:%S %Z"
     set -l utctime (printf '%s%s' (set_color brblue) (date -u $human_centric_verbose))
@@ -100,23 +99,19 @@ function fish_greeting
       set -g hi_update_status ""
     end
 
-    set -l _timer_line $spacer" "$utctime"   "$spacer"   "$localtime
-    set -l _git_key_change_line $spacer" "$git_identity" "$spacer" "$containers" "$spacer" "$authorized" "$spacer" "$public
     set -l _system_info_line $spacer" "$os_type" "$spacer" "$arch" "$spacer" "$distro" "$spacer" "$cpus" "$spacer" "$ram
 
-    # TODO: DEDUPE
-    set -l _packages (bash -c "source $_HI_CHECK; packages")
-    set -l _basics (bash -c "source $_HI_CHECK; basics")
-    set -l _systems (bash -c "source $_HI_CHECK; systems")
-    set -l _tools (bash -c "source $_HI_CHECK; tools")
+    set -l _full_check_formatted (string split "newline" (bash -c "source $_HI_CHECK; full_check_fish"))
 
-    # set -g fish_greeting $hi_change_status" "$hi_update_status" "$header\n $_timer_line\n $_system_info_line\n $_git_key_change_line\n$_packages\n$_basics\n$_systems\n$_tools
-    set -g fish_greeting $hi_change_status" "$hi_update_status" "$header\n $_timer_line\n $_git_key_change_line\n$_packages\n$_basics\n$_systems\n$_tools
-    # set -g fish_greeting $hi_change_status $hi_update_status $header\n $_timer_line\n $_git_key_change_line\n $_unified_checks
+    echo -n "$hi_change_status $hi_update_status"
+    echo (printf '%s~~~~~~~~~~~~~~~~~~ Online %s[%s%s%s]%s ~~~~~~~~~~~~~~~~~~~~~~~~~~%s' (set_color brcyan) (set_color normal) (set_color $fish_color_host) (prompt_hostname) (set_color normal) (set_color brcyan) (set_color normal))
+    echo $spacer" "$utctime"   "$spacer"   "$localtime
+    echo $spacer" "$git_identity" "$spacer" "$containers" "$spacer" "$authorized" "$spacer" "$public
+    echo $_full_check_formatted[1]
+    echo $_full_check_formatted[2]
+    echo $_full_check_formatted[3]
+    echo $_full_check_formatted[4]
   end
-
-  test -n "$fish_greeting"
-  and echo $fish_greeting
 end
 # === end required configurations ===
 

@@ -55,6 +55,8 @@ The following will apply the `laptop` tag coloring to the hostname `foo` and the
 
 `~/.ssh/config` example
 
+# TODO: update this area
+
 ```bash
 # Tags: laptop, work
 Host foo

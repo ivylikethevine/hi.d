@@ -23,8 +23,8 @@
 
 *docker*
 
-**/travel_config
-**/host_colors
-**/user_colors
-**/group_colors
-**/packages_config
+#**/travel_config
+#**/host_colors
+#**/user_colors
+#**/group_colors
+#**/packages_config

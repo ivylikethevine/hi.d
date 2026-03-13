@@ -8,48 +8,48 @@ command -v cecho >/dev/null || source "$_HI_COLORS"
 
 declare -A host_or_user bash_colors fish_colors
 
-function cleanup() {
-  cecho "Re-creating: $_HI_HOST_COLORS ===" "$YELLOW"
-  if [ -f "$_HI_HOST_COLORS" ]; then
-    rm "$_HI_HOST_COLORS"
-    touch "$_HI_HOST_COLORS"
-    printf '%s\n' "# hostname color_bash color_fish" >> "$_HI_HOST_COLORS"
-    printf '%s\n' "$(hostname),\e[0;35m,brmagenta" >> "$_HI_HOST_COLORS"
-    cecho "Generated color entries for: $(wc -l "$_HI_HOST_COLORS" | awk '{ print $1 }') hosts" "$GREEN"
-  else
-    cecho "Already detected, skipping..."
-  fi
 
-  cecho "Re-creating: $_HI_USER_COLORS ===" "$YELLOW"
-  if [ -f "$_HI_USER_COLORS" ]; then
-    rm "$_HI_USER_COLORS"
-    touch "$_HI_USER_COLORS"
-    printf '%s\n' "# username color_bash color_fish" >> "$_HI_USER_COLORS"
-    printf '%s\n' "root,\e[0;31m,red" >> "$_HI_USER_COLORS"
-    cecho "Generated color entries for: $(wc -l "$_HI_USER_COLORS" | awk '{ print $1 }') users" "$GREEN"
-  else
-    cecho "Already detected, skipping..."
-  fi
 
-  cecho "Generating: $_HI_GROUP_COLORS ===" "$YELLOW"
-  if [ ! -f "$_HI_GROUP_COLORS" ]; then
-    touch "$_HI_GROUP_COLORS"
-    {
-      printf '%s\n' "# hosttag tag color_bash color_fish";
-      printf '%s\n' "hosttag,laptop,\e[0;35m,brmagenta";
-      printf '%s\n' "# username name color_bash color_fish";
-      printf '%s\n' "username,root,\e[0;31m,red";
-      printf '%s\n' "# hostname name color_bash color_fish";
-      printf '%s\n' "hostname,meow,\e[0;31m,red";
-    } >> "$_HI_GROUP_COLORS"
-    cecho "Generated entries for: $(grep -c \, "$_HI_GROUP_COLORS" | awk '{ print $1 }') groups" "$GREEN"
-  else
-    cecho "Already detected, skipping..." "$CYAN"
-  fi
+function create_basic_group_colors() {
+  touch "$_HI_GROUP_COLORS"
+  {
+    printf '%s\n' "# username/hostname/hosttag color_bash color_fish";
+    printf '%s\n' "hosttag,desktop,$GREEN,green";
+
+    printf '%s\n' "username,root,$RED,red";
+    printf '%s\n' "username,$USER,$CYAN,blue"
+
+    printf '%s\n' "hostname,prod,$YELLOW,yellow";
+    printf '%s\n' "hostname,$(hostname),$PURPLE,magenta";
+
+  } >> "$_HI_GROUP_COLORS"
+  cecho "Generated entries for: $(grep -c \, "$_HI_GROUP_COLORS" | awk '{ print $1 }') groups" "$GREEN"
 }
 
-function read_colors() {
-  cecho "Reading group color config from: $_HI_GROUP_COLORS ===" "$YELLOW"
+function create_basic_host_colors() {
+  touch "$_HI_HOST_COLORS"
+  {
+    printf '%s\n' "# hostname color_bash color_fish";
+    # printf '%s\n' "prod,$YELLOW,yellow";
+    # printf '%s\n' "$(hostname),$PURPLE,magenta";
+  } >> "$_HI_HOST_COLORS"
+
+  cecho "Recreated!" "$GREEN"
+}
+
+function create_basic_user_colors() {
+  touch "$_HI_USER_COLORS"
+  {
+    printf '%s\n' "# username color_bash color_fish";
+    # printf '%s\n' "root,$RED,red";
+    # printf '%s\n' "$USER,$CYAN,green"
+  } >> "$_HI_USER_COLORS"
+
+  cecho "Recreated!" "$GREEN"
+}
+
+function read_group_colors() {
+  cecho "=== Reading groups from: $_HI_GROUP_COLORS ===" "$YELLOW"
   while IFS=',' read -r type tag color_bash color_fish; do
     [[ -z "$type" ]] && continue
     [[ "$type" =~ "#" ]] && continue
@@ -62,11 +62,13 @@ function read_colors() {
       printf '%s\n' "$tag,${color_bash},${color_fish}" >> "$_HI_USER_COLORS"
     fi
   done < "$_HI_GROUP_COLORS"
-  cecho "Generated color entries for: $(wc -l "$_HI_USER_COLORS" | awk '{ print $1 }') users" "$GREEN"
+  cecho "Generated group-based colors for: $(wc -l "$_HI_USER_COLORS" | awk '{ print $1 }') users" "$CYAN"
+  cecho "Generated group-based colors for: $(wc -l "$_HI_HOST_COLORS" | awk '{ print $1 }') hosts" "$CYAN"
+
 }
 
-function ssh_hosts() {
-  cecho "Reading ssh hosts from: $_HI_SSH_CONFIG_FILE ===" "$YELLOW"
+function read_ssh_hosts() {
+  cecho "=== Reading ssh hosts from: $_HI_SSH_CONFIG_FILE ===" "$YELLOW"
   prev_line=""
   while IFS=' ' read -r line; do
     [[ -z "$line" ]] && continue
@@ -92,11 +94,29 @@ function ssh_hosts() {
 }
 
 function colorgen() {
-  cecho "Generating user & host colors for hi.sh!" "$BRPURPLE"
-  cleanup
-  read_colors
-  ssh_hosts
-  cecho "Colors generated!" "$BRGREEN"
+  cecho "~~~~~ Generating user & host colors for hi.sh! ~~~~~" "$BRGREEN"
+
+  cecho "=== Re-creating: $_HI_HOST_COLORS ===" "$YELLOW"
+  if [ -f "$_HI_HOST_COLORS" ]; then
+    rm "$_HI_HOST_COLORS"
+    create_basic_host_colors
+  fi
+
+  cecho "=== Re-creating: $_HI_USER_COLORS ===" "$YELLOW"
+  if [ -f "$_HI_USER_COLORS" ]; then
+    rm "$_HI_USER_COLORS"
+    create_basic_user_colors
+  fi
+
+  cecho "=== Generating: $_HI_GROUP_COLORS ===" "$YELLOW"
+  if [ -f "$_HI_GROUP_COLORS" ]; then
+    rm "$_HI_GROUP_COLORS"
+    create_basic_group_colors
+  fi
+
+  read_group_colors
+  read_ssh_hosts
+  cecho "~~~~~ Colors generated! ~~~~~ " "$BRGREEN"
   return 0
 }
 

@@ -7,6 +7,9 @@ source "$HI_TMPDIR/hi.d/common/paths.sh"
 # shellcheck source=./common/colors.sh
 command -v cecho >/dev/null || source "$_HI_COLORS"
 
+# shellcheck source=./common/check.sh
+source "$_HI_CHECK"
+
 hi_config_start="# hi-config-start"
 hi_config_end="# hi-config-end"
 hi_copy_time=-1
@@ -57,12 +60,15 @@ function timers() {
 }
 
 function check_packages() {
-  # shellcheck source=./common/check.sh
-  source "$_HI_CHECK"
+  echo -ne " "
   packages
+  echo -ne "\n "
   basics
+  echo -ne "\n "
   systems
+  echo -ne "\n "
   tools
+  echo -ne "\n"
 }
 
 function system_info() {

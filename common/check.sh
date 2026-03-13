@@ -6,41 +6,76 @@ source "$HI_TMPDIR/hi.d/common/paths.sh"
 # shellcheck source=./colors.sh
 command -v cecho >/dev/null || source "$_HI_COLORS"
 
+package_commands=()
+basic_commands=()
+system_commands=()
+tool_commands=()
+
+while IFS= read -r line; do
+  if [[ "$line" =~ ^packages ]]; then
+    package_commands+=("$line")
+  elif [[ "$line" =~ ^basics ]]; then
+    basic_commands+=("$line")
+  elif [[ "$line" =~ ^systems ]]; then
+    system_commands+=("$line")
+  elif [[ "$line" =~ ^tools ]]; then
+    tool_commands+=("$line")
+  fi
+done < "$_HI_CHECK_PACKAGES"
+
 function sort_commands() {
-  local cmd_list=("$@")
+ local cmd_list=("$@")
+ local result=()
 
-  local result=()
+ # Cache command existence to avoid repeated command -v lookups
+ declare -g -A _HI_CMD_CACHE 2>/dev/null
+ if [[ -z ${_HI_CMD_CACHE+x} ]]; then
+  declare -g -A _HI_CMD_CACHE
+ fi
 
-  for item in "${cmd_list[@]}"; do
-    IFS=',' read -ra pairs <<< "$item"
+ for item in "${cmd_list[@]}"; do
+  IFS=',' read -ra pairs <<< "$item"
 
-    local max_priority_cmd=""
-    local max_priority=0
-    local is_installed=false
+  local max_priority=-1
+  local max_cmd
+  local is_installed=0
+  local first_cmd
+  local first_priority
 
-    for pair in "${pairs[@]}"; do
-      cmd="${pair%:*}"
-      priority="${pair#*:}"
+  for pair in "${pairs[@]}"; do
+   local cmd="${pair%:*}"
+   local priority="${pair#*:}"
 
-      if command -v "$cmd" &>/dev/null; then
-        if [[ "$priority" -gt "$max_priority" ]] || [[ "$max_priority" -eq 0 ]]; then
-          max_priority=$priority
-          max_priority_cmd=$cmd
-          is_installed=true
-        fi
-      fi
-    done
-
-    if [[ "$is_installed" == true ]]; then
-      result+=("$max_priority_cmd:$max_priority:yes")
+   if [[ -z ${_HI_CMD_CACHE[$cmd]+_} ]]; then
+    if command -v "$cmd" &>/dev/null; then
+     _HI_CMD_CACHE["$cmd"]=1
     else
-      first_cmd="${pairs[0]%:*}"
-      first_priority="${pairs[0]#*:}"
-      result+=("$first_cmd:$first_priority:no")
+     _HI_CMD_CACHE["$cmd"]=0
     fi
+   fi
+
+   if [[ ${_HI_CMD_CACHE[$cmd]} -eq 1 ]]; then
+    if (( priority > max_priority )); then
+     max_priority=$priority
+     max_cmd=$cmd
+     is_installed=1
+    fi
+   fi
+
+   if [[ -z $first_cmd ]]; then
+    first_cmd=$cmd
+    first_priority=$priority
+   fi
   done
 
-  printf '%s\n' "${result[@]}" | sort -t':' -k2,2n -k3,3r
+  if (( is_installed )); then
+   result+=("$max_cmd:$max_priority:yes")
+  else
+   result+=("$first_cmd:$first_priority:no")
+  fi
+ done
+
+ printf '%s\n' "${result[@]}" | sort -t':' -k2,2n -k3,3r
 }
 
 function check_commands() {
@@ -50,8 +85,6 @@ function check_commands() {
   fi
   IFS=',' read -ra cmd_list <<< "$raw"
   cmd_list=("${cmd_list[@]:1}") # remove the grouping
-
-  echo -ne "$NC"
 
   declare -A color_yes
   declare -A color_no
@@ -91,62 +124,44 @@ function check_commands() {
       symbol="✗"
     fi
 
-    cecho " $cmd $symbol" "$color" 1
+    printf '%b' "$color $cmd $symbol$NC"
+  done
+}
+
+function process_commands() {
+  echo -ne "$NC|"
+  local -n arr=$1
+  for line in "${arr[@]}"; do
+    check_commands "$line"
   done
 }
 
 function packages() {
-  echo -ne " $NC|"
-
-  local package_commands
-  package_commands=$(grep -E '^packages' "$_HI_CHECK_PACKAGES")
-  [[ -z $package_commands ]] && return 1
-  package_commands=${package_commands#packages:}
-  local -a cmd_arr
-  readarray -t cmd_arr <<< "$package_commands"
-  for line in "${cmd_arr[@]}"; do
-    check_commands "$line"
-  done
+  process_commands package_commands
 }
 
 function basics() {
-  echo -ne " $NC|"
-
-  local basic_commands
-  basic_commands=$(grep -E '^basics' "$_HI_CHECK_PACKAGES")
-  [[ -z $basic_commands ]] && return 1
-  basic_commands=${basic_commands#basics:}
-  local -a cmd_arr
-  readarray -t cmd_arr <<< "$basic_commands"
-  for line in "${cmd_arr[@]}"; do
-    check_commands "$line"
-  done
+  process_commands basic_commands
 }
 
 function systems() {
-  echo -ne " $NC|"
-
-  local system_commands
-  system_commands=$(grep -E '^systems' "$_HI_CHECK_PACKAGES")
-  [[ -z $system_commands ]] && return 1
-  system_commands=${system_commands#systems:}
-  local -a cmd_arr
-  readarray -t cmd_arr <<< "$system_commands"
-  for line in "${cmd_arr[@]}"; do
-    check_commands "$line"
-  done
+  process_commands system_commands
 }
 
 function tools() {
-  echo -ne " $NC|"
+  process_commands tool_commands
+}
 
-  local tool_commands
-  tool_commands=$(grep -E '^tools' "$_HI_CHECK_PACKAGES")
-  [[ -z $tool_commands ]] && return 1
-  tool_commands=${tool_commands#tools:}
-  local -a cmd_arr
-  readarray -t cmd_arr <<< "$tool_commands"
-  for line in "${cmd_arr[@]}"; do
-    check_commands "$line"
-  done
+function full_check_fish {
+  packages
+  echo -n "newline"
+
+  basics
+  echo -n "newline"
+
+  systems
+  echo -n "newline"
+
+  tools
+  echo -n "newline"
 }

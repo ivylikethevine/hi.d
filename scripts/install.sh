@@ -6,57 +6,65 @@ source "$HI_TMPDIR/hi.d/common/paths.sh"
 # shellcheck source=./../common/colors.sh
 command -v cecho >/dev/null || source "$_HI_COLORS"
 
-install_tmpdir=$(mktemp -d)
-tmp_bashrc="$install_tmpdir/bashrc"
-tmp_zshrc="$install_tmpdir/zshrc"
-tmp_fish="$install_tmpdir/config.fish"
-
-HI_TMPDIR=${HI_TMPDIR:-$HOME}
-
 function append() {
   local input="$1"
   local output="$2"
+  local tmpdir="$3"
+  local appendfile="$tmpdir/append.tmp"
+
   if ! test -f "$input"; then
     touch "$input"
   fi
-  cat "$input" | grep -vxF -f "$output" > "$install_tmpdir/append.tmp"
-  cat "$output" >> "$install_tmpdir/append.tmp"
-  mv "$install_tmpdir/append.tmp" "$2"
+  cat "$input" | grep -vxF -f "$output" > "$appendfile"
+  cat "$output" >> "$appendfile"
+  mv "$appendfile" "$output"
 }
 
 function config_bashrc() {
-  cecho "Checking bashrc ========" "$CYAN"
+  cecho "=== Checking bashrc ===" "$YELLOW"
+
+  local tmpdir="$1"
+  local tmp_bashrc="$tmpdir/bashrc"
   cat <<'EOF' >> "$tmp_bashrc"
 # If not running interactively, exit   # added by hi during install
 [[ $- != *i* ]] && return              # added by hi during install
 source ~/hi.d/shells/bash.sh          # added by hi during install
 EOF
-  append "$tmp_bashrc" "$_HI_HOME_BASHRC"
+  append "$tmp_bashrc" "$_HI_HOME_BASHRC" "$tmpdir"
+
   cecho "local bashrc up to date :)" "$GREEN"
 }
 
 function config_zshrc() {
-  cecho "Checking zshrc ========" "$CYAN"
+  cecho "=== Checking zshrc ===" "$YELLOW"
+
+  local tmpdir="$1"
+  local tmp_zshrc="$tmpdir/zshrc"
   cat <<'EOF' >> "$tmp_zshrc"
 source ~/hi.d/shells/zsh.zsh          # added by hi during install
 EOF
-  append "$tmp_zshrc" "$_HI_HOME_ZSHRC"
+  append "$tmp_zshrc" "$_HI_HOME_ZSHRC" "$tmpdir"
+
   cecho "local zshrc up to date :)" "$GREEN"
 }
 
 function config_fish() {
-  cecho "Checking config.fish ========" "$CYAN"
+  cecho "=== Checking config.fish ===" "$YELLOW"
+
+  local tmpdir="$1"
+  local tmp_fish="$tmpdir/config.fish"
   cat <<'EOF' >> "$tmp_fish"
 if status is-interactive               # added by hi during install
   source ~/hi.d/shells/config.fish    # added by hi during install
 end                                    # added by hi during install
 EOF
-  append "$tmp_fish" "$_HI_HOME_FISH_CONFIG"
+  append "$tmp_fish" "$_HI_HOME_FISH_CONFIG" "$tmpdir"
+
   cecho "local config.fish up to date :)" "$GREEN"
 }
 
 function config_hi() {
-  cecho "Checking hi.sh ========" "$CYAN"
+  cecho "=== Checking hi.sh ===" "$YELLOW"
   local INSTALLED_HI="/usr/bin/hi"
   local NEW_HI="$HOME/hi.d/hi.sh"
 
@@ -75,14 +83,21 @@ function config_hi() {
 }
 
 function main() {
-  config_bashrc
-  config_zshrc
-  config_fish
+  cecho "~~~~~ Installing (or reinstalling) hi.sh! ~~~~~" "$BRGREEN"
+
+  local TMP
+  TMP=$(mktemp -d)
+  config_bashrc "$TMP"
+  config_zshrc "$TMP"
+  config_fish "$TMP"
+
   config_hi
-  cecho "Generating colors for users and hosts" "$CYAN"
+  cecho "===== Running hi_colorgen =====" "$BRCYAN"
   # shellcheck source=./colorgen.sh
-  source "$_HI_COLORGEN"  rm -rf "$install_tmpdir"
-  cecho "Done!" "$GREEN"
+  source "$_HI_COLORGEN"
+  rm -rf "$TMP"
+
+  cecho "~~~~~ Installed! ~~~~~ " "$BRGREEN"
 }
 
 main

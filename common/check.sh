@@ -6,8 +6,15 @@ source "$HI_TMPDIR/hi.d/common/paths.sh"
 # shellcheck source=./prompt_colors.sh
 command -v cecho >/dev/null || source "$_HI_PROMPT_COLORS_PATH"
 
-# # Format - package:priority,similar_package
-# # Sort highest priorities to top of each list
+# Format - package:priority,similar_package:priority
+# priority | installed | hidden | color
+#    0     |    yes    |   X    |
+#    0     |    no     |        | yellow
+#    1     |    yes    |        | blue
+#    1     |    no     |   X    |
+#    2     |    yes    |        | green
+#    2     |    no     |        | bright yellow
+# highest priority on left
 
 # shellcheck disable=SC2054
 PACKAGES=(
@@ -71,19 +78,19 @@ SYSTEMS=(
 
 function sort_commands() {
   local cmd_list=("$@")
-  local present=()
-  local absent=()
-  local priority_zero_present=()
-  local priority_zero_absent=()
+  local result=()
 
   for item in "${cmd_list[@]}"; do
     IFS=',' read -ra pairs <<< "$item"
+
     local max_priority_cmd=""
     local max_priority=0
     local is_installed=false
+
     for pair in "${pairs[@]}"; do
       cmd="${pair%:*}"
       priority="${pair#*:}"
+
       if command -v "$cmd" &>/dev/null; then
         if [[ "$priority" -gt "$max_priority" ]] || [[ "$max_priority" -eq 0 ]]; then
           max_priority=$priority
@@ -92,56 +99,55 @@ function sort_commands() {
         fi
       fi
     done
+
     if [[ "$is_installed" == true ]]; then
-      if [[ "$max_priority" -eq 0 ]]; then
-        priority_zero_present+=("$max_priority_cmd:$max_priority:yes")
-      else
-        present+=("$max_priority_cmd:$max_priority:yes")
-      fi
+      result+=("$max_priority_cmd:$max_priority:yes")
     else
       first_cmd="${pairs[0]%:*}"
       first_priority="${pairs[0]#*:}"
-      if [[ "$first_priority" -eq 0 ]]; then
-        priority_zero_absent+=("$first_cmd:$first_priority:no")
-      else
-        absent+=("$first_cmd:$first_priority:no")
-      fi
+      result+=("$first_cmd:$first_priority:no")
     fi
   done
-  local sorted=("${priority_zero_present[@]}" "${priority_zero_absent[@]}" "${present[@]}" "${absent[@]}")
-  printf '%s\n' "${sorted[@]}"
+
+  # Sort by priority (0=low, 1=medium, 2=high)
+  printf '%s\n' "${result[@]}" | sort -t':' -k2,2n -k3,3r
 }
 
 function check_commands() {
   local cmd_list=("$@")
   echo -ne " $NC|"
+
   # shellcheck disable=SC2207
   local sorted_cmd_list=($(sort_commands "${cmd_list[@]}"))
+
   for item in "${sorted_cmd_list[@]}"; do
     cmd="${item%:*:*}"
     inner="${item#*:}"
     priority="${inner%:*}"
     is_installed="${item##*:}"
-    if [[ "$priority" == "0" ]]; then
-      if [[ "$is_installed" == "yes" ]]; then
-        echo -ne "" # print nothing
-      else
+
+    case "$priority:$is_installed" in
+      "0:yes")
+        # Print nothing for priority 0 when installed
+        ;;
+      "0:no")
         cecho " $cmd ✗" "$YELLOW" 1
-      fi
-    elif [[ "$priority" == "1" ]]; then
-      if [[ "$is_installed" == "yes" ]]; then
+        ;;
+      "1:yes")
         cecho " $cmd ✓" "$BLUE" 1
-      else
-        echo -ne "" # print nothing
-      fi
-    elif [[ "$priority" == "2" ]]; then
-      if [[ "$is_installed" == "yes" ]]; then
+        ;;
+      "1:no")
+        # Print nothing for priority 1 when not installed
+        ;;
+      "2:yes")
         cecho " $cmd ✓" "$GREEN" 1
-      else
+        ;;
+      "2:no")
         cecho " $cmd ✗" "$BRYELLOW" 1
-      fi
-    fi
+        ;;
+    esac
   done
+
   echo
 }
 

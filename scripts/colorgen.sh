@@ -91,7 +91,7 @@ function read_ssh_hosts() {
   cecho "Generated color entries for: $(wc -l "$_HI_HOST_COLORS" | awk '{ print $1 }') hosts" "$GREEN"
 }
 
-function intial_colorgen() {
+function initial_colorgen() {
   rm "$_HI_GROUP_COLORS"
   colorgen
 }

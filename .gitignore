@@ -17,6 +17,7 @@
 *.csv
 *.sql
 *.json
+!.zed/settings.json
 *.toml
 *.yaml
 *.yml

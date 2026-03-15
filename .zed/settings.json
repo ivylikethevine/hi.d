@@ -1,0 +1,8 @@
+{
+  "file_types": {
+    "JSONC": [".zed/settings.json"],
+    "Rainbow CSV (,)": ["group_colors", "host_colors", "user_colors", "packages_config"],
+    "SSH Config": ["travel_config"],
+    "Properties": ["vim.rc", "nano.rc"],
+  },
+}

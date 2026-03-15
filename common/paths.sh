@@ -10,9 +10,9 @@ export _HI_HOST_COLORS="$HI_ROOT/data/host_colors"
 export _HI_USER_COLORS="$HI_ROOT/data/user_colors"
 
 # user configurable
-export _HI_GROUP_COLORS="$HI_ROOT/data/group_colors"
+export _HI_GROUP_CONFIG="$HI_ROOT/data/group_config" # remains local & is not copied to any targets
 export _HI_TRAVEL_CONFIG="$HI_ROOT/data/travel_config"
-export _HI_CHECK_PACKAGES="$HI_ROOT/data/packages_config"
+export _HI_PACKAGES_CONFIG="$HI_ROOT/data/packages_config"
 
 export _HI_VIMRC="$HI_ROOT/misc/vim.rc"
 export _HI_NANORC="$HI_ROOT/misc/nano.rc"

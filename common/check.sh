@@ -32,7 +32,7 @@ load_packages() {
       color_yes["$priority"]="$yescol"
       color_no["$priority"]="$nocol"
     fi
-  done < "$_HI_CHECK_PACKAGES"
+  done < "$_HI_PACKAGES_CONFIG"
 }
 
 function sort_commands() {
@@ -155,5 +155,4 @@ function full_check_fish {
   process_commands system_commands
   echo -n "newline"
   process_commands tool_commands
-  echo -n "newline"
 }

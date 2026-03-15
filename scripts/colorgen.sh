@@ -9,7 +9,7 @@ command -v cecho >/dev/null || source "$_HI_COLORS"
 declare -A host_or_user bash_colors fish_colors
 
 function create_basic_group_colors() {
-  touch "$_HI_GROUP_COLORS"
+  touch "$_HI_GROUP_CONFIG"
   {
     printf '%s\n' "#username/hostname/hosttag,color_bash,color_fish";
     printf '%s\n' "hosttag,desktop,$GREEN,green";
@@ -20,8 +20,8 @@ function create_basic_group_colors() {
     printf '%s\n' "hostname,prod,$YELLOW,yellow";
     printf '%s\n' "hostname,$(hostname),$PURPLE,magenta";
 
-  } >> "$_HI_GROUP_COLORS"
-  cecho "Generated entries for: $(grep -c \, "$_HI_GROUP_COLORS" | awk '{ print $1 }') groups" "$GREEN"
+  } >> "$_HI_GROUP_CONFIG"
+  cecho "Generated entries for: $(grep -c \, "$_HI_GROUP_CONFIG" | awk '{ print $1 }') groups" "$GREEN"
 }
 
 function create_basic_host_colors() {
@@ -47,7 +47,7 @@ function create_basic_user_colors() {
 }
 
 function read_group_colors() {
-  cecho "=== Reading groups from: $_HI_GROUP_COLORS ===" "$YELLOW"
+  cecho "=== Reading groups from: $_HI_GROUP_CONFIG ===" "$YELLOW"
   while IFS=',' read -r type tag color_bash color_fish; do
     [[ -z "$type" ]] && continue
     [[ "$type" =~ "#" ]] && continue
@@ -59,7 +59,7 @@ function read_group_colors() {
     elif [ "$type" = 'username' ]; then
       printf '%s\n' "$tag,${color_bash},${color_fish}" >> "$_HI_USER_COLORS"
     fi
-  done < "$_HI_GROUP_COLORS"
+  done < "$_HI_GROUP_CONFIG"
   cecho "Generated group-based colors for: $(wc -l "$_HI_USER_COLORS" | awk '{ print $1 }') users" "$CYAN"
   cecho "Generated group-based colors for: $(wc -l "$_HI_HOST_COLORS" | awk '{ print $1 }') hosts" "$CYAN"
 
@@ -92,7 +92,7 @@ function read_ssh_hosts() {
 }
 
 function initial_colorgen() {
-  rm "$_HI_GROUP_COLORS"
+  rm "$_HI_GROUP_CONFIG"
   colorgen
 }
 
@@ -120,14 +120,14 @@ function colorgen() {
     create_basic_user_colors
   fi
 
-  cecho "=== Generating: $_HI_GROUP_COLORS ===" "$YELLOW"
-  if [ -f "$_HI_GROUP_COLORS" ]; then
+  cecho "=== Generating: $_HI_GROUP_CONFIG ===" "$YELLOW"
+  if [ -f "$_HI_GROUP_CONFIG" ]; then
     create_basic_group_colors
   fi
 
   read_group_colors
   read_ssh_hosts
-  dedupe "$_HI_GROUP_COLORS"
+  dedupe "$_HI_GROUP_CONFIG"
   dedupe "$_HI_USER_COLORS"
   dedupe "$_HI_HOST_COLORS"
 

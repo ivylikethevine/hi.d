@@ -107,10 +107,9 @@ function fish_greeting
     echo (printf '%s~~~~~~~~~~~~~~~~~~ Online %s[%s%s%s]%s ~~~~~~~~~~~~~~~~~~~~~~~~~~%s' (set_color brcyan) (set_color normal) (set_color $fish_color_host) (prompt_hostname) (set_color normal) (set_color brcyan) (set_color normal))
     echo $spacer" "$utctime"   "$spacer"   "$localtime
     echo $spacer" "$git_identity" "$spacer" "$containers" "$spacer" "$authorized" "$spacer" "$public
-    echo $_full_check_formatted[1]
-    echo $_full_check_formatted[2]
-    echo $_full_check_formatted[3]
-    echo $_full_check_formatted[4]
+    for line in $_full_check_formatted
+      echo $line
+    end
   end
 end
 # === end required configurations ===

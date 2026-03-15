@@ -30,4 +30,5 @@ min/
 **/host_colors
 **/user_colors
 **/group_colors
+**/group_config
 **/packages_config

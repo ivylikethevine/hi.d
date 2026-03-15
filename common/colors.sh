@@ -4,7 +4,6 @@
 HI_TMPDIR=${HI_TMPDIR:-$HOME}
 # shellcheck source=./paths.sh
 source "$HI_TMPDIR/hi.d/common/paths.sh"
-# shellcheck source=./common/aliases.sh
 
 # required
 export RED='\e[0;31m'
@@ -25,19 +24,21 @@ export NC='\e[0m'
 cecho() {
   local text=${1:-}
   local color=${2:-}
+  local skip_newline=${3:-}
 
   local formatted_text="$color$text$NC"
-  if [[ -n ${3+x} ]]; then
-    echo -e -n "$formatted_text";
-  else
+  if [[ -z $skip_newline  ]]; then
     echo -e "$formatted_text";
+  else
+    echo -e -n "$formatted_text";
   fi
+  return
 }
 
 # required
 function at_color() {
-  local ssh_tty="$1"
-  if [[ $ssh_tty ]]; then
+  local ssh_tty=${1+x}
+  if [[ -z $ssh_tty ]]; then
     printf '%s' "$YELLOW"
   else
     printf '%s' "$NC"
@@ -46,30 +47,30 @@ function at_color() {
 
 # required
 function read_color_file() {
-  local search_val="$1"
-  local color_file="$2"
-  local is_fish="$3"
+  local search_val=${1:-}
+  local color_file=${2:-}
+  local is_fish=${3+x}
 
+  declare -a dataArray
   while IFS=$',' read -r -a dataArray; do
       current_val="${dataArray[0]}"
       [[ "$current_val" =~ ^[[:space:]]*# ]] && continue
-      [[ -z "$current_val" ]] && continue
+      [[ -z ${current_val+x} ]] && continue
 
       if [ "$search_val" = "$current_val" ]; then
-        if [[ -z "$is_fish" ]]; then
+        if [[ -z $is_fish ]]; then
           echo "${dataArray[2]}"
         else
           echo "${dataArray[1]}"
         fi
-        return 0
+        return
       fi
   done < "$color_file"
-  if [[ -z "$is_fish" ]]; then
+  if [[ -z $is_fish ]]; then
     printf '%s\n' "brgreen"
   else
     printf '%s\n' "\e[0;32m"
   fi
-  return 1
 }
 
 # required

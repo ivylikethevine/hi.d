@@ -1,5 +1,5 @@
 #!/bin/bash
-# set -eou pipefail
+set -eou pipefail
 
 HI_TMPDIR=${HI_TMPDIR:-$HOME}
 # shellcheck source=./paths.sh

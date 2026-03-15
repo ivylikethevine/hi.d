@@ -1,4 +1,5 @@
 #!/bin/bash
+set -eou pipefail
 
 # === start required configuration ===
 HI_TMPDIR=${HI_TMPDIR:-$HOME}
@@ -28,7 +29,7 @@ fi
 if [ "$color_prompt" = yes ]; then
   USER_COLOR=$(user_color "$(whoami)")
   HOST_COLOR=$(host_color "$(hostname)")
-  AT_COLOR=$(at_color "${SSH_TTY}")
+  AT_COLOR=$(at_color ${SSH_TTY+x})
 
   PS1=" ${debian_chroot:+($debian_chroot)}${USER_COLOR}\u${AT_COLOR}@${HOST_COLOR}\h\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]\$ "
 else

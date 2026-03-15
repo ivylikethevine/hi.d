@@ -25,6 +25,7 @@ if [ -n "$force_color_prompt" ]; then
     color_prompt=
   fi
 fi
+# TODO: fix + improve
 if [ "$color_prompt" = yes ]; then
   USER_COLOR=$(user_color "$(whoami)")
   HOST_COLOR=$(host_color "$(hostname)")

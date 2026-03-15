@@ -1,6 +1,6 @@
 #!/bin/bash
 # forked from sshrc: https://github.com/danrabinowitz/sshrc
-# set -eou pipefail
+set -eou pipefail
 
 HI_TMPDIR=${HI_TMPDIR:-$HOME}
 # shellcheck source=./common/paths.sh

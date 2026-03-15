@@ -1,6 +1,4 @@
-# hostname color_bash color_fish
-prod,\e[0;33m,yellow
-liona,\e[0;35m,magenta
+#hostname,color_bash,color_fish
 prod,\e[0;33m,yellow
 liona,\e[0;35m,magenta
 prod,\e[0;33m,yellow

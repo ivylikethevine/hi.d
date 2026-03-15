@@ -24,7 +24,7 @@
 *docker*
 
 data/
-
+min/
 **/travel_config
 **/host_colors
 **/user_colors

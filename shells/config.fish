@@ -244,7 +244,13 @@ set -gx fish_pager_color_selected_completion
 set -gx fish_pager_color_selected_description
 set -gx fish_pager_color_selected_prefix
 
-# TODO: dedupe
-set -gx fish_color_user (bash -c "source $_HI_COLORS; user_color")
-set -gx fish_color_host (bash -c "source $_HI_COLORS; host_color")
+
+if [ $HI_TMPDIR = $HOME ]
+  set -gx _hi_colors (string split " " (bash -c "source $_HI_COLORS; user_color; host_color"))
+else
+  set -gx _hi_colors (string split " " (bash -c "source $_HI_COLORS; user_color; echo; host_color"))
+end
+
+set -gx fish_color_user $_hi_colors[1]
+set -gx fish_color_host $_hi_colors[2]
 set -gx fish_color_host_remote $fish_color_host

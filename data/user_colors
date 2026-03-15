@@ -1,6 +1,4 @@
-# username color_bash color_fish
-root,\e[0;31m,red
-ivy,\e[0;36m,blue
+#username,color_bash,color_fish
 root,\e[0;31m,red
 ivy,\e[0;36m,blue
 root,\e[0;31m,red

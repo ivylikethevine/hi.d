@@ -11,7 +11,7 @@ declare -A host_or_user bash_colors fish_colors
 function create_basic_group_colors() {
   touch "$_HI_GROUP_COLORS"
   {
-    printf '%s\n' "# username/hostname/hosttag color_bash color_fish";
+    printf '%s\n' "#username/hostname/hosttag,color_bash,color_fish";
     printf '%s\n' "hosttag,desktop,$GREEN,green";
 
     printf '%s\n' "username,root,$RED,red";
@@ -27,7 +27,7 @@ function create_basic_group_colors() {
 function create_basic_host_colors() {
   touch "$_HI_HOST_COLORS"
   {
-    printf '%s\n' "# hostname color_bash color_fish";
+    printf '%s\n' "#hostname,color_bash,color_fish";
     # printf '%s\n' "prod,$YELLOW,yellow";
     # printf '%s\n' "$(hostname),$PURPLE,magenta";
   } >> "$_HI_HOST_COLORS"
@@ -38,7 +38,7 @@ function create_basic_host_colors() {
 function create_basic_user_colors() {
   touch "$_HI_USER_COLORS"
   {
-    printf '%s\n' "# username color_bash color_fish";
+    printf '%s\n' "#username,color_bash,color_fish";
     # printf '%s\n' "root,$RED,red";
     # printf '%s\n' "$USER,$CYAN,green"
   } >> "$_HI_USER_COLORS"
@@ -96,6 +96,15 @@ function intial_colorgen() {
   colorgen
 }
 
+# TODO: fix or switch to append
+function dedupe() {
+  local input="$1"
+  tmp=$(mktemp)
+  cat "$input" | uniq -c | awk '{ print $2 }' > "$tmp"
+  cp "$tmp" "$input"
+  rm "$tmp"
+}
+
 function colorgen() {
   cecho "~~~~~ Generating user & host colors for hi.sh! ~~~~~" "$BRGREEN"
 
@@ -118,6 +127,10 @@ function colorgen() {
 
   read_group_colors
   read_ssh_hosts
+  dedupe "$_HI_GROUP_COLORS"
+  dedupe "$_HI_USER_COLORS"
+  dedupe "$_HI_HOST_COLORS"
+
   cecho "~~~~~ Colors generated! ~~~~~ " "$BRGREEN"
   return 0
 }

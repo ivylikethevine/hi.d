@@ -70,3 +70,8 @@ alias aptup="sudo apt update"
 alias aptug="sudo apt upgrade"
 alias aptupg="sudo apt update && sudo apt upgrade"
 alias aptac="sudo apt autoclean && sudo apt autoremove"
+
+
+# fwupdmgr
+alias fw_check="fwupdmgr get-devices && fwupdmgr get-updates"
+alias fw_update="fwupdmgr update"

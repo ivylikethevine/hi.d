@@ -1,11 +1,9 @@
-# username/hostname/hosttag color_bash color_fish
+#username/hostname/hosttag,color_bash,color_fish
 hosttag,desktop,\e[0;32m,green
 hosttag,csd,\e[0;33m,blue
 hosttag,edenlabs,\e[0;34m,yellow
 hosttag,desktop,\e[0;32m,green
-
 username,root,\e[0;31m,red
 username,ivy,\e[0;36m,blue
-
 hostname,prod,\e[0;33m,yellow
 hostname,liona,\e[0;35m,magenta

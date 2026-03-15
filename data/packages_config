@@ -41,6 +41,7 @@ tools,sshm:1,sshrc:2,hi:2
 tools,rust:1,rustc:1,rustup:2
 tools,cosign:1
 tools,shellcheck:1
+tools,has:2
 
 systems,docker:4
 systems,direnv:4

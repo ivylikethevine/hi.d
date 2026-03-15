@@ -1,4 +1,5 @@
 #!/bin/bash
+# set -eou pipefail
 
 HI_TMPDIR=${HI_TMPDIR:-$HOME}
 # shellcheck source=./paths.sh
@@ -22,10 +23,11 @@ export NC='\e[0m'
 
 # required
 cecho() {
-  local formatted_text="$2$1$NC"
-  local disable_newline="${3}"
+  local text=${1:-}
+  local color=${2:-}
 
-  if [[ -n "$disable_newline" ]]; then
+  local formatted_text="$color$text$NC"
+  if [[ -n ${3+x} ]]; then
     echo -e -n "$formatted_text";
   else
     echo -e "$formatted_text";
@@ -63,19 +65,19 @@ function read_color_file() {
       fi
   done < "$color_file"
   if [[ -z "$is_fish" ]]; then
-    printf '%s' "brgreen"
+    printf '%s\n' "brgreen"
   else
-    printf '%s' "\e[0;32m"
+    printf '%s\n' "\e[0;32m"
   fi
   return 1
 }
 
 # required
 function host_color() {
-  read_color_file "$(hostname)" "$_HI_HOST_COLORS" "${1:-}"
+  read_color_file "$(hostname)" "$_HI_HOST_COLORS" ${1+x}
 }
 
 # required
 function user_color() {
-  read_color_file "$(whoami)" "$_HI_USER_COLORS"  "${1:-}"
+  read_color_file "$(whoami)" "$_HI_USER_COLORS"  ${1+x}
 }

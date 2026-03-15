@@ -1,12 +1,12 @@
 #!/bin/bash
 # forked from sshrc: https://github.com/danrabinowitz/sshrc
+# set -eou pipefail
 
 HI_TMPDIR=${HI_TMPDIR:-$HOME}
 # shellcheck source=./common/paths.sh
 source "$HI_TMPDIR/hi.d/common/paths.sh"
 # shellcheck source=./common/colors.sh
 command -v cecho >/dev/null || source "$_HI_COLORS"
-
 if [ ! -f "$_HI_HOST_COLORS" ] || [ ! -f "$_HI_USER_COLORS" ]; then
   # shellcheck source=./scripts/colorgen.sh
   source "$_HI_COLORGEN"
@@ -22,7 +22,7 @@ command -v openssl >/dev/null 2>&1 || {
 hi_exclude=(--exclude README.md --exclude .git --exclude .gitignore --exclude scripts --exclude hi.sh --exclude hi.bashrc --exclude data/group_colors --exclude .zed --exclude data/.gitkeep --exclude *private*)
 
 function hi_parse() {
-  while [[ -n $1 ]]; do
+  while [[ -n ${1+x} ]]; do
     case $1 in
     -b | -c | -D | -E | -e | -F | -I | -i | -L | -l | -m | -O | -o | -p | -Q | -R | -S | -W | -w)
       SSHARGS="$SSHARGS $1 $2"
@@ -32,7 +32,7 @@ function hi_parse() {
       SSHARGS="$SSHARGS $1"
       ;;
     *)
-      if [ -z "$DOMAIN" ]; then
+      if [ -z ${DOMAIN+x} ]; then
         DOMAIN="$1"
       else
         local SEMICOLON=""
@@ -77,7 +77,7 @@ function say_hi() {
                 elif [ -r ~/.bash_login ]; then source ~/.bash_login
                 elif [ -r ~/.profile ]; then source ~/.profile
                 fi
-                export PATH=$PATH:$HI_ROOT
+                export PATH=$PATH:${HI_ROOT+x}
                 source $HI_ROOT/load.sh
                 load
 EOF

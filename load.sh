@@ -1,12 +1,12 @@
 #!/bin/bash
 # forked from sshrc: https://github.com/danrabinowitz/sshrc
+# set -eou pipefail
 
 HI_TMPDIR=${HI_TMPDIR:-$HOME}
 # shellcheck source=./common/paths.sh
 source "$HI_TMPDIR/hi.d/common/paths.sh"
 # shellcheck source=./common/colors.sh
 command -v cecho >/dev/null || source "$_HI_COLORS"
-
 # shellcheck source=./common/check.sh
 source "$_HI_CHECK"
 
@@ -29,8 +29,8 @@ function timestamp() {
 
 # required
 function configure_file() {
-  local source="$1"
-  local target="$2"
+  local source=${1}
+  local target=${2}
   touch "$target"
   if test -f "$source"; then
     if ! grep -q "$hi_config_start" "$target"; then
@@ -45,7 +45,12 @@ function configure_file() {
 
 # required
 function clean_all() {
-  local shells=("$_HI_HOME_BASHRC" "$_HI_HOME_ZSHRC" "$_HI_HOME_FISH_CONFIG")
+  local shells
+  if [ -d "$_HI_FISH_DIR" ]; then
+    shells=("$_HI_HOME_BASHRC" "$_HI_HOME_ZSHRC" "$_HI_HOME_FISH_CONFIG")
+  else
+    shells=("$_HI_HOME_BASHRC" "$_HI_HOME_ZSHRC")
+  fi
   for shell in "${shells[@]}"; do
     if test -f "$shell"; then
       sed -i "/^$hi_config_start/,/^$hi_config_end/d" -- "$shell"
@@ -143,7 +148,7 @@ function load() {
   fi
 
   configure_file "$_HI_BASH_CONFIG" "$_HI_HOME_BASHRC"
-  configure_file "$_HI_ZSHRC" "$_HI_HOME_ZSHRC"
+  configure_file "$_HI_ZSH_CONFIG" "$_HI_HOME_ZSHRC"
   if [ -d "$_HI_FISH_DIR" ]; then
     # This directory won't exist if fish isn't installed
     configure_file "$_HI_FISH_CONFIG" "$_HI_HOME_FISH_CONFIG"

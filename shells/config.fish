@@ -105,10 +105,10 @@ function fish_greeting
 
     echo -n "$hi_change_status $hi_update_status "
     echo (printf '%s~~~~~~~~~~~~~~~~~~ Online %s[%s%s%s]%s ~~~~~~~~~~~~~~~~~~~~~~~~~~%s' (set_color brcyan) (set_color normal) (set_color $fish_color_host) (prompt_hostname) (set_color normal) (set_color brcyan) (set_color normal))
-    echo $spacer" "$utctime"   "$spacer"   "$localtime
-    echo $spacer" "$git_identity" "$spacer" "$containers" "$spacer" "$authorized" "$spacer" "$public
+    echo " "$spacer" "$utctime"   "$spacer"   "$localtime
+    echo " "$spacer" "$git_identity" "$spacer" "$containers" "$spacer" "$authorized" "$spacer" "$public
     for line in $_full_check_formatted
-      echo $line
+      echo " "$line
     end
   end
 end
@@ -244,12 +244,7 @@ set -gx fish_pager_color_selected_description
 set -gx fish_pager_color_selected_prefix
 
 
-if [ $HI_TMPDIR = $HOME ]
-  set -gx _hi_colors (string split " " (bash -c "source $_HI_COLORS; user_color; host_color"))
-else
-  set -gx _hi_colors (string split " " (bash -c "source $_HI_COLORS; user_color; echo; host_color"))
-end
-
+set -gx _hi_colors (string split " " (bash -c "source $_HI_COLORS; user_color; host_color"))
 set -gx fish_color_user $_hi_colors[1]
 set -gx fish_color_host $_hi_colors[2]
 set -gx fish_color_host_remote $fish_color_host

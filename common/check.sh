@@ -1,4 +1,5 @@
 #!/bin/bash
+# set -eou pipefail
 
 HI_TMPDIR=${HI_TMPDIR:-$HOME}
 # shellcheck source=./paths.sh
@@ -60,7 +61,7 @@ function sort_commands() {
         fi
       fi
 
-      if [[ -z $first_cmd ]]; then
+      if [[ -z ${first_cmd+x} ]]; then
         first_cmd=$cmd
         first_priority=$current
       fi

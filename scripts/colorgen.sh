@@ -1,4 +1,5 @@
 #!/bin/bash
+set -eou pipefail
 
 HI_TMPDIR=${HI_TMPDIR:-$HOME}
 # shellcheck source=./../common/paths.sh
@@ -81,7 +82,7 @@ function read_ssh_hosts() {
       fi
       current=${tags[0]} # only uses leftmost tag for now :shrug:
       [[ -z "$current" ]] && continue
-      [[ -z "${host_or_user[$current]}" ]] && continue
+      [[ -z "${host_or_user[$current]+x}" ]] && continue
       if [[ "${host_or_user[$current]}" =~ hosttag ]]; then
         printf '%s\n' "$host,${bash_colors[$current]},${fish_colors[$current]}" >> "$_HI_HOST_COLORS"
       fi

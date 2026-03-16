@@ -14,6 +14,9 @@ alias nano="nano --rcfile $HI_TMPDIR/hi.d/misc/nano.rc"
 alias vim="vim -u $HI_TMPDIR/hi.d/misc/vim.rc"
 
 # shellcheck disable=SC2139
+alias hi="$HI_TMPDIR/hi.d/hi.sh"
+
+# shellcheck disable=SC2139
 alias bat="$(command -v bat || command -v batcat) -P --tabs 2 --theme Monokai\ Extended\ Bright --style changes,grid,numbers"
 # === end required variables/aliases ===
 

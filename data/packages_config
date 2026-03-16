@@ -42,8 +42,9 @@ tools,rust:1,rustc:1,rustup:2
 tools,cosign:1
 tools,shellcheck:1
 tools,has:2
+tools,tree:4
 
-systems,docker:4
+systems,docker:4,podman:4,kubectl:4
 systems,direnv:4
 systems,snap:1
 systems,apt:1,pacman:1,dnf:1,rpm:1,zypper:1,brew:1,apk:2,nix:2
@@ -54,3 +55,4 @@ systems,pkgconf:1
 systems,appimage:1
 systems,fusermount:1
 systems,flatpak:1
+systems,dotnet-sdk:4

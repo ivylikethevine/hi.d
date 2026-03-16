@@ -52,7 +52,12 @@ function hi_parse() {
 
 function say_hi() {
   if [ -d "$HI_ROOT" ]; then
-    cecho "\r $(du -sh "${hi_exclude[@]}" --apparent-size "$HI_ROOT" | awk '{ print $1 }') " "$CYAN" 1
+    if [ -f /etc/os-release ]; then
+      cecho "\r $(du -sh "${hi_exclude[@]}" --apparent-size "$HI_ROOT" | awk '{ print $1 }') " "$CYAN" 1
+    else
+      cecho "\r $(du -sh "${hi_exclude[@]}" "$HI_ROOT" | awk '{ print $1 }') "  "$CYAN" 1
+    fi
+
     local size=0
     size="$(tar cfz - -h -C "${hi_exclude[@]}" hi.d | wc -c)"
     if [ "$size" -gt 65536 ]; then
@@ -68,8 +73,8 @@ function say_hi() {
             export HI_ROOT=\$HI_TMPDIR/hi.d
             export HI_CLEANUP=\$HI_TMPDIR
             trap \"rm -rf \$HI_CLEANUP; exit\" exit
-            echo \"$(cat "$0" | $OPENSSL_CMD)\" | $TR_CMD | $OPENSSL_CMD -d > \$HI_ROOT/hi
-            chmod +x \$HI_ROOT/hi
+            echo \"$(cat "$0" | $OPENSSL_CMD)\" | $TR_CMD | $OPENSSL_CMD -d > \$HI_ROOT/hi.sh
+            chmod +x \$HI_ROOT/hi.sh
             echo \"$(
       cat <<'EOF' | $OPENSSL_CMD
                 if [ -r /etc/profile ]; then source /etc/profile; fi
@@ -86,7 +91,7 @@ EOF
             export HI_TMPDIR=\$HI_TMPDIR
             export HI_ROOT=\$HI_ROOT
             echo \"$CMDARG\" >> \$HI_ROOT/hi.bashrc
-            echo \"export hi_copy_time='$(echo "$(date +%s.%N) $copy_start_time" | awk '{ printf "%.3f\n", $1 - $2 }')'\" >> \$HI_ROOT/load.sh
+            echo \"export hi_copy_time='$(echo "$(perl -MTime::HiRes=time -e 'printf "%.3f", time') $copy_start_time" | awk '{ printf "%.3f\n", $1 - $2 }')'\" >> \$HI_ROOT/load.sh
             bash --rcfile \$HI_ROOT/hi.bashrc
             "
   else
@@ -96,7 +101,7 @@ EOF
 }
 
 function run() {
-  copy_start_time=$(date +%s.%N)
+  copy_start_time="$(perl -MTime::HiRes=time -e 'printf "%.3f", time')"
   tmp="/tmp/$(date +%s).hi"
   trap 'rm $tmp &>/dev/null' exit
 

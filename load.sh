@@ -61,7 +61,7 @@ function clean_all() {
 # required
 function timers() {
   spacer
-  cecho "load: $(echo "$(date +%s.%N) $load_start_time" | awk '{ printf "%.3f\n", $1 - $2 }')s | copy: ${hi_copy_time}s"
+  cecho "load: $(echo "$(perl -MTime::HiRes=time -e 'printf "%.3f", time') $load_start_time" | awk '{ printf "%.3f\n", $1 - $2 }')s | copy: ${hi_copy_time}s"
 }
 
 function system_info() {
@@ -124,7 +124,7 @@ function key_count() {
 # required
 function load() {
   local load_start_time
-  load_start_time=$(date +%s.%N)
+  load_start_time="$(perl -MTime::HiRes=time -e 'printf "%.3f", time')"
   load_packages
 
   trap 'clean_all' exit
@@ -171,7 +171,13 @@ function load() {
     bash -i
   fi
 
-  cecho " $(du -sh --apparent-size "$HI_ROOT" | awk '{ print $1 }') " "$YELLOW" 1
+  # check macOS
+  if [ -f /etc/os-release ]; then
+    cecho " $(du -sh --apparent-size "$HI_ROOT" | awk '{ print $1 }') " "$YELLOW" 1
+  else
+    cecho " $(du -sh "$HI_ROOT" | awk '{ print $1 }') " "$YELLOW" 1
+  fi
+
   echo -e "$BRRED~~~~~~~~~~~~~~~~~ Disconnected from ${NC}[$HOST_COLOR$(hostname)${NC}]$BRRED ~~~~~~~~~~~~~~~~~~~~~$NC"
   timestamp
   cecho "hi closing! " "$BRPURPLE"

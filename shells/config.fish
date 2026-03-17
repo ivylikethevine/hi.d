@@ -64,8 +64,13 @@ function fish_greeting
     set -l human_centric_date_format "+%a %b %-e %Y %H:%M:%S %Z"
     set -l utctime (printf '%s%s' (set_color brblue) (date -u $human_centric_verbose))
     set -l localtime (printf '%s%s' (set_color bryellow) (date $human_centric_verbose))
+    # TODO: Unified macOS checking/handling
+    if [ -f /etc/os-release ]
+      set -g distro (printf '%s%s' (set_color green) (grep PRETTY_NAME /etc/os-release | cut -d= -f2 | tr -d '\"'))
+    else
+      set -g distro "macOS"
+    end
 
-    set -l distro (printf '%s%s' (set_color green) (grep PRETTY_NAME /etc/os-release | cut -d= -f2 | tr -d '\"'))
     set -l arch (printf '%s%s' (set_color brmagenta) (uname -m))
     set -l os_type (printf '%s%s' (set_color bryellow) (uname -s))
 
@@ -99,14 +104,15 @@ function fish_greeting
       set -g hi_update_status ""
     end
 
-    set -l _system_info_line $spacer" "$os_type" "$spacer" "$arch" "$spacer" "$distro" "$spacer" "$cpus" "$spacer" "$ram
-
     set -l _full_check_formatted (string split "newline" (bash -c "source $_HI_CHECK; full_check_fish"))
 
     echo -n "$hi_change_status $hi_update_status "
     echo (printf '%s~~~~~~~~~~~~~~~~~~ Online %s[%s%s%s]%s ~~~~~~~~~~~~~~~~~~~~~~~~~~%s' (set_color brcyan) (set_color normal) (set_color $fish_color_host) (prompt_hostname) (set_color normal) (set_color brcyan) (set_color normal))
+
     echo " "$spacer" "$utctime"   "$spacer"   "$localtime
+    echo " "$spacer" "$os_type" "$spacer" "$arch" "$spacer" "$distro" "$spacer" "$cpus" "$spacer" "$ram
     echo " "$spacer" "$git_identity" "$spacer" "$containers" "$spacer" "$authorized" "$spacer" "$public
+
     for line in $_full_check_formatted
       echo " "$line
     end

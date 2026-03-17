@@ -52,6 +52,7 @@ function hi_parse() {
 
 function say_hi() {
   if [ -d "$HI_ROOT" ]; then
+    # TODO: Unified macOS checking/handling
     if [ -f /etc/os-release ]; then
       cecho "\r $(du -sh "${hi_exclude[@]}" --apparent-size "$HI_ROOT" | awk '{ print $1 }') " "$CYAN" 1
     else

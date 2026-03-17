@@ -53,6 +53,7 @@ function clean_all() {
   fi
   for shell in "${shells[@]}"; do
     if test -f "$shell"; then
+      # TODO: Unified macOS checking/handling
       if [ ! -f /etc/os-release ]; then
         sed -i '' "/^$hi_config_start/,/^$hi_config_end/d" "$shell"
       else
@@ -73,6 +74,7 @@ function system_info() {
   spacer
   cecho "$(uname -m)" "$PURPLE" 1
   spacer
+  # TODO: Unified macOS checking/handling
   if [ -f /etc/os-release ]; then
     cecho "$(grep PRETTY_NAME /etc/os-release | cut -d= -f2 | tr -d '"')" "${GREEN}" 1
     spacer
@@ -80,13 +82,16 @@ function system_info() {
     spacer
     cecho "RAM: $(free -h --giga | awk '/^Mem:/ {print $2}GB') " "${CYAN}"
   else
-    cecho "macOS" "${BLUE}" 1
+    local system_info
+    system_info=$(system_profiler SPHardwareDataType)
+    cecho "macOS $(sw_vers -productVersion)" "${BLUE}" 1
     spacer
-    cecho "CPUs: ..." "$BLUE" 1
+    cecho "CPUs: $(echo "$system_info" | grep -e Cores | awk '{ print $5 }')" "$BLUE" 1
     spacer
-    cecho "RAM: ..." "${CYAN}"
+    cecho "RAM: $(echo "$system_info" | grep -e Memory | awk '{ print $2 }')GB" "${CYAN}"
   fi
 }
+
 
 function git_identity() {
   spacer
@@ -183,7 +188,7 @@ function load() {
     bash -i
   fi
 
-  # check macOS
+  # TODO: Unified macOS checking/handling
   if [ -f /etc/os-release ]; then
     cecho " $(du -sh --apparent-size "$HI_ROOT" | awk '{ print $1 }') " "$YELLOW" 1
   else

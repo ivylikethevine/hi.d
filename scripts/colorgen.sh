@@ -78,7 +78,11 @@ function read_ssh_hosts() {
       if [[ $prev_line =~ Tags[:=]([^\n\r]*) ]]; then
         tags_str=${prev_line#*Tags: }
         tags_str=${tags_str#" "}
-        IFS=', ' read -ra tags <<< "$tags_str"
+        if [[ -z ${ZSH_VERSION+x} ]]; then
+          IFS=', ' read -ra tags <<< "$tags_str"
+        else
+          IFS=', ' read -rA tags <<< "$tags_str"
+        fi
       fi
       current=${tags[0]} # only uses leftmost tag for now :shrug:
       [[ -z "$current" ]] && continue

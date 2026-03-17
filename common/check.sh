@@ -12,8 +12,8 @@ basic_commands=()
 system_commands=()
 tool_commands=()
 
-declare -A color_yes
-declare -A color_no
+declare -a color_yes
+declare -a color_no
 
 load_packages() {
   while read -r line; do
@@ -41,14 +41,17 @@ function sort_commands() {
   local result=()
 
   for item in "${cmd_list[@]}"; do
-    IFS=',' read -ra pairs <<< "$item"
+    if [[ -z ${ZSH_VERSION+x} ]]; then
+      IFS=',' read -ra pairs <<< "$item"
+    else
+      IFS=',' read -rA pairs <<< "$item"
+    fi
 
     local max=-1
     local max_cmd
     local is_installed=0
     local first_cmd
     local first_priority
-
     for pair in "${pairs[@]}"; do
       local cmd="${pair%:*}"
       local current="${pair#*:}"
@@ -61,7 +64,7 @@ function sort_commands() {
         fi
       fi
 
-      if [[ -z ${first_cmd+x} ]]; then
+      if [[ -z ${first_cmd:-} ]]; then
         first_cmd=$cmd
         first_priority=$current
       fi
@@ -78,20 +81,30 @@ function sort_commands() {
 }
 
 function check_commands() {
+  local -a cmd_list
   local raw="${1:-}"
   if [[ -z "$raw" ]]; then
     return
   fi
-  IFS=',' read -ra cmd_list <<< "$raw"
+
+  if [[ -z ${ZSH_VERSION+x} ]]; then
+    IFS=',' read -ra cmd_list <<< "$raw"
+  else
+    IFS=',' read -rA cmd_list <<< "$raw"
+  fi
+
   cmd_list=("${cmd_list[@]:1}") # remove the grouping
 
   # shellcheck disable=SC2207
   local sorted_cmd_list=($(sort_commands "${cmd_list[@]}"))
+
   if (( ${#sorted_cmd_list[@]} == 0 )); then
     return
   fi
 
-  # Find the first command whose color is not empty and not "hide".
+  local symbol
+  local color
+  local cmd
   local item
   local found=0
   for item in "${sorted_cmd_list[@]}"; do
@@ -100,11 +113,12 @@ function check_commands() {
     priority="${inner%:*}"
     is_installed="${item##*:}"
 
-    local color
     if [[ "$is_installed" == "yes" ]]; then
-      color="${color_yes[$priority]}"
+      color="${color_yes[priority]}"
+      symbol="✓"
     else
-      color="${color_no[$priority]}"
+      color="${color_no[priority]}"
+      symbol="✗"
     fi
 
     if [[ -n "$color" && "$color" != "hide" ]]; then
@@ -117,43 +131,36 @@ function check_commands() {
     return
   fi
 
-  local symbol
-  if [[ "$is_installed" == "yes" ]]; then
-    symbol="✓"
-  else
-    symbol="✗"
-  fi
-
-  printf '%b' "$color $cmd $symbol$NC"
+  printf '%b %b %b%b' "$color" "$cmd" "$symbol" "$NC"
 }
 
 function process_commands() {
   echo -ne "$NC|"
-  local -n arr=$1
-  for line in "${arr[@]}"; do
+  for line in "$@"; do
     check_commands "$line"
   done
 }
 
+
 function full_check() {
   echo -ne " "
-  process_commands package_commands
+  process_commands "${package_commands[@]}"
   echo -ne "\n "
-  process_commands basic_commands
+  process_commands "${basic_commands[@]}"
   echo -ne "\n "
-  process_commands system_commands
+  process_commands "${system_commands[@]}"
   echo -ne "\n "
-  process_commands tool_commands
+  process_commands "${tool_commands[@]}"
   echo -ne "\n"
 }
 
 function full_check_fish {
   load_packages
-  process_commands package_commands
+  process_commands "${package_commands[@]}"
   echo -n "newline"
-  process_commands basic_commands
+  process_commands "${basic_commands[@]}"
   echo -n "newline"
-  process_commands system_commands
+  process_commands "${system_commands[@]}"
   echo -n "newline"
-  process_commands tool_commands
+  process_commands "${tool_commands[@]}"
 }

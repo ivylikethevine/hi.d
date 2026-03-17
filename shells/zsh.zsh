@@ -9,6 +9,9 @@ source "$_HI_COLORS"
 # shellcheck source=./common/aliases.sh
 source "$_HI_ALIASES"
 
+# required for sanity & some of the other scripts we run
+setopt KSH_ARRAYS
+
 # header/coloring
 [ -x /usr/bin/lesspipe ] && eval "$(SHELL=/bin/sh lesspipe)"
 if [ -z "${debian_chroot:-}" ] && [ -r /etc/debian_chroot ]; then
@@ -25,14 +28,13 @@ if [ -n "$force_color_prompt" ]; then
     color_prompt=
   fi
 fi
-# TODO: fix + improve
+
 if [ "$color_prompt" = yes ]; then
   USER_COLOR=$(user_color "$(whoami)")
   HOST_COLOR=$(host_color "$(hostname)")
   AT_COLOR=$(at_color "${SSH_TTY}")
-  PLAIN_COLOR=$(plain)
 
-  PS1=" ${debian_chroot:+($debian_chroot)}${USER_COLOR}%n${AT_COLOR}@${HOST_COLOR}%m:${PLAIN_COLOR}%1~\$ "
+  PS1=$(printf '%b' " ${debian_chroot:+($debian_chroot)}${USER_COLOR}%n${AT_COLOR}@${HOST_COLOR}%m:%F{white}%1~\$ ")
 fi
 # === end required configuration ===
 
@@ -148,7 +150,6 @@ zstyle ':completion:*' completer _expand _complete _correct _approximate
 zstyle ':completion:*' format 'Completing %d'
 zstyle ':completion:*' group-name ''
 zstyle ':completion:*' menu select=2
-eval "$(dircolors -b)"
 zstyle ':completion:*:default' list-colors ${(s.:.)LS_COLORS}
 zstyle ':completion:*' list-colors ''
 zstyle ':completion:*' list-prompt %SAt %p: Hit TAB for more, or the character to insert%s

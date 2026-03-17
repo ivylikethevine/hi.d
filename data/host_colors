@@ -3,6 +3,14 @@ prod,\e[0;33m,yellow
 liona,\e[0;35m,magenta
 prod,\e[0;33m,yellow
 liona,\e[0;35m,magenta
+prod,\e[0;33m,yellow
+liona,\e[0;35m,magenta
+prod,\e[0;33m,yellow
+liona,\e[0;35m,magenta
+prod,\e[0;33m,yellow
+liona,\e[0;35m,magenta
+prod,\e[0;33m,yellow
+liona,\e[0;35m,magenta
 ryoji,\e[0;32m,green
 gendo,\e[0;32m,green
 shinji,\e[0;32m,green
@@ -10,6 +18,6 @@ edison,\e[0;32m,green
 swervy,\e[0;31m,red
 melchior,\e[0;31m,red
 lenny,\e[0;31m,red
-bernie,\e[0;34m,yellow
-minty,\e[0;34m,yellow
+bernie,\e[0;33m,yellow
+minty,\e[0;33m,yellow
 mavie,\e[0;32m,green

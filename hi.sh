@@ -72,7 +72,13 @@ function say_hi() {
             mkdir \$HI_TMPDIR/hi.d
             export HI_ROOT=\$HI_TMPDIR/hi.d
             export HI_CLEANUP=\$HI_TMPDIR
-            trap \"rm -rf \$HI_CLEANUP; exit\" exit
+            if [[ -z \${ZSH_VERSION+x} ]]; then
+              trap 'rm -rf \$HI_CLEANUP' exit
+            else
+              TRAPINT() { 'rm -rf \$HI_CLEANUP'; }
+            fi
+
+            # trap \"rm -rf \$HI_CLEANUP; exit\" exit
             echo \"$(cat "$0" | $OPENSSL_CMD)\" | $TR_CMD | $OPENSSL_CMD -d > \$HI_ROOT/hi.sh
             chmod +x \$HI_ROOT/hi.sh
             echo \"$(
@@ -103,7 +109,12 @@ EOF
 function run() {
   copy_start_time="$(perl -MTime::HiRes=time -e 'printf "%.3f", time')"
   tmp="/tmp/$(date +%s).hi"
-  trap 'rm $tmp &>/dev/null' exit
+  if [[ -z ${ZSH_VERSION+x} ]]; then
+    trap 'rm $tmp &>/dev/null' exit
+  else
+    TRAPEXIT() { 'rm $tmp &>/dev/null'; }
+  fi
+
 
   hi_parse "$@"
   say_hi "$@" 2>"$tmp"

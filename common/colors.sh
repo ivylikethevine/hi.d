@@ -24,13 +24,12 @@ export NC='\e[0m'
 cecho() {
   local text=${1:-}
   local color=${2:-}
-  local skip_newline=${3:-}
 
   local formatted_text="$color$text$NC"
-  if [[ -z $skip_newline  ]]; then
-    echo -e "$formatted_text";
+  if [[ -z ${3+x}  ]]; then
+    printf '%b\n' "$formatted_text";
   else
-    echo -e -n "$formatted_text";
+    printf '%b' "$formatted_text";
   fi
   return
 }
@@ -39,9 +38,9 @@ cecho() {
 function at_color() {
   local ssh_tty=${1+x}
   if [[ -z $ssh_tty ]]; then
-    printf '%s' "$YELLOW"
+    printf '%b' "$YELLOW"
   else
-    printf '%s' "$NC"
+    printf '%b' "$NC"
   fi
 }
 
@@ -51,20 +50,26 @@ function read_color_file() {
   local color_file=${2:-}
   local is_fish=${3+x}
 
-  declare -a dataArray
-  while IFS=$',' read -r -a dataArray; do
-      current_val="${dataArray[0]}"
-      [[ "$current_val" =~ ^[[:space:]]*# ]] && continue
-      [[ -z ${current_val+x} ]] && continue
+  local -a dataArray
+  local line
+  while IFS=$' ' read -r line; do
+    if [[ -z ${ZSH_VERSION+x} ]]; then
+      IFS=',' read -ra dataArray <<< "$line"
+    else
+      IFS=',' read -rA dataArray <<< "$line"
+    fi
+    current_val="${dataArray[0]}"
+    [[ "$current_val" =~ ^[[:space:]]*# ]] && continue
+    [[ -z ${current_val+x} ]] && continue
 
-      if [ "$search_val" = "$current_val" ]; then
-        if [[ -z $is_fish ]]; then
-          echo "${dataArray[2]}"
-        else
-          echo "${dataArray[1]}"
-        fi
-        return
+    if [ "$search_val" = "$current_val" ]; then
+      if [[ -z $is_fish ]]; then
+        printf '%b\n' "${dataArray[2]}"
+      else
+        printf '%b\n' "${dataArray[1]}"
       fi
+      return
+    fi
   done < "$color_file"
   if [[ -z $is_fish ]]; then
     printf '%s\n' "brgreen"

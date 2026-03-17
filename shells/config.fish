@@ -56,66 +56,56 @@ end
 # header
 function fish_greeting
   if not set -q fish_greeting
-    set -l spacer (printf '%s|' (set_color normal))
-
-    set -l human_centric_date_format "+%a %b %-e %Y %H:%M:%S %Z"
-    set -l utctime (printf '%s%s' (set_color brblue) (date -u $human_centric_verbose))
-    set -l localtime (printf '%s%s' (set_color bryellow) (date $human_centric_verbose))
-
     # TODO: Unified macOS checking/handling
     if [ -f /etc/os-release ]
       set -g distro (printf '%s%s' (set_color green) (grep PRETTY_NAME /etc/os-release | cut -d= -f2 | tr -d '\"'))
     else
       set -g distro "macOS"
     end
-
-    set -l arch (printf '%s%s' (set_color brmagenta) (uname -m))
-    set -l os_type (printf '%s%s' (set_color bryellow) (uname -s))
-
-    set -l cpus (printf '%sCPUs: %s' (set_color brblue) (nproc))
-    set -l ram (printf '%sRAM: %s' (set_color cyan) (free -h --giga | awk '/^Mem:/ {print $2}GB'))
     if [ -f "$_HI_SSH_AUTHORIZED_KEYS" ]
       set -g authorized (printf '%sAuth: %s' (set_color red) (wc -l "$_HI_SSH_AUTHORIZED_KEYS" | awk '{ print $1 }'))
     else
       set -g authorized (printf '%sAuth: 0!' (set_color red))
     end
-
-    set -l public (printf '%sPub: %s' (set_color magenta) (find ~/.ssh -type f -name "*.pub" | wc -l))
-
     if [ -f "/usr/bin/docker" ]
       set -g containers (printf '%sContainers: %s' (set_color brblue) (docker container ls | wc -l | awk '{print $1 - 1}'))
     else
       set -g containers (printf '%sCounting impossible, no docker :(' (set_color bryellow))
     end
-
     if [ -f "$_HI_GIT_CONFIG_PATH" ]
       set -g git_identity (printf '%sGit ID: %s%s' (set_color brcyan) (set_color yellow) (grep email "$_HI_GIT_CONFIG_PATH" | tail -n1 | cut -d= -f2 | tr -d ' ' | awk -F@ '{ for(i=0;i<length($2);i++) c=c"●"; print $1"@"c; c="" }'))
     else
       set -g git_identity (printf '%sNo Git ID Found...' (set_color yellow))
     end
-
     if [ -d "$HI_ROOT/.git" ]
       set -g hi_change_status (printf ' %s%s' (set_color bryellow) (git -C ~/hi.d status --short | wc -l | awk '{ print $1 }')' ↑')
-      set -g hi_update_status (printf '%s%s' (set_color brgreen) (git -C ~/hi.d rev-list --count HEAD..origin/$(git -C ~/hi.d rev-parse --abbrev-ref HEAD))' ↓')
     else
       set -g hi_change_status ""
-      set -g hi_update_status ""
     end
 
-    set -l _full_check_formatted (string split "newline" (bash -c "source $_HI_CHECK; full_check_fish"))
+    set -l spacer (printf '%s|' (set_color normal))
+    set -l utctime (printf '%s%s' (set_color brblue) (date -u $human_centric_date_format))
+    set -l localtime (printf '%s%s' (set_color bryellow) (date $human_centric_date_format))
+    set -l public (printf '%sPub: %s' (set_color magenta) (find ~/.ssh -type f -name "*.pub" | wc -l))
+    set -l arch (printf '%s%s' (set_color brmagenta) (uname -m))
+    set -l os_type (printf '%s%s' (set_color bryellow) (uname -s))
+    set -l cpus (printf '%sCPUs: %s' (set_color brblue) (nproc))
+    set -l ram (printf '%sRAM: %s' (set_color cyan) (free -h --giga | awk '/^Mem:/ {print $2}GB'))
 
-    echo -n "$hi_change_status $hi_update_status "
-    echo (printf '%s~~~~~~~~~~~~~~~~~~ Online %s[%s%s%s]%s ~~~~~~~~~~~~~~~~~~~~~~~~~~%s' (set_color brcyan) (set_color normal) (set_color $fish_color_host) (prompt_hostname) (set_color normal) (set_color brcyan) (set_color normal))
-
+    echo (printf '%s %s~~~~~~~~~~~~~~~~~~~ Online %s[%s%s%s]%s ~~~~~~~~~~~~~~~~~~~~~~~~~~~%s' $hi_change_status (set_color brcyan) (set_color normal) (set_color $fish_color_host) (prompt_hostname) (set_color normal) (set_color brcyan) (set_color normal))
     echo " "$spacer" "$utctime"   "$spacer"   "$localtime
     echo " "$spacer" "$os_type" "$spacer" "$arch" "$spacer" "$distro" "$spacer" "$cpus" "$spacer" "$ram
     echo " "$spacer" "$git_identity" "$spacer" "$containers" "$spacer" "$authorized" "$spacer" "$public
-
-    for line in $_full_check_formatted
+    for line in (string split "newline" (bash -c "source $_HI_CHECK; full_check_fish"))
       echo " "$line
     end
   end
 end
+
+set -gx _hi_colors (string split " " (bash -c "source $_HI_COLORS; user_color; host_color"))
+set -gx fish_color_user $_hi_colors[1]
+set -gx fish_color_host $_hi_colors[2]
+set -gx fish_color_host_remote $fish_color_host
 # === end required configurations ===
 
 function vew --description 'Cat/bat a file or list a directory in detail | spelled vew to avoid calling vi'
@@ -246,9 +236,3 @@ set -gx fish_pager_color_selected_background --reverse
 set -gx fish_pager_color_selected_completion
 set -gx fish_pager_color_selected_description
 set -gx fish_pager_color_selected_prefix
-
-
-set -gx _hi_colors (string split " " (bash -c "source $_HI_COLORS; user_color; host_color"))
-set -gx fish_color_user $_hi_colors[1]
-set -gx fish_color_host $_hi_colors[2]
-set -gx fish_color_host_remote $fish_color_host

@@ -6,6 +6,9 @@ alias hi_colorgen="sh -c 'source ~/hi.d/scripts/colorgen.sh && colorgen'"
 alias hi_reinstall="~/hi.d/scripts/install.sh"
 alias hi_relink="sudo rm /usr/bin/hi && sudo ln ~/hi.d/hi.sh /usr/bin/hi"
 
+# shellcheck disable=SC2139,SC2155
+export EDITOR="$(command -v pico || command -v nano || command -v micro || command -v vim || command -v vi)"
+
 # works in bash, fish has a wrapper for sudo in config.fish
 alias sudo="command sudo "
 # shellcheck disable=SC2139
@@ -18,10 +21,11 @@ alias hi="$HI_TMPDIR/hi.d/hi.sh"
 
 # shellcheck disable=SC2139
 alias bat="$(command -v bat || command -v batcat) -P --tabs 2 --theme Monokai\ Extended\ Bright --style changes,grid,numbers"
-# === end required variables/aliases ===
 
+export human_centric_date_format="+%a %b %-e %Y %H:%M:%S %Z"
 export human_short_date_format="+%b %-e %y %H:%M %Z"
 alias now='date $human_short_date_format && date -u $human_short_date_format'
+# === end required variables/aliases ===
 
 alias hey="ssh"
 alias zed="zeditor"
@@ -73,7 +77,6 @@ alias aptup="sudo apt update"
 alias aptug="sudo apt upgrade"
 alias aptupg="sudo apt update && sudo apt upgrade"
 alias aptac="sudo apt autoclean && sudo apt autoremove"
-
 
 # fwupdmgr
 alias fw_check="fwupdmgr get-devices && fwupdmgr get-updates"

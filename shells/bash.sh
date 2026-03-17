@@ -134,39 +134,22 @@ HISTCONTROL=ignoreboth
 HISTSIZE=2000
 HISTFILESIZE=2000
 
+PROMPT_DIRTRIM=2
+PROMPT_COMMAND='history -a'
+HISTCONTROL="erasedups:ignoreboth"
+export HISTIGNORE="&:[ ]*:exit:ls:bg:fg:history:clear"
+
 shopt -s histappend
 shopt -s checkwinsize
 shopt -s globstar
-
-# Sensible Bash - https://github.com/mrzool/bash-sensible
-# Prevent file overwrite on stdout redirection
-# Use `>|` to force redirection to an existing file
-set -o noclobber
-# Automatically trim long paths in the prompt (requires Bash 4.x)
-PROMPT_DIRTRIM=2
-# Enable history expansion with space
-# E.g. typing !!<space> will replace the !! with your last command
-bind Space:magic-space
-# Turn on recursive globbing (enables ** to recurse all directories)
-shopt -s globstar 2> /dev/null
-# Perform file completion in a case insensitive fashion
-bind "set completion-ignore-case on"
-# Treat hyphens and underscores as equivalent
-bind "set completion-map-case on"
-# Display matches for ambiguous patterns at first tab press
-bind "set show-all-if-ambiguous on"
-# Immediately add a trailing slash when autocompleting symlinks to directories
-bind "set mark-symlinked-directories on"
-## SANE HISTORY DEFAULTS ##
-# Save multi-line commands as one command
 shopt -s cmdhist
-# Record each line as it gets issued
-PROMPT_COMMAND='history -a'
-# Avoid duplicate entries
-HISTCONTROL="erasedups:ignoreboth"
-# Don't record some commands
-export HISTIGNORE="&:[ ]*:exit:ls:bg:fg:history:clear"
-# Learn more about this here: http://codeinthehole.com/writing/the-most-important-command-line-tip-incremental-history-searching-with-inputrc/
+
+bind "set completion-ignore-case on"
+bind "set completion-map-case on"
+bind "set show-all-if-ambiguous on"
+bind "set mark-symlinked-directories on"
+
+bind Space:magic-space
 bind '"\e[A": history-search-backward'
 bind '"\e[B": history-search-forward'
 bind '"\e[C": forward-char'

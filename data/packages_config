@@ -29,7 +29,7 @@ basics,asdf:2
 basics,cosign:1
 basics,cmake:2,make:1
 
-tools,docker:4,podman:4,kubectl:4
+tools,docker:3,podman:3,kubectl:3
 tools,dotnet:4
 tools,just:2
 tools,node:1,npx:2,npm:2,n:2

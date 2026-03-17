@@ -1,5 +1,5 @@
 #!/bin/sh
-# requires HI_TMPDIR be set correctly by any scripts sourcing this file
+# requires HI_TMPDIR be set correctly by any scripts sourcing this file, ${var+x}/${var:-} will not work, since this file is sourced by fish
 export HI_ROOT="$HI_TMPDIR/hi.d"
 export _HI_COLORS="$HI_ROOT/common/colors.sh"
 export _HI_ALIASES="$HI_ROOT/common/aliases.sh"

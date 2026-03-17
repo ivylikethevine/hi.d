@@ -32,9 +32,9 @@ fi
 if [ "$color_prompt" = yes ]; then
   USER_COLOR=$(user_color "$(whoami)")
   HOST_COLOR=$(host_color "$(hostname)")
-  AT_COLOR=$(at_color "${ssh_tty}")
+  AT_COLOR=$(at_color)
 
-  PS1=$(printf '%b' " ${debian_chroot:+($debian_chroot)}${USER_COLOR}%n${AT_COLOR}@${HOST_COLOR}%m:%F{white}%1~\$ ")
+  PS1=$(printf '%b' " ${debian_chroot:+($debian_chroot)}${USER_COLOR}%n${AT_COLOR}@${HOST_COLOR}%m %F{cyan}%~%F{plain}")
 fi
 # === end required configuration ===
 
@@ -118,17 +118,6 @@ HISTFILE=~/.zsh_history
 HISTSIZE=2000
 SAVEHIST=2000
 
-autoload -Uz compinit
-compinit
-compdef hi=ssh
-
-autoload -Uz promptinit
-promptinit
-
-setopt histignorealldups sharehistory
-unsetopt beep
-bindkey -e
-
 # homekey
 bindkey "^[OH" beginning-of-line
 bindkey "^[[H" beginning-of-line
@@ -144,19 +133,40 @@ bindkey "^[[1;5C" forward-word
 # delkey
 bindkey "^[[3;5~" delete-word
 
-# completion
-zstyle ':completion:*' auto-description 'specify: %d'
-zstyle ':completion:*' completer _expand _complete _correct _approximate
-zstyle ':completion:*' format 'Completing %d'
+# completion configuration
+zmodload zsh/complist
+autoload -Uz compinit
+autoload -Uz promptinit
+compinit
+compdef hi=ssh
+promptinit
+
+# git status
+autoload -Uz vcs_info
+precmd() { vcs_info }
+setopt prompt_subst
+zstyle ':vcs_info:git:*' formats '%b'
+PROMPT=$PROMPT' %F{plain}$vcs_info_msg_0_| '
+
+# configuration
+setopt LIST_PACKED
+setopt histignorealldups sharehistory
+unsetopt beep
+bindkey -e
+
+zstyle ':completion:*' menu yes select
+zstyle ':completion:*' completer _extensions _expand _complete _correct _approximate
+zstyle ':completion:*' file-list all
+zstyle ':completion:*' verbose yes
+zstyle ':completion:*' use-cache on
+zstyle ':completion:*' rehash true
+zstyle ':completion:*' cache-path "$XDG_CACHE_HOME/zsh/.zcompcache"
+zstyle ':completion:*' squeeze-slashes true
+zstyle ':completion:*' complete-options true
 zstyle ':completion:*' group-name ''
-zstyle ':completion:*' menu select=2
+
 zstyle ':completion:*:default' list-colors ${(s.:.)LS_COLORS}
-zstyle ':completion:*' list-colors ''
-zstyle ':completion:*' list-prompt %SAt %p: Hit TAB for more, or the character to insert%s
-zstyle ':completion:*' matcher-list '' 'm:{a-z}={A-Z}' 'm:{a-zA-Z}={A-Za-z}' 'r:|[._-]=* r:|=* l:|=*'
-zstyle ':completion:*' menu select=long
-zstyle ':completion:*' select-prompt %SScrolling active: current selection at %p%s
-zstyle ':completion:*' use-compctl false
-zstyle ':completion:*' verbose true
-zstyle ':completion:*:*:kill:*:processes' list-colors '=(#b) #([0-9]#)*=0=01;31'
+zstyle ':completion:*:*:-command-:*:*' group-order alias builtins functions commands
+
 zstyle ':completion:*:kill:*' command 'ps -u $USER -o pid,%cpu,tty,cputime,cmd'
+zstyle ':completion:*:*:kill:*:processes' list-colors '=(#b) #([0-9]#)*=0=01;31'

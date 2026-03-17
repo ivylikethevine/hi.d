@@ -24,7 +24,7 @@ basics,nmap:2
 basics,screen:1,tmux:2
 basics,scp:1,rsync:1
 basics,sshpass:1
-basics,apt:1,pacman:1,dnf:1,rpm:1,zypper:1,brew:1,apk:2,nix:2
+basics,brew:3,apt-get:1,pacman:1,dnf:1,rpm:1,zypper:1,apk:2,nix:2
 basics,asdf:2
 basics,cosign:1
 basics,cmake:2,make:1

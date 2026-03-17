@@ -1,8 +1,8 @@
 set autoread
-set ai "Auto indent
+set ai
 set backspace=eol,start,indent
 set background=dark
-set cmdheight=1
+set cmdheight=2
 set encoding=utf8
 set expandtab
 set ffs=unix,dos,mac
@@ -26,7 +26,7 @@ set ruler
 set regexpengine=0
 set smartcase
 set showmatch
-set si "Smart indent
+set si
 set so=7
 set smarttab
 set shiftwidth=2
@@ -34,7 +34,7 @@ set tm=500
 set tabstop=2
 set tw=500
 set whichwrap+=<,>,h,l
-set wrap "Wrap lines
+set wrap
 set wildmenu
 set wildignore=*.o,*~,*.pyc
 if has("win16") || has("win32")
@@ -55,3 +55,7 @@ endtry
 syntax enable
 filetype plugin on
 filetype indent on
+set laststatus=1
+
+:map Q :qa!
+:map q :qa!

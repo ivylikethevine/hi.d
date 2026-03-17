@@ -45,15 +45,12 @@ function prompt_login --description "display user name for the prompt"
     echo -n -s (set_color yellow) "$__fish_machine" (set_color normal) ' '
   end
 
-  set -l color_host $fish_color_host
-  set -l color_user $fish_color_user
-  set -l color_at normal
-  if set -q SSH_TTY; and set -q fish_color_host_remote
-    set color_host $fish_color_host_remote
-    set color_at yellow
+  set -g color_at normal
+  if set -q SSH_TTY;
+    set -g color_at yellow
   end
 
-  echo -ns (set_color $color_user) " $USER" (set_color $color_at) @ (set_color $color_host) (prompt_hostname) (set_color normal)
+  echo -ns (set_color $fish_color_user) " $USER" (set_color $color_at) @ (set_color $fish_color_host) (prompt_hostname) (set_color normal)
 end
 
 # header
@@ -64,6 +61,7 @@ function fish_greeting
     set -l human_centric_date_format "+%a %b %-e %Y %H:%M:%S %Z"
     set -l utctime (printf '%s%s' (set_color brblue) (date -u $human_centric_verbose))
     set -l localtime (printf '%s%s' (set_color bryellow) (date $human_centric_verbose))
+
     # TODO: Unified macOS checking/handling
     if [ -f /etc/os-release ]
       set -g distro (printf '%s%s' (set_color green) (grep PRETTY_NAME /etc/os-release | cut -d= -f2 | tr -d '\"'))

@@ -29,9 +29,9 @@ fi
 if [ "$color_prompt" = yes ]; then
   USER_COLOR=$(user_color "$(whoami)")
   HOST_COLOR=$(host_color "$(hostname)")
-  AT_COLOR=$(at_color ${SSH_TTY+x})
+  AT_COLOR=$(at_color)
 
-  PS1=" ${debian_chroot:+($debian_chroot)}${USER_COLOR}\u${AT_COLOR}@${HOST_COLOR}\h\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]\$ "
+  PS1=" ${debian_chroot:+($debian_chroot)}${USER_COLOR}\u${AT_COLOR}@${HOST_COLOR}\h\[\033[00m\] \[\033[01;34m\]\w\[\033[00m\]\$ "
 else
   PS1=" ${debian_chroot:+($debian_chroot)}\u@\h:\w\$ "
 fi

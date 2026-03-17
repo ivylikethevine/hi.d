@@ -21,7 +21,7 @@ export BRCYAN='\e[1;36m'
 export NC='\e[0m'
 
 # required
-cecho() {
+function cecho() {
   local text=${1:-}
   local color=${2:-}
 
@@ -36,10 +36,10 @@ cecho() {
 
 # required
 function at_color() {
-  if [[ -z ${1+x} ]]; then
-    printf '%b' "$YELLOW"
+  if [[ ! -z ${SSH_TTY+x} ]]; then
+    printf '%s' "$YELLOW"
   else
-    printf '%b' "$NC"
+    printf '%s' "$NC"
   fi
 }
 

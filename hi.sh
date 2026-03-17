@@ -21,6 +21,7 @@ command -v openssl >/dev/null 2>&1 || {
 
 hi_exclude=(--exclude README.md --exclude .git --exclude .gitignore --exclude scripts --exclude hi.sh --exclude hi.bashrc --exclude data/group_colors --exclude .zed --exclude data/.gitkeep --exclude *private*)
 
+# TODO: Use travel_config when on remote hosts
 function hi_parse() {
   while [[ -n ${1+x} ]]; do
     case $1 in
@@ -52,17 +53,21 @@ function hi_parse() {
 
 function say_hi() {
   if [ -d "$HI_ROOT" ]; then
-    # TODO: Unified macOS checking/handling
-    if [ -f /etc/os-release ]; then
-      cecho "\r $(du -sh "${hi_exclude[@]}" --apparent-size "$HI_ROOT" | awk '{ print $1 }') " "$CYAN" 1
-    else
-      cecho "\r $(du -sh "${hi_exclude[@]}" "$HI_ROOT" | awk '{ print $1 }') "  "$CYAN" 1
-    fi
 
-    local size=0
-    size="$(tar cfz - -h -C "${hi_exclude[@]}" hi.d | wc -c)"
-    if [ "$size" -gt 65536 ]; then
-      cecho >&2 $'hi.d files must be less than 64kb. Current size: '"$size"' bytes' "$RED"
+    local DU_COMMAND="du -sh ${hi_exclude[*]} $HI_ROOT"
+    local du_size
+    if [ -f "$_HI_LINUX_PATH" ]; then
+      du_size="$($DU_COMMAND --apparent-size)"
+    else
+      du_size="$($DU_COMMAND)"
+    fi
+    cecho "\r $(echo "$du_size" | awk '{ print $1" " }')"  "$CYAN" 1
+
+
+    local tar_size=0
+    tar_size="$(tar cfz - -h -C "${hi_exclude[@]}" hi.d | wc -c)"
+    if [ "$tar_size" -gt 65536 ]; then
+      cecho >&2 $'hi.d files must be less than 64kb. Current size: '"$tar_size"' bytes' "$RED"
       return 10
     fi
     local TR_CMD="tr -s ' ' '\n'"

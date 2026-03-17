@@ -57,8 +57,8 @@ end
 function fish_greeting
   if not set -q fish_greeting
     # TODO: Unified macOS checking/handling
-    if [ -f /etc/os-release ]
-      set -g distro (printf '%s%s' (set_color green) (grep PRETTY_NAME /etc/os-release | cut -d= -f2 | tr -d '\"'))
+    if [ -f "$_HI_LINUX_PATH" ]
+      set -g distro (printf '%s%s' (set_color green) (grep PRETTY_NAME "$_HI_LINUX_PATH" | cut -d= -f2 | tr -d '\"'))
     else
       set -g distro "macOS"
     end

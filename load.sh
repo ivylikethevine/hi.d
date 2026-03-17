@@ -53,11 +53,10 @@ function clean_all() {
   fi
   for shell in "${shells[@]}"; do
     if test -f "$shell"; then
-      # TODO: Unified macOS checking/handling
-      if [ ! -f /etc/os-release ]; then
-        sed -i '' "/^$hi_config_start/,/^$hi_config_end/d" "$shell"
-      else
+      if [ -f "$_HI_LINUX_PATH" ]; then
         sed -i "/^$hi_config_start/,/^$hi_config_end/d" -- "$shell"
+      else
+        sed -i '' "/^$hi_config_start/,/^$hi_config_end/d" "$shell"
       fi
     fi
   done
@@ -74,9 +73,8 @@ function system_info() {
   spacer
   cecho "$(uname -m)" "$PURPLE" 1
   spacer
-  # TODO: Unified macOS checking/handling
-  if [ -f /etc/os-release ]; then
-    cecho "$(grep PRETTY_NAME /etc/os-release | cut -d= -f2 | tr -d '"')" "${GREEN}" 1
+  if [ -f "$_HI_LINUX_PATH" ]; then
+    cecho "$(grep PRETTY_NAME "$_HI_LINUX_PATH" | cut -d= -f2 | tr -d '"')" "${GREEN}" 1
     spacer
     cecho "CPUs: $(nproc)" "$BLUE" 1
     spacer
@@ -188,12 +186,15 @@ function load() {
     bash -i
   fi
 
-  # TODO: Unified macOS checking/handling
-  if [ -f /etc/os-release ]; then
-    cecho " $(du -sh --apparent-size "$HI_ROOT" | awk '{ print $1 }') " "$YELLOW" 1
+  local DU_COMMAND="du -sh $HI_ROOT"
+  local du_size
+  if [ -f "$_HI_LINUX_PATH" ]; then
+    du_size="$($DU_COMMAND --apparent-size)"
   else
-    cecho " $(du -sh "$HI_ROOT" | awk '{ print $1 }') " "$YELLOW" 1
+    du_size="$($DU_COMMAND)"
   fi
+  cecho "\r $(echo "$du_size" | awk '{ print $1" " }')"  "$YELLOW" 1
+
 
   printf '%b\n' "${BRRED}~~~~~~~~~~~~~~~~~ Disconnected from ${NC}[$HOST_COLOR$(hostname)${NC}]$BRRED ~~~~~~~~~~~~~~~~~~~~~${NC}"
   timestamp

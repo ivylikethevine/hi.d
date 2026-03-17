@@ -22,13 +22,16 @@ export _HI_ZSH_CONFIG="$HI_ROOT/shells/zsh.zsh"
 export _HI_FISH_CONFIG="$HI_ROOT/shells/config.fish"
 
 export _HI_COLORGEN="$HI_ROOT/scripts/colorgen.sh"
+export _HI_INSTALL="$HI_ROOT/scripts/install.sh"
+export _HI_UNLINK="$HI_ROOT/scripts/unlink.sh"
+
+export _HI_LINUX_PATH="/etc/os-release"
 
 export _HI_SSH_KEY_DIR="$HOME/.ssh"
 export _HI_SSH_CONFIG_FILE="$_HI_SSH_KEY_DIR/config"
 export _HI_SSH_AUTHORIZED_KEYS="$_HI_SSH_KEY_DIR/authorized_keys"
 
 export _HI_GIT_CONFIG_PATH="$HOME/.gitconfig"
-
 export _HI_FISH_DIR="$HOME/.config/fish"
 export _HI_HOME_BASHRC="$HOME/.bashrc"
 export _HI_HOME_ZSHRC="$HOME/.zshrc"

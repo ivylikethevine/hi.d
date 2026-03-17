@@ -2,6 +2,7 @@
 
 # === start required variables/aliases ===
 alias hi_colorgen="sh -c 'source ~/hi.d/scripts/colorgen.sh && colorgen'"
+alias hi_newhost="~/hi.d/scripts/newhost.sh"
 
 # shellcheck disable=SC2139,SC2155
 export EDITOR="$(command -v pico || command -v nano || command -v micro || command -v vim || command -v vi)"
@@ -31,7 +32,6 @@ alias essh="zed ~/.ssh"
 alias view="vew" # here to prevent calling vi
 alias vw="vew"
 alias vs="version"
-alias newkey='ssh-keygen -t ed25519 -f "/home/$USER/.ssh/$(hostname)-$USER-$(date -Im)" -P '' -C '''
 
 alias dcl="docker container ls && docker compose ls"
 alias dcu="docker compose up"

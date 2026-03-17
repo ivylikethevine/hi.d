@@ -67,6 +67,7 @@ function say_hi() {
       return 10
     fi
     local TR_CMD="tr -s ' ' '\n'"
+    # TODO: Handle issue with fish-shell and the ZSH_VERSION trap branching...
     local OPENSSL_CMD="openssl enc -base64"
     ssh -t "$DOMAIN" "$SSHARGS" "
             command -v openssl >/dev/null 2>&1 || { echo >&2 \"hi requires openssl to be installed on [$DOMAIN], but it is not. Aborting.\"; exit 1; }

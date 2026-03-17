@@ -9,7 +9,6 @@ command -v cecho >/dev/null || source "$_HI_COLORS"
 
 package_commands=()
 basic_commands=()
-system_commands=()
 tool_commands=()
 
 declare -a color_yes
@@ -21,8 +20,6 @@ load_packages() {
       package_commands+=("$line")
     elif [[ "$line" =~ ^basics ]]; then
       basic_commands+=("$line")
-    elif [[ "$line" =~ ^systems ]]; then
-      system_commands+=("$line")
     elif [[ "$line" =~ ^tools ]]; then
       tool_commands+=("$line")
     elif [[ "$line" =~ ^[0-9] ]]; then
@@ -148,8 +145,6 @@ function full_check() {
   echo -ne "\n "
   process_commands "${basic_commands[@]}"
   echo -ne "\n "
-  process_commands "${system_commands[@]}"
-  echo -ne "\n "
   process_commands "${tool_commands[@]}"
   echo -ne "\n"
 }
@@ -159,8 +154,6 @@ function full_check_fish {
   process_commands "${package_commands[@]}"
   echo -n "newline"
   process_commands "${basic_commands[@]}"
-  echo -n "newline"
-  process_commands "${system_commands[@]}"
   echo -n "newline"
   process_commands "${tool_commands[@]}"
 }

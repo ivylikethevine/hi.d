@@ -1,15 +1,5 @@
 #hostname,color_bash,color_fish
-prod,\e[0;33m,yellow
-liona,\e[0;35m,magenta
-prod,\e[0;33m,yellow
-liona,\e[0;35m,magenta
-prod,\e[0;33m,yellow
-liona,\e[0;35m,magenta
-prod,\e[0;33m,yellow
-liona,\e[0;35m,magenta
-prod,\e[0;33m,yellow
-liona,\e[0;35m,magenta
-prod,\e[0;33m,yellow
+prod,\e[0;33m,bryellow
 liona,\e[0;35m,magenta
 ryoji,\e[0;32m,green
 gendo,\e[0;32m,green
@@ -20,4 +10,4 @@ melchior,\e[0;31m,red
 lenny,\e[0;31m,red
 bernie,\e[0;33m,yellow
 minty,\e[0;33m,yellow
-mavie,\e[0;32m,green
+mavie,\e[1;35m,brmagenta

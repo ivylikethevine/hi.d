@@ -120,7 +120,7 @@ function key_count() {
     cecho "Auth: 0!" "$RED" 1
   fi
   spacer
-  cecho "Pub: $(find "$_HI_SSH_KEY_DIR" -type f -name "*.pub" | wc -l)" "$PURPLE"
+  cecho "Pub: $(find "$_HI_SSH_KEY_DIR" -type f -name "*.pub" | wc -l | awk '{ print $1 }')" "$PURPLE"
 }
 
 # TODO: Test

@@ -32,7 +32,7 @@ fi
 if [ "$color_prompt" = yes ]; then
   USER_COLOR=$(user_color "$(whoami)")
   HOST_COLOR=$(host_color "$(hostname)")
-  AT_COLOR=$(at_color "${SSH_TTY}")
+  AT_COLOR=$(at_color "${ssh_tty}")
 
   PS1=$(printf '%b' " ${debian_chroot:+($debian_chroot)}${USER_COLOR}%n${AT_COLOR}@${HOST_COLOR}%m:%F{white}%1~\$ ")
 fi

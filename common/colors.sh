@@ -36,8 +36,7 @@ cecho() {
 
 # required
 function at_color() {
-  local ssh_tty=${1+x}
-  if [[ -z $ssh_tty ]]; then
+  if [[ -z ${1+x} ]]; then
     printf '%b' "$YELLOW"
   else
     printf '%b' "$NC"

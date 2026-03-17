@@ -1,7 +1,6 @@
 #!/bin/sh
 
 # === start required variables/aliases ===
-# TODO: Hide/shadow these aliases when on a remote device...
 alias hi_colorgen="sh -c 'source ~/hi.d/scripts/colorgen.sh && colorgen'"
 
 # shellcheck disable=SC2139,SC2155

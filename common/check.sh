@@ -72,7 +72,7 @@ function sort_commands() {
     fi
   done
 
-  printf '%s\n' "${result[@]}" | sort -t':' -k2,2n -k3,3r
+  printf '%s\n' "${result[@]}"
 }
 
 function check_commands() {
@@ -104,7 +104,7 @@ function check_commands() {
   local found=0
   for item in "${sorted_cmd_list[@]}"; do
     symbol="✓"
-    color=""
+    color="$NC"
     cmd="${item%:*:*}"
     inner="${item#*:}"
     priority="${inner%:*}"

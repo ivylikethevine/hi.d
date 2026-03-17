@@ -14,6 +14,7 @@ unlink_hi() {
   rm .gitignore
   rm README.md
 
+  rm data/.gitkeep
   rm "$_HI_USER_COLORS"
   rm "$_HI_HOST_COLORS"
   rm "$_HI_TRAVEL_CONFIG"

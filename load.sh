@@ -68,7 +68,7 @@ function timers() {
   cecho "load: $(echo "$(perl -MTime::HiRes=time -e 'printf "%.3f", time') $load_start_time" | awk '{ printf "%.3f\n", $1 - $2 }')s | copy: ${hi_copy_time}s"
 }
 
-function system_info() {
+function system_info_line() {
   cecho "$(uname -s)" "$YELLOW" 1
   spacer
   cecho "$(uname -m)" "$PURPLE" 1
@@ -91,7 +91,7 @@ function system_info() {
 }
 
 
-function git_identity() {
+function git_keys_docker_line() {
   spacer
   if [ -f "$_HI_GIT_CONFIG_PATH" ]; then
     cecho "Git ID: " "${CYAN}" 1
@@ -99,18 +99,12 @@ function git_identity() {
   else
     cecho "No Git ID Found..." "${YELLOW}" 1
   fi
-}
-
-function docker_count() {
   spacer
   if command -v "docker" &>/dev/null; then
     cecho "Containers: $(docker container ls | wc -l | awk '{ print $1 - 1 }')" "${BLUE}" 1
   else
     cecho "No docker :(" "${BRYELLOW}" 1
   fi
-}
-
-function key_count() {
   spacer
   if [ -f "$_HI_SSH_AUTHORIZED_KEYS" ]; then
     cecho "Auth: $(wc -l "$_HI_SSH_AUTHORIZED_KEYS" | awk '{ print $1 }')" "$RED" 1
@@ -122,19 +116,18 @@ function key_count() {
 }
 
 # TODO: Test
-# shellcheck disable=SC2329
-# function tmuxrc() {
-#   local TMUXDIR="/tmp/tmuxrc"
-#   if ! [ -d "$TMUXDIR" ]; then
-#     rm -rf "$TMUXDIR"
-#     mkdir -p "$TMUXDIR"
-#   fi
-#   rm -rf "$TMUXDIR"/hi.d
-#   cp -r "$HI_ROOT"/bashrc.hi "$HI_ROOT"/hi "$HI_ROOT"/hi.d "$TMUXDIR"
-#   HI_ROOT="$TMUXDIR" SHELL="$TMUXDIR"/bashrc.hi /usr/bin/tmux -S "$TMUXDIR"/tmuxserver "$@"
-#   SHELL=$(which bash)
-#   export SHELL
-# }
+function tmuxrc() {
+  local TMUXDIR="/tmp/tmuxrc"
+  if ! [ -d "$TMUXDIR" ]; then
+    rm -rf "$TMUXDIR"
+    mkdir -p "$TMUXDIR"
+  fi
+  rm -rf "$TMUXDIR"/hi.d
+  cp -r "$HI_ROOT"/bashrc.hi "$HI_ROOT"/hi "$HI_ROOT"/hi.d "$TMUXDIR"
+  HI_ROOT="$TMUXDIR" SHELL="$TMUXDIR"/bashrc.hi /usr/bin/tmux -S "$TMUXDIR"/tmuxserver "$@"
+  SHELL=$(which bash)
+  export SHELL
+}
 
 # required
 function load() {
@@ -142,7 +135,12 @@ function load() {
   load_start_time="$(perl -MTime::HiRes=time -e 'printf "%.3f", time')"
   load_packages
 
-  trap 'clean_all' exit
+  if [[ -z ${ZSH_VERSION+x} ]]; then
+    trap 'clean_all' exit
+  else
+    # shellcheck disable=SC2329
+    TRAPEXIT() { clean_all; }
+  fi
 
   local HOST_COLOR
   HOST_COLOR=$(host_color "$(hostname)")
@@ -150,10 +148,8 @@ function load() {
   timestamp
 
   # optional header items
-  system_info
-  git_identity
-  docker_count
-  key_count
+  system_info_line
+  git_keys_docker_line
   printf '%b\n' "$(full_check)"
 
   # back to required configuration
@@ -187,18 +183,14 @@ function load() {
   fi
 
   local DU_COMMAND="du -sh $HI_ROOT"
-  local du_size
   if [ -f "$_HI_LINUX_PATH" ]; then
-    du_size="$($DU_COMMAND --apparent-size)"
-  else
-    du_size="$($DU_COMMAND)"
+    DU_COMMAND="$DU_COMMAND --apparent-size"
   fi
-  cecho "\r $(echo "$du_size" | awk '{ print $1" " }')"  "$YELLOW" 1
-
+  # shellcheck disable=SC2005
+  cecho "\r $(echo "$($DU_COMMAND)" | awk '{ print $1" " }')"  "$YELLOW" 1
 
   printf '%b\n' "${BRRED}~~~~~~~~~~~~~~~~~ Disconnected from ${NC}[$HOST_COLOR$(hostname)${NC}]$BRRED ~~~~~~~~~~~~~~~~~~~~~${NC}"
   timestamp
   cecho "hi closing! " "${BRPURPLE}"
-  clean_all
   exit 0
 }

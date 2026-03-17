@@ -25,10 +25,8 @@ load_packages() {
     elif [[ "$line" =~ ^[0-9] ]]; then
       priority=${line%%,*}
       inner=${line#*,}
-      yescol=${inner%%,*}
-      nocol=${line##*,}
-      color_yes["$priority"]="$yescol"
-      color_no["$priority"]="$nocol"
+      color_yes["$priority"]="${inner%%,*}"
+      color_no["$priority"]="${line##*,}"
     fi
   done < "$_HI_PACKAGES_CONFIG"
 }
@@ -105,6 +103,8 @@ function check_commands() {
   local item
   local found=0
   for item in "${sorted_cmd_list[@]}"; do
+    symbol="✓"
+    color=""
     cmd="${item%:*:*}"
     inner="${item#*:}"
     priority="${inner%:*}"
@@ -112,7 +112,6 @@ function check_commands() {
 
     if [[ "$is_installed" == "yes" ]]; then
       color="${color_yes[priority]}"
-      symbol="✓"
     else
       color="${color_no[priority]}"
       symbol="✗"

@@ -3,8 +3,6 @@
 # === start required variables/aliases ===
 # TODO: Hide/shadow these aliases when on a remote device...
 alias hi_colorgen="sh -c 'source ~/hi.d/scripts/colorgen.sh && colorgen'"
-alias hi_reinstall="~/hi.d/scripts/install.sh"
-alias hi_relink="sudo rm /usr/bin/hi && sudo ln ~/hi.d/hi.sh /usr/bin/hi"
 
 # shellcheck disable=SC2139,SC2155
 export EDITOR="$(command -v pico || command -v nano || command -v micro || command -v vim || command -v vi)"

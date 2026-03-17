@@ -19,7 +19,7 @@ command -v openssl >/dev/null 2>&1 || {
   exit 1
 }
 
-hi_exclude=(--exclude README.md --exclude .git --exclude .gitignore --exclude scripts --exclude hi.sh --exclude hi.bashrc --exclude data/group_colors --exclude .zed --exclude data/.gitkeep --exclude *private*)
+hi_exclude=(--exclude README.md --exclude .git --exclude .gitignore --exclude scripts --exclude hi.sh --exclude hi.bashrc --exclude data/group_config --exclude .zed --exclude data/.gitkeep)
 
 # TODO: Use travel_config when on remote hosts
 function hi_parse() {
@@ -53,16 +53,12 @@ function hi_parse() {
 
 function say_hi() {
   if [ -d "$HI_ROOT" ]; then
-
     local DU_COMMAND="du -sh ${hi_exclude[*]} $HI_ROOT"
-    local du_size
     if [ -f "$_HI_LINUX_PATH" ]; then
-      du_size="$($DU_COMMAND --apparent-size)"
-    else
-      du_size="$($DU_COMMAND)"
+      DU_COMMAND="$DU_COMMAND --apparent-size"
     fi
-    cecho "\r $(echo "$du_size" | awk '{ print $1" " }')"  "$CYAN" 1
-
+    # shellcheck disable=SC2005
+    cecho "\r $(echo "$($DU_COMMAND)" | awk '{ print $1" " }')"  "$CYAN" 1
 
     local tar_size=0
     tar_size="$(tar cfz - -h -C "${hi_exclude[@]}" hi.d | wc -c)"
@@ -83,7 +79,6 @@ function say_hi() {
             else
               TRAPEXIT() { rm -rf \$HI_CLEANUP; }
             fi
-
             echo \"$(cat "$0" | $OPENSSL_CMD)\" | $TR_CMD | $OPENSSL_CMD -d > \$HI_ROOT/hi.sh
             chmod +x \$HI_ROOT/hi.sh
             echo \"$(
@@ -114,7 +109,12 @@ EOF
 function run() {
   copy_start_time="$(perl -MTime::HiRes=time -e 'printf "%.3f", time')"
   tmp="/tmp/$(date +%s).hi"
-  trap 'rm $tmp &>/dev/null' exit
+  if [[ -z ${ZSH_VERSION+x} ]]; then
+    trap 'rm -rf $tmp' exit
+  else
+    # shellcheck disable=SC2329
+    TRAPEXIT() { rm -rf "$tmp"; }
+  fi
 
   hi_parse "$@"
   say_hi "$@" 2>"$tmp"
@@ -131,10 +131,8 @@ function run() {
       || [[ "$_errors" == *"Permission denied"* ]]; then
       cecho "| hi: ${_errors#*ssh: }" "$RED"
     else
-      cecho "==============================================================================" "$BRYELLOW"
       cecho "hi failed [code: $_exit_code], falling back to ssh..." "$BRRED"
       cecho "$_errors" "$BRRED"
-      cecho "==============================================================================" "$BRYELLOW"
       ssh "$@"
       exit 1
     fi

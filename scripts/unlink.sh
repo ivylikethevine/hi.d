@@ -35,11 +35,6 @@ echo "Anonymizing group colors"
   touch "$_HI_GROUP_CONFIG"
   {
     printf '%s\n' "# hosttag tag color_bash color_fish";
-    printf '%s\n' "hosttag,laptop,\e[0;35m,brmagenta";
-    printf '%s\n' "# username name color_bash color_fish";
-    printf '%s\n' "username,root,\e[0;31m,red";
-    printf '%s\n' "# hostname name color_bash color_fish";
-    printf '%s\n' "hostname,meow,\e[0;31m,red";
   } >> "$_HI_GROUP_CONFIG"
 
   chown -R "$USER:$USER" "$HI_ROOT"

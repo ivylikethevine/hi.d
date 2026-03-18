@@ -64,6 +64,8 @@ function read_color_file() {
     if [ "$search_val" = "$current_val" ]; then
       if [[ -z $is_fish ]]; then
         printf '%b\n' "${dataArray[2]}"
+      elif [[ -z ${ZSH_VERSION+x} ]]; then
+        printf '%b' "${dataArray[1]}"
       else
         printf '%b\n' "${dataArray[1]}"
       fi
@@ -72,6 +74,8 @@ function read_color_file() {
   done < "$color_file"
   if [[ -z $is_fish ]]; then
     printf '%s\n' "brgreen"
+  elif [[ -z ${ZSH_VERSION+x} ]]; then
+    printf '%s' "\e[0;32m"
   else
     printf '%s\n' "\e[0;32m"
   fi

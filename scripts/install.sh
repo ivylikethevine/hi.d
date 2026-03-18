@@ -101,6 +101,11 @@ function main() {
   initial_colorgen
   rm -rf "$TMP"
 
+  cecho "===== Checking $USER's login shell =====" "$BRCYAN"
+  local shellname
+  shellname=$(cat /etc/passwd | grep -e "$USER" | xargs basename)
+
+
   cecho "~~~~~ Installed! ~~~~~ " "$BRGREEN"
 }
 

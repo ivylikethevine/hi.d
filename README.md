@@ -66,3 +66,13 @@ TBD Features:
 - docker exec
 - tmux
 - screen
+
+## Following added to LOCAL ~/.bashrc will drop into fish from a bash chsh.
+
+```bash
+if grep -qv 'fish' /proc/$PPID/comm && [[ ${SHLVL} == [1,2] ]]
+then
+	shopt -q login_shell && LOGIN_OPTION='--login' || LOGIN_OPTION=''
+	exec fish $LOGIN_OPTION
+fi
+```

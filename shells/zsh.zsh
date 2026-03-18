@@ -29,13 +29,34 @@ if [ -n "$force_color_prompt" ]; then
   fi
 fi
 
-if [ "$color_prompt" = yes ]; then
-  USER_COLOR=$(user_color "$(whoami)")
-  HOST_COLOR=$(host_color "$(hostname)")
-  AT_COLOR=$(at_color)
 
-  PS1=$(printf '%b' " ${debian_chroot:+($debian_chroot)}${USER_COLOR}%n${AT_COLOR}@${HOST_COLOR}%m %F{cyan}%~%F{plain}")
+# git status
+autoload -Uz vcs_info
+precmd() { vcs_info }
+setopt prompt_subst
+zstyle ':vcs_info:git:*' formats '%b'
+
+if [ "$color_prompt" = yes ]; then
+  export CLICOLOR=1
+  export LSCOLORS=gafacadabaegedabagacad
+  # TODO: Improve this conversion from fish colors to zsh colors
+  USER_COLOR=$(user_color)
+  if [[ "$USER_COLOR" = "bryellow" ]]; then
+    USER_COLOR=yellow
+  fi
+  HOST_COLOR=$(host_color)
+  if [[ "$HOST_COLOR" = "bryellow" ]]; then
+    HOST_COLOR=yellow
+  fi
+  AT_COLOR=plain
+  if [[ ! -z ${SSH_TTY+x} ]]; then
+    AT_COLOR=yellow
+  fi
+  PS1=$' ${debian_chroot:+($debian_chroot)}%F{$USER_COLOR}%n%f%F{$AT_COLOR}@%f%F{$HOST_COLOR}%m%f%F{cyan} %~%f%F{plain} $vcs_info_msg_0_| '
+else
+  PS1=$' ${debian_chroot:+($debian_chroot)}%n@%m %~ $vcs_info_msg_0_| '
 fi
+
 # === end required configuration ===
 
 # Spelled vew to avoid calling vi
@@ -140,13 +161,6 @@ autoload -Uz promptinit
 compinit
 compdef hi=ssh
 promptinit
-
-# git status
-autoload -Uz vcs_info
-precmd() { vcs_info }
-setopt prompt_subst
-zstyle ':vcs_info:git:*' formats '%b'
-PROMPT=$PROMPT' %F{plain}$vcs_info_msg_0_| '
 
 # configuration
 setopt LIST_PACKED

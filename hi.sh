@@ -55,6 +55,9 @@ function say_hi() {
   if [ -d "$HI_ROOT" ]; then
     local TR_CMD="tr -s ' ' '\n'"
     # TODO: Handle issue with fish-shell and the ZSH_VERSION trap branching...
+    # Should be able to determine login shell by grepping /etc/passwd for username, then can branch properly?
+    # local shellname
+    # shellname=$(cat /etc/passwd | grep -e "$USER" | xargs basename)
     local OPENSSL_CMD="openssl enc -base64"
     ssh -t "$DOMAIN" "$SSHARGS" "
             command -v openssl >/dev/null 2>&1 || { echo >&2 \"hi requires openssl to be installed on [$DOMAIN], but it is not. Aborting.\"; exit 1; }

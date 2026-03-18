@@ -53,13 +53,7 @@ function hi_parse() {
 
 function say_hi() {
   if [ -d "$HI_ROOT" ]; then
-    local DU_COMMAND="du -sh ${hi_exclude[*]} $HI_ROOT"
-    if [ -f "$_HI_LINUX_PATH" ]; then
-      DU_COMMAND="$DU_COMMAND --apparent-size"
-    fi
-    # shellcheck disable=SC2005
-    cecho "\r $(echo "$($DU_COMMAND)" | awk '{ print $1" " }')"  "$CYAN" 1
-
+    cecho "\r $(du -sh "${hi_exclude[@]}" "$HI_ROOT" | awk '{ print $1" " }')"  "$CYAN" 1
     local tar_size=0
     tar_size="$(tar cfz - -h -C "${hi_exclude[@]}" hi.d | wc -c)"
     if [ "$tar_size" -gt 65536 ]; then

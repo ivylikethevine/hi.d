@@ -56,26 +56,33 @@ end
 # header
 function fish_greeting
   if not set -q fish_greeting
-    # TODO: Unified macOS checking/handling
     if [ -f "$_HI_LINUX_PATH" ]
-      set -g distro (printf '%s%s' (set_color green) (grep PRETTY_NAME "$_HI_LINUX_PATH" | cut -d= -f2 | tr -d '\"'))
+      set -g hi_distro (printf '%s%s' (set_color green) (grep PRETTY_NAME "$_HI_LINUX_PATH" | cut -d= -f2 | tr -d '\"'))
+      set -g hi_cpus (printf '%sCPUs: %s' (set_color brblue) (nproc))
+      set -g hi_ram (printf '%sRAM: %s' (set_color cyan) (free -h --giga | awk '/^Mem:/ {print $2}'))
     else
-      set -g distro "macOS"
+      set -l hi_system_info $(system_profiler SPHardwareDataType)
+      set -g hi_distro "macOS $(sw_vers -productVersion)"
+      set -g hi_cpus (printf '%sCPUs: %s' (set_color brblue) (echo "$system_info" | grep -e Cores | awk '{ print $5 }'))
+      set -g hi_ram (printf '%sRAM: %s' (set_color cyan) (echo "$system_info" | grep -e Memory | awk '{ print $2 }'))
     end
+
     if [ -f "$_HI_SSH_AUTHORIZED_KEYS" ]
-      set -g authorized (printf '%sAuth: %s' (set_color red) (wc -l "$_HI_SSH_AUTHORIZED_KEYS" | awk '{ print $1 }'))
+      set -g hi_authorized (printf '%sAuth: %s' (set_color red) (wc -l "$_HI_SSH_AUTHORIZED_KEYS" | awk '{ print $1 }'))
     else
-      set -g authorized (printf '%sAuth: 0!' (set_color red))
+      set -g hi_authorized (printf '%sAuth: 0!' (set_color red))
     end
+
     if [ -f "/usr/bin/docker" ]
-      set -g containers (printf '%sContainers: %s' (set_color brblue) (docker container ls | wc -l | awk '{print $1 - 1}'))
+      set -g hi_containers (printf '%sContainers: %s' (set_color brblue) (docker container ls | wc -l | awk '{print $1 - 1}'))
     else
-      set -g containers (printf '%sCounting impossible, no docker :(' (set_color bryellow))
+      set -g hi_containers (printf '%sCounting impossible, no docker :(' (set_color bryellow))
     end
+
     if [ -f "$_HI_GIT_CONFIG_PATH" ]
-      set -g git_identity (printf '%sGit ID: %s%s' (set_color brcyan) (set_color yellow) (grep email "$_HI_GIT_CONFIG_PATH" | tail -n1 | cut -d= -f2 | tr -d ' ' | awk -F@ '{ for(i=0;i<length($2);i++) c=c"●"; print $1"@"c; c="" }'))
+      set -g hi_git_identity (printf '%sGit ID: %s%s' (set_color brcyan) (set_color yellow) (grep email "$_HI_GIT_CONFIG_PATH" | tail -n1 | cut -d= -f2 | tr -d ' ' | awk -F@ '{ for(i=0;i<length($2);i++) c=c"●"; print $1"@"c; c="" }'))
     else
-      set -g git_identity (printf '%sNo Git ID Found...' (set_color yellow))
+      set -g hi_git_identity (printf '%sNo Git ID Found...' (set_color yellow))
     end
     if [ -d "$HI_ROOT/.git" ]
       set -g hi_change_status (printf ' %s%s' (set_color bryellow) (git -C ~/hi.d status --short | wc -l | awk '{ print $1 }')' ↑')
@@ -89,16 +96,18 @@ function fish_greeting
     set -l public (printf '%sPub: %s' (set_color magenta) (find ~/.ssh -type f -name "*.pub" | wc -l))
     set -l arch (printf '%s%s' (set_color brmagenta) (uname -m))
     set -l os_type (printf '%s%s' (set_color bryellow) (uname -s))
-    set -l cpus (printf '%sCPUs: %s' (set_color brblue) (nproc))
-    set -l ram (printf '%sRAM: %s' (set_color cyan) (free -h --giga | awk '/^Mem:/ {print $2}GB'))
 
     echo (printf '%s %s~~~~~~~~~~~~~~~~~~~ Online %s[%s%s%s]%s ~~~~~~~~~~~~~~~~~~~~~~~~~~~%s' $hi_change_status (set_color brcyan) (set_color normal) (set_color $fish_color_host) (prompt_hostname) (set_color normal) (set_color brcyan) (set_color normal))
     echo " "$spacer" "$utctime"   "$spacer"   "$localtime
-    echo " "$spacer" "$os_type" "$spacer" "$arch" "$spacer" "$distro" "$spacer" "$cpus" "$spacer" "$ram
-    echo " "$spacer" "$git_identity" "$spacer" "$containers" "$spacer" "$authorized" "$spacer" "$public
-    for line in (string split "newline" (bash -c "source $_HI_CHECK; full_check_fish"))
-      echo " "$line
-    end
+    echo " "$spacer" "$os_type" "$spacer" "$arch" "$spacer" "$hi_distro" "$spacer" "$hi_cpus" "$spacer" "$hi_ram
+    echo " "$spacer" "$hi_git_identity" "$spacer" "$hi_containers" "$spacer" "$hi_authorized" "$spacer" "$public
+    check_packages
+  end
+end
+
+function check_packages --description 'Display a list of installed packages defined by hi.d/data/packages_config'
+  for line in (string split "newline" (bash -c "source $_HI_CHECK; full_check_fish"))
+    echo " "$line
   end
 end
 

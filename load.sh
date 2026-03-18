@@ -144,7 +144,7 @@ function load() {
 
   local HOST_COLOR
   HOST_COLOR=$(host_color "$(hostname)")
-  printf '%b\n' "${BRGREEN}~~~~~~~~~~~~~~~~~~~ Connected to ${NC}[${HOST_COLOR}$(hostname)${NC}]${BRGREEN} ~~~~~~~~~~~~~~~~~~~~~~~~${NC}"
+  printf '%b\n' "${BRGREEN}~~~~~~~~~~~~~~~~~~~~~ Connected ${NC}[${HOST_COLOR}$(hostname)${NC}]${BRGREEN} ~~~~~~~~~~~~~~~~~~~~~~~~~${NC}"
   timestamp
 
   # optional header items
@@ -182,14 +182,9 @@ function load() {
     bash -i
   fi
 
-  local DU_COMMAND="du -sh $HI_ROOT"
-  if [ -f "$_HI_LINUX_PATH" ]; then
-    DU_COMMAND="$DU_COMMAND --apparent-size"
-  fi
-  # shellcheck disable=SC2005
-  cecho "\r $(echo "$($DU_COMMAND)" | awk '{ print $1" " }')"  "$YELLOW" 1
+  cecho "\r $(du -sh "$HI_ROOT" | awk '{ print $1" " }')"  "$YELLOW" 1
 
-  printf '%b\n' "${BRRED}~~~~~~~~~~~~~~~~~ Disconnected from ${NC}[$HOST_COLOR$(hostname)${NC}]$BRRED ~~~~~~~~~~~~~~~~~~~~~${NC}"
+  printf '%b\n' "${BRRED}~~~~~~~~~~~~~~~~~~~ Disconnected ${NC}[$HOST_COLOR$(hostname)${NC}]$BRRED ~~~~~~~~~~~~~~~~~~~~~~~~${NC}"
   timestamp
   cecho "hi closing! " "${BRPURPLE}"
   exit 0

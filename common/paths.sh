@@ -31,8 +31,8 @@ export _HI_SSH_KEY_DIR="$HOME/.ssh"
 export _HI_SSH_CONFIG_FILE="$_HI_SSH_KEY_DIR/config"
 export _HI_SSH_AUTHORIZED_KEYS="$_HI_SSH_KEY_DIR/authorized_keys"
 
-export _HI_GIT_CONFIG_PATH="$HOME/.gitconfig"
-export _HI_FISH_DIR="$HOME/.config/fish"
+export _HI_HOME_GIT_CONFIG="$HOME/.gitconfig"
 export _HI_HOME_BASHRC="$HOME/.bashrc"
 export _HI_HOME_ZSHRC="$HOME/.zshrc"
 export _HI_HOME_FISH_CONFIG="$HOME/.config/fish/config.fish"
+export _HI_FISH_DIR="$HOME/.config/fish" # used to check if fish installed before appending config

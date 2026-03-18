@@ -60,6 +60,7 @@ function clean_all() {
       fi
     fi
   done
+  rm -rf "$HI_TMPDIR/hi.d"
 }
 
 # required
@@ -93,9 +94,9 @@ function system_info_line() {
 
 function git_keys_docker_line() {
   spacer
-  if [ -f "$_HI_GIT_CONFIG_PATH" ]; then
+  if [ -f "$_HI_HOME_GIT_CONFIG" ]; then
     cecho "Git ID: " "${CYAN}" 1
-    cecho "$(grep email "$_HI_GIT_CONFIG_PATH" | tail -n1 | cut -d= -f2 | tr -d ' ' | awk -F@ '{ for(i=0;i<length($2);i++) c=c"●"; print $1"@"c; c="" }')" "${YELLOW}" 1
+    cecho "$(grep email "$_HI_HOME_GIT_CONFIG" | tail -n1 | cut -d= -f2 | tr -d ' ' | awk -F@ '{ for(i=0;i<length($2);i++) c=c"●"; print $1"@"c; c="" }')" "${YELLOW}" 1
   else
     cecho "No Git ID Found..." "${YELLOW}" 1
   fi
@@ -144,7 +145,7 @@ function load() {
 
   local HOST_COLOR
   HOST_COLOR=$(host_color "$(hostname)")
-  printf '%b\n' "${BRGREEN}~~~~~~~~~~~~~~~~~~~~~ Connected ${NC}[${HOST_COLOR}$(hostname)${NC}]${BRGREEN} ~~~~~~~~~~~~~~~~~~~~~~~~~${NC}"
+  printf ' %b\n' "${BRGREEN}~~~~~~~~~~~~~~~~~~~~~~~~ Connected ${NC}[${HOST_COLOR}$(hostname)${NC}]${BRGREEN} ~~~~~~~~~~~~~~~~~~~~~~~${NC}"
   timestamp
 
   # optional header items
@@ -182,9 +183,8 @@ function load() {
     bash -i
   fi
 
-  cecho "\r $(du -sh "$HI_ROOT" | awk '{ print $1" " }')"  "$YELLOW" 1
 
-  printf '%b\n' "${BRRED}~~~~~~~~~~~~~~~~~~~ Disconnected ${NC}[$HOST_COLOR$(hostname)${NC}]$BRRED ~~~~~~~~~~~~~~~~~~~~~~~~${NC}"
+  printf ' %b\n' "${BRRED}~~~~~~~~~~~~~~~~~~~~~ Disconnected ${NC}[$HOST_COLOR$(hostname)${NC}]$BRRED ~~~~~~~~~~~~~~~~~~~~~~~${NC}"
   timestamp
   cecho "hi closing! " "${BRPURPLE}"
   exit 0

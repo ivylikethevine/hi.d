@@ -79,11 +79,12 @@ function fish_greeting
       set -g hi_containers (printf '%sCounting impossible, no docker :(' (set_color bryellow))
     end
 
-    if [ -f "$_HI_GIT_CONFIG_PATH" ]
-      set -g hi_git_identity (printf '%sGit ID: %s%s' (set_color brcyan) (set_color yellow) (grep email "$_HI_GIT_CONFIG_PATH" | tail -n1 | cut -d= -f2 | tr -d ' ' | awk -F@ '{ for(i=0;i<length($2);i++) c=c"●"; print $1"@"c; c="" }'))
+    if [ -f "$_HI_HOME_GIT_CONFIG" ]
+      set -g hi_git_identity (printf '%sGit ID: %s%s' (set_color brcyan) (set_color yellow) (grep email "$_HI_HOME_GIT_CONFIG" | tail -n1 | cut -d= -f2 | tr -d ' ' | awk -F@ '{ for(i=0;i<length($2);i++) c=c"●"; print $1"@"c; c="" }'))
     else
       set -g hi_git_identity (printf '%sNo Git ID Found...' (set_color yellow))
     end
+
     if [ -d "$HI_ROOT/.git" ]
       set -g hi_change_status (printf ' %s%s' (set_color bryellow) (git -C ~/hi.d status --short | wc -l | awk '{ print $1 }')' ↑')
     else

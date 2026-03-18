@@ -53,13 +53,6 @@ function hi_parse() {
 
 function say_hi() {
   if [ -d "$HI_ROOT" ]; then
-    cecho "\r $(du -sh "${hi_exclude[@]}" "$HI_ROOT" | awk '{ print $1" " }')"  "$CYAN" 1
-    local tar_size=0
-    tar_size="$(tar cfz - -h -C "${hi_exclude[@]}" hi.d | wc -c)"
-    if [ "$tar_size" -gt 65536 ]; then
-      cecho >&2 $'hi.d files must be less than 64kb. Current size: '"$tar_size"' bytes' "$RED"
-      return 10
-    fi
     local TR_CMD="tr -s ' ' '\n'"
     # TODO: Handle issue with fish-shell and the ZSH_VERSION trap branching...
     local OPENSSL_CMD="openssl enc -base64"

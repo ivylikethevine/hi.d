@@ -19,7 +19,7 @@ command -v openssl >/dev/null 2>&1 || {
   exit 1
 }
 
-hi_exclude=(--exclude README.md --exclude .git --exclude .gitignore --exclude scripts --exclude hi.sh --exclude hi.bashrc --exclude data/group_config --exclude .zed --exclude data/.gitkeep)
+hi_exclude=(--exclude README.md --exclude .git --exclude .gitignore --exclude scripts --exclude hi.sh --exclude hi.bashrc --exclude data/group_config --exclude .zed --exclude data/.gitkeep --exclude wip)
 
 # TODO: Use travel_config when on remote hosts
 function hi_parse() {

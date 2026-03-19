@@ -29,9 +29,9 @@ alias hey="ssh"
 alias zed="zeditor"
 alias ehi="zed ~/hi.d"
 alias essh="zed ~/.ssh"
-alias view="vew" # here to prevent calling vi
-alias vw="vew"
-alias vs="version"
+# alias view="vew" # here to prevent calling vi
+# alias vw="vew"
+# alias vs="version"
 
 alias dcl="docker container ls && docker compose ls"
 alias dcu="docker compose up"

@@ -20,6 +20,27 @@ export BRPURPLE='\e[1;35m'
 export BRCYAN='\e[1;36m'
 export NC='\e[0m'
 
+### Shell Color Mapping Chart
+#           |    bash    |      zsh       |     fish
+# ---------------------------------------------------------
+# red       | '\e[0;31m' | red            | red
+# green     | '\e[0;32m' | green          | green
+# yellow*   | '\e[0;33m' | yellow*        | yellow*
+# blue      | '\e[0;34m' | blue           | blue
+# purple    | '\e[0;35m' | magenta        | magenta
+# cyan      | '\e[0;36m' | cyan           | cyan
+# white     | '\e[0;37m' | white          | white
+# grey      | '\e[0;38m' | gray           | ---
+# brred     | '\e[1;31m' | bright-red     | brred
+# brgreen   | '\e[1;32m' | bright-green   | brgreen
+# bryellow* | '\e[1;33m' | bright-yellow* | bryellow*
+# brblue    | '\e[1;34m' | bright-blue    | brblue
+# brpurple  | '\e[1;35m' | bright-magenta | brmagenta
+# brcyan    | '\e[1;36m' | bright-cyan    | brcyan
+# brwhite   | '\e[1;37m' | bright-white   | brwhite
+# brgrey    | '\e[1;38m' | bright-grey    | ---
+# nc        | '\e[0m'    | default/plain  | normal
+
 # required
 function cecho() {
   local text=${1:-}

@@ -86,6 +86,28 @@ function config_hi() {
 function main() {
   cecho "~~~~~ Installing (or reinstalling) hi.sh! ~~~~~" "$BRGREEN"
 
+  cecho "===== Checking $USER's login shell =====" "$BRCYAN"
+  local shellname
+  shellname=$(cat /etc/passwd | grep -e "$USER" | xargs basename)
+  if [ "$shellname" = "bash" ]; then
+    cecho "===== Bash shell detected! =====" "$CYAN"
+    # trap 'rm -rf $TMP' exit
+  elif [ "$shellname" = "zsh" ]; then
+    cecho "===== Zsh shell detected! =====" "$PURPLE"
+    # if [[ -z \${ZSH_VERSION+x} ]]; then
+    #   trap 'rm -rf \$HI_CLEANUP' exit
+    # else
+    #   TRAPEXIT() { rm -rf \$HI_CLEANUP; }
+    # fi
+  elif [ "$shellname" = "fish" ]; then
+    cecho "===== Fish shell detected! =====" "$GREEN"
+    # trap 'rm -rf $TMP' exit
+  elif [ "$shellname" = "sh" ]; then
+    cecho "===== sh shell detected? =====" "$YELLOW"
+  else
+    cecho "===== UNKNOWN SHELL: $shellname! =====" "$BRRED"
+  fi
+
   local TMP
   TMP=$(mktemp -d)
   trap 'rm -rf $TMP' exit
@@ -100,10 +122,6 @@ function main() {
   source "$_HI_COLORGEN"
   initial_colorgen
   rm -rf "$TMP"
-
-  cecho "===== Checking $USER's login shell =====" "$BRCYAN"
-  local shellname
-  shellname=$(cat /etc/passwd | grep -e "$USER" | xargs basename)
 
 
   cecho "~~~~~ Installed! ~~~~~ " "$BRGREEN"

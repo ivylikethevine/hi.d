@@ -1,5 +1,5 @@
 #!/bin/bash
-set -eou pipefail
+# set -eou pipefail # this will cause an interactive shell to exit on first error
 
 # === start required configuration ===
 HI_TMPDIR=${HI_TMPDIR:-$HOME}

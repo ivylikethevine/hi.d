@@ -5,7 +5,29 @@ HI_TMPDIR=${HI_TMPDIR:-$HOME}
 # shellcheck source=./paths.sh
 source "$HI_TMPDIR/hi.d/common/paths.sh"
 
+## Shell Color Mapping Chart
+# Notes - greys are skipped, as they don't exist in fish
+#       - sometimes yellow vs bright-yellow is yellow/orange...
+#  number  |    bash    |      zsh       |     fish
+# ---------------------------------------------------------
+#   0      | '\e[0m'    | default/plain  | normal
+#   1      | '\e[0;31m' | red            | red
+#   2      | '\e[0;32m' | green          | green
+#   3      | '\e[0;33m' | yellow*        | yellow*
+#   4      | '\e[0;34m' | blue           | blue
+#   5      | '\e[0;35m' | magenta        | magenta
+#   6      | '\e[0;36m' | cyan           | cyan
+#   7      | '\e[0;37m' | white          | white
+#   8      | '\e[1;31m' | bright-red     | brred
+#   9      | '\e[1;32m' | bright-green   | brgreen
+#   10     | '\e[1;33m' | bright-yellow* | bryellow*
+#   11     | '\e[1;34m' | bright-blue    | brblue
+#   12     | '\e[1;35m' | bright-magenta | brmagenta
+#   13     | '\e[1;36m' | bright-cyan    | brcyan
+#   14     | '\e[1;37m' | bright-white   | brwhite
+
 # required
+export NC='\e[0m'
 export RED='\e[0;31m'
 export GREEN='\e[0;32m'
 export YELLOW='\e[0;33m'
@@ -18,28 +40,6 @@ export BRYELLOW='\e[1;33m'
 export BRBLUE='\e[1;34m'
 export BRPURPLE='\e[1;35m'
 export BRCYAN='\e[1;36m'
-export NC='\e[0m'
-
-### Shell Color Mapping Chart
-#           |    bash    |      zsh       |     fish
-# ---------------------------------------------------------
-# red       | '\e[0;31m' | red            | red
-# green     | '\e[0;32m' | green          | green
-# yellow*   | '\e[0;33m' | yellow*        | yellow*
-# blue      | '\e[0;34m' | blue           | blue
-# purple    | '\e[0;35m' | magenta        | magenta
-# cyan      | '\e[0;36m' | cyan           | cyan
-# white     | '\e[0;37m' | white          | white
-# grey      | '\e[0;38m' | gray           | ---
-# brred     | '\e[1;31m' | bright-red     | brred
-# brgreen   | '\e[1;32m' | bright-green   | brgreen
-# bryellow* | '\e[1;33m' | bright-yellow* | bryellow*
-# brblue    | '\e[1;34m' | bright-blue    | brblue
-# brpurple  | '\e[1;35m' | bright-magenta | brmagenta
-# brcyan    | '\e[1;36m' | bright-cyan    | brcyan
-# brwhite   | '\e[1;37m' | bright-white   | brwhite
-# brgrey    | '\e[1;38m' | bright-grey    | ---
-# nc        | '\e[0m'    | default/plain  | normal
 
 # required
 function cecho() {

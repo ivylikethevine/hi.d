@@ -3,31 +3,36 @@
 # === start required variables/aliases ===
 alias hi_colorgen="sh -c 'source ~/hi.d/scripts/colorgen.sh && colorgen'"
 alias hi_newhost="~/hi.d/scripts/newhost.sh"
+# shellcheck disable=SC2139
+alias hi="$HI_TMPDIR/hi.d/hi.sh"
 
 # shellcheck disable=SC2139,SC2155
 export EDITOR="$(command -v pico || command -v nano || command -v micro || command -v vim || command -v vi)"
-
-# works in bash, fish has a wrapper for sudo in config.fish
-alias sudo="command sudo "
 # shellcheck disable=SC2139
 alias nano="nano --rcfile $HI_TMPDIR/hi.d/misc/nano.rc"
 # shellcheck disable=SC2139
 alias vim="vim -u $HI_TMPDIR/hi.d/misc/vim.rc"
-# shellcheck disable=SC2139
-alias hi="$HI_TMPDIR/hi.d/hi.sh"
 
 # nonsense for cat to be bat with options if present, cat otherwise
 export BAT_OPTS='-P --tabs 2 --theme Monokai\ Extended\ Bright --style changes,grid'
 export BAT_OPTS_NUM='-P --tabs 2 --theme Monokai\ Extended\ Bright --style changes,grid,numbers'
+# shellcheck disable=SC2139
 alias batcat="$(command -v bat || command -v batcat || command -v cat)"
+# shellcheck disable=SC2139
 alias bat="batcat $BAT_OPTS"
+# shellcheck disable=SC2139
 alias batn="batcat $BAT_OPTS_NUM"
 alias cat="batcat"
 
 export human_centric_date_format="+%a %b %-e %Y %H:%M:%S %Z"
 export human_short_date_format="+%b %-e %y %H:%M %Z"
-alias now='date $human_short_date_format && date -u $human_short_date_format'
+
+# works in bash, fish has a wrapper for sudo in config.fish
+alias sudo="command sudo "
 # === end required variables/aliases ===
+
+# time helpers
+alias now='date $human_short_date_format && date -u $human_short_date_format'
 
 # for working on this repo quickly
 alias hey="ssh"

@@ -1,5 +1,0 @@
-# Proxy: shinji
-Host officespace
-  HostName office-space.lan
-  User team
-  IdentityFile ~/.ssh/self_hosting

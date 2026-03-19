@@ -15,6 +15,10 @@ newhost() {
   local local_host
   local_host=$(hostname)
   local key_name="$local_host-to-$remote_host"
+  if [ ! -d "$HOME/.ssh/per-host/" ]; then
+    mkdir "$HOME/.ssh/per-host/"
+  fi
+
   local key_path="$HOME/.ssh/per-host/$key_name"
 
   echo "Generating SSH key for $remote_host..."

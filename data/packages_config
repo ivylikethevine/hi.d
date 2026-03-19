@@ -67,6 +67,7 @@ tools,rust:0,rustc:4,rustup:5
 tools,dotnet:0
 tools,ssh-audit:1
 tools,shellcheck:1
+tools,exa:9,eza:9
 
 #a,tree:0
 #a,cosign:0

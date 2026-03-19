@@ -8,6 +8,7 @@ source $HI_TMPDIR/hi.d/common/paths.sh
 source $_HI_ALIASES;
 
 complete hi --wraps ssh
+complete exa --wraps eza
 
 # wrapper for aliases to work in fish shell under sudo
 function sudo

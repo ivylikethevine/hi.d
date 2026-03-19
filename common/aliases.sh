@@ -13,38 +13,55 @@ alias sudo="command sudo "
 alias nano="nano --rcfile $HI_TMPDIR/hi.d/misc/nano.rc"
 # shellcheck disable=SC2139
 alias vim="vim -u $HI_TMPDIR/hi.d/misc/vim.rc"
-
 # shellcheck disable=SC2139
 alias hi="$HI_TMPDIR/hi.d/hi.sh"
 
-# shellcheck disable=SC2139
-alias bat="$(command -v bat || command -v batcat) -P --tabs 2 --theme Monokai\ Extended\ Bright --style changes,grid,numbers"
+# nonsense for cat to be bat with options if present, cat otherwise
+export BAT_OPTS='-P --tabs 2 --theme Monokai\ Extended\ Bright --style changes,grid'
+export BAT_OPTS_NUM='-P --tabs 2 --theme Monokai\ Extended\ Bright --style changes,grid,numbers'
+alias batcat="$(command -v bat || command -v batcat || command -v cat)"
+alias bat="batcat $BAT_OPTS"
+alias batn="batcat $BAT_OPTS_NUM"
+alias cat="batcat"
 
 export human_centric_date_format="+%a %b %-e %Y %H:%M:%S %Z"
 export human_short_date_format="+%b %-e %y %H:%M %Z"
 alias now='date $human_short_date_format && date -u $human_short_date_format'
 # === end required variables/aliases ===
 
+# for working on this repo quickly
 alias hey="ssh"
 alias zed="zeditor"
 alias ehi="zed ~/hi.d"
 alias essh="zed ~/.ssh"
-# alias view="vew" # here to prevent calling vi
-# alias vw="vew"
-# alias vs="version"
 
+# docker
 alias dcl="docker container ls && docker compose ls"
 alias dcu="docker compose up"
 alias dcud="docker compose up -d"
 alias dcd="docker compose down"
 
+# files/listing/transfer
 alias ls="ls -lh --color=auto"
 alias lsa="ls -lha --color=auto"
 alias lsd="ls -lhd .* --color=auto"
 alias lsr="ls -lhaR --color=auto"
 
 alias grep="grep --color=auto"
+alias rm="rm -iv"
+alias rsync="rsync -zvhPra --info=progress2"
 
+# trialing exa/eza (ls replacement)
+alias le="exa -1 --icons --git"
+alias lea="exa -lha --color=auto"
+alias led="exa -lhd .* --color=auto"
+alias ler="exa -lhaR --color=auto"
+# TODO: Themes? https://github.com/eza-community/eza-themes
+# alias eza="exa"
+# alias exa="eza"
+# alias ls="le"
+
+# git
 alias gl="git log -1"
 alias gf="git fetch -a"
 alias gp="git fetch -a && git pull"
@@ -54,6 +71,7 @@ alias gd="git diff --color=always"
 alias gps="echo ' Okay. Where are we going?'"
 alias gpsh='git push --set-upstream origin $(git rev-parse --abbrev-ref HEAD)'
 
+# internet
 alias ping="ping -O"
 alias ip="ip -color=always"
 alias ips="ip -br a"

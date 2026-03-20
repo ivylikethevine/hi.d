@@ -35,19 +35,6 @@ precmd() { vcs_info }
 setopt prompt_subst
 zstyle ':vcs_info:git:*' formats '%b'
 
-function fish_to_zsh_color() {
-  local color="${1:-}"
-  if [[ $color =~ ^(.*)br(.*)$ ]]; then
-    result="${BASH_REMATCH[1]}bright-${BASH_REMATCH[2]}"
-    echo "$result"
-    return
-  fi
-  echo "$color"
-  return
-}
-
-
-
 if [ "$color_prompt" = yes ]; then
   export CLICOLOR=1
   export LSCOLORS=gafacadabaegedabagacad

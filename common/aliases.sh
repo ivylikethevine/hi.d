@@ -15,7 +15,7 @@ alias vim="vim -u $HI_TMPDIR/hi.d/misc/vim.rc"
 
 # nonsense for cat to be bat with options if present, cat otherwise
 export BAT_OPTS='-P --tabs 2 --theme Monokai\ Extended\ Bright --style changes,grid'
-export BAT_OPTS_NUM='-P --tabs 2 --theme Monokai\ Extended\ Bright --style changes,grid,numbers'
+export BAT_OPTS_NUM="$BAT_OPTS"',numbers'
 # shellcheck disable=SC2139
 alias batcat="$(command -v bat || command -v batcat || command -v cat)"
 # shellcheck disable=SC2139
@@ -57,14 +57,23 @@ alias rm="rm -iv"
 alias rsync="rsync -zvhPra --info=progress2"
 
 # trialing exa/eza (ls replacement)
-alias le="exa -1 --icons --git"
-alias lea="exa -lha --color=auto"
-alias led="exa -lhd .* --color=auto"
-alias ler="exa -lhaR --color=auto"
 # TODO: Themes? https://github.com/eza-community/eza-themes
-# alias eza="exa"
-# alias exa="eza"
-# alias ls="le"
+export EXA_SHARED_OPTS='-F -1 -l -h -m --group-directories-first'
+export EXA_OPTS="$EXA_SHARED_OPTS"' --group --no-filesize'
+export EZA_OPTS="$EXA_SHARED_OPTS"' --smart-group --no-filesize'
+export EZA_OPTS_SIZE="$EZA_OPTS"' --total-size'
+# shellcheck disable=SC2139
+alias eza="$(command -v eza || command -v exa || command -v ls)"
+# shellcheck disable=SC2139
+alias exa="exa $EXA_OPTS"
+# shellcheck disable=SC2139
+alias eza="eza $EZA_OPTS"
+# shellcheck disable=SC2139
+alias le="exa"
+# shellcheck disable=SC2139
+alias les="eza $EZA_OPTS_SIZE"
+alias ltree="les -T -L2"
+alias leg="le --git --git-repos-no-status"
 
 # git
 alias gl="git log -1"

@@ -39,6 +39,8 @@ alias hey="ssh"
 alias zed="zeditor"
 alias ehi="zed ~/hi.d"
 alias essh="zed ~/.ssh"
+alias elinks="zed ~/projects/links"
+alias eeza="zed ~/.eza/theme.yml"
 
 # docker
 alias dcl="docker container ls && docker compose ls"
@@ -57,23 +59,31 @@ alias rm="rm -iv"
 alias rsync="rsync -zvhPra --info=progress2"
 
 # trialing exa/eza (ls replacement)
-# TODO: Themes? https://github.com/eza-community/eza-themes
-export EXA_SHARED_OPTS='-F -1 -l -h -m --group-directories-first'
+export EXA_SHARED_OPTS='-F -1 -l -m --group-directories-first'
 export EXA_OPTS="$EXA_SHARED_OPTS"' --group --no-filesize'
-export EZA_OPTS="$EXA_SHARED_OPTS"' --smart-group --no-filesize'
-export EZA_OPTS_SIZE="$EZA_OPTS"' --total-size'
 # shellcheck disable=SC2139
 alias eza="$(command -v eza || command -v exa || command -v ls)"
 # shellcheck disable=SC2139
 alias exa="exa $EXA_OPTS"
 # shellcheck disable=SC2139
+alias le="exa"
+
+# per https://docs.rs/chrono/latest/chrono/format/strftime/index.html
+export eza_date_format="+%H:%M %m-%d-%y"
+export EZA_OPTS="$EXA_SHARED_OPTS"' --smart-group --time-style="'"$eza_date_format"'"'
+export EZA_OPTS_SIZE="$EZA_OPTS --total-size"
+# shellcheck disable=SC2139
 alias eza="eza $EZA_OPTS"
 # shellcheck disable=SC2139
-alias le="exa"
+alias lrs="eza $EZA_OPTS_SIZE"
 # shellcheck disable=SC2139
-alias les="eza $EZA_OPTS_SIZE"
-alias ltree="les -T -L2"
-alias leg="le --git --git-repos-no-status"
+alias lrst="eza $EZA_OPTS_SIZE -T -L2"
+# shellcheck disable=SC2139
+alias lrsg="eza $EZA_OPTS_SIZE --git --git-repos-no-status"
+# shellcheck disable=SC2139
+alias lr="eza --no-filesize"
+alias lrt="lr -T -L2"
+alias lrg="lr --git --git-repos-no-status"
 
 # git
 alias gl="git log -1"

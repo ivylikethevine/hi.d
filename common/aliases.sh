@@ -41,6 +41,7 @@ alias ehi="zed ~/hi.d"
 alias essh="zed ~/.ssh"
 alias elinks="zed ~/projects/links"
 alias eeza="zed ~/.eza/theme.yml"
+alias list_pkgs="pacman -Qe > ~/projects/links/explicitly-installed.txt && pacman -Qd > ~/projects/links/dependencies-installed.txt"
 
 # docker
 alias dcl="docker container ls && docker compose ls"
@@ -82,6 +83,7 @@ alias lrst="eza $EZA_OPTS_SIZE -T -L2"
 alias lrsg="eza $EZA_OPTS_SIZE --git --git-repos-no-status"
 # shellcheck disable=SC2139
 alias lr="eza --no-filesize"
+alias lra="lr -a"
 alias lrt="lr -T -L2"
 alias lrg="lr --git --git-repos-no-status"
 

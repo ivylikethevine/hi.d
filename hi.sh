@@ -21,7 +21,6 @@ command -v openssl >/dev/null 2>&1 || {
 
 hi_exclude=(--exclude README.md --exclude .git --exclude .gitignore --exclude scripts --exclude hi.sh --exclude hi.bashrc --exclude data/group_config --exclude .zed --exclude data/.gitkeep --exclude wip)
 
-# TODO: Use travel_config when on remote hosts
 function hi_parse() {
   while [[ -n ${1+x} ]]; do
     case $1 in
@@ -51,44 +50,52 @@ function hi_parse() {
   fi
 }
 
-# TODO: Handle issue with fish-shell and the ZSH_VERSION trap branching...
-# Should be able to determine login shell by grepping /etc/passwd for username, then can branch properly?
-# local shellname
-# shellname=$(cat /etc/passwd | grep -e "$USER" | xargs basename)
-# if [ "$shellname" = "bash" ]; then
-#   cecho "===== Bash shell detected! =====" "$CYAN"
-#   # trap 'rm -rf $TMP' exit
-# elif [ "$shellname" = "zsh" ]; then
-#   cecho "===== Zsh shell detected! =====" "$PURPLE"
-#   # if [[ -z \${ZSH_VERSION+x} ]]; then
-#   #   trap 'rm -rf \$HI_CLEANUP' exit
-#   # else
-#   #   TRAPEXIT() { rm -rf \$HI_CLEANUP; }
-#   # fi
-# elif [ "$shellname" = "fish" ]; then
-#   cecho "===== Fish shell detected! =====" "$GREEN"
-#   # trap 'rm -rf $TMP' exit
-# elif [ "$shellname" = "sh" ]; then
-#   cecho "===== sh shell detected? =====" "$YELLOW"
-# else
-#   cecho "===== UNKNOWN SHELL: $shellname! =====" "$BRRED"
-# fi
 
 function say_hi() {
+  shell_start_time="$(perl -MTime::HiRes=time -e 'printf "%.3f", time')"
+
   if [ -d "$HI_ROOT" ]; then
-    local TR_CMD="tr -s ' ' '\n'"
-    local OPENSSL_CMD="openssl enc -base64"
+    local remote_shell
+    remote_shell="$(ssh "$DOMAIN" 'echo $(cat /etc/passwd | grep -e "$USER" | xargs basename)' 2>/dev/null)"
+
+    # # this will be false for a macOS target
+    if [ "$remote_shell" = "false" ]; then
+      remote_shell="$(ssh "$DOMAIN" 'echo $(dscl . -read ~/ UserShell)' 2>/dev/null | awk '{ print $2 }' | xargs basename)"
+    fi
+    shell_end_time="$(perl -MTime::HiRes=time -e 'printf "%.3f", time')"
+    cecho " $(echo "$shell_end_time $shell_start_time" | awk '{ printf "shell: %.3fs ", $1 - $2 }')" "$BLUE" 1
+
+    if [ "$remote_shell" = "bash" ]; then
+      cecho "-> bash" "$CYAN" 1
+      say_hi_bash "$@" 2>"$tmp"
+    elif [ "$remote_shell" = "zsh" ]; then
+      cecho "-> zsh" "$PURPLE" 1
+      say_hi_zsh "$@" 2>"$tmp"
+    elif [ "$remote_shell" = "fish" ]; then
+      cecho "-> fish" "$GREEN" 1
+      say_hi_bash "$@" 2>"$tmp"
+    elif [ "$remote_shell" = "sh" ]; then
+      cecho "-> sh?" "$YELLOW" 1
+    else
+      cecho "-> UNKNOWN: $remote_shell!" "$BRRED"
+    fi
+  else
+    cecho "No such directory: $HI_ROOT" "$RED" >&2
+    return 1
+  fi
+}
+
+export TR_CMD="tr -s ' ' '\n'"
+export OPENSSL_CMD="openssl enc -base64"
+
+function say_hi_bash() {
     ssh -t "$DOMAIN" "$SSHARGS" "
             command -v openssl >/dev/null 2>&1 || { echo >&2 \"hi requires openssl to be installed on [$DOMAIN], but it is not. Aborting.\"; exit 1; }
             export HI_TMPDIR=\$(mktemp -d -t $(whoami).hi.XXXX)
             mkdir \$HI_TMPDIR/hi.d
             export HI_ROOT=\$HI_TMPDIR/hi.d
             export HI_CLEANUP=\$HI_TMPDIR
-            if [[ -z \${ZSH_VERSION+x} ]]; then
-              trap 'rm -rf \$HI_CLEANUP' exit
-            else
-              TRAPEXIT() { rm -rf \$HI_CLEANUP; }
-            fi
+            trap 'rm -rf \$HI_CLEANUP' exit
             echo \"$(cat "$0" | $OPENSSL_CMD)\" | $TR_CMD | $OPENSSL_CMD -d > \$HI_ROOT/hi.sh
             chmod +x \$HI_ROOT/hi.sh
             echo \"$(
@@ -110,10 +117,37 @@ EOF
             echo \"export hi_copy_time='$(echo "$(perl -MTime::HiRes=time -e 'printf "%.3f", time') $copy_start_time" | awk '{ printf "%.3f\n", $1 - $2 }')'\" >> \$HI_ROOT/load.sh
             bash --rcfile \$HI_ROOT/hi.bashrc
             "
-  else
-    cecho "No such directory: $HI_ROOT" "$RED" >&2
-    return 1
-  fi
+}
+
+function say_hi_zsh() {
+    ssh -t "$DOMAIN" "$SSHARGS" "
+            command -v openssl >/dev/null 2>&1 || { echo >&2 \"hi requires openssl to be installed on [$DOMAIN], but it is not. Aborting.\"; exit 1; }
+            export HI_TMPDIR=\$(mktemp -d -t $(whoami).hi.XXXX)
+            mkdir \$HI_TMPDIR/hi.d
+            export HI_ROOT=\$HI_TMPDIR/hi.d
+            export HI_CLEANUP=\$HI_TMPDIR
+            TRAPEXIT() { rm -rf \$HI_CLEANUP; }
+            echo \"$(cat "$0" | $OPENSSL_CMD)\" | $TR_CMD | $OPENSSL_CMD -d > \$HI_ROOT/hi.sh
+            chmod +x \$HI_ROOT/hi.sh
+            echo \"$(
+      cat <<'EOF' | $OPENSSL_CMD
+                if [ -r /etc/profile ]; then source /etc/profile; fi
+                if [ -r ~/.bash_profile ]; then source ~/.bash_profile
+                elif [ -r ~/.bash_login ]; then source ~/.bash_login
+                elif [ -r ~/.profile ]; then source ~/.profile
+                fi
+                export PATH=$PATH:${HI_ROOT+x}
+                source $HI_ROOT/load.sh
+                load
+EOF
+    )\" | $TR_CMD | $OPENSSL_CMD -d > \$HI_ROOT/hi.bashrc
+            echo \"$(tar czf - -h -C "$HI_TMPDIR" "${hi_exclude[@]}" hi.d | $OPENSSL_CMD)\" | $TR_CMD | $OPENSSL_CMD -d | tar mxzf - -C \$HI_TMPDIR
+            export HI_TMPDIR=\$HI_TMPDIR
+            export HI_ROOT=\$HI_ROOT
+            echo \"$CMDARG\" >> \$HI_ROOT/hi.bashrc
+            echo \"export hi_copy_time='$(echo "$(perl -MTime::HiRes=time -e 'printf "%.3f", time') $copy_start_time" | awk '{ printf "%.3f\n", $1 - $2 }')'\" >> \$HI_ROOT/load.sh
+            bash --rcfile \$HI_ROOT/hi.bashrc
+            "
 }
 
 function run() {

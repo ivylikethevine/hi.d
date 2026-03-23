@@ -82,3 +82,7 @@ tools,exa:9,eza:9
 #a,fusermount:2
 #a,flatpak:4
 #a,emacs:0
+#a,whois:0
+#a,strace:0
+#a,nmcli
+#a,msdnss

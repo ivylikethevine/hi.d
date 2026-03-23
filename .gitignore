@@ -21,6 +21,7 @@
 *.toml
 *.yaml
 *.yml
+!theme.yml
 
 *docker*
 

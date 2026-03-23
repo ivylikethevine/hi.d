@@ -9,6 +9,8 @@ source "$_HI_COLORS"
 # shellcheck source=./common/aliases.sh
 source "$_HI_ALIASES"
 
+export EZA_CONFIG_DIR="$HI_TMPDIR"/hi.d/misc # for eza theme customization at misc/theme.yml
+
 # required for sanity & some of the other scripts we run
 setopt KSH_ARRAYS
 
@@ -107,3 +109,12 @@ zstyle ':completion:*:*:-command-:*:*' group-order alias builtins functions comm
 
 zstyle ':completion:*:kill:*' command 'ps -u $USER -o pid,%cpu,tty,cputime,cmd'
 zstyle ':completion:*:*:kill:*:processes' list-colors '=(#b) #([0-9]#)*=0=01;31'
+
+# # TODO: Determine best way to switch this/configure on install
+# # # If we are in bash and there is no fish shell running
+# # # drop from bash into fish (for interactive, login shells).
+# # # source: https://wiki.archlinux.org/title/Fish#Modify_.bashrc_to_drop_into_fish
+# if grep -qv 'fish' /proc/$PPID/comm && [[ ${SHLVL} == [1,2] ]]; then
+#  	shopt -q login_shell && LOGIN_OPTION='--login' || LOGIN_OPTION=''
+#  	exec fish "$LOGIN_OPTION"
+# fi

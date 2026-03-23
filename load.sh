@@ -145,7 +145,8 @@ function load() {
 
   local HOST_COLOR
   HOST_COLOR=$(host_color "$(hostname)")
-  printf ' %b\n' "${BRGREEN}~~~~~~~~~~~~~~~~~~~~~~~~ Connected ${NC}[${HOST_COLOR}$(hostname)${NC}]${BRGREEN} ~~~~~~~~~~~~~~~~~~~~~~~${NC}"
+  # printf ' %b\n' "${BRGREEN}~~~~~~~~~~~~~~~~~~~~~~~~ Connected ${NC}[${HOST_COLOR}$(hostname)${NC}]${BRGREEN} ~~~~~~~~~~~~~~~~~~~~~~~${NC}"4
+  printf ' %b\n' "${BRGREEN} ~~ Connected ${NC}[${HOST_COLOR}$(hostname)${NC}]${BRGREEN} ~~~~~~~~~~~~~~~~~~~~~~~${NC}"
   timestamp
 
   # optional header items

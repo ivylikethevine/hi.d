@@ -10,6 +10,12 @@ source $_HI_ALIASES;
 complete hi --wraps ssh
 complete exa --wraps eza
 
+if [ -d $HOME/Android ] && [ -d $HOME/Android/Sdk ]
+  set -gx ANDROID_HOME $HOME/Android/Sdk # for android dev on linux
+end
+
+set -gx EZA_CONFIG_DIR $HI_TMPDIR/hi.d/misc # for eza theme customization at misc/theme.yml
+
 # wrapper for aliases to work in fish shell under sudo
 function sudo
   if functions -q -- "$argv[1]"

@@ -32,7 +32,7 @@ alias sudo="command sudo "
 # === end required variables/aliases ===
 
 # time helpers
-alias now='date $human_short_date_format && date -u $human_short_date_format'
+alias now='echo "LOCAL: $(date $human_short_date_format) => UTC: $(date -u $human_short_date_format)"'
 
 # for working on this repo quickly
 alias hey="ssh"
@@ -68,9 +68,11 @@ alias eza="$(command -v eza || command -v exa || command -v ls)"
 alias exa="exa $EXA_OPTS"
 # shellcheck disable=SC2139
 alias le="exa"
+alias lea="le -a"
+alias let="le -T -L2"
 
 # per https://docs.rs/chrono/latest/chrono/format/strftime/index.html
-export eza_date_format="+%H:%M %m-%d-%y"
+export eza_date_format="+%b %d %Y %H:%M"
 export EZA_OPTS="$EXA_SHARED_OPTS"' --smart-group --time-style="'"$eza_date_format"'"'
 export EZA_OPTS_SIZE="$EZA_OPTS --total-size"
 # shellcheck disable=SC2139

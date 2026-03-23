@@ -7,20 +7,15 @@ HI_TMPDIR=${HI_TMPDIR:-$HOME}
 source "$HI_TMPDIR/hi.d/common/paths.sh"
 # shellcheck source=./common/colors.sh
 command -v cecho >/dev/null || source "$_HI_COLORS"
+
+# This will autogenerate the colors if we don't have any yet.
 if [ ! -f "$_HI_HOST_COLORS" ] || [ ! -f "$_HI_USER_COLORS" ]; then
   # shellcheck source=./scripts/colorgen.sh
   source "$_HI_COLORGEN"
-  # This will autogenerate the colors if we don't have any yet.
   initial_colorgen
 fi
 
-command -v openssl >/dev/null 2>&1 || {
-  cecho >&2 "hi requires openssl to be installed on [$(hostname)], but it is not. Aborting..." "$RED"
-  exit 1
-}
-
-hi_exclude=(--exclude README.md --exclude .git --exclude .gitignore --exclude scripts --exclude hi.sh --exclude hi.bashrc --exclude data/group_config --exclude .zed --exclude data/.gitkeep --exclude wip)
-
+# Parse ssh arguments
 function hi_parse() {
   while [[ -n ${1+x} ]]; do
     case $1 in
@@ -50,7 +45,7 @@ function hi_parse() {
   fi
 }
 
-
+# Connect to remote host, determine shell, then copy hi.d & run load.sh
 function say_hi() {
   local shell_start_time
   shell_start_time="$(perl -MTime::HiRes=time -e 'printf "%.3f", time')"
@@ -83,72 +78,83 @@ function say_hi() {
   esac
 }
 
+# Unify as many parts of the process as possible
+export HI_EXCLUDE=(--exclude README.md --exclude .git --exclude .gitignore --exclude scripts --exclude hi.sh --exclude hi.bashrc --exclude data/group_config --exclude .zed --exclude data/.gitkeep --exclude wip)
 export TR_CMD="tr -s ' ' '\n'"
 export OPENSSL_CMD="openssl enc -base64"
+export OPENSSL_CHECK="command -v openssl >/dev/null 2>&1 || { echo >&2 \"hi requires openssl to be installed on [$DOMAIN], but it is not. Aborting.\"; exit 1; }"
 
+# Bash & Fish shell both work with this command
 function say_hi_bash() {
   ssh -t "$DOMAIN" "$SSHARGS" "
-          command -v openssl >/dev/null 2>&1 || { echo >&2 \"hi requires openssl to be installed on [$DOMAIN], but it is not. Aborting.\"; exit 1; }
-          export HI_TMPDIR=\$(mktemp -d -t $(whoami).hi.XXXX)
-          mkdir \$HI_TMPDIR/hi.d
-          export HI_ROOT=\$HI_TMPDIR/hi.d
-          export HI_CLEANUP=\$HI_TMPDIR
-          trap 'rm -rf \$HI_CLEANUP' exit
-          echo \"$(cat "$0" | $OPENSSL_CMD)\" | $TR_CMD | $OPENSSL_CMD -d > \$HI_ROOT/hi.sh
-          chmod +x \$HI_ROOT/hi.sh
-          echo \"$(
+      $OPENSSL_CHECK
+      export HI_TMPDIR=\$(mktemp -d -t $(whoami).hi.XXXX)
+      mkdir \$HI_TMPDIR/hi.d
+      export HI_ROOT=\$HI_TMPDIR/hi.d
+      export HI_CLEANUP=\$HI_TMPDIR
+      trap 'rm -rf \$HI_CLEANUP' exit
+      echo \"$(cat "$0" | $OPENSSL_CMD)\" | $TR_CMD | $OPENSSL_CMD -d > \$HI_ROOT/hi.sh
+      chmod +x \$HI_ROOT/hi.sh
+      echo \"$(
     cat <<'EOF' | $OPENSSL_CMD
-              if [ -r /etc/profile ]; then source /etc/profile; fi
-              if [ -r ~/.bash_profile ]; then source ~/.bash_profile
-              elif [ -r ~/.bash_login ]; then source ~/.bash_login
-              elif [ -r ~/.profile ]; then source ~/.profile
-              fi
-              export PATH=$PATH:${HI_ROOT+x}
-              source $HI_ROOT/load.sh
-              load
+      if [ -r /etc/profile ]; then source /etc/profile; fi
+      if [ -r ~/.bash_profile ]; then source ~/.bash_profile
+      elif [ -r ~/.bash_login ]; then source ~/.bash_login
+      elif [ -r ~/.profile ]; then source ~/.profile
+      fi
+      export PATH=$PATH:${HI_ROOT+x}
+      source $HI_ROOT/load.sh
+      load
 EOF
   )\" | $TR_CMD | $OPENSSL_CMD -d > \$HI_ROOT/hi.bashrc
-          echo \"$(tar czf - -h -C "$HI_TMPDIR" "${hi_exclude[@]}" hi.d | $OPENSSL_CMD)\" | $TR_CMD | $OPENSSL_CMD -d | tar mxzf - -C \$HI_TMPDIR
-          export HI_TMPDIR=\$HI_TMPDIR
-          export HI_ROOT=\$HI_ROOT
-          echo \"$CMDARG\" >> \$HI_ROOT/hi.bashrc
-          echo \"export hi_copy_time='$(echo "$(perl -MTime::HiRes=time -e 'printf "%.3f", time') $copy_start_time" | awk '{ printf "%.3f\n", $1 - $2 }')'\" >> \$HI_ROOT/load.sh
-          bash --rcfile \$HI_ROOT/hi.bashrc
-          "
+      echo \"$(tar czf - -h -C "$HI_TMPDIR" "${HI_EXCLUDE[@]}" hi.d | $OPENSSL_CMD)\" | $TR_CMD | $OPENSSL_CMD -d | tar mxzf - -C \$HI_TMPDIR
+      export HI_TMPDIR=\$HI_TMPDIR
+      export HI_ROOT=\$HI_ROOT
+      echo \"$CMDARG\" >> \$HI_ROOT/hi.bashrc
+      echo \"export hi_copy_time='$(echo "$(perl -MTime::HiRes=time -e 'printf "%.3f", time') $copy_start_time" | awk '{ printf "%.3f\n", $1 - $2 }')'\" >> \$HI_ROOT/load.sh
+      bash --rcfile \$HI_ROOT/hi.bashrc
+      "
 }
 
+# Zsh requires a different trap syntax (TRAPEXIT() { ... } vs trap '...' exit)
 function say_hi_zsh() {
   ssh -t "$DOMAIN" "$SSHARGS" "
-          command -v openssl >/dev/null 2>&1 || { echo >&2 \"hi requires openssl to be installed on [$DOMAIN], but it is not. Aborting.\"; exit 1; }
-          export HI_TMPDIR=\$(mktemp -d -t $(whoami).hi.XXXX)
-          mkdir \$HI_TMPDIR/hi.d
-          export HI_ROOT=\$HI_TMPDIR/hi.d
-          export HI_CLEANUP=\$HI_TMPDIR
-          TRAPEXIT() { rm -rf \$HI_CLEANUP; }
-          echo \"$(cat "$0" | $OPENSSL_CMD)\" | $TR_CMD | $OPENSSL_CMD -d > \$HI_ROOT/hi.sh
-          chmod +x \$HI_ROOT/hi.sh
-          echo \"$(
+      $OPENSSL_CHECK
+      export HI_TMPDIR=\$(mktemp -d -t $(whoami).hi.XXXX)
+      mkdir \$HI_TMPDIR/hi.d
+      export HI_ROOT=\$HI_TMPDIR/hi.d
+      export HI_CLEANUP=\$HI_TMPDIR
+      TRAPEXIT() { rm -rf \$HI_CLEANUP; }
+      echo \"$(cat "$0" | $OPENSSL_CMD)\" | $TR_CMD | $OPENSSL_CMD -d > \$HI_ROOT/hi.sh
+      chmod +x \$HI_ROOT/hi.sh
+      echo \"$(
     cat <<'EOF' | $OPENSSL_CMD
-              if [ -r /etc/profile ]; then source /etc/profile; fi
-              if [ -r ~/.bash_profile ]; then source ~/.bash_profile
-              elif [ -r ~/.bash_login ]; then source ~/.bash_login
-              elif [ -r ~/.profile ]; then source ~/.profile
-              fi
-              export PATH=$PATH:${HI_ROOT+x}
-              source $HI_ROOT/load.sh
-              load
+      if [ -r /etc/profile ]; then source /etc/profile; fi
+      if [ -r ~/.bash_profile ]; then source ~/.bash_profile
+      elif [ -r ~/.bash_login ]; then source ~/.bash_login
+      elif [ -r ~/.profile ]; then source ~/.profile
+      fi
+      export PATH=$PATH:${HI_ROOT+x}
+      source $HI_ROOT/load.sh
+      load
 EOF
   )\" | $TR_CMD | $OPENSSL_CMD -d > \$HI_ROOT/hi.bashrc
-          echo \"$(tar czf - -h -C "$HI_TMPDIR" "${hi_exclude[@]}" hi.d | $OPENSSL_CMD)\" | $TR_CMD | $OPENSSL_CMD -d | tar mxzf - -C \$HI_TMPDIR
-          export HI_TMPDIR=\$HI_TMPDIR
-          export HI_ROOT=\$HI_ROOT
-          echo \"$CMDARG\" >> \$HI_ROOT/hi.bashrc
-          echo \"export hi_copy_time='$(echo "$(perl -MTime::HiRes=time -e 'printf "%.3f", time') $copy_start_time" | awk '{ printf "%.3f\n", $1 - $2 }')'\" >> \$HI_ROOT/load.sh
-          bash --rcfile \$HI_ROOT/hi.bashrc
-          "
+      echo \"$(tar czf - -h -C "$HI_TMPDIR" "${HI_EXCLUDE[@]}" hi.d | $OPENSSL_CMD)\" | $TR_CMD | $OPENSSL_CMD -d | tar mxzf - -C \$HI_TMPDIR
+      export HI_TMPDIR=\$HI_TMPDIR
+      export HI_ROOT=\$HI_ROOT
+      echo \"$CMDARG\" >> \$HI_ROOT/hi.bashrc
+      echo \"export hi_copy_time='$(echo "$(perl -MTime::HiRes=time -e 'printf "%.3f", time') $copy_start_time" | awk '{ printf "%.3f\n", $1 - $2 }')'\" >> \$HI_ROOT/load.sh
+      bash --rcfile \$HI_ROOT/hi.bashrc
+      "
 }
 
+# Check dependencies, start to say hi, handle errors (both hi & ssh)
 function run() {
+  command -v openssl >/dev/null 2>&1 || {
+    cecho >&2 "hi requires openssl to be installed on [$(hostname)], but it is not. Aborting..." "$RED"
+    exit 1
+  }
+
   if [ -d "$HI_ROOT" ]; then
     copy_start_time="$(perl -MTime::HiRes=time -e 'printf "%.3f", time')"
     tmp="/tmp/$(date +%s).hi"

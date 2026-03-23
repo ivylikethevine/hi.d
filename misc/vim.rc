@@ -26,6 +26,7 @@ set ruler
 set regexpengine=0
 set smartcase
 set showmatch
+set showmode
 set si
 set so=7
 set smarttab
@@ -57,5 +58,21 @@ filetype plugin on
 filetype indent on
 set laststatus=1
 
-:map Q :qa!
-:map q :qa!
+" TODO: Fix the following because none work...
+
+" Quickly quit
+map qq :qa!
+
+" Arrow keys in all modes...
+map <Up> j
+map <Down> k
+map <Left> h
+map <Right> l
+imap <Up> j
+imap <Down> k
+imap <Left> h
+imap <Right> l
+map! ^[OA ^[ka
+map! ^[OB ^[ja
+map! ^[OC ^[la
+map! ^[OD ^[ha

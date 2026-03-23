@@ -24,13 +24,11 @@ alias bat="batcat $BAT_OPTS"
 alias batn="batcat $BAT_OPTS_NUM"
 alias cat="batcat"
 
-export human_centric_date_format="+%a %b %-e %Y %H:%M:%S %Z"
-export human_short_date_format="+%b %-e %y %H:%M %Z"
-
 # works in bash, fish has a wrapper for sudo in config.fish
 alias sudo="command sudo "
-# === end required variables/aliases ===
 
+export human_centric_date_format="+%a %b %-e %Y %H:%M:%S %Z" # used in fish
+export human_short_date_format="+%b %-e %y %H:%M %Z" # used for 'now' alias
 # time helpers
 alias now='echo "LOCAL: $(date $human_short_date_format) => UTC: $(date -u $human_short_date_format)"'
 
@@ -41,6 +39,8 @@ alias ehi="zed ~/hi.d"
 alias essh="zed ~/.ssh"
 alias elinks="zed ~/projects/links"
 alias eeza="zed ~/.eza/theme.yml"
+# === end required variables/aliases ===
+# in trial
 alias list_pkgs="pacman -Qe > ~/projects/links/explicitly-installed.txt && pacman -Qd > ~/projects/links/dependencies-installed.txt"
 
 # docker
@@ -59,7 +59,7 @@ alias grep="grep --color=auto"
 alias rm="rm -iv"
 alias rsync="rsync -zvhPra --info=progress2"
 
-# trialing exa/eza (ls replacement)
+# exa (back-compat) improved ls
 export EXA_SHARED_OPTS='-F -1 -l -m --group-directories-first'
 export EXA_OPTS="$EXA_SHARED_OPTS"' --group --no-filesize'
 # shellcheck disable=SC2139
@@ -71,6 +71,7 @@ alias le="exa"
 alias lea="le -a"
 alias let="le -T -L2"
 
+# eza (newer fork of exa) improved ls
 # per https://docs.rs/chrono/latest/chrono/format/strftime/index.html
 export eza_date_format="+%b %d %Y %H:%M"
 export EZA_OPTS="$EXA_SHARED_OPTS"' --smart-group --time-style="'"$eza_date_format"'"'

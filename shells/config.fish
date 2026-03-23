@@ -34,6 +34,34 @@ end
 
 # prompt
 function prompt_login --description "display user name for the prompt"
+  # fish git prompt
+  set -l last_status $status
+  if not set -q __fish_git_prompt_show_informative_status
+    set -g __fish_git_prompt_show_informative_status 1
+  end
+  if not set -q __fish_git_prompt_color_branch
+    set -g __fish_git_prompt_color_branch brmagenta
+  end
+  if not set -q __fish_git_prompt_showupstream
+    set -g __fish_git_prompt_showupstream "informative"
+  end
+  if not set -q __fish_git_prompt_showdirtystate
+    set -g __fish_git_prompt_showdirtystate "yes"
+  end
+  if not set -q __fish_git_prompt_color_stagedstate
+    set -g __fish_git_prompt_color_stagedstate yellow
+  end
+  if not set -q __fish_git_prompt_color_invalidstate
+    set -g __fish_git_prompt_color_invalidstate red
+  end
+  if not set -q __fish_git_prompt_color_cleanstate
+    set -g __fish_git_prompt_color_cleanstate brgreen
+  end
+  if not test $last_status -eq 0
+    set_color $fish_color_error
+  end
+
+  # fish colors, chroot, and the ssh_tty @ coloring
   if not set -q __fish_machine
     set -g __fish_machine
     set -l debian_chroot $debian_chroot
@@ -47,11 +75,9 @@ function prompt_login --description "display user name for the prompt"
       set -g __fish_machine "(chroot:$debian_chroot)"
     end
   end
-
   if set -q __fish_machine[1]
     echo -n -s (set_color yellow) "$__fish_machine" (set_color normal) ' '
   end
-
   set -g color_at normal
   if set -q SSH_TTY;
     set -g color_at yellow
@@ -74,30 +100,10 @@ function fish_greeting
       set -g hi_ram (printf '%sRAM: %s' (set_color cyan) (echo "$system_info" | grep -e Memory | awk '{ print $2 }'))
     end
 
-    if [ -f "$_HI_SSH_AUTHORIZED_KEYS" ]
-      set -g hi_authorized (printf '%sAuth: %s' (set_color red) (wc -l "$_HI_SSH_AUTHORIZED_KEYS" | awk '{ print $1 }'))
-    else
-      set -g hi_authorized (printf '%sAuth: 0!' (set_color red))
-    end
-
-    if [ -f "/usr/bin/docker" ]
-      set -g hi_containers (printf '%sContainers: %s' (set_color brblue) (docker container ls | wc -l | awk '{print $1 - 1}'))
-    else
-      set -g hi_containers (printf '%sCounting impossible, no docker :(' (set_color bryellow))
-    end
-
-    if [ -f "$_HI_HOME_GIT_CONFIG" ]
-      set -g hi_git_identity (printf '%sGit ID: %s%s' (set_color brcyan) (set_color yellow) (grep email "$_HI_HOME_GIT_CONFIG" | tail -n1 | cut -d= -f2 | tr -d ' ' | awk -F@ '{ for(i=0;i<length($2);i++) c=c"●"; print $1"@"c; c="" }'))
-    else
-      set -g hi_git_identity (printf '%sNo Git ID Found...' (set_color yellow))
-    end
-
-    if [ -d "$HI_ROOT/.git" ]
-      set -g hi_change_status (printf ' %s%s' (set_color bryellow) (git -C ~/hi.d status --short | wc -l | awk '{ print $1 }')' ↑')
-    else
-      set -g hi_change_status ""
-    end
-
+    set -l authorized_keys ([ -f "$_HI_SSH_AUTHORIZED_KEYS" ] && printf '%sAuth: %s' (set_color red) (wc -l "$_HI_SSH_AUTHORIZED_KEYS" | awk '{ print $1 }') || printf '%sAuth: 0!' (set_color red))
+    set -l running_containers ([ -f "/usr/bin/docker" ] && printf '%sContainers: %s' (set_color brblue) (docker container ls | wc -l | awk '{print $1 - 1}') || printf '%sCounting impossible, no docker :(' (set_color bryellow))
+    set -l git_identity ([ -f "$_HI_HOME_GIT_CONFIG" ] && printf '%sGit ID: %s%s' (set_color brcyan) (set_color yellow) (grep email "$_HI_HOME_GIT_CONFIG" | tail -n1 | cut -d= -f2 | tr -d ' ' | awk -F@ '{ for(i=0;i<length($2);i++) c=c"●"; print $1"@"c; c="" }') || printf '%sNo Git ID Found...' (set_color yellow))
+    set -l hi_change_status ([ -d "$HI_ROOT/.git" ] && printf ' %s%s' (set_color bryellow) (git -C ~/hi.d status --short | wc -l | awk '{ print $1 }')' ↑' || "")
     set -l spacer (printf '%s|' (set_color normal))
     set -l utctime (printf '%s%s' (set_color brblue) (date -u $human_centric_date_format))
     set -l localtime (printf '%s%s' (set_color bryellow) (date $human_centric_date_format))
@@ -105,17 +111,17 @@ function fish_greeting
     set -l arch (printf '%s%s' (set_color brmagenta) (uname -m))
     set -l os_type (printf '%s%s' (set_color bryellow) (uname -s))
 
-    echo (printf '%s %s~~~~~~~~~~~~~~~~~~~ Online %s[%s%s%s]%s ~~~~~~~~~~~~~~~~~~~~~~~~~~~%s' $hi_change_status (set_color brcyan) (set_color normal) (set_color $fish_color_host) (prompt_hostname) (set_color normal) (set_color brcyan) (set_color normal))
-    echo " "$spacer" "$utctime"   "$spacer"   "$localtime
-    echo " "$spacer" "$os_type" "$spacer" "$arch" "$spacer" "$hi_distro" "$spacer" "$hi_cpus" "$spacer" "$hi_ram
-    echo " "$spacer" "$hi_git_identity" "$spacer" "$hi_containers" "$spacer" "$hi_authorized" "$spacer" "$public
+    printf '%s %s~~~~~~~~~~~~~~~~~~~ Online %s[%s%s%s]%s ~~~~~~~~~~~~~~~~~~~~~~~~~~~%s\n' $hi_change_status (set_color brcyan) (set_color normal) (set_color $fish_color_host) (prompt_hostname) (set_color normal) (set_color brcyan) (set_color normal)
+    printf " %s %s   %s   %s   %s\n" $spacer $utctime $spacer $localtime
+    printf " %s %s %s %s %s %s %s %s %s %s %s\n" $spacer $os_type $spacer $arch $spacer $hi_distro $spacer $hi_cpus $spacer $hi_ram
+    printf " %s %s %s %s %s %s %s %s\n" $spacer $git_identity $spacer $running_containers $spacer $authorized_keys $spacer $public
     check_packages
   end
 end
 
 function check_packages --description 'Display a list of installed packages defined by hi.d/data/packages_config'
   for line in (string split "newline" (bash -c "source $_HI_CHECK; full_check_fish"))
-    echo " "$line
+    printf " %s\n" $line
   end
 end
 

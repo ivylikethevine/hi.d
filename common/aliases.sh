@@ -90,6 +90,12 @@ alias lra="lr -a"
 alias lrt="lr -T -L2"
 alias lrg="lr --git --git-repos-no-status"
 
+# zoxide (improved popd/pushd/cd)
+alias z="zoxide"
+
+# for bash/zsh (fish enabled by default)
+alias ..="cd ../"
+
 # git
 alias gl="git log -1"
 alias gf="git fetch -a"

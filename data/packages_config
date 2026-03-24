@@ -44,6 +44,7 @@ packages,ping:3
 packages,scp:3
 packages,direnv:7
 packages,asdf:7
+#packages,envrc:0
 
 basics,systemctl:9
 basics,make:3,cmake:3
@@ -60,6 +61,7 @@ tools,kubectl:0
 tools,docker:0,podman:0
 tools,nomad:0
 tools,python:4,python2:5,python3:8
+#tools,pip:0,pyenv:0,pyvenv:0
 tools,node:0
 tools,npm:0
 tools,npx:5,n:4
@@ -68,6 +70,7 @@ tools,dotnet:0
 tools,ssh-audit:1
 tools,shellcheck:1
 tools,exa:9,eza:9
+tools,zoxide:9
 
 #a,tree:0
 #a,cosign:0
@@ -84,5 +87,7 @@ tools,exa:9,eza:9
 #a,emacs:0
 #a,whois:0
 #a,strace:0
-#a,nmcli
-#a,msdnss
+#a,nmcli:0
+#a,msdnss:0
+
+#misc,pokeget:0

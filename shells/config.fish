@@ -103,7 +103,7 @@ function fish_greeting
     set -l authorized_keys ([ -f "$_HI_SSH_AUTHORIZED_KEYS" ] && printf '%sAuth: %s' (set_color red) (wc -l "$_HI_SSH_AUTHORIZED_KEYS" | awk '{ print $1 }') || printf '%sAuth: 0!' (set_color red))
     set -l running_containers ([ -f "/usr/bin/docker" ] && printf '%sContainers: %s' (set_color brblue) (docker container ls | wc -l | awk '{print $1 - 1}') || printf '%sCounting impossible, no docker :(' (set_color bryellow))
     set -l git_identity ([ -f "$_HI_HOME_GIT_CONFIG" ] && printf '%sGit ID: %s%s' (set_color brcyan) (set_color yellow) (grep email "$_HI_HOME_GIT_CONFIG" | tail -n1 | cut -d= -f2 | tr -d ' ' | awk -F@ '{ for(i=0;i<length($2);i++) c=c"●"; print $1"@"c; c="" }') || printf '%sNo Git ID Found...' (set_color yellow))
-    set -l hi_change_status ([ -d "$HI_ROOT/.git" ] && printf ' %s%s' (set_color bryellow) (git -C ~/hi.d status --short | wc -l | awk '{ print $1 }')' ↑' || "")
+    set -l hi_change_status ([ -d "$HI_ROOT/.git" ] && printf ' %s%s' (set_color bryellow) (git -C ~/hi.d status --short | wc -l | awk '{ print $1 }')' ↑' || printf '%s' "")
     set -l spacer (printf '%s|' (set_color normal))
     set -l utctime (printf '%s%s' (set_color brblue) (date -u $human_centric_date_format))
     set -l localtime (printf '%s%s' (set_color bryellow) (date $human_centric_date_format))

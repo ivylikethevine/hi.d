@@ -9,6 +9,12 @@ source "$_HI_COLORS"
 # shellcheck source=./common/aliases.sh
 source "$_HI_ALIASES"
 
+# TODO: Determine how to wrap autocomplete for hi, exa, etc.
+
+if [ -d "$HOME"/Android ] && [ -d "$HOME"/Android/Sdk ]; then
+  export ANDROID_HOME="$HOME"/Android/Sdk # for android dev on linux
+fi
+
 export EZA_CONFIG_DIR="$HI_TMPDIR"/hi.d/misc # for eza theme customization at misc/theme.yml
 
 # required for sanity & some of the other scripts we run
@@ -37,6 +43,7 @@ precmd() { vcs_info }
 setopt prompt_subst
 zstyle ':vcs_info:git:*' formats '%b'
 
+# TODO: Implement commits behind + files modified as per fish
 if [ "$color_prompt" = yes ]; then
   export CLICOLOR=1
   export LSCOLORS=gafacadabaegedabagacad
@@ -57,7 +64,6 @@ if [ "$color_prompt" = yes ]; then
 else
   PS1=$' ${debian_chroot:+($debian_chroot)}%n@%m %~ $vcs_info_msg_0_| '
 fi
-
 # === end required configuration ===
 
 HISTFILE=~/.zsh_history

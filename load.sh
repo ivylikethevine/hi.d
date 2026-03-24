@@ -75,19 +75,19 @@ function system_info_line() {
   cecho "$(uname -m)" "$PURPLE" 1
   spacer
   if [ -f "$_HI_LINUX_PATH" ]; then
-    cecho "$(grep PRETTY_NAME "$_HI_LINUX_PATH" | cut -d= -f2 | tr -d '"')" "${GREEN}" 1
+    cecho "$(grep PRETTY_NAME "$_HI_LINUX_PATH" | cut -d= -f2 | tr -d '"')" "$GREEN" 1
     spacer
     cecho "CPUs: $(nproc)" "$BLUE" 1
     spacer
-    cecho "RAM: $(free -h --giga | awk '/^Mem:/ {print $2}GB') " "${CYAN}"
+    cecho "RAM: $(free -h --giga | awk '/^Mem:/ {print $2}GB') " "$CYAN"
   else
     local system_info
     system_info=$(system_profiler SPHardwareDataType)
-    cecho "macOS $(sw_vers -productVersion)" "${BLUE}" 1
+    cecho "macOS $(sw_vers -productVersion)" "$BLUE" 1
     spacer
     cecho "CPUs: $(echo "$system_info" | grep -e Cores | awk '{ print $5 }')" "$BLUE" 1
     spacer
-    cecho "RAM: $(echo "$system_info" | grep -e Memory | awk '{ print $2 }')GB" "${CYAN}"
+    cecho "RAM: $(echo "$system_info" | grep -e Memory | awk '{ print $2 }')GB" "$CYAN"
   fi
 }
 
@@ -95,16 +95,16 @@ function system_info_line() {
 function git_keys_docker_line() {
   spacer
   if [ -f "$_HI_HOME_GIT_CONFIG" ]; then
-    cecho "Git ID: " "${CYAN}" 1
-    cecho "$(grep email "$_HI_HOME_GIT_CONFIG" | tail -n1 | cut -d= -f2 | tr -d ' ' | awk -F@ '{ for(i=0;i<length($2);i++) c=c"●"; print $1"@"c; c="" }')" "${YELLOW}" 1
+    cecho "Git ID: " "$CYAN" 1
+    cecho "$(grep email "$_HI_HOME_GIT_CONFIG" | tail -n1 | cut -d= -f2 | tr -d ' ' | awk -F@ '{ for(i=0;i<length($2);i++) c=c"●"; print $1"@"c; c="" }')" "$YELLOW" 1
   else
-    cecho "No Git ID Found..." "${YELLOW}" 1
+    cecho "No Git ID Found..." "$YELLOW" 1
   fi
   spacer
   if command -v "docker" &>/dev/null; then
-    cecho "Containers: $(docker container ls | wc -l | awk '{ print $1 - 1 }')" "${BLUE}" 1
+    cecho "Containers: $(docker container ls | wc -l | awk '{ print $1 - 1 }')" "$BLUE" 1
   else
-    cecho "No docker :(" "${BRYELLOW}" 1
+    cecho "No docker :(" "$BRYELLOW" 1
   fi
   spacer
   if [ -f "$_HI_SSH_AUTHORIZED_KEYS" ]; then
@@ -168,18 +168,18 @@ function load() {
   fi
 
   spacer
-  cecho "hi loaded with... " "${BRCYAN}" 1
+  cecho "hi loaded with... " "$BRCYAN" 1
 
   if command -v "fish" &>/dev/null; then
-    cecho "fish shell! :^)" "${GREEN}" 1
+    cecho "fish shell! :^)" "$GREEN" 1
     timers
     fish -C "set fish_greeting ''" -i
   elif command -v "zsh" &>/dev/null; then
-    cecho "zsh shell! :)" "${PURPLE}" 1
+    cecho "zsh shell! :)" "$PURPLE" 1
     timers
     zsh -i
   else
-    cecho "only bash today :(" "${RED}" 1
+    cecho "only bash today :(" "$RED" 1
     timers
     bash -i
   fi
@@ -187,6 +187,6 @@ function load() {
 
   printf ' %b\n' "${BRRED}~~~~~~~~~~~~~~~~~~~~~ Disconnected ${NC}[$HOST_COLOR$(hostname)${NC}]$BRRED ~~~~~~~~~~~~~~~~~~~~~~~${NC}"
   timestamp
-  cecho "hi closing! " "${BRPURPLE}"
+  cecho "hi closing! " "$BRPURPLE"
   exit 0
 }

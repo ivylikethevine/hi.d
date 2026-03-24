@@ -42,18 +42,18 @@ function sort_commands() {
       IFS=',' read -rA pairs <<< "$item"
     fi
 
-    local max=-1
+    local max_priority=-1
     local max_cmd
     local is_installed=0
     local first_cmd
     local first_priority
     for pair in "${pairs[@]}"; do
       local cmd="${pair%:*}"
-      local current="${pair#*:}"
+      local current_priority="${pair#*:}"
 
       if command -v "$cmd" &>/dev/null; then
-        if (( current > max )); then
-          max=$current
+        if (( current_priority > max_priority )); then
+          max_priority=$current_priority
           max_cmd=$cmd
           is_installed=1
         fi
@@ -61,12 +61,12 @@ function sort_commands() {
 
       if [[ -z ${first_cmd:-} ]]; then
         first_cmd=$cmd
-        first_priority=$current
+        first_priority=$current_priority
       fi
     done
 
     if (( is_installed )); then
-      result+=("$max_cmd:$max:yes")
+      result+=("$max_cmd:$max_priority:yes")
     else
       result+=("$first_cmd:$first_priority:no")
     fi

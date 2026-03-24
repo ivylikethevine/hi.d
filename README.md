@@ -57,7 +57,7 @@ Reminder - place local only changes after the "`# hi-config-end`" comment in the
 
 ###### Built from/with:
 
-- sshrc - https://github.com/cdown/sshrc (built into `hi.sh`)
+- sshrc - https://github.com/cdown/sshrc (forked/became `hi.sh`)
 - sshm - https://github.com/Gu1llaum-3/sshm (optional, but _highly_ recommended to configure `~/.ssh/config`)
 
 TBD Features:
@@ -67,12 +67,18 @@ TBD Features:
 - tmux
 - screen
 
-## Following added to LOCAL ~/.bashrc will drop into fish from a bash chsh.
+###### Nice-to-haves
 
-```bash
-if grep -qv 'fish' /proc/$PPID/comm && [[ ${SHLVL} == [1,2] ]]
-then
-	shopt -q login_shell && LOGIN_OPTION='--login' || LOGIN_OPTION=''
-	exec fish $LOGIN_OPTION
-fi
-```
+- exa/eza
+- bat
+- sshm
+- zed-editor
+- nano
+- zoxide
+- shellcheck
+- tree
+- nmap
+- delta
+- xdelta3
+- fd
+- grc

@@ -28,7 +28,7 @@ alias cat="batcat"
 alias sudo="command sudo "
 
 export human_centric_date_format="+%a %b %-e %Y %H:%M:%S %Z" # used in fish
-export human_short_date_format="+%b %-e %y %H:%M %Z" # used for 'now' alias
+export human_short_date_format="+%b %-e %y %H:%M %Z"         # used for 'now' alias
 # time helpers
 alias now='echo "LOCAL: $(date $human_short_date_format) => UTC: $(date -u $human_short_date_format)"'
 
@@ -57,7 +57,9 @@ alias lsr="ls -lhaR --color=auto"
 
 alias grep="grep --color=auto"
 alias rm="rm -iv"
-alias rsync="rsync -zvhPra --info=progress2"
+# alias rsync="rsync -zvhPra --info=progress2" #  the -a flag might not work on all systems...
+alias rsync="rsync -zvhPr --info=progress2"
+alias scp="scp -Cr"
 
 # exa (back-compat) improved ls
 export EXA_SHARED_OPTS='-F -1 -l -m --group-directories-first'
@@ -95,6 +97,7 @@ alias z="zoxide"
 
 # for bash/zsh (fish enabled by default)
 alias ..="cd ../"
+alias ...="cd ../../"
 
 # git
 alias gl="git log -1"

@@ -91,7 +91,6 @@ function system_info_line() {
   fi
 }
 
-
 function git_keys_docker_line() {
   spacer
   if [ -f "$_HI_HOME_GIT_CONFIG" ]; then
@@ -145,7 +144,6 @@ function load() {
 
   local HOST_COLOR
   HOST_COLOR=$(host_color "$(hostname)")
-  # printf ' %b\n' "${BRGREEN}~~~~~~~~~~~~~~~~~~~~~~~~ Connected ${NC}[${HOST_COLOR}$(hostname)${NC}]${BRGREEN} ~~~~~~~~~~~~~~~~~~~~~~~${NC}"4
   printf ' %b\n' "${BRGREEN} ~~ Connected ${NC}[${HOST_COLOR}$(hostname)${NC}]${BRGREEN} ~~~~~~~~~~~~~~~~~~~~~~~${NC}"
   timestamp
 
@@ -155,20 +153,23 @@ function load() {
   printf '%b\n' "$(full_check)"
 
   # back to required configuration
-  if command -v "vim" &>/dev/null; then
-    # Will cause errors if we load this with only VI
-    export VIMINIT="let \$MYVIMRC='$_HI_VIMRC' | source \$MYVIMRC"
-  fi
-
-  configure_file "$_HI_BASH_CONFIG" "$_HI_HOME_BASHRC"
-  configure_file "$_HI_ZSH_CONFIG" "$_HI_HOME_ZSHRC"
-  if [ -d "$_HI_FISH_DIR" ]; then
-    # This directory won't exist if fish isn't installed
-    configure_file "$_HI_FISH_CONFIG" "$_HI_HOME_FISH_CONFIG"
-  fi
-
   spacer
-  cecho "hi loaded with... " "$BRCYAN" 1
+  # Determine if target has hi.d installed, then skip loading copied code if possible
+  if [ ! -d "/home/$USER/hi.d/" ]; then
+    if command -v "vim" &>/dev/null; then
+      # Will cause errors if we load this with only VI
+      export VIMINIT="let \$MYVIMRC='$_HI_VIMRC' | source \$MYVIMRC"
+    fi
+    configure_file "$_HI_BASH_CONFIG" "$_HI_HOME_BASHRC"
+    configure_file "$_HI_ZSH_CONFIG" "$_HI_HOME_ZSHRC"
+    if [ -d "$_HI_FISH_DIR" ]; then
+      # This directory won't exist if fish isn't installed
+      configure_file "$_HI_FISH_CONFIG" "$_HI_HOME_FISH_CONFIG"
+    fi
+    cecho "hi loaded with... " "$BRCYAN" 1
+  else
+    cecho "hi on target: " "$BRGREEN" 1
+  fi
 
   if command -v "fish" &>/dev/null; then
     cecho "fish shell! :^)" "$GREEN" 1
@@ -183,7 +184,6 @@ function load() {
     timers
     bash -i
   fi
-
 
   printf ' %b\n' "${BRRED}~~~~~~~~~~~~~~~~~~~~~ Disconnected ${NC}[$HOST_COLOR$(hostname)${NC}]$BRRED ~~~~~~~~~~~~~~~~~~~~~~~${NC}"
   timestamp

@@ -45,7 +45,11 @@ function hi_parse() {
   fi
 }
 
-# Connect to remote host, determine shell, then copy hi.d & run load.sh
+# Connect to remote host, determine shell, then copy hi.d & run load.sh.
+# This could be removed if we required all targets to run bash as the login shell.
+# This part takes usually 0.5-2s, which is noticeable and quite annoying.
+# Ideally, we could stay on the target if we have login bash, reducing the overall
+# connection for most connections, but I haven't figured that out yet.
 function say_hi() {
   local shell_start_time
   shell_start_time="$(perl -MTime::HiRes=time -e 'printf "%.3f", time')"
@@ -57,24 +61,24 @@ function say_hi() {
   cecho " $(echo "$shell_end_time $shell_start_time" | awk '{ printf "shell: %.3fs ", $1 - $2 }')" "$BLUE" 1
 
   case "$remote_shell" in
-    bash)
-      cecho "-> bash" "$CYAN" 1
-      say_hi_bash "$@" 2>"$tmp"
-      ;;
-    zsh)
-      cecho "-> zsh" "$PURPLE" 1
-      say_hi_zsh "$@" 2>"$tmp"
-      ;;
-    fish)
-      cecho "-> fish" "$GREEN" 1
-      say_hi_bash "$@" 2>"$tmp"
-      ;;
-    sh)
-      cecho "-> sh?" "$YELLOW" 1
-      ;;
-    *)
-      cecho "-> UNKNOWN: $remote_shell!" "$BRRED"
-      ;;
+  bash)
+    cecho "-> bash" "$CYAN" 1
+    say_hi_bash "$@" 2>"$tmp"
+    ;;
+  zsh)
+    cecho "-> zsh" "$PURPLE" 1
+    say_hi_zsh "$@" 2>"$tmp"
+    ;;
+  fish)
+    cecho "-> fish" "$GREEN" 1
+    say_hi_bash "$@" 2>"$tmp"
+    ;;
+  sh)
+    cecho "-> sh?" "$YELLOW" 1
+    ;;
+  *)
+    cecho "-> UNKNOWN: $remote_shell!" "$BRRED"
+    ;;
   esac
 }
 
@@ -174,10 +178,10 @@ function run() {
 
     if [ "$_exit_code" -ne 0 ]; then
       echo -ne "\r\r\r\r"
-      if [[ "$_errors" == *"Could not resolve hostname"* ]] \
-        || [[ "$_errors" == *"Broken pipe"* ]] \
-        || [[ "$_errors" == *"no such identity"* ]] \
-        || [[ "$_errors" == *"Permission denied"* ]]; then
+      if [[ "$_errors" == *"Could not resolve hostname"* ]] ||
+        [[ "$_errors" == *"Broken pipe"* ]] ||
+        [[ "$_errors" == *"no such identity"* ]] ||
+        [[ "$_errors" == *"Permission denied"* ]]; then
         cecho "| hi: ${_errors#*ssh: }" "$RED"
       else
         cecho "hi failed [code: $_exit_code], falling back to ssh..." "$BRRED"

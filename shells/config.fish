@@ -179,3 +179,5 @@ set -gx fish_pager_color_secondary_background #
 set -gx fish_pager_color_secondary_prefix #
 set -gx fish_pager_color_secondary_completion #
 set -gx fish_pager_color_secondary_description #
+
+# TODO: Fisher/packages?

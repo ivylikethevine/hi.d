@@ -91,7 +91,7 @@ __git_info() {
       marks="*$marks"
       break
     fi
-  done < <($git_eng status --porcelain --branch 2>/dev/null)  # note the space between the two <
+  done < <($git_eng status --porcelain --branch 2>/dev/null) # note the space between the two <
 
   printf " ($BRPURPLE%s%s$NC)" "$ref" "$marks"
 }

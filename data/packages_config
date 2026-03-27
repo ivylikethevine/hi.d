@@ -72,7 +72,7 @@ tools,nomad:0
 tools,python:4,python2:5,python3:8
 tools,pip:0,pyenv:0,pyvenv:0
 tools,node:0
-tools,npm:0
+tools,npm:0,n:0,nvm:0
 tools,chocolatey:4,choco:4
 tools,npx:5,n:4
 tools,rust:0,rustc:4,rustup:5

@@ -56,7 +56,6 @@ export OPENSSL_CHECK="command -v openssl >/dev/null 2>&1 || { echo >&2 \"hi requ
 # This part takes usually 0.5-2s, which is noticeable and quite annoying.
 # Ideally, we could stay on the target if we have login bash, reducing the overall
 # connection for most connections, but I haven't figured that out yet.
-# # TODO: Re-add size to hi/goodbye messages
 function say_hi() {
   local shell_start_time
   shell_start_time="$(perl -MTime::HiRes=time -e 'printf "%.3f", time')"
@@ -66,22 +65,25 @@ function say_hi() {
 
   shell_end_time="$(perl -MTime::HiRes=time -e 'printf "%.3f", time')"
   cecho " $(echo "$shell_end_time $shell_start_time" | awk '{ printf "shell: %.3fs ", $1 - $2 }')" "$BLUE" 1
-
+  local linux_flags=""
+  if [ -f /etc/os-release ]; then
+    linux_flags="--apparent-size"
+  fi
 
   case "$remote_shell" in
   bash)
     cecho "-> bash" "$CYAN" 1
-    echo -ne " $(du -sh "${HI_EXCLUDE[@]}" --apparent-size ~/.hi.d "$HI_ROOT" | awk '{ print $1 }') "
+    echo -ne " $(du -sh "${HI_EXCLUDE[@]}" $linux_flags ~/.hi.d "$HI_ROOT" | awk '{ print $1 }')"
     say_hi_bash "$@" 2>"$tmp"
     ;;
   zsh)
     cecho "-> zsh" "$PURPLE" 1
-    echo -ne " $(du -sh "${HI_EXCLUDE[@]}" --apparent-size ~/.hi.d "$HI_ROOT" | awk '{ print $1 }') "
+    echo -ne " $(du -sh "${HI_EXCLUDE[@]}" $linux_flags ~/.hi.d "$HI_ROOT" | awk '{ print $1 }')"
     say_hi_zsh "$@" 2>"$tmp"
     ;;
   fish)
     cecho "-> fish" "$GREEN" 1
-    echo -ne " $(du -sh "${HI_EXCLUDE[@]}" --apparent-size ~/.hi.d "$HI_ROOT" | awk '{ print $1 }') "
+    echo -ne " $(du -sh "${HI_EXCLUDE[@]}" $linux_flags ~/.hi.d "$HI_ROOT" | awk '{ print $1 }')"
     say_hi_bash "$@" 2>"$tmp"
     ;;
   sh)

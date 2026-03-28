@@ -185,7 +185,12 @@ function load() {
     bash -i
   fi
 
-  cecho " $(du -sh --apparent-size "$HI_ROOT" | awk '{ print $1 }') " "$NC" 1
+  local linux_flags=""
+  if [ -f /etc/os-release ]; then
+    linux_flags="--apparent-size"
+  fi
+
+  cecho " $(du -sh $linux_flags "$HI_ROOT" | awk '{ print $1 }') " "$NC" 1
   printf ' %b\n' "${BRRED}~~~~~~~~~~~~~~~~~~~~~ Disconnected ${NC}[$HOST_COLOR$(hostname)${NC}]$BRRED ~~~~~~~~~~~~~~~~~~~~~~~${NC}"
   timestamp
   cecho "hi closing! " "$BRPURPLE"

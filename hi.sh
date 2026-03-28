@@ -45,11 +45,18 @@ function hi_parse() {
   fi
 }
 
+# Unify as many parts of the process as possible
+export HI_EXCLUDE=(--exclude README.md --exclude .git --exclude .gitignore --exclude scripts --exclude hi.sh --exclude hi.bashrc --exclude data/group_config --exclude .zed --exclude data/.gitkeep --exclude wip)
+export TR_CMD="tr -s ' ' '\n'"
+export OPENSSL_CMD="openssl enc -base64"
+export OPENSSL_CHECK="command -v openssl >/dev/null 2>&1 || { echo >&2 \"hi requires openssl to be installed on [$DOMAIN], but it is not. Aborting.\"; exit 1; }"
+
 # Connect to remote host, determine shell, then copy hi.d & run load.sh.
 # This could be removed if we required all targets to run bash as the login shell.
 # This part takes usually 0.5-2s, which is noticeable and quite annoying.
 # Ideally, we could stay on the target if we have login bash, reducing the overall
 # connection for most connections, but I haven't figured that out yet.
+# # TODO: Re-add size to hi/goodbye messages
 function say_hi() {
   local shell_start_time
   shell_start_time="$(perl -MTime::HiRes=time -e 'printf "%.3f", time')"
@@ -60,17 +67,21 @@ function say_hi() {
   shell_end_time="$(perl -MTime::HiRes=time -e 'printf "%.3f", time')"
   cecho " $(echo "$shell_end_time $shell_start_time" | awk '{ printf "shell: %.3fs ", $1 - $2 }')" "$BLUE" 1
 
+
   case "$remote_shell" in
   bash)
     cecho "-> bash" "$CYAN" 1
+    echo -ne " $(du -sh "${HI_EXCLUDE[@]}" --apparent-size ~/.hi.d "$HI_ROOT" | awk '{ print $1 }') "
     say_hi_bash "$@" 2>"$tmp"
     ;;
   zsh)
     cecho "-> zsh" "$PURPLE" 1
+    echo -ne " $(du -sh "${HI_EXCLUDE[@]}" --apparent-size ~/.hi.d "$HI_ROOT" | awk '{ print $1 }') "
     say_hi_zsh "$@" 2>"$tmp"
     ;;
   fish)
     cecho "-> fish" "$GREEN" 1
+    echo -ne " $(du -sh "${HI_EXCLUDE[@]}" --apparent-size ~/.hi.d "$HI_ROOT" | awk '{ print $1 }') "
     say_hi_bash "$@" 2>"$tmp"
     ;;
   sh)
@@ -81,12 +92,6 @@ function say_hi() {
     ;;
   esac
 }
-
-# Unify as many parts of the process as possible
-export HI_EXCLUDE=(--exclude README.md --exclude .git --exclude .gitignore --exclude scripts --exclude hi.sh --exclude hi.bashrc --exclude data/group_config --exclude .zed --exclude data/.gitkeep --exclude wip)
-export TR_CMD="tr -s ' ' '\n'"
-export OPENSSL_CMD="openssl enc -base64"
-export OPENSSL_CHECK="command -v openssl >/dev/null 2>&1 || { echo >&2 \"hi requires openssl to be installed on [$DOMAIN], but it is not. Aborting.\"; exit 1; }"
 
 # Bash & Fish shell both work with this command
 function say_hi_bash() {

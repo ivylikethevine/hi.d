@@ -3,6 +3,9 @@
 # === start required variables/aliases ===
 alias hi_colorgen="sh -c 'source ~/hi.d/scripts/colorgen.sh && colorgen'"
 alias hi_newhost="~/hi.d/scripts/newhost.sh"
+alias hi_update="cd ~/hi.d && git pull"
+alias hi_install="~/hi.d/scripts/install.sh"
+
 # shellcheck disable=SC2139
 alias hi="$HI_TMPDIR/hi.d/hi.sh"
 

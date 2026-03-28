@@ -25,37 +25,39 @@ setopt KSH_ARRAYS
 if [ -z "${debian_chroot:-}" ] && [ -r /etc/debian_chroot ]; then
   debian_chroot=$(cat /etc/debian_chroot)
 fi
+
+case "$TERM" in
+xterm* | rxvt*)
+  HI_PS1="\[\e]0;${debian_chroot:+($debian_chroot)}\u@\h: \w\a\]$PS1"
+  ;;
+*) ;;
+esac
+
 case "$TERM" in
 xterm-color | *-256color) color_prompt=yes ;;
 esac
-force_color_prompt=yes
-if [ -n "$force_color_prompt" ]; then
-  if [ -x /usr/bin/tput ] && tput setaf 1 >&/dev/null; then
-    color_prompt=yes
-  else
-    color_prompt=
-  fi
+
+if [ -x /usr/bin/tput ] && tput setaf 1 >&/dev/null; then
+  color_prompt=yes
+else
+  color_prompt=
 fi
 
 # git status
 autoload -Uz vcs_info
 precmd() { vcs_info; }
 setopt prompt_subst
+# TODO: Implement commits behind + files modified as per fish
 zstyle ':vcs_info:git:*' formats '%b'
 
-# TODO: Implement commits behind + files modified as per fish
 if [ "$color_prompt" = yes ]; then
   export CLICOLOR=1
   export LSCOLORS=gafacadabaegedabagacad
-  # TODO: Improve this conversion from fish colors to zsh colors
+  # TODO: Determine how to get bright zsh colors in prompt
   USER_COLOR=$(user_color)
-  if [[ "$USER_COLOR" = "bryellow" ]]; then
-    USER_COLOR=yellow
-  fi
+  USER_COLOR="${USER_COLOR//br/}"
   HOST_COLOR=$(host_color)
-  if [[ "$HOST_COLOR" = "bryellow" ]]; then
-    HOST_COLOR=yellow
-  fi
+  HOST_COLOR="${HOST_COLOR//br/}"
   AT_COLOR=plain
   if [[ ! -z ${SSH_TTY+x} ]]; then
     AT_COLOR=yellow

@@ -185,6 +185,7 @@ function load() {
     bash -i
   fi
 
+  cecho " $(du -sh --apparent-size "$HI_ROOT" | awk '{ print $1 }') " "$NC" 1
   printf ' %b\n' "${BRRED}~~~~~~~~~~~~~~~~~~~~~ Disconnected ${NC}[$HOST_COLOR$(hostname)${NC}]$BRRED ~~~~~~~~~~~~~~~~~~~~~~~${NC}"
   timestamp
   cecho "hi closing! " "$BRPURPLE"

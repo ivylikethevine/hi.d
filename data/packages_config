@@ -67,7 +67,6 @@ basics,docker:0,podman:0,kubectl:0
 basics,rsync:3
 basics,nmap:0
 
-tools,zoxide:0
 tools,nomad:0
 tools,python:4,python2:5,python3:8
 tools,pip:0,pyenv:0,pyvenv:0

@@ -47,6 +47,7 @@ function hi_parse() {
 
 # Unify as many parts of the process as possible
 export HI_EXCLUDE=(--exclude README.md --exclude .git --exclude .gitignore --exclude scripts --exclude hi.sh --exclude hi.bashrc --exclude data/group_config --exclude .zed --exclude data/.gitkeep --exclude wip)
+export HI_EXCLUDE_MIN=(--exclude README.md --exclude .git --exclude .gitignore --exclude scripts --exclude hi.sh --exclude hi.bashrc --exclude data/group_config --exclude .zed --exclude data/.gitkeep --exclude wip --exclude common --exclude misc --exclude shells --exclude wip --exclude load.sh)
 export TR_CMD="tr -s ' ' '\n'"
 export OPENSSL_CMD="openssl enc -base64"
 export OPENSSL_CHECK="command -v openssl >/dev/null 2>&1 || { echo >&2 \"hi requires openssl to be installed on [$DOMAIN], but it is not. Aborting.\"; exit 1; }"
@@ -61,6 +62,8 @@ function say_hi() {
   shell_start_time="$(perl -MTime::HiRes=time -e 'printf "%.3f", time')"
 
   local remote_shell
+
+  # remote_shell=$(ssh "$DOMAIN" '[ ! -f /etc/os-release ] && dscl . -read ~/ UserShell 2>/dev/null | awk "{ print \$2 }" | xargs basename || cat /etc/passwd | grep -e $(whoami) | xargs basename && [ -d $HOME/hi.d ] && echo -n yes || echo -n no' 2>/dev/null)
   remote_shell=$(ssh "$DOMAIN" '[ ! -f /etc/os-release ] && dscl . -read ~/ UserShell 2>/dev/null | awk "{ print \$2 }" | xargs basename || cat /etc/passwd | grep -e $(whoami) | xargs basename' 2>/dev/null)
 
   shell_end_time="$(perl -MTime::HiRes=time -e 'printf "%.3f", time')"

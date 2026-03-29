@@ -41,7 +41,6 @@ alias zed="zeditor"
 alias ehi="zed ~/hi.d"
 alias essh="zed ~/.ssh"
 alias elinks="zed ~/projects/links"
-alias eeza="zed ~/.eza/theme.yml"
 # === end required variables/aliases ===
 # in trial
 alias list_pkgs="pacman -Qe > ~/projects/links/explicitly-installed.txt && pacman -Qd > ~/projects/links/dependencies-installed.txt"
@@ -72,31 +71,27 @@ alias eza="$(command -v eza || command -v exa || command -v ls)"
 # shellcheck disable=SC2139
 alias exa="exa $EXA_OPTS"
 # shellcheck disable=SC2139
-alias le="exa"
-alias lea="le -a"
-alias let="le -T -L2"
+alias lr="exa"
+alias lra="lr -a"
+alias lrt="lr -T -L2"
 
 # eza (newer fork of exa) improved ls
 # per https://docs.rs/chrono/latest/chrono/format/strftime/index.html
-export eza_date_format="+%b %d %Y %H:%M"
-export EZA_OPTS="$EXA_SHARED_OPTS"' --smart-group --time-style="'"$eza_date_format"'"'
+export EZA_OPTS="$EXA_SHARED_OPTS"' --smart-group --time-style=+%b %d %Y %H:%M'
 export EZA_OPTS_SIZE="$EZA_OPTS --total-size"
 # shellcheck disable=SC2139
 alias eza="eza $EZA_OPTS"
 # shellcheck disable=SC2139
-alias lrs="eza $EZA_OPTS_SIZE"
+alias les="eza $EZA_OPTS_SIZE"
 # shellcheck disable=SC2139
-alias lrst="eza $EZA_OPTS_SIZE -T -L2"
+alias lest="eza $EZA_OPTS_SIZE -T -L2"
 # shellcheck disable=SC2139
-alias lrsg="eza $EZA_OPTS_SIZE --git --git-repos-no-status"
+alias lesg="eza $EZA_OPTS_SIZE --git --git-repos-no-status"
 # shellcheck disable=SC2139
-alias lr="eza --no-filesize"
-alias lra="lr -a"
-alias lrt="lr -T -L2"
-alias lrg="lr --git --git-repos-no-status"
-
-# zoxide (improved popd/pushd/cd)
-alias z="zoxide"
+alias le="eza --no-filesize"
+alias lea="le -a"
+alias let="le -T -L2"
+alias leg="le --git --git-repos-no-status"
 
 # for bash/zsh (fish enabled by default)
 alias ..="cd ../"

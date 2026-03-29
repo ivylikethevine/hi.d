@@ -34,29 +34,7 @@ end
 
 # prompt
 function prompt_login --description "display user name for the prompt"
-  # fish git prompt
   set -l last_status $status
-  if not set -q __fish_git_prompt_show_informative_status
-    set -g __fish_git_prompt_show_informative_status 1
-  end
-  if not set -q __fish_git_prompt_color_branch
-    set -g __fish_git_prompt_color_branch brmagenta
-  end
-  if not set -q __fish_git_prompt_showupstream
-    set -g __fish_git_prompt_showupstream "informative"
-  end
-  if not set -q __fish_git_prompt_showdirtystate
-    set -g __fish_git_prompt_showdirtystate "yes"
-  end
-  if not set -q __fish_git_prompt_color_stagedstate
-    set -g __fish_git_prompt_color_stagedstate yellow
-  end
-  if not set -q __fish_git_prompt_color_invalidstate
-    set -g __fish_git_prompt_color_invalidstate red
-  end
-  if not set -q __fish_git_prompt_color_cleanstate
-    set -g __fish_git_prompt_color_cleanstate brgreen
-  end
   if not test $last_status -eq 0
     set_color $fish_color_error
   end
@@ -75,15 +53,45 @@ function prompt_login --description "display user name for the prompt"
       set -g __fish_machine "(chroot:$debian_chroot)"
     end
   end
+
   if set -q __fish_machine[1]
     echo -n -s (set_color yellow) "$__fish_machine" (set_color normal) ' '
   end
+
   set -g color_at normal
   if set -q SSH_TTY;
     set -g color_at yellow
   end
 
   echo -ns (set_color $fish_color_user) " $USER" (set_color $color_at) @ (set_color $fish_color_host) (prompt_hostname) (set_color normal)
+end
+
+# copied + modified from Lilly Ballard, fish default
+function fish_prompt --description 'Write out the prompt'
+    set -l last_pipestatus $pipestatus
+    set -lx __fish_last_status $status
+    set -l normal (set_color normal)
+
+    set -l color_cwd $fish_color_cwd
+    set -l suffix ' |'
+    if functions -q fish_is_root_user; and fish_is_root_user
+        if set -q fish_color_cwd_root
+            set color_cwd $fish_color_cwd_root
+        end
+        set suffix '#'
+    end
+
+    set -l bold_flag --bold
+    set -q __fish_prompt_status_generation; or set -g __fish_prompt_status_generation $status_generation
+    if test $__fish_prompt_status_generation = $status_generation
+        set bold_flag
+    end
+    set __fish_prompt_status_generation $status_generation
+    set -l status_color (set_color $fish_color_status)
+    set -l statusb_color (set_color $bold_flag $fish_color_status)
+    set -l prompt_status (__fish_print_pipestatus "[" "]" "|" "$status_color" "$statusb_color" $last_pipestatus)
+
+    echo -n -s (prompt_login)' ' (set_color $color_cwd) (prompt_pwd) $normal (fish_vcs_prompt) $normal " "$prompt_status $suffix " "
 end
 
 # header
@@ -179,5 +187,19 @@ set -gx fish_pager_color_secondary_background #
 set -gx fish_pager_color_secondary_prefix #
 set -gx fish_pager_color_secondary_completion #
 set -gx fish_pager_color_secondary_description #
+
+# fish git prompt settings
+set -g __fish_git_prompt_show_informative_status 1
+set -g __fish_git_prompt_color_branch brmagenta
+set -g __fish_git_prompt_showupstream "informative"
+set -g __fish_git_prompt_showdirtystate "yes"
+set -g __fish_git_prompt_color_stagedstate yellow
+set -g __fish_git_prompt_color_invalidstate red
+set -g __fish_git_prompt_color_cleanstate brgreen
+set -g __fish_git_prompt_showuntrackedfiles "yes"
+set -g __fish_git_prompt_showstashstate "yes"
+set -g __fish_git_prompt_shorten_branch_len 32
+set -g __fish_git_prompt_describe_style "contains"
+set -g __fish_git_prompt_showcolorhints "yes"
 
 # TODO: Fisher/packages?

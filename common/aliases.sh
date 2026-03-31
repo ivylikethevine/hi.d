@@ -77,7 +77,7 @@ alias lrt="lr -T -L2"
 
 # eza (newer fork of exa) improved ls
 # per https://docs.rs/chrono/latest/chrono/format/strftime/index.html
-export EZA_OPTS="$EXA_SHARED_OPTS"' --smart-group --time-style=+%b %d %Y %H:%M'
+export EZA_OPTS="$EXA_SHARED_OPTS"' --smart-group --time-style="+%b %d %Y %H:%M"'
 export EZA_OPTS_SIZE="$EZA_OPTS --total-size"
 # shellcheck disable=SC2139
 alias eza="eza $EZA_OPTS"

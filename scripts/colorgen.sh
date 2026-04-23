@@ -105,14 +105,16 @@ function read_ssh_hosts() {
   TMP_HOST_COLORS=$(mktemp)
   touch "$TMP_HOST_COLORS"
 
-  prev_line=""
+  local prev_line=""
   while IFS=' ' read -r line; do
     [[ -z "$line" ]] && continue
     if [[ $line =~ ^Host[[:space:]]+([^#]+) ]]; then
+      local host
       host=${BASH_REMATCH[1]}
       host=${host%%[[:space:]]*}
-      tags=()
+      local tags=()
       if [[ $prev_line =~ Tags[:=]([^\n\r]*) ]]; then
+        local tags_str
         tags_str=${prev_line#*Tags: }
         tags_str=${tags_str#" "}
         if [[ -z ${ZSH_VERSION+x} ]]; then
@@ -121,6 +123,7 @@ function read_ssh_hosts() {
           IFS=', ' read -rA tags <<< "$tags_str"
         fi
       fi
+      local current
       current=${tags[0]} # only uses leftmost tag for now :shrug:
       [[ -z "$current" ]] && continue
       [[ -z "${host_or_user[$current]+x}" ]] && continue

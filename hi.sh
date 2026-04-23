@@ -66,6 +66,7 @@ function say_hi() {
   # remote_shell=$(ssh "$DOMAIN" '[ ! -f /etc/os-release ] && dscl . -read ~/ UserShell 2>/dev/null | awk "{ print \$2 }" | xargs basename || cat /etc/passwd | grep -e $(whoami) | xargs basename && [ -d $HOME/hi.d ] && echo -n yes || echo -n no' 2>/dev/null)
   remote_shell=$(ssh "$DOMAIN" '[ ! -f /etc/os-release ] && dscl . -read ~/ UserShell 2>/dev/null | awk "{ print \$2 }" | xargs basename || cat /etc/passwd | grep -e $(whoami) | xargs basename' 2>/dev/null)
 
+  local shell_end_time
   shell_end_time="$(perl -MTime::HiRes=time -e 'printf "%.3f", time')"
   cecho " $(echo "$shell_end_time $shell_start_time" | awk '{ printf "shell: %.3fs ", $1 - $2 }')" "$BLUE" 1
   local linux_flags=""

@@ -98,7 +98,7 @@ alias ..="cd ../"
 alias ...="cd ../../"
 
 # git
-alias gl="git log -1"
+alias gl="git log --abbrev-commit --graph"
 alias gf="git fetch -a"
 alias gp="git fetch -a && git pull"
 alias gs="git status"

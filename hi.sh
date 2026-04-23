@@ -52,6 +52,7 @@ export TR_CMD="tr -s ' ' '\n'"
 export OPENSSL_CMD="openssl enc -base64"
 export OPENSSL_CHECK="command -v openssl >/dev/null 2>&1 || { echo >&2 \"hi requires openssl to be installed on [$DOMAIN], but it is not. Aborting.\"; exit 1; }"
 
+# TODO: Better handle multiple hi sessions to the same target
 # Connect to remote host, determine shell, then copy hi.d & run load.sh.
 # This could be removed if we required all targets to run bash as the login shell.
 # This part takes usually 0.5-2s, which is noticeable and quite annoying.

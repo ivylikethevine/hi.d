@@ -91,3 +91,5 @@ tools,pokeget:0
 tools,delta:0,xdelta3:0
 tools,fd:0
 tools,grc:0
+tools,prettyping:0
+tools,icdiff:0

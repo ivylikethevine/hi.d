@@ -109,6 +109,7 @@ alias gpsh='git push --set-upstream origin $(git rev-parse --abbrev-ref HEAD)'
 
 # internet
 alias ping="ping -O"
+alias pping="prettyping"
 alias ip="ip -color=always"
 alias ips="ip -br a"
 alias my_ip="ip route get 1.1.1.1"
@@ -132,3 +133,6 @@ alias aptac="sudo apt autoclean && sudo apt autoremove"
 # fwupdmgr
 alias fw_check="fwupdmgr get-devices && fwupdmgr get-updates"
 alias fw_update="fwupdmgr update"
+
+alias fc="ls | wc -l"
+alias mkex="chmod +x"

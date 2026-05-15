@@ -136,3 +136,6 @@ alias fw_update="fwupdmgr update"
 
 alias fc="ls | wc -l"
 alias mkex="chmod +x"
+
+alias ctar="tar -zcvf"
+alias utar="tar -zxvf"

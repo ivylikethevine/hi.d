@@ -139,3 +139,5 @@ alias mkex="chmod +x"
 
 alias ctar="tar -zcvf"
 alias utar="tar -zxvf"
+
+alias cp="cp -rv"

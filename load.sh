@@ -2,6 +2,17 @@
 # forked from sshrc: https://github.com/danrabinowitz/sshrc
 set -eou pipefail
 
+# shellcheck disable=SC2010
+# if [ -d "/home/$USER/hi.d/" ]; then
+#   export HI_TMPDIR="/home/$USER"
+# else
+#   val=$(ls -l /tmp | grep -e "$(whoami)" | grep -e hi | awk '{ print $9 }')
+#   if [ -n "$val" ]; then
+#     export HI_TMPDIR="/tmp/$val"
+#   else
+#     export HI_TMPDIR=${HI_TMPDIR:-$HOME}
+#   fi
+# fi
 HI_TMPDIR=${HI_TMPDIR:-$HOME}
 # shellcheck source=./common/paths.sh
 source "$HI_TMPDIR/hi.d/common/paths.sh"
@@ -155,7 +166,13 @@ function load() {
   # back to required configuration
   spacer
   # Determine if target has hi.d installed, then skip loading copied code if possible
-  if [ ! -d "/home/$USER/hi.d/" ]; then
+  # shellcheck disable=SC2010
+  if [ -d "/home/$USER/hi.d/" ]; then
+    cecho "hi on target (native): " "$BRGREEN" 1
+  elif [ "$(ls -l /tmp | grep -e "^d.*$USER}hi\." -c)" -gt 1 ]; then
+    # export HI_TMPDIR="/tmp/$USER.hi.*"
+    cecho "hi on target (copied): " "$BRGREEN" 1
+  else
     if command -v "vim" &>/dev/null; then
       # Will cause errors if we load this with only VI
       export VIMINIT="let \$MYVIMRC='$_HI_VIMRC' | source \$MYVIMRC"
@@ -167,8 +184,6 @@ function load() {
       configure_file "$_HI_FISH_CONFIG" "$_HI_HOME_FISH_CONFIG"
     fi
     cecho "hi loaded with... " "$BRCYAN" 1
-  else
-    cecho "hi on target: " "$BRGREEN" 1
   fi
 
   if command -v "fish" &>/dev/null; then

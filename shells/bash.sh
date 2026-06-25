@@ -2,6 +2,17 @@
 # set -eou pipefail # this will cause an interactive shell to exit on first error
 
 # === start required configuration ===
+# shellcheck disable=SC2010
+# if [ -d "/home/$USER/hi.d/" ]; then
+#   export HI_TMPDIR="/home/$USER"
+# else
+#   val=$(ls -l /tmp | grep -e "$USER" | grep -e hi | awk '{ print $9 }')
+#   if [ -n "$val" ]; then
+#     export HI_TMPDIR="/tmp/$val"
+#   else
+#     export HI_TMPDIR=${HI_TMPDIR:-$HOME}
+#   fi
+# fi
 HI_TMPDIR=${HI_TMPDIR:-$HOME}
 # shellcheck source=./../common/paths.sh
 source "$HI_TMPDIR/hi.d/common/paths.sh"

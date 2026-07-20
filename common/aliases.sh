@@ -102,6 +102,7 @@ alias gl="git log --abbrev-commit --graph"
 alias gf="git fetch -a"
 alias gp="git fetch -a && git pull"
 alias gch="git checkout"
+alias gcl="git clone"
 alias gs="git status"
 alias gst="git stash"
 alias gd="git diff --color=always"
@@ -122,8 +123,8 @@ alias chrontab="crontab"
 
 # pacman/yay updates
 alias yayy="yay -Syyu"
-alias yayc="yay -Sc"
-alias yaycc="sudo rm -rf /var/cache/pacman/pkg/download-*"
+alias yayc="yay -Sc --noconfirm"
+alias yaycc="sudo rm -rf /var/cache/pacman/pkg/download-* >/dev/null"
 
 # apt updates
 alias aptup="sudo apt update"

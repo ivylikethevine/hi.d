@@ -2,7 +2,6 @@
 
 # === start required variables/aliases ===
 alias hi_colorgen="sh -c 'source ~/hi.d/scripts/colorgen.sh && colorgen'"
-alias hi_newhost="~/hi.d/scripts/newhost.sh"
 alias hi_update="cd ~/hi.d && git pull"
 alias hi_install="~/hi.d/scripts/install.sh"
 
@@ -42,9 +41,6 @@ alias ehi="zed ~/hi.d"
 alias essh="zed ~/.ssh"
 alias elinks="zed ~/projects/links"
 # === end required variables/aliases ===
-# in trial
-alias list_pkgs="pacman -Qe > ~/projects/links/explicitly-installed.txt && pacman -Qd > ~/projects/links/dependencies-installed.txt"
-
 # docker
 alias dcl="docker container ls && docker compose ls"
 alias dcu="docker compose up"
@@ -59,7 +55,6 @@ alias lsr="ls -lhaR --color=auto"
 
 alias grep="grep --color=auto"
 alias rm="rm -iv"
-# alias rsync="rsync -zvhPra --info=progress2" #  the -a flag might not work on all systems...
 alias rsync="rsync -zvhPr --info=progress2"
 alias scp="scp -Cr"
 

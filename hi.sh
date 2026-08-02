@@ -2,9 +2,9 @@
 # forked from sshrc: https://github.com/danrabinowitz/sshrc
 # set -eou pipefail
 
-HI_TMPDIR=${HI_TMPDIR:-$HOME}
+_HI_TMPDIR=${_HI_TMPDIR:-$HOME}
 # shellcheck source=./common/paths.sh
-source "$HI_TMPDIR/hi.d/common/paths.sh"
+source "$_HI_TMPDIR/hi.d/common/paths.sh"
 # shellcheck source=./common/colors.sh
 command -v cecho >/dev/null || source "$_HI_COLORS"
 
@@ -78,17 +78,17 @@ function say_hi() {
   case "$remote_shell" in
   bash)
     cecho "-> bash" "$CYAN" 1
-    echo -ne " $(du -sh "${HI_EXCLUDE[@]}" $linux_flags ~/.hi.d "$HI_ROOT" | awk '{ print $1 }')"
+    echo -ne " $(du -sh "${HI_EXCLUDE[@]}" $linux_flags ~/.hi.d "$_HI_ROOT" | awk '{ print $1 }')"
     say_hi_bash "$@" 2>"$tmp"
     ;;
   zsh)
     cecho "-> zsh" "$PURPLE" 1
-    echo -ne " $(du -sh "${HI_EXCLUDE[@]}" $linux_flags ~/.hi.d "$HI_ROOT" | awk '{ print $1 }')"
+    echo -ne " $(du -sh "${HI_EXCLUDE[@]}" $linux_flags ~/.hi.d "$_HI_ROOT" | awk '{ print $1 }')"
     say_hi_zsh "$@" 2>"$tmp"
     ;;
   fish)
     cecho "-> fish" "$GREEN" 1
-    echo -ne " $(du -sh "${HI_EXCLUDE[@]}" $linux_flags ~/.hi.d "$HI_ROOT" | awk '{ print $1 }')"
+    echo -ne " $(du -sh "${HI_EXCLUDE[@]}" $linux_flags ~/.hi.d "$_HI_ROOT" | awk '{ print $1 }')"
     say_hi_bash "$@" 2>"$tmp"
     ;;
   sh)
@@ -104,13 +104,13 @@ function say_hi() {
 function say_hi_bash() {
   ssh -t "$DOMAIN" "$SSHARGS" "
       $OPENSSL_CHECK
-      export HI_TMPDIR=\$(mktemp -d -t $(whoami).hi.XXXX)
-      mkdir \$HI_TMPDIR/hi.d
-      export HI_ROOT=\$HI_TMPDIR/hi.d
-      export HI_CLEANUP=\$HI_TMPDIR
+      export _HI_TMPDIR=\$(mktemp -d -t $(whoami).hi.XXXX)
+      mkdir \$_HI_TMPDIR/hi.d
+      export _HI_ROOT=\$_HI_TMPDIR/hi.d
+      export HI_CLEANUP=\$_HI_TMPDIR
       trap 'rm -rf \$HI_CLEANUP' exit
-      echo \"$(cat "$0" | $OPENSSL_CMD)\" | $TR_CMD | $OPENSSL_CMD -d > \$HI_ROOT/hi.sh
-      chmod +x \$HI_ROOT/hi.sh
+      echo \"$(cat "$0" | $OPENSSL_CMD)\" | $TR_CMD | $OPENSSL_CMD -d > \$_HI_ROOT/hi.sh
+      chmod +x \$_HI_ROOT/hi.sh
       echo \"$(
     cat <<'EOF' | $OPENSSL_CMD
       if [ -r /etc/profile ]; then source /etc/profile; fi
@@ -118,17 +118,17 @@ function say_hi_bash() {
       elif [ -r ~/.bash_login ]; then source ~/.bash_login
       elif [ -r ~/.profile ]; then source ~/.profile
       fi
-      export PATH=$PATH:${HI_ROOT+x}
-      source $HI_ROOT/load.sh
+      export PATH=$PATH:${_HI_ROOT+x}
+      source $_HI_ROOT/load.sh
       load
 EOF
-  )\" | $TR_CMD | $OPENSSL_CMD -d > \$HI_ROOT/hi.bashrc
-      echo \"$(tar czf - -h -C "$HI_TMPDIR" "${HI_EXCLUDE[@]}" hi.d | $OPENSSL_CMD)\" | $TR_CMD | $OPENSSL_CMD -d | tar mxzf - -C \$HI_TMPDIR
-      export HI_TMPDIR=\$HI_TMPDIR
-      export HI_ROOT=\$HI_ROOT
-      echo \"$CMDARG\" >> \$HI_ROOT/hi.bashrc
-      echo \"export hi_copy_time='$(echo "$(perl -MTime::HiRes=time -e 'printf "%.3f", time') $copy_start_time" | awk '{ printf "%.3f\n", $1 - $2 }')'\" >> \$HI_ROOT/load.sh
-      bash --rcfile \$HI_ROOT/hi.bashrc
+  )\" | $TR_CMD | $OPENSSL_CMD -d > \$_HI_ROOT/hi.bashrc
+      echo \"$(tar czf - -h -C "$_HI_TMPDIR" "${HI_EXCLUDE[@]}" hi.d | $OPENSSL_CMD)\" | $TR_CMD | $OPENSSL_CMD -d | tar mxzf - -C \$_HI_TMPDIR
+      export _HI_TMPDIR=\$_HI_TMPDIR
+      export _HI_ROOT=\$_HI_ROOT
+      echo \"$CMDARG\" >> \$_HI_ROOT/hi.bashrc
+      echo \"export hi_copy_time='$(echo "$(perl -MTime::HiRes=time -e 'printf "%.3f", time') $copy_start_time" | awk '{ printf "%.3f\n", $1 - $2 }')'\" >> \$_HI_ROOT/load.sh
+      bash --rcfile \$_HI_ROOT/hi.bashrc
       "
 }
 
@@ -136,13 +136,13 @@ EOF
 function say_hi_zsh() {
   ssh -t "$DOMAIN" "$SSHARGS" "
       $OPENSSL_CHECK
-      export HI_TMPDIR=\$(mktemp -d -t $(whoami).hi.XXXX)
-      mkdir \$HI_TMPDIR/hi.d
-      export HI_ROOT=\$HI_TMPDIR/hi.d
-      export HI_CLEANUP=\$HI_TMPDIR
+      export _HI_TMPDIR=\$(mktemp -d -t $(whoami).hi.XXXX)
+      mkdir \$_HI_TMPDIR/hi.d
+      export _HI_ROOT=\$_HI_TMPDIR/hi.d
+      export HI_CLEANUP=\$_HI_TMPDIR
       TRAPEXIT() { rm -rf \$HI_CLEANUP; }
-      echo \"$(cat "$0" | $OPENSSL_CMD)\" | $TR_CMD | $OPENSSL_CMD -d > \$HI_ROOT/hi.sh
-      chmod +x \$HI_ROOT/hi.sh
+      echo \"$(cat "$0" | $OPENSSL_CMD)\" | $TR_CMD | $OPENSSL_CMD -d > \$_HI_ROOT/hi.sh
+      chmod +x \$_HI_ROOT/hi.sh
       echo \"$(
     cat <<'EOF' | $OPENSSL_CMD
       if [ -r /etc/profile ]; then source /etc/profile; fi
@@ -150,17 +150,17 @@ function say_hi_zsh() {
       elif [ -r ~/.bash_login ]; then source ~/.bash_login
       elif [ -r ~/.profile ]; then source ~/.profile
       fi
-      export PATH=$PATH:${HI_ROOT+x}
-      source $HI_ROOT/load.sh
+      export PATH=$PATH:${_HI_ROOT+x}
+      source $_HI_ROOT/load.sh
       load
 EOF
-  )\" | $TR_CMD | $OPENSSL_CMD -d > \$HI_ROOT/hi.bashrc
-      echo \"$(tar czf - -h -C "$HI_TMPDIR" "${HI_EXCLUDE[@]}" hi.d | $OPENSSL_CMD)\" | $TR_CMD | $OPENSSL_CMD -d | tar mxzf - -C \$HI_TMPDIR
-      export HI_TMPDIR=\$HI_TMPDIR
-      export HI_ROOT=\$HI_ROOT
-      echo \"$CMDARG\" >> \$HI_ROOT/hi.bashrc
-      echo \"export hi_copy_time='$(echo "$(perl -MTime::HiRes=time -e 'printf "%.3f", time') $copy_start_time" | awk '{ printf "%.3f\n", $1 - $2 }')'\" >> \$HI_ROOT/load.sh
-      bash --rcfile \$HI_ROOT/hi.bashrc
+  )\" | $TR_CMD | $OPENSSL_CMD -d > \$_HI_ROOT/hi.bashrc
+      echo \"$(tar czf - -h -C "$_HI_TMPDIR" "${HI_EXCLUDE[@]}" hi.d | $OPENSSL_CMD)\" | $TR_CMD | $OPENSSL_CMD -d | tar mxzf - -C \$_HI_TMPDIR
+      export _HI_TMPDIR=\$_HI_TMPDIR
+      export _HI_ROOT=\$_HI_ROOT
+      echo \"$CMDARG\" >> \$_HI_ROOT/hi.bashrc
+      echo \"export hi_copy_time='$(echo "$(perl -MTime::HiRes=time -e 'printf "%.3f", time') $copy_start_time" | awk '{ printf "%.3f\n", $1 - $2 }')'\" >> \$_HI_ROOT/load.sh
+      bash --rcfile \$_HI_ROOT/hi.bashrc
       "
 }
 
@@ -171,7 +171,8 @@ function run() {
     exit 1
   }
 
-  if [ -d "$HI_ROOT" ]; then
+  if [ -d "$_HI_ROOT" ]; then
+    # sh doesn't have perl :/
     copy_start_time="$(perl -MTime::HiRes=time -e 'printf "%.3f", time')"
     tmp="/tmp/$(date +%s).hi"
     if [[ -z ${ZSH_VERSION+x} ]]; then
@@ -190,6 +191,7 @@ function run() {
 
     if [ "$_exit_code" -ne 0 ]; then
       echo -ne "\r\r\r\r"
+      # TODO: Better pass through errors from ssh
       if [[ "$_errors" == *"Could not resolve hostname"* ]] ||
         [[ "$_errors" == *"Broken pipe"* ]] ||
         [[ "$_errors" == *"no such identity"* ]] ||
@@ -205,7 +207,7 @@ function run() {
     exit "$_exit_code"
 
   else
-    cecho "No such directory: $HI_ROOT" "$RED" >&2
+    cecho "No such directory: $_HI_ROOT" "$RED" >&2
     exit 1
   fi
 }

@@ -1,9 +1,9 @@
 #!/bin/zsh
 
 # === start required configuration ===
-HI_TMPDIR=${HI_TMPDIR:-$HOME}
+_HI_TMPDIR=${_HI_TMPDIR:-$HOME}
 # shellcheck source=./../common/paths.sh
-source "$HI_TMPDIR/hi.d/common/paths.sh"
+source "$_HI_TMPDIR/hi.d/common/paths.sh"
 # shellcheck source=./../common/colors.sh
 source "$_HI_COLORS"
 # shellcheck source=./common/aliases.sh
@@ -15,7 +15,7 @@ if [ -d "$HOME"/Android ] && [ -d "$HOME"/Android/Sdk ]; then
   export ANDROID_HOME="$HOME"/Android/Sdk # for android dev on linux
 fi
 
-export EZA_CONFIG_DIR="$HI_TMPDIR"/hi.d/misc # for eza theme customization at misc/theme.yml
+export EZA_CONFIG_DIR="$_HI_TMPDIR"/hi.d/misc # for eza theme customization at misc/theme.yml
 
 # required for sanity & some of the other scripts we run
 setopt KSH_ARRAYS

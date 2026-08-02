@@ -4,18 +4,18 @@ set -eou pipefail
 
 # shellcheck disable=SC2010
 # if [ -d "/home/$USER/hi.d/" ]; then
-#   export HI_TMPDIR="/home/$USER"
+#   export _HI_TMPDIR="/home/$USER"
 # else
 #   val=$(ls -l /tmp | grep -e "$(whoami)" | grep -e hi | awk '{ print $9 }')
 #   if [ -n "$val" ]; then
-#     export HI_TMPDIR="/tmp/$val"
+#     export _HI_TMPDIR="/tmp/$val"
 #   else
-#     export HI_TMPDIR=${HI_TMPDIR:-$HOME}
+#     export _HI_TMPDIR=${_HI_TMPDIR:-$HOME}
 #   fi
 # fi
-HI_TMPDIR=${HI_TMPDIR:-$HOME}
+_HI_TMPDIR=${_HI_TMPDIR:-$HOME}
 # shellcheck source=./common/paths.sh
-source "$HI_TMPDIR/hi.d/common/paths.sh"
+source "$_HI_TMPDIR/hi.d/common/paths.sh"
 # shellcheck source=./common/colors.sh
 command -v cecho >/dev/null || source "$_HI_COLORS"
 # shellcheck source=./common/check.sh
@@ -33,8 +33,8 @@ function spacer() {
 # required
 function timestamp() {
   spacer
-  local human_centric_date_format="+%a %b %-e %Y %H:%M:%S %Z"
-  printf '%b\n' "${BRBLUE}$(date -u "$human_centric_date_format")   ${NC}|${BRYELLOW}   $(date "$human_centric_date_format")${NC}"
+  local _HI_HUMAN_CENTRIC_DATE="+%a %b %-e %Y %H:%M:%S %Z"
+  printf '%b\n' "${BRBLUE}$(date -u "$_HI_HUMAN_CENTRIC_DATE")   ${NC}|${BRYELLOW}   $(date "$_HI_HUMAN_CENTRIC_DATE")${NC}"
   spacer
 }
 
@@ -71,7 +71,7 @@ function clean_all() {
       fi
     fi
   done
-  rm -rf "$HI_TMPDIR/hi.d"
+  rm -rf "$_HI_TMPDIR/hi.d"
 }
 
 # required
@@ -134,8 +134,8 @@ function tmuxrc() {
     mkdir -p "$TMUXDIR"
   fi
   rm -rf "$TMUXDIR"/hi.d
-  cp -r "$HI_ROOT"/bashrc.hi "$HI_ROOT"/hi "$HI_ROOT"/hi.d "$TMUXDIR"
-  HI_ROOT="$TMUXDIR" SHELL="$TMUXDIR"/bashrc.hi /usr/bin/tmux -S "$TMUXDIR"/tmuxserver "$@"
+  cp -r "$_HI_ROOT"/bashrc.hi "$_HI_ROOT"/hi "$_HI_ROOT"/hi.d "$TMUXDIR"
+  _HI_ROOT="$TMUXDIR" SHELL="$TMUXDIR"/bashrc.hi /usr/bin/tmux -S "$TMUXDIR"/tmuxserver "$@"
   SHELL=$(which bash)
   export SHELL
 }
@@ -170,7 +170,7 @@ function load() {
   if [ -d "/home/$USER/hi.d/" ]; then
     cecho "hi on target (native): " "$BRGREEN" 1
   elif [ "$(ls -l /tmp | grep -e "^d.*$USER}hi\." -c)" -gt 1 ]; then
-    # export HI_TMPDIR="/tmp/$USER.hi.*"
+    # export _HI_TMPDIR="/tmp/$USER.hi.*"
     cecho "hi on target (copied): " "$BRGREEN" 1
   else
     if command -v "vim" &>/dev/null; then
@@ -205,7 +205,7 @@ function load() {
     linux_flags="--apparent-size"
   fi
 
-  cecho " $(du -sh $linux_flags "$HI_ROOT" | awk '{ print $1 }') " "$NC" 1
+  cecho " $(du -sh $linux_flags "$_HI_ROOT" | awk '{ print $1 }') " "$NC" 1
   printf ' %b\n' "${BRRED}~~~~~~~~~~~~~~~~~~~~~ Disconnected ${NC}[$HOST_COLOR$(hostname)${NC}]$BRRED ~~~~~~~~~~~~~~~~~~~~~~~${NC}"
   timestamp
   cecho "hi closing! " "$BRPURPLE"

@@ -1,9 +1,9 @@
 #!/bin/bash
 set -eou pipefail
 
-HI_TMPDIR=${HI_TMPDIR:-$HOME}
+_HI_TMPDIR=${_HI_TMPDIR:-$HOME}
 # shellcheck source=./paths.sh
-source "$HI_TMPDIR/hi.d/common/paths.sh"
+source "$_HI_TMPDIR/hi.d/common/paths.sh"
 # shellcheck source=./colors.sh
 command -v cecho >/dev/null || source "$_HI_COLORS"
 

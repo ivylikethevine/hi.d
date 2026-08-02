@@ -1,38 +1,32 @@
 #!/bin/sh
+# shellcheck disable=SC2155
+# shellcheck disable=SC2139
 
 # === start required variables/aliases ===
-alias hi_colorgen="sh -c 'source ~/hi.d/scripts/colorgen.sh && colorgen'"
-alias hi_update="cd ~/hi.d && git pull"
-alias hi_install="~/hi.d/scripts/install.sh"
+alias hi_colorgen="sh -c 'source $_HI_TMPDIR/hi.d/scripts/colorgen.sh && colorgen'"
+alias hi_update="git -C $_HI_TMPDIR/hi.d pull"
+alias hi_install="$_HI_TMPDIR/hi.d/scripts/install.sh"
+alias hi="$_HI_TMPDIR/hi.d/hi.sh"
 
-# shellcheck disable=SC2139
-alias hi="$HI_TMPDIR/hi.d/hi.sh"
-
-# shellcheck disable=SC2139,SC2155
 export EDITOR="$(command -v pico || command -v nano || command -v micro || command -v vim || command -v vi)"
-# shellcheck disable=SC2139
-alias nano="nano --rcfile $HI_TMPDIR/hi.d/misc/nano.rc"
-# shellcheck disable=SC2139
-alias vim="vim -u $HI_TMPDIR/hi.d/misc/vim.rc"
+alias nano="nano --rcfile $_HI_TMPDIR/hi.d/misc/nano.rc"
+alias vim="vim -u $_HI_TMPDIR/hi.d/misc/vim.rc"
 
 # nonsense for cat to be bat with options if present, cat otherwise
-export BAT_OPTS='-P --tabs 2 --theme Monokai\ Extended\ Bright --style changes,grid'
-export BAT_OPTS_NUM="$BAT_OPTS"',numbers'
-# shellcheck disable=SC2139
+export _HI_BAT_OPTS='-P --tabs 2 --theme Monokai\ Extended\ Bright --style changes,grid'
+export _HI_BAT_OPTS_NUM="$_HI_BAT_OPTS"',numbers'
 alias batcat="$(command -v bat || command -v batcat || command -v cat)"
-# shellcheck disable=SC2139
-alias bat="batcat $BAT_OPTS"
-# shellcheck disable=SC2139
-alias batn="batcat $BAT_OPTS_NUM"
+alias bat="batcat $_HI_BAT_OPTS"
+alias batn="batcat $_HI_BAT_OPTS_NUM"
 alias cat="batcat"
 
 # works in bash, fish has a wrapper for sudo in config.fish
 alias sudo="command sudo "
 
-export human_centric_date_format="+%a %b %-e %Y %H:%M:%S %Z" # used in fish
-export human_short_date_format="+%b %-e %y %H:%M %Z"         # used for 'now' alias
+export _HI_HUMAN_CENTRIC_DATE="+%a %b %-e %Y %H:%M:%S %Z" # used in fish
+export _HI_HUMAN_SHORT_DATE="+%b %-e %y %H:%M %Z"         # used for 'now' alias
 # time helpers
-alias now='echo "LOCAL: $(date $human_short_date_format) => UTC: $(date -u $human_short_date_format)"'
+alias now='echo "LOCAL: $(date $_HI_HUMAN_SHORT_DATE) => UTC: $(date -u $_HI_HUMAN_SHORT_DATE)"'
 
 # for working on this repo quickly
 alias hey="ssh"
@@ -41,6 +35,7 @@ alias ehi="zed ~/hi.d"
 alias essh="zed ~/.ssh"
 alias elinks="zed ~/projects/links"
 # === end required variables/aliases ===
+
 # docker
 alias dcl="docker container ls && docker compose ls"
 alias dcu="docker compose up"
@@ -59,30 +54,22 @@ alias rsync="rsync -zvhPr --info=progress2"
 alias scp="scp -Cr"
 
 # exa (back-compat) improved ls
-export EXA_SHARED_OPTS='-F -1 -l -m --group-directories-first'
-export EXA_OPTS="$EXA_SHARED_OPTS"' --group --no-filesize'
-# shellcheck disable=SC2139
+export _HI_EXA_SHARED_OPTS='-F -1 -l -m --group-directories-first'
+export _HI_EXA_OPTS="$_HI_EXA_SHARED_OPTS"' --group --no-filesize'
 alias eza="$(command -v eza || command -v exa || command -v ls)"
-# shellcheck disable=SC2139
-alias exa="exa $EXA_OPTS"
-# shellcheck disable=SC2139
+alias exa="exa $_HI_EXA_OPTS"
 alias lr="exa"
 alias lra="lr -a"
 alias lrt="lr -T -L2"
 
 # eza (newer fork of exa) improved ls
 # per https://docs.rs/chrono/latest/chrono/format/strftime/index.html
-export EZA_OPTS="$EXA_SHARED_OPTS"' --smart-group --time-style="+%b %d %Y %H:%M"'
-export EZA_OPTS_SIZE="$EZA_OPTS --total-size"
-# shellcheck disable=SC2139
-alias eza="eza $EZA_OPTS"
-# shellcheck disable=SC2139
-alias les="eza $EZA_OPTS_SIZE"
-# shellcheck disable=SC2139
-alias lest="eza $EZA_OPTS_SIZE -T -L2"
-# shellcheck disable=SC2139
-alias lesg="eza $EZA_OPTS_SIZE --git --git-repos-no-status"
-# shellcheck disable=SC2139
+export _HI_EZA_OPTS="$_HI_EXA_SHARED_OPTS"' --smart-group --time-style="+%b %d %Y %H:%M"'
+export _HI_EZA_OPTS_SIZE="$_HI_EZA_OPTS --total-size"
+alias eza="eza $_HI_EZA_OPTS"
+alias les="eza $_HI_EZA_OPTS_SIZE"
+alias lest="eza $_HI_EZA_OPTS_SIZE -T -L2"
+alias lesg="eza $_HI_EZA_OPTS_SIZE --git --git-repos-no-status"
 alias le="eza --no-filesize"
 alias lea="le -a"
 alias let="le -T -L2"

@@ -201,5 +201,3 @@ set -g __fish_git_prompt_showstashstate "yes"
 set -g __fish_git_prompt_shorten_branch_len 32
 set -g __fish_git_prompt_describe_style "contains"
 set -g __fish_git_prompt_showcolorhints "yes"
-
-# TODO: Fisher/packages?

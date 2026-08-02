@@ -93,7 +93,6 @@ function say_hi() {
   say_hi_inner "$@" 2>"$tmp"
 }
 
-
 # Bash & Fish shell both work with this command
 function say_hi_inner() {
   ssh -t "$DOMAIN" "$SSHARGS" "
@@ -121,7 +120,7 @@ EOF
       export _HI_TMPDIR=\$_HI_TMPDIR
       export _HI_ROOT=\$_HI_ROOT
       echo \"$CMDARG\" >> \$_HI_ROOT/hi.bashrc
-      echo \"export hi_copy_time='$(echo "$(perl -MTime::HiRes=time -e 'printf "%.3f", time') $copy_start_time" | awk '{ printf "%.3f\n", $1 - $2 }')'\" >> \$_HI_ROOT/load.sh
+      echo \"export _HI_COPY_TIME='$(echo "$(perl -MTime::HiRes=time -e 'printf "%.3f", time') $copy_start_time" | awk '{ printf "%.3f\n", $1 - $2 }')'\" >> \$_HI_ROOT/load.sh
       bash --rcfile \$_HI_ROOT/hi.bashrc
       "
 }
@@ -130,11 +129,10 @@ EOF
 function run() {
   local copy_start_time
   local tmp
-  local _exit_code
-  local _errors
+  local exit_code
+  local errors
 
   if [ -d "$_HI_ROOT" ]; then
-    # TODO: sh doesn't have perl :/
     copy_start_time="$(perl -MTime::HiRes=time -e 'printf "%.3f", time')"
     tmp="/tmp/$(date +%s).hi"
     if [[ -z ${ZSH_VERSION+x} ]]; then
@@ -147,17 +145,16 @@ function run() {
     hi_parse "$@"
     say_hi "$@" 2>"$tmp"
 
-    _exit_code="$?"
-    _errors="$(cat "$tmp")"
+    exit_code="$?"
+    errors="$(cat "$tmp")"
 
-    if [ "$_exit_code" -ne 0 ]; then
+    if [ "$exit_code" -ne 0 ]; then
       echo -ne "\r\r\r\r"
-      cecho "hi failed [code: $_exit_code], falling back to ssh..." "$BRRED"
-      cecho "$_errors" "$BRRED"
+      cecho "hi failed [code: $exit_code], falling back to ssh..." "$BRRED"
+      cecho "$errors" "$BRRED"
       ssh "$@"
-      exit 1
     fi
-    exit "$_exit_code"
+    exit "$exit_code"
 
   else
     cecho "No such directory: $_HI_ROOT" "$RED" >&2

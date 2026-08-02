@@ -3,16 +3,6 @@
 
 # === start required configuration ===
 # shellcheck disable=SC2010
-# if [ -d "/home/$USER/hi.d/" ]; then
-#   export _HI_TMPDIR="/home/$USER"
-# else
-#   val=$(ls -l /tmp | grep -e "$USER" | grep -e hi | awk '{ print $9 }')
-#   if [ -n "$val" ]; then
-#     export _HI_TMPDIR="/tmp/$val"
-#   else
-#     export _HI_TMPDIR=${_HI_TMPDIR:-$HOME}
-#   fi
-# fi
 _HI_TMPDIR=${_HI_TMPDIR:-$HOME}
 # shellcheck source=./../common/paths.sh
 source "$_HI_TMPDIR/hi.d/common/paths.sh"
@@ -21,7 +11,6 @@ source "$_HI_COLORS"
 # shellcheck source=./../common/aliases.sh
 source "$_HI_ALIASES"
 
-# TODO: Test autocomplete for hi, exa, etc.
 complete -C hi ssh
 complete -C exa eza
 
@@ -92,7 +81,6 @@ __git_info() {
 
   local marks
 
-  # TODO: Modify to list number of locally modified files + commits behind
   # scan first two lines of output from `git status`
   while IFS= read -r line; do
     if [[ $line =~ ^## ]]; then # header line
@@ -160,12 +148,3 @@ bind '"\e[A": history-search-backward'
 bind '"\e[B": history-search-forward'
 bind '"\e[C": forward-char'
 bind '"\e[D": backward-char'
-
-# TODO: Determine best way to switch this/configure on install
-# # If we are in bash and there is no fish shell running
-# # drop from bash into fish (for interactive, login shells).
-# # source: https://wiki.archlinux.org/title/Fish#Modify_.bashrc_to_drop_into_fish
-# if grep -qv 'fish' /proc/$PPID/comm && [[ ${SHLVL} == [1,2] ]]; then
-#  	shopt -q login_shell && LOGIN_OPTION='--login' || LOGIN_OPTION=''
-#  	exec fish "$LOGIN_OPTION"
-# fi

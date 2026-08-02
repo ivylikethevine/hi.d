@@ -3,16 +3,6 @@
 set -eou pipefail
 
 # shellcheck disable=SC2010
-# if [ -d "/home/$USER/hi.d/" ]; then
-#   export _HI_TMPDIR="/home/$USER"
-# else
-#   val=$(ls -l /tmp | grep -e "$(whoami)" | grep -e hi | awk '{ print $9 }')
-#   if [ -n "$val" ]; then
-#     export _HI_TMPDIR="/tmp/$val"
-#   else
-#     export _HI_TMPDIR=${_HI_TMPDIR:-$HOME}
-#   fi
-# fi
 _HI_TMPDIR=${_HI_TMPDIR:-$HOME}
 # shellcheck source=./common/paths.sh
 source "$_HI_TMPDIR/hi.d/common/paths.sh"
@@ -20,23 +10,12 @@ source "$_HI_TMPDIR/hi.d/common/paths.sh"
 command -v cecho >/dev/null || source "$_HI_COLORS"
 # shellcheck source=./common/check.sh
 source "$_HI_CHECK"
+# shellcheck source=./common/header.sh
+command -v spacer >/dev/null || source "$_HI_TMPDIR/hi.d/common/header.sh"
 
-hi_config_start="# hi-config-start"
-hi_config_end="# hi-config-end"
-hi_copy_time=-1
-
-# required
-function spacer() {
-  echo -n ' | '
-}
-
-# required
-function timestamp() {
-  spacer
-  local _HI_HUMAN_CENTRIC_DATE="+%a %b %-e %Y %H:%M:%S %Z"
-  printf '%b\n' "${BRBLUE}$(date -u "$_HI_HUMAN_CENTRIC_DATE")   ${NC}|${BRYELLOW}   $(date "$_HI_HUMAN_CENTRIC_DATE")${NC}"
-  spacer
-}
+export _HI_CONFIG_START="# hi-config-start"
+export _HI_CONFIG_END="# hi-config-end"
+export _HI_COPY_TIME=-1
 
 # required
 function configure_file() {
@@ -44,11 +23,11 @@ function configure_file() {
   local target=${2}
   touch "$target"
   if test -f "$source"; then
-    if ! grep -q "$hi_config_start" "$target"; then
+    if ! grep -q "$_HI_CONFIG_START" "$target"; then
       {
-        echo "$hi_config_start"
+        echo "$_HI_CONFIG_START"
         cat "$source"
-        echo "$hi_config_end"
+        echo "$_HI_CONFIG_END"
       } >>"$target"
     fi
   fi
@@ -63,67 +42,24 @@ function clean_all() {
     shells=("$_HI_HOME_BASHRC" "$_HI_HOME_ZSHRC")
   fi
   for shell in "${shells[@]}"; do
+    # Double up on sed's just to be sure
     if test -f "$shell"; then
       if [ -f "$_HI_LINUX_PATH" ]; then
-        sed -i "/^$hi_config_start/,/^$hi_config_end/d" -- "$shell"
+        sed -i "/^$_HI_CONFIG_START/,/^$_HI_CONFIG_END/d" -- "$shell"
+        sed -i "/^$_HI_CONFIG_START/,/^$_HI_CONFIG_END/d" -- "$shell"
       else
-        sed -i '' "/^$hi_config_start/,/^$hi_config_end/d" "$shell"
+        sed -i '' "/^$_HI_CONFIG_START/,/^$_HI_CONFIG_END/d" "$shell"
+        sed -i '' "/^$_HI_CONFIG_START/,/^$_HI_CONFIG_END/d" "$shell"
       fi
     fi
   done
-  rm -rf "$_HI_TMPDIR/hi.d"
+  rm -rfv "$_HI_TMPDIR/hi.d"
 }
 
 # required
 function timers() {
   spacer
-  cecho "load: $(echo "$(perl -MTime::HiRes=time -e 'printf "%.3f", time') $load_start_time" | awk '{ printf "%.3f\n", $1 - $2 }')s | copy: ${hi_copy_time}s"
-}
-
-function system_info_line() {
-  cecho "$(uname -s)" "$YELLOW" 1
-  spacer
-  cecho "$(uname -m)" "$PURPLE" 1
-  spacer
-  if [ -f "$_HI_LINUX_PATH" ]; then
-    cecho "$(grep PRETTY_NAME "$_HI_LINUX_PATH" | cut -d= -f2 | tr -d '"')" "$GREEN" 1
-    spacer
-    cecho "CPUs: $(nproc)" "$BLUE" 1
-    spacer
-    cecho "RAM: $(free -h --giga | awk '/^Mem:/ {print $2}GB') " "$CYAN"
-  else
-    local system_info
-    system_info=$(system_profiler SPHardwareDataType)
-    cecho "macOS $(sw_vers -productVersion)" "$BLUE" 1
-    spacer
-    cecho "CPUs: $(echo "$system_info" | grep -e Cores | awk '{ print $5 }')" "$BLUE" 1
-    spacer
-    cecho "RAM: $(echo "$system_info" | grep -e Memory | awk '{ print $2 }')GB" "$CYAN"
-  fi
-}
-
-function git_keys_docker_line() {
-  spacer
-  if [ -f "$_HI_HOME_GIT_CONFIG" ]; then
-    cecho "Git ID: " "$CYAN" 1
-    cecho "$(grep email "$_HI_HOME_GIT_CONFIG" | tail -n1 | cut -d= -f2 | tr -d ' ' | awk -F@ '{ for(i=0;i<length($2);i++) c=c"●"; print $1"@"c; c="" }')" "$YELLOW" 1
-  else
-    cecho "No Git ID Found..." "$YELLOW" 1
-  fi
-  spacer
-  if command -v "docker" &>/dev/null; then
-    cecho "Containers: $(docker container ls | wc -l | awk '{ print $1 - 1 }')" "$BLUE" 1
-  else
-    cecho "No docker :(" "$BRYELLOW" 1
-  fi
-  spacer
-  if [ -f "$_HI_SSH_AUTHORIZED_KEYS" ]; then
-    cecho "Auth: $(wc -l "$_HI_SSH_AUTHORIZED_KEYS" | awk '{ print $1 }')" "$RED" 1
-  else
-    cecho "Auth: 0!" "$RED" 1
-  fi
-  spacer
-  cecho "Pub: $(find "$_HI_SSH_KEY_DIR" -type f -name "*.pub" | wc -l | awk '{ print $1 }')" "$PURPLE"
+  cecho "load: $(echo "$(perl -MTime::HiRes=time -e 'printf "%.3f", time') $load_start_time" | awk '{ printf "%.3f\n", $1 - $2 }')s | copy: ${_HI_COPY_TIME}s"
 }
 
 # TODO: Test
@@ -155,7 +91,7 @@ function load() {
 
   local HOST_COLOR
   HOST_COLOR=$(host_color "$(hostname)")
-  printf ' %b\n' "${BRGREEN} ~~ Connected ${NC}[${HOST_COLOR}$(hostname)${NC}]${BRGREEN} ~~~~~~~~~~~~~~~~~~~~~~~${NC}"
+  printf '%b\n' "${BRGREEN} ~~ Connected ${NC}[${HOST_COLOR}$(hostname)${NC}]${BRGREEN} ~~~~~~~~~~~~~~~~~~~~~~~${NC}"
   timestamp
 
   # optional header items
@@ -206,7 +142,7 @@ function load() {
   fi
 
   cecho " $(du -sh $linux_flags "$_HI_ROOT" | awk '{ print $1 }') " "$NC" 1
-  printf ' %b\n' "${BRRED}~~~~~~~~~~~~~~~~~~~~~ Disconnected ${NC}[$HOST_COLOR$(hostname)${NC}]$BRRED ~~~~~~~~~~~~~~~~~~~~~~~${NC}"
+  printf '%b\n' "${BRRED}~~~~~~~~~~~~~~~~~~~~~ Disconnected ${NC}[$HOST_COLOR$(hostname)${NC}]$BRRED ~~~~~~~~~~~~~~~~~~~~~~~${NC}"
   timestamp
   cecho "hi closing! " "$BRPURPLE"
   exit 0

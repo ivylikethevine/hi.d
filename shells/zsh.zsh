@@ -9,8 +9,6 @@ source "$_HI_COLORS"
 # shellcheck source=./common/aliases.sh
 source "$_HI_ALIASES"
 
-# TODO: Determine how to wrap autocomplete for hi, exa, etc.
-
 if [ -d "$HOME"/Android ] && [ -d "$HOME"/Android/Sdk ]; then
   export ANDROID_HOME="$HOME"/Android/Sdk # for android dev on linux
 fi
@@ -47,13 +45,11 @@ fi
 autoload -Uz vcs_info
 precmd() { vcs_info; }
 setopt prompt_subst
-# TODO: Implement commits behind + files modified as per fish
 zstyle ':vcs_info:git:*' formats '%b'
 
 if [ "$color_prompt" = yes ]; then
   export CLICOLOR=1
   export LSCOLORS=gafacadabaegedabagacad
-  # TODO: Determine how to get bright zsh colors in prompt
   USER_COLOR=$(user_color)
   USER_COLOR="${USER_COLOR//br/}"
   HOST_COLOR=$(host_color)
@@ -117,12 +113,3 @@ zstyle ':completion:*:*:-command-:*:*' group-order alias builtins functions comm
 
 zstyle ':completion:*:kill:*' command 'ps -u $USER -o pid,%cpu,tty,cputime,cmd'
 zstyle ':completion:*:*:kill:*:processes' list-colors '=(#b) #([0-9]#)*=0=01;31'
-
-# # TODO: Determine best way to switch this/configure on install
-# # # If we are in bash and there is no fish shell running
-# # # drop from bash into fish (for interactive, login shells).
-# # # source: https://wiki.archlinux.org/title/Fish#Modify_.bashrc_to_drop_into_fish
-# if grep -qv 'fish' /proc/$PPID/comm && [[ ${SHLVL} == [1,2] ]]; then
-#  	shopt -q login_shell && LOGIN_OPTION='--login' || LOGIN_OPTION=''
-#  	exec fish "$LOGIN_OPTION"
-# fi

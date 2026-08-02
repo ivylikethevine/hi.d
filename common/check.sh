@@ -103,7 +103,7 @@ function check_commands() {
   local item
   local found=0
   for item in "${sorted_cmd_list[@]}"; do
-    symbol="✓"
+    symbol="$GREEN✓"
     color="$NC"
     cmd="${item%:*:*}"
     inner="${item#*:}"
@@ -114,7 +114,7 @@ function check_commands() {
       color="${color_yes[priority]}"
     else
       color="${color_no[priority]}"
-      symbol="✗"
+      symbol="$RED✗"
     fi
 
     if [[ -n "$color" && "$color" != "hide" ]]; then

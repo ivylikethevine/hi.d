@@ -6,20 +6,8 @@ _HI_TMPDIR=${_HI_TMPDIR:-$HOME}
 source "$_HI_TMPDIR/hi.d/common/paths.sh"
 # shellcheck source=./../common/colors.sh
 command -v cecho >/dev/null || source "$_HI_COLORS"
-
-function append() {
-  local input="$1"
-  local output="$2"
-  local tmpdir="$3"
-  local appendfile="$tmpdir/append.tmp"
-
-  if ! test -f "$input"; then
-    touch "$input"
-  fi
-  cat "$input" | grep -vxF -f "$output" > "$appendfile"
-  cat "$output" >> "$appendfile"
-  mv "$appendfile" "$output"
-}
+# shellcheck source=./shared.sh
+command -v append >/dev/null || source "$_HI_TMPDIR/hi.d/scripts/shared.sh"
 
 function config_bashrc() {
   cecho "=== Checking bashrc ===" "$YELLOW"
@@ -89,40 +77,27 @@ function main() {
   cecho "===== Checking $USER's login shell =====" "$BRCYAN"
   local shellname
   shellname=$(cat /etc/passwd | grep -e "$USER" | xargs basename)
-  if [ "$shellname" = "bash" ]; then
-    cecho "===== Bash shell detected! =====" "$CYAN"
-    # trap 'rm -rf $TMP' exit
-  elif [ "$shellname" = "zsh" ]; then
-    cecho "===== Zsh shell detected! =====" "$PURPLE"
-    # if [[ -z \${ZSH_VERSION+x} ]]; then
-    #   trap 'rm -rf \$HI_CLEANUP' exit
-    # else
-    #   TRAPEXIT() { rm -rf \$HI_CLEANUP; }
-    # fi
-  elif [ "$shellname" = "fish" ]; then
-    cecho "===== Fish shell detected! =====" "$GREEN"
-    # trap 'rm -rf $TMP' exit
-  elif [ "$shellname" = "sh" ]; then
-    cecho "===== sh shell detected? =====" "$YELLOW"
-  else
-    cecho "===== UNKNOWN SHELL: $shellname! =====" "$BRRED"
-  fi
+  cecho "===== [$shellname] shell detected! =====" "$CYAN"
 
   local TMP
   TMP=$(mktemp -d)
-  trap 'rm -rf $TMP' exit
+  if [ -z "$ZSH_VERSION" ]; then
+    trap 'rm -rf $TMP' exit
+  else
+    TRAPEXIT() { rm -rf \$TMP; }
+  fi
 
   config_bashrc "$TMP"
   config_zshrc "$TMP"
   config_fish "$TMP"
 
   config_hi
+
   cecho "===== Running hi_colorgen =====" "$BRCYAN"
   # shellcheck source=./colorgen.sh
   source "$_HI_COLORGEN"
   initial_colorgen
   rm -rf "$TMP"
-
 
   cecho "~~~~~ Installed! ~~~~~ " "$BRGREEN"
 }

@@ -6,24 +6,8 @@ _HI_TMPDIR=${_HI_TMPDIR:-$HOME}
 source "$_HI_TMPDIR/hi.d/common/paths.sh"
 # shellcheck source=./../common/colors.sh
 command -v cecho >/dev/null || source "$_HI_COLORS"
-
-function append() {
-  local input="${1}"
-  local output="${2}"
-  local tmp
-  tmp="$(mktemp)"
-
-  if ! test -f "$input"; then
-    touch "$input"
-  fi
-
-  # TODO: Figure out why this line causes set -eou pipefail to crash
-  cat "$input" | grep -vxF -f "$output" > "$tmp"
-  cat "$output" >> "$tmp"
-
-  mv "$tmp" "$output"
-  rm "$input"
-}
+# shellcheck source=./shared.sh
+command -v append >/dev/null || source "$_HI_TMPDIR/hi.d/scripts/shared.sh"
 
 declare -A host_or_user bash_colors fish_colors
 
@@ -43,6 +27,7 @@ function create_basic_group_colors() {
   } >> "$TMP_GROUP_COLORS"
 
   append "$TMP_GROUP_COLORS" "$_HI_GROUP_CONFIG"
+  rm "$TMP_GROUP_COLORS"
 
   cecho "Generated entries for: $(grep -c \, "$_HI_GROUP_CONFIG" | awk '{ print $1 }') groups" "$GREEN"
 }
@@ -53,6 +38,7 @@ function create_basic_host_colors() {
   touch "$TMP_HOST_COLORS"
   printf '%s\n' "#hostname,color_bash,color_fish" >> "$TMP_HOST_COLORS"
   append "$TMP_HOST_COLORS" "$_HI_HOST_COLORS"
+  rm "$TMP_HOST_COLORS"
 
   cecho "Recreated!" "$GREEN"
 }
@@ -63,6 +49,7 @@ function create_basic_user_colors() {
   touch "$TMP_USER_COLORS"
   printf '%s\n' "#username,color_bash,color_fish" >> "$TMP_USER_COLORS"
   append "$TMP_USER_COLORS" "$_HI_USER_COLORS"
+  rm "$TMP_USER_COLORS"
 
   cecho "Recreated!" "$GREEN"
 }
@@ -91,7 +78,9 @@ function read_group_colors() {
   done < "$_HI_GROUP_CONFIG"
 
   append "$TMP_USER_COLORS" "$_HI_USER_COLORS"
+  rm "$TMP_USER_COLORS"
   append "$TMP_HOST_COLORS" "$_HI_HOST_COLORS"
+  rm "$TMP_HOST_COLORS"
 
   cecho "Generated group-based colors for: $(wc -l "$_HI_USER_COLORS" | awk '{ print $1 }') users" "$CYAN"
   cecho "Generated group-based colors for: $(wc -l "$_HI_HOST_COLORS" | awk '{ print $1 }') hosts" "$CYAN"
@@ -135,6 +124,7 @@ function read_ssh_hosts() {
   done < "$_HI_SSH_CONFIG_FILE"
 
   append "$TMP_HOST_COLORS" "$_HI_HOST_COLORS"
+  rm "$TMP_HOST_COLORS"
   cecho "Generated color entries for: $(wc -l "$_HI_HOST_COLORS" | awk '{ print $1 }') hosts" "$GREEN"
 }
 

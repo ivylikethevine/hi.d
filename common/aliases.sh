@@ -48,6 +48,7 @@ alias lsa="ls -lha --color=auto"
 alias lsd="ls -lhd .* --color=auto"
 alias lsr="ls -lhaR --color=auto"
 
+# some safeties
 alias grep="grep --color=auto"
 alias rm="rm -iv"
 alias rsync="rsync -zvhPr --info=progress2"
@@ -118,11 +119,18 @@ alias aptac="sudo apt autoclean && sudo apt autoremove"
 alias fw_check="fwupdmgr get-devices && fwupdmgr get-updates"
 alias fw_update="fwupdmgr update"
 
+# file count
 alias fc="ls | wc -l"
+
+# make executable
 alias mkex="chmod +x"
 
+# tar shortcuts
 alias ctar="tar -zcvf"
 alias utar="tar -zxvf"
 
+# copy with progress
 alias cp="cp -rv"
+
+# minimal diff-ing
 alias mindiff="diff -Bdw"

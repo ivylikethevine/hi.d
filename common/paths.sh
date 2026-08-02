@@ -11,7 +11,6 @@ export _HI_USER_COLORS="$_HI_ROOT/data/user_colors"
 
 # user configurable
 export _HI_GROUP_CONFIG="$_HI_ROOT/data/group_config" # remains local & is not copied to any targets
-export _HI_TRAVEL_CONFIG="$_HI_ROOT/data/travel_config"
 export _HI_PACKAGES_CONFIG="$_HI_ROOT/data/packages_config"
 
 export _HI_VIMRC="$_HI_ROOT/misc/vim.rc"
@@ -22,17 +21,15 @@ export _HI_ZSH_CONFIG="$_HI_ROOT/shells/zsh.zsh"
 export _HI_FISH_CONFIG="$_HI_ROOT/shells/config.fish"
 
 export _HI_COLORGEN="$_HI_ROOT/scripts/colorgen.sh"
-export _HI_INSTALL="$_HI_ROOT/scripts/install.sh"
-export _HI_UNLINK="$_HI_ROOT/scripts/unlink.sh"
 
 export _HI_LINUX_PATH="/etc/os-release"
 
 export _HI_SSH_KEY_DIR="$HOME/.ssh"
 export _HI_SSH_CONFIG_FILE="$_HI_SSH_KEY_DIR/config"
 export _HI_SSH_AUTHORIZED_KEYS="$_HI_SSH_KEY_DIR/authorized_keys"
-
 export _HI_HOME_GIT_CONFIG="$HOME/.gitconfig"
+
 export _HI_HOME_BASHRC="$HOME/.bashrc"
 export _HI_HOME_ZSHRC="$HOME/.zshrc"
-export _HI_HOME_FISH_CONFIG="$HOME/.config/fish/config.fish"
 export _HI_FISH_DIR="$HOME/.config/fish" # used to check if fish installed before appending config
+export _HI_HOME_FISH_CONFIG="$_HI_FISH_DIR/config.fish"

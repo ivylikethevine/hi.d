@@ -25,11 +25,10 @@
 
 *docker*
 
-data/
-min/
-**/travel_config
-**/host_colors
-**/user_colors
-**/group_colors
-**/group_config
-**/packages_config
+# data/
+# **/travel_config
+# **/host_colors
+# **/user_colors
+# **/group_colors
+# **/group_config
+# **/packages_config

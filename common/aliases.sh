@@ -20,12 +20,14 @@ alias batcat="$(command -v bat || command -v batcat || command -v cat)"
 alias bat="batcat $_HI_BAT_OPTS"
 alias batn="batcat $_HI_BAT_OPTS_NUM"
 alias cat="batcat"
+alias catn="batn"
 
 # works in bash, fish has a wrapper for sudo in config.fish
 alias sudo="command sudo "
 
-export _HI_HUMAN_CENTRIC_DATE="+%a %b %-e %Y %H:%M:%S %Z" # used in fish
-export _HI_HUMAN_SHORT_DATE="+%b %-e %y %H:%M %Z"         # used for 'now' alias
+# helpful time formats
+export _HI_HUMAN_CENTRIC_DATE="+%a %b %-e %Y %H:%M:%S %Z"
+export _HI_HUMAN_SHORT_DATE="+%b %-e %y %H:%M %Z"
 # time helpers
 alias now='echo "LOCAL: $(date $_HI_HUMAN_SHORT_DATE) => UTC: $(date -u $_HI_HUMAN_SHORT_DATE)"'
 
@@ -49,11 +51,11 @@ alias lsa="ls -lha --color=auto"
 alias lsd="ls -lhd .* --color=auto"
 alias lsr="ls -lhaR --color=auto"
 
-# some safeties
+# enable color
 alias grep="grep --color=auto"
+
+# good safety
 alias rm="rm -iv"
-alias rsync="rsync -zvhPr --info=progress2"
-alias scp="scp -Cr"
 
 # exa (back-compat) improved ls
 export _HI_EXA_SHARED_OPTS='-F -1 -l -m --group-directories-first'
@@ -130,8 +132,10 @@ alias mkex="chmod +x"
 alias ctar="tar -zcvf"
 alias utar="tar -zxvf"
 
-# copy with progress
+# copy with progress/recursive
 alias cp="cp -rv"
+alias rsync="rsync -zvhPr --info=progress2"
+alias scp="scp -Cr"
 
 # minimal diff-ing
 alias mindiff="diff -Bdw"

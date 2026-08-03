@@ -24,7 +24,6 @@ _Don't `ssh`ush your hosts, say `hi`!_
   - then run `hi_colorgen` to regenerate colors
 - configure `~/hi.d/data/packages_config` to preferences
 - say `hi`!
-- [optional] `~/hi.d/scripts/unlink.sh` to remove git tracking, etc.
 - [optional] modify `~/hi.d/aliases.sh`, `~/hi.d/common/check.sh`, `~/hi.d/misc/*`, and `~/hi.d/shells/*` to your liking! (required parts of those files are commented as such)
 
 --
@@ -47,38 +46,14 @@ Reminder - place local only changes after the "`# hi-config-end`" comment in the
 - `common/check.sh` - check for commonly used commands and displays results in header
 - `common/colors.sh` - unified coloration for usernames & hosts (see `scripts/colorgen`)
 - `scripts/install.sh` - configure local shells to use hi.d configurations, install, and update
-- `scripts/unlink.sh` - remove identifiable information
 - `scripts/colorgen.sh` - generates `data/user_colors` and `data/host_colors` from `~/.ssh/config`, `data/travel_config`, and `data/group_config`
 - `data/group_config` - user defined coloration for hostnames/usernames (not copied to targets)
 
 ##### Hostname, Username, and Group/Tag Colors
 
-`hi` uses the _leftmost_ tag in your `~/.ssh/config` tags for each host to determine which color to apply to the prompt hostname in all 3 shells on the client device, but will use `$_HI_ROOT/data/travel_config` (in the context of the target filesystem) on the target (in-progress).
+`hi` uses the _leftmost_ tag in your `~/.ssh/config` tags for each host to determine which color to apply to the prompt hostname in all 3 shells on the client device.
 
 ###### Built from/with:
 
 - sshrc - https://github.com/cdown/sshrc (forked/became `hi.sh`)
 - sshm - https://github.com/Gu1llaum-3/sshm (optional, but _highly_ recommended to configure `~/.ssh/config`)
-
-TBD Features:
-
-- nomad alloc exec
-- docker exec
-- tmux
-- screen
-
-###### Nice-to-haves
-
-- exa/eza
-- bat
-- sshm
-- zed-editor
-- nano
-- zoxide
-- shellcheck
-- tree
-- nmap
-- delta
-- xdelta3
-- fd
-- grc

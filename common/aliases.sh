@@ -3,12 +3,13 @@
 # shellcheck disable=SC2139
 
 # === start required variables/aliases ===
-alias hi_colorgen="sh -c 'source $_HI_TMPDIR/hi.d/scripts/colorgen.sh && colorgen'"
 alias hi_update="git -C $_HI_TMPDIR/hi.d pull"
+alias hi_status="git -C $_HI_TMPDIR/hi.d status"
 alias hi_install="$_HI_TMPDIR/hi.d/scripts/install.sh"
+alias hi_colorgen="sh -c 'source $_HI_TMPDIR/hi.d/scripts/colorgen.sh && colorgen'"
 alias hi="$_HI_TMPDIR/hi.d/hi.sh"
 
-export EDITOR="$(command -v pico || command -v nano || command -v micro || command -v vim || command -v vi)"
+export EDITOR="$(command -v nano || command -v pico || command -v micro || command -v vim || command -v vi)"
 alias nano="nano --rcfile $_HI_TMPDIR/hi.d/misc/nano.rc"
 alias vim="vim -u $_HI_TMPDIR/hi.d/misc/vim.rc"
 

@@ -47,10 +47,10 @@ function cecho() {
   local color=${2:-}
 
   local formatted_text="$color$text$NC"
-  if [[ -z ${3+x}  ]]; then
-    printf '%b\n' "$formatted_text";
+  if [[ -z ${3+x} ]]; then
+    printf '%b\n' "$formatted_text"
   else
-    printf '%b' "$formatted_text";
+    printf '%b' "$formatted_text"
   fi
   return
 }
@@ -74,9 +74,9 @@ function read_color_file() {
   local line
   while IFS=$' ' read -r line; do
     if [[ -z ${ZSH_VERSION+x} ]]; then
-      IFS=',' read -ra dataArray <<< "$line"
+      IFS=',' read -ra dataArray <<<"$line"
     else
-      IFS=',' read -rA dataArray <<< "$line"
+      IFS=',' read -rA dataArray <<<"$line"
     fi
     current_val="${dataArray[0]}"
     [[ "$current_val" =~ ^[[:space:]]*# ]] && continue
@@ -92,7 +92,7 @@ function read_color_file() {
       fi
       return
     fi
-  done < "$color_file"
+  done <"$color_file"
   if [[ -z $is_fish ]]; then
     printf '%s\n' "brgreen"
   elif [[ -z ${ZSH_VERSION+x} ]]; then
@@ -109,5 +109,5 @@ function host_color() {
 
 # required
 function user_color() {
-  read_color_file "$(whoami)" "$_HI_USER_COLORS"  ${1+x}
+  read_color_file "$(whoami)" "$_HI_USER_COLORS" ${1+x}
 }

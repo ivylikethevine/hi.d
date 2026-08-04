@@ -15,11 +15,11 @@ color_no[0]="hide"
 
 # bright blue if we have, yellow if we don't (ex. 2nd line tools, such as git, curl, ping)
 color_yes[1]="$BRBLUE"
-color_no[1]="$YELLOW"
+color_no[1]="$BRYELLOW"
 
 # hide if we have, bright red if we don't (ex: 1st line tools, such as sed, awk, bc)
 color_yes[2]="hide"
-color_no[2]="$BRRED"
+color_no[2]="$YELLOW"
 
 # green if we have, hide if we don't (ex: tools/languages such as python, node, docker, dotnet)
 color_yes[3]="$GREEN"
@@ -33,144 +33,99 @@ color_no[4]="hide"
 color_yes[5]="$BRGREEN"
 color_no[5]="$BRRED"
 
-commands=()
-
-load_packages() {
-  while IFS=$'\n' read -r line; do
-    if ! [[ "$line" =~ '#' ]]; then
-      commands+=("$line")
-    fi
-  done <"$_HI_PACKAGES_CONFIG"
-}
-
-function sort_commands() {
-  local cmd_list=("$@")
-  local result=()
-  local color
-
-  for item in "${cmd_list[@]}"; do
-    if [[ -z ${ZSH_VERSION+x} ]]; then
-      IFS=',' read -ra pairs <<<"$item"
-    else
-      IFS=',' read -rA pairs <<<"$item"
-    fi
-
-    local max_priority=-1
-    local max_cmd
-    local is_installed=0
-    local first_cmd
-    local first_priority
-    for pair in "${pairs[@]}"; do
-      local cmd="${pair%:*}"
-      local current_priority="${pair#*:}"
-
-      if command -v "$cmd" &>/dev/null; then
-        if ((current_priority >= max_priority)); then
-          max_priority=$current_priority
-          max_cmd=$cmd
-          is_installed=1
-        fi
-      fi
-
-      if [[ -z ${first_cmd:-} ]]; then
-        first_cmd=$cmd
-        first_priority=$current_priority
-      fi
-    done
-
-    if ((is_installed)); then
-      color="${color_yes[max_priority]}"
-      result+=("$max_cmd:$GREEN✓:$color")
-    else
-      color="${color_no[first_priority]}"
-      result+=("$first_cmd:$RED✗:$color")
-    fi
-  done
-
-  printf '%s\n' "${result[@]}"
-}
-
-function check_commands() {
-  local -a cmd_list
-  local raw="${1:-}"
-  if [[ -z "$raw" ]]; then
-    return
-  fi
-
+# for a single "cmd:priority[,cmd:priority...]" line, pick the installed
+# pair with the highest priority (falling back to the first pair if none
+# are installed), then emit it unless its priority maps to "hide"
+function check_line() {
+  local line="$1"
+  local -a pairs
   if [[ -z ${ZSH_VERSION+x} ]]; then
-    IFS=',' read -ra cmd_list <<<"$raw"
+    IFS=',' read -ra pairs <<<"$line"
   else
-    IFS=',' read -rA cmd_list <<<"$raw"
+    IFS=',' read -rA pairs <<<"$line"
   fi
 
-  # shellcheck disable=SC2207
-  local sorted_cmd_list=($(sort_commands "${cmd_list[@]}"))
+  local pair cmd priority
+  local max_priority=-1
+  local max_cmd=""
+  local is_installed=0
+  local first_cmd=""
+  local first_priority=""
 
-  if ((${#sorted_cmd_list[@]} == 0)); then
-    return
-  fi
+  for pair in "${pairs[@]}"; do
+    cmd="${pair%:*}"
+    priority="${pair#*:}"
 
-  local symbol
-  local color
-  local cmd
-  local item
-  local found=0
-  for item in "${sorted_cmd_list[@]}"; do
-    color="$NC"
-    cmd="${item%:*:*}"
-    inner="${item#*:}"
-    symbol="${inner%:*}"
-    color="${item##*:}"
+    if [[ -z "$first_cmd" ]]; then
+      first_cmd="$cmd"
+      first_priority="$priority"
+    fi
 
-    if [[ -n "$color" && "$color" != "hide" ]]; then
-      found=1
-      break
+    if command -v "$cmd" &>/dev/null && ((priority > max_priority)); then
+      max_priority=$priority
+      max_cmd=$cmd
+      is_installed=1
     fi
   done
 
-  if ((found == 0)); then
-    return
+  local color cmd_out symbol priority_out
+  if ((is_installed)); then
+    color="${color_yes[max_priority]}"
+    cmd_out="$max_cmd"
+    symbol="$GREEN✓"
+    priority_out="$max_priority"
+  else
+    color="${color_no[first_priority]}"
+    cmd_out="$first_cmd"
+    symbol="$RED✗"
+    priority_out="$first_priority"
   fi
 
-  if [[ "$color" != "hide" ]]; then
-    printf '%b %b %b%b' "$color" "$cmd" "$symbol" "$NC"
-  fi
+  [[ "$color" == "hide" ]] && return
+
+  printf '%s\x1f%b %b %b\n' "$priority_out" "$color" "$cmd_out" "$symbol"
 }
 
 function process_commands() {
   local is_fish="${1:-0}"
-  local columns=6
+  local columns=8
 
-  echo -ne "$NC|"
-  local checked_output=()
-  for line in "${commands[@]}"; do
-    checked_output+=("$(check_commands "$line")")
-  done
+  local -a visible_output=()
+  local line item
+  while IFS=$'\n' read -r line; do
+    [[ "$line" == *#* ]] && continue
+    item="$(check_line "$line")"
+    [[ -n "$item" ]] && visible_output+=("$item")
+  done <"$_HI_PACKAGES_CONFIG"
 
-  local count=0
+  # sort the visible (non-"hide") entries by their priority, highest first,
+  # ties keep file order, then drop the priority prefix used only for sorting
+  local -a checked_output=()
+  if ((${#visible_output[@]} > 0)); then
+    while IFS=$' ' read -r item; do
+      checked_output+=("${item#*$'\x1f'}")
+    done < <(printf '%s\n' "${visible_output[@]}" | sort -t $'\x1f' -k1,1nr -s)
+  fi
+
+  local count=1
   for item in "${checked_output[@]}"; do
-    if [[ "$item" != "" ]]; then
-      echo -ne "$item |"
-      if ((count % columns == 0)) && ((count != 0)); then
-        if [[ $is_fish -eq 1 ]]; then
-          echo -n "newline"
-        else
-          echo -ne "\n "
-        fi
-        echo -ne "$NC|"
+    echo -ne "$NC|$item "
+    if ((count % columns == 0)); then
+      if [[ $is_fish -eq 1 ]]; then
+        echo -n "newline"
+      else
+        echo -ne "\n "
       fi
-      ((count += 1))
     fi
-
+    ((count += 1))
   done
 }
 
 function full_check() {
   echo -ne " "
-  process_commands 2
+  process_commands 0
 }
 
 function full_check_fish {
-  load_packages
   process_commands 1
 }

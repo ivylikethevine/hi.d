@@ -80,7 +80,6 @@ function tmuxrc() {
 function load() {
   local load_start_time
   load_start_time="$(perl -MTime::HiRes=time -e 'printf "%.3f", time')"
-  load_packages
 
   if [[ -z ${ZSH_VERSION+x} ]]; then
     trap 'clean_all' exit

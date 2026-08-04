@@ -6,8 +6,8 @@ _HI_TMPDIR=${_HI_TMPDIR:-$HOME}
 source "$_HI_TMPDIR/hi.d/common/paths.sh"
 # shellcheck source=./../common/colors.sh
 command -v cecho >/dev/null || source "$_HI_COLORS"
-# shellcheck source=./shared.sh
-command -v append >/dev/null || source "$_HI_TMPDIR/hi.d/scripts/shared.sh"
+# shellcheck source=./append.sh
+command -v append >/dev/null || source "$_HI_TMPDIR/hi.d/scripts/append.sh"
 
 function config_bashrc() {
   cecho "=== Checking bashrc ===" "$YELLOW"

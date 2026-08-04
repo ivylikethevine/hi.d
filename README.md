@@ -39,7 +39,6 @@ Reminder - place local only changes after the "`# hi-config-end`" comment in the
 - `config.fish`
 - `misc/nano.rc`
 - `misc/vim.rc`
-- `misc/tmux.conf`
 - `hi.sh` - run on client
 - `load.sh` - chainloader executed on target
 - `common/aliases.sh` - shared aliases between bash, zsh, and fish

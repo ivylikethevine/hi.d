@@ -62,20 +62,6 @@ function timers() {
   cecho "load: $(echo "$(perl -MTime::HiRes=time -e 'printf "%.3f", time') $load_start_time" | awk '{ printf "%.3f\n", $1 - $2 }')s | copy: ${_HI_COPY_TIME}s"
 }
 
-# TODO: Test
-function tmuxrc() {
-  local TMUXDIR="/tmp/tmuxrc"
-  if ! [ -d "$TMUXDIR" ]; then
-    rm -rf "$TMUXDIR"
-    mkdir -p "$TMUXDIR"
-  fi
-  rm -rf "$TMUXDIR"/hi.d
-  cp -r "$_HI_ROOT"/bashrc.hi "$_HI_ROOT"/hi "$_HI_ROOT"/hi.d "$TMUXDIR"
-  _HI_ROOT="$TMUXDIR" SHELL="$TMUXDIR"/bashrc.hi /usr/bin/tmux -S "$TMUXDIR"/tmuxserver "$@"
-  SHELL=$(which bash)
-  export SHELL
-}
-
 # required
 function load() {
   local load_start_time

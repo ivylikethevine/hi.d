@@ -63,11 +63,7 @@ function hi_parse() {
 # Ideally, we could stay on the target if we have login bash, reducing the overall
 # connection for most connections, but I haven't figured that out yet.
 function say_hi() {
-  local shell_start_time
-  local remote_shell
-  local tmp
-  local shell_end_time
-  local linux_flags=""
+  local shell_start_time remote_shell tmp shell_end_time linux_flags
 
   shell_start_time="$(perl -MTime::HiRes=time -e 'printf "%.3f", time')"
   tmp="/tmp/$(date +%s).hi"
@@ -90,11 +86,6 @@ function say_hi() {
   fi
 
   echo -ne "$YELLOW-> $remote_shell$NC $(du -sh "${_HI_EXCLUDE[@]}" $linux_flags ~/.hi.d "$_HI_ROOT" | awk '{ print $1 }')"
-  say_hi_inner "$@" 2>"$tmp"
-}
-
-# Bash & Fish shell both work with this command
-function say_hi_inner() {
   ssh -t "$DOMAIN" "$SSHARGS" "
       $_HI_OPENSSL_CHECK
       export _HI_TMPDIR=\$(mktemp -d -t $(whoami).hi.XXXX)
@@ -125,12 +116,8 @@ EOF
       "
 }
 
-# Check dependencies, start to say hi, handle errors (both hi & ssh)
 function run() {
-  local copy_start_time
-  local tmp
-  local exit_code
-  local errors
+  local copy_start_time tmp exit_code errors
 
   if [ -d "$_HI_ROOT" ]; then
     copy_start_time="$(perl -MTime::HiRes=time -e 'printf "%.3f", time')"
@@ -147,15 +134,14 @@ function run() {
 
     exit_code="$?"
     errors="$(cat "$tmp")"
+    rm -rf "$tmp"
 
     if [ "$exit_code" -ne 0 ]; then
       echo -ne "\r\r\r\r"
-      cecho "hi failed [code: $exit_code], falling back to ssh..." "$BRRED"
+      cecho "hi failed [code: $exit_code]" "$BRRED"
       cecho "$errors" "$BRRED"
-      ssh "$@"
     fi
     exit "$exit_code"
-
   else
     cecho "No such directory: $_HI_ROOT" "$RED" >&2
     exit 1

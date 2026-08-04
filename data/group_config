@@ -1,14 +1,11 @@
-hostname,mavie,\e[0;35m,magenta
 #username/hostname/hosttag,color_bash,color_fish
 hosttag,desktop,\e[0;32m,green
 hosttag,csd,\e[0;32m,green
 hosttag,edenlabs,\e[0;33m,yellow
 hosttag,proxmox,\e[0;31m,red
-
 username,root,\e[0;31m,red
 username,ivy,\e[1;33m,bryellow
 username,team,\e[0;34m,blue
-
 hostname,prod,\e[0;33m,bryellow
 hostname,liona,\e[0;35m,magenta
 hostname,mavie,\e[1;35m,brmagenta

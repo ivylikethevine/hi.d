@@ -36,7 +36,7 @@ color_no[5]="$BRRED"
 commands=()
 
 load_packages() {
-  while read -r line; do
+  while IFS=$'\n' read -r line; do
     if ! [[ "$line" =~ '#' ]]; then
       commands+=("$line")
     fi
@@ -65,7 +65,7 @@ function sort_commands() {
       local current_priority="${pair#*:}"
 
       if command -v "$cmd" &>/dev/null; then
-        if ((current_priority > max_priority)); then
+        if ((current_priority >= max_priority)); then
           max_priority=$current_priority
           max_cmd=$cmd
           is_installed=1
@@ -132,30 +132,36 @@ function check_commands() {
     return
   fi
 
-  printf '%b %b %b%b' "$color" "$cmd" "$symbol" "$NC"
+  if [[ "$color" != "hide" ]]; then
+    printf '%b %b %b%b' "$color" "$cmd" "$symbol" "$NC"
+  fi
 }
 
 function process_commands() {
   local is_fish="${1:-0}"
-  local length
-  local breakpoint
-  local rows=3
-  length="${#commands[@]}"
-  breakpoint=$(((length + (rows - 1)) / rows))
+  local columns=6
 
   echo -ne "$NC|"
-  local count=0
+  local checked_output=()
   for line in "${commands[@]}"; do
-    check_commands "$line"
-    if ((count % breakpoint == 0)) && ((count != 0)); then
-      if [[ $is_fish -eq 1 ]]; then
-        echo -n "newline"
-      else
-        echo -ne "\n "
+    checked_output+=("$(check_commands "$line")")
+  done
+
+  local count=0
+  for item in "${checked_output[@]}"; do
+    if [[ "$item" != "" ]]; then
+      echo -ne "$item |"
+      if ((count % columns == 0)) && ((count != 0)); then
+        if [[ $is_fish -eq 1 ]]; then
+          echo -n "newline"
+        else
+          echo -ne "\n "
+        fi
+        echo -ne "$NC|"
       fi
-      echo -ne "$NC|"
+      ((count += 1))
     fi
-    ((count += 1))
+
   done
 }
 

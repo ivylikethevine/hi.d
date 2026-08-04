@@ -9,35 +9,29 @@ command -v cecho >/dev/null || source "$_HI_COLORS"
 
 declare -a color_yes
 declare -a color_no
+# bright blue if we have, ignore if we don't (ex: nice-to-haves, such netstat + distro specific tools)
 color_yes[0]="$BRBLUE"
 color_no[0]="hide"
 
-color_yes[1]="hide"
+# bright blue if we have, yellow if we don't (ex. 2nd line tools, such as git, curl, ping)
+color_yes[1]="$BRBLUE"
 color_no[1]="$YELLOW"
 
+# hide if we have, bright red if we don't (ex: 1st line tools, such as sed, awk, bc)
 color_yes[2]="hide"
-color_no[2]="$RED"
+color_no[2]="$BRRED"
 
-color_yes[3]="hide"
-color_no[3]="$BRRED"
+# green if we have, hide if we don't (ex: tools/languages such as python, node, docker, dotnet)
+color_yes[3]="$GREEN"
+color_no[3]="hide"
 
-color_yes[4]="$GREEN"
+# bright green if we have, hide if we don't (ex: favorites & complex tools such as eza/exa)
+color_yes[4]="$BRGREEN"
 color_no[4]="hide"
 
+# bright green if we have, bright red if we don't (ex: things that majorly change work such as asdf, direnv)
 color_yes[5]="$BRGREEN"
-color_no[5]="hide"
-
-color_yes[6]="$BLUE"
-color_no[6]="$YELLOW"
-
-color_yes[7]="$BRBLUE"
-color_no[7]="$BRYELLOW"
-
-color_yes[8]="$GREEN"
-color_no[8]="$BRPURPLE"
-
-color_yes[9]="$BRGREEN"
-color_no[9]="$BRRED"
+color_no[5]="$BRRED"
 
 commands=()
 
@@ -52,6 +46,7 @@ load_packages() {
 function sort_commands() {
   local cmd_list=("$@")
   local result=()
+  local color
 
   for item in "${cmd_list[@]}"; do
     if [[ -z ${ZSH_VERSION+x} ]]; then
@@ -84,9 +79,11 @@ function sort_commands() {
     done
 
     if ((is_installed)); then
-      result+=("$max_cmd:$max_priority:yes")
+      color="${color_yes[max_priority]}"
+      result+=("$max_cmd:$GREEN✓:$color")
     else
-      result+=("$first_cmd:$first_priority:no")
+      color="${color_no[first_priority]}"
+      result+=("$first_cmd:$RED✗:$color")
     fi
   done
 
@@ -119,19 +116,11 @@ function check_commands() {
   local item
   local found=0
   for item in "${sorted_cmd_list[@]}"; do
-    symbol="$GREEN✓"
     color="$NC"
     cmd="${item%:*:*}"
     inner="${item#*:}"
-    priority="${inner%:*}"
-    is_installed="${item##*:}"
-
-    if [[ "$is_installed" == "yes" ]]; then
-      color="${color_yes[priority]}"
-    else
-      color="${color_no[priority]}"
-      symbol="$RED✗"
-    fi
+    symbol="${inner%:*}"
+    color="${item##*:}"
 
     if [[ -n "$color" && "$color" != "hide" ]]; then
       found=1

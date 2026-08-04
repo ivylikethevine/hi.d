@@ -109,7 +109,7 @@ function process_commands() {
 
   local count=1
   for item in "${checked_output[@]}"; do
-    echo -ne "$NC|$item "
+    echo -ne "$NC|$item $NC"
     if ((count % columns == 0)); then
       if [[ $is_fish -eq 1 ]]; then
         echo -n "newline"

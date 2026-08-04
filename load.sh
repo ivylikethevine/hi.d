@@ -64,7 +64,7 @@ function timers() {
 
 # required
 function load() {
-  local load_start_time
+  local load_start_time host_color linux_flags
   load_start_time="$(perl -MTime::HiRes=time -e 'printf "%.3f", time')"
 
   if [[ -z ${ZSH_VERSION+x} ]]; then
@@ -74,38 +74,26 @@ function load() {
     TRAPEXIT() { clean_all; }
   fi
 
-  local HOST_COLOR
-  HOST_COLOR=$(host_color "$(hostname)")
-  printf '%b\n' "${BRGREEN} ~~ Connected ${NC}[${HOST_COLOR}$(hostname)${NC}]${BRGREEN} ~~~~~~~~~~~~~~~~~~~~~~~${NC}"
+  host_color=$(host_color "$(hostname)")
+  printf '%b\n' "${BRGREEN} ~~ Connected ${NC}[${host_color}$(hostname)${NC}]${BRGREEN} ~~~~~~~~~~~~~~~~~~~~~~~${NC}"
   timestamp
 
-  # optional header items
   system_info_line
   git_keys_docker_line
   printf '%b\n' "$(full_check)"
 
-  # back to required configuration
   spacer
-  # Determine if target has hi.d installed, then skip loading copied code if possible
-  # shellcheck disable=SC2010
-  if [ -d "/home/$USER/hi.d/" ]; then
-    cecho "hi on target (native): " "$BRGREEN" 1
-  elif [ "$(ls -l /tmp | grep -e "^d.*$USER}hi\." -c)" -gt 1 ]; then
-    # export _HI_TMPDIR="/tmp/$USER.hi.*"
-    cecho "hi on target (copied): " "$BRGREEN" 1
-  else
-    if command -v "vim" &>/dev/null; then
-      # Will cause errors if we load this with only VI
-      export VIMINIT="let \$MYVIMRC='$_HI_VIMRC' | source \$MYVIMRC"
-    fi
-    configure_file "$_HI_BASH_CONFIG" "$_HI_HOME_BASHRC"
-    configure_file "$_HI_ZSH_CONFIG" "$_HI_HOME_ZSHRC"
-    if [ -d "$_HI_FISH_DIR" ]; then
-      # This directory won't exist if fish isn't installed
-      configure_file "$_HI_FISH_CONFIG" "$_HI_HOME_FISH_CONFIG"
-    fi
-    cecho "hi loaded with... " "$BRCYAN" 1
+  if command -v "vim" &>/dev/null; then
+    # Will cause errors if we load this with only VI
+    export VIMINIT="let \$MYVIMRC='$_HI_VIMRC' | source \$MYVIMRC"
   fi
+  configure_file "$_HI_BASH_CONFIG" "$_HI_HOME_BASHRC"
+  configure_file "$_HI_ZSH_CONFIG" "$_HI_HOME_ZSHRC"
+  if [ -d "$_HI_FISH_DIR" ]; then
+    # This directory won't exist if fish isn't installed
+    configure_file "$_HI_FISH_CONFIG" "$_HI_HOME_FISH_CONFIG"
+  fi
+  cecho "hi loaded with... " "$BRCYAN" 1
 
   if command -v "fish" &>/dev/null; then
     cecho "fish shell! :^)" "$GREEN" 1
@@ -121,13 +109,12 @@ function load() {
     bash -i
   fi
 
-  local linux_flags=""
   if [ -f /etc/os-release ]; then
     linux_flags="--apparent-size"
   fi
 
   cecho " $(du -sh $linux_flags "$_HI_ROOT" | awk '{ print $1 }') " "$NC" 1
-  printf '%b\n' "${BRRED}~~~~~~~~~~~~~~~~~~~~~ Disconnected ${NC}[$HOST_COLOR$(hostname)${NC}]$BRRED ~~~~~~~~~~~~~~~~~~~~~~~${NC}"
+  printf '%b\n' "${BRRED}~~~~~~~~~~~~~~~~~~~~~ Disconnected ${NC}[$host_color$(hostname)${NC}]$BRRED ~~~~~~~~~~~~~~~~~~~~~~~${NC}"
   timestamp
   cecho "hi closing! " "$BRPURPLE"
   exit 0

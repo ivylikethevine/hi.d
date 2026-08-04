@@ -21,41 +21,11 @@ if [ ! -f "$_HI_HOST_COLORS" ] || [ ! -f "$_HI_USER_COLORS" ]; then
 fi
 
 # Unify as many parts of the process as possible
-export _HI_EXCLUDE=(--exclude README.md --exclude .git --exclude .gitignore --exclude scripts --exclude hi.sh --exclude hi.bashrc --exclude data/group_config --exclude .zed --exclude data/.gitkeep --exclude wip)
+export _HI_EXCLUDE=(--exclude README.md --exclude .git --exclude .gitignore --exclude scripts --exclude hi.sh --exclude hi.bashrc --exclude data/group_config --exclude .zed)
 export _HI_TR_CMD="tr -s ' ' '\n'"
 export _HI_OPENSSL_CMD="openssl enc -base64"
 export _HI_OPENSSL_CHECK="command -v openssl >/dev/null 2>&1 || { echo >&2 \"hi requires openssl to be installed on [$DOMAIN], but it is not. Aborting.\"; exit 1; }"
 export _HI_TRAP="trap 'rm -rf \$_HI_CLEANUP' exit"
-
-# Parse ssh arguments
-function hi_parse() {
-  while [[ -n ${1+x} ]]; do
-    case $1 in
-    -b | -c | -D | -E | -e | -F | -I | -i | -L | -l | -m | -O | -o | -p | -Q | -R | -S | -W | -w)
-      SSHARGS="$SSHARGS $1 $2"
-      shift
-      ;;
-    -*)
-      SSHARGS="$SSHARGS $1"
-      ;;
-    *)
-      if [ -z ${DOMAIN+x} ]; then
-        DOMAIN="$1"
-      else
-        local SEMICOLON=""
-        SEMICOLON=$([[ "$*" = *[![:space:]]* ]] && echo '; ')
-        CMDARG="$*$SEMICOLON exit"
-        return
-      fi
-      ;;
-    esac
-    shift
-  done
-  if [ -z "$DOMAIN" ]; then
-    ssh "$SSHARGS"
-    exit 1
-  fi
-}
 
 # Connect to remote host, determine shell, then copy hi.d & run load.sh.
 # This could be removed if we required all targets to run bash as the login shell.
@@ -116,6 +86,36 @@ EOF
       "
 }
 
+# Parse ssh arguments
+function hi_parse() {
+  while [[ -n ${1+x} ]]; do
+    case $1 in
+    -b | -c | -D | -E | -e | -F | -I | -i | -L | -l | -m | -O | -o | -p | -Q | -R | -S | -W | -w)
+      SSHARGS="$SSHARGS $1 $2"
+      shift
+      ;;
+    -*)
+      SSHARGS="$SSHARGS $1"
+      ;;
+    *)
+      if [ -z ${DOMAIN+x} ]; then
+        DOMAIN="$1"
+      else
+        local SEMICOLON=""
+        SEMICOLON=$([[ "$*" = *[![:space:]]* ]] && echo '; ')
+        CMDARG="$*$SEMICOLON exit"
+        return
+      fi
+      ;;
+    esac
+    shift
+  done
+  if [ -z "$DOMAIN" ]; then
+    ssh "$SSHARGS"
+    exit 1
+  fi
+}
+
 function run() {
   local copy_start_time tmp exit_code errors
 
@@ -130,7 +130,7 @@ function run() {
     fi
 
     hi_parse "$@"
-    say_hi "$@" 2>"$tmp"
+    say_hi 2>"$tmp"
 
     exit_code="$?"
     errors="$(cat "$tmp")"
@@ -149,3 +149,4 @@ function run() {
 }
 
 run "$@"
+# run -> hi_parse -> say_hi

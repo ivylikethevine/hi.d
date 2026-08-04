@@ -17,6 +17,11 @@ export _HI_CONFIG_START="# hi-config-start"
 export _HI_CONFIG_END="# hi-config-end"
 export _HI_COPY_TIME=-1
 
+if [ -f "$_HI_LINUX_PATH" ]; then
+  _HI_LINUX_FLAGS="--apparent-size"
+fi
+export _HI_LINUX_FLAGS
+
 # required
 function configure_file() {
   local source=${1}
@@ -109,11 +114,7 @@ function load() {
     bash -i
   fi
 
-  if [ -f /etc/os-release ]; then
-    linux_flags="--apparent-size"
-  fi
-
-  cecho " $(du -sh $linux_flags "$_HI_ROOT" | awk '{ print $1 }') " "$NC" 1
+  cecho " $(du -sh "$_HI_LINUX_FLAGS" "$_HI_ROOT" | awk '{ print $1 }') " "$NC" 1
   printf '%b\n' "${BRRED}~~~~~~~~~~~~~~~~~~~~~ Disconnected ${NC}[$host_color$(hostname)${NC}]$BRRED ~~~~~~~~~~~~~~~~~~~~~~~${NC}"
   timestamp
   cecho "hi closing! " "$BRPURPLE"

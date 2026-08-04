@@ -20,6 +20,11 @@ if [ ! -f "$_HI_HOST_COLORS" ] || [ ! -f "$_HI_USER_COLORS" ]; then
   initial_colorgen
 fi
 
+if [ -f "$_HI_LINUX_PATH" ]; then
+  _HI_LINUX_FLAGS="--apparent-size"
+fi
+export _HI_LINUX_FLAGS
+
 # Unify as many parts of the process as possible
 export _HI_EXCLUDE=(--exclude README.md --exclude .git --exclude .gitignore --exclude scripts --exclude hi.sh --exclude hi.bashrc --exclude data/group_config --exclude .zed)
 export _HI_TR_CMD="tr -s ' ' '\n'"
@@ -33,7 +38,7 @@ export _HI_TRAP="trap 'rm -rf \$_HI_CLEANUP' exit"
 # Ideally, we could stay on the target if we have login bash, reducing the overall
 # connection for most connections, but I haven't figured that out yet.
 function say_hi() {
-  local shell_start_time remote_shell tmp shell_end_time linux_flags
+  local shell_start_time remote_shell tmp shell_end_time
 
   shell_start_time="$(perl -MTime::HiRes=time -e 'printf "%.3f", time')"
   tmp="/tmp/$(date +%s).hi"
@@ -47,15 +52,11 @@ function say_hi() {
   shell_end_time="$(perl -MTime::HiRes=time -e 'printf "%.3f", time')"
   cecho " $(echo "$shell_end_time $shell_start_time" | awk '{ printf "shell: %.3fs ", $1 - $2 }')" "$BLUE" 1
 
-  if [ -f /etc/os-release ]; then
-    linux_flags="--apparent-size"
-  fi
-
   if [ "$remote_shell" = "zsh" ]; then
     _HI_TRAP="TRAPEXIT() { rm -rf \$_HI_CLEANUP; }"
   fi
 
-  echo -ne "$YELLOW-> $remote_shell$NC $(du -sh "${_HI_EXCLUDE[@]}" $linux_flags ~/.hi.d "$_HI_ROOT" | awk '{ print $1 }')"
+  echo -ne "$YELLOW-> $remote_shell$NC $(du -sh "${_HI_EXCLUDE[@]}" "$_HI_LINUX_FLAGS" ~/.hi.d "$_HI_ROOT" | awk '{ print $1 }')"
   ssh -t "$DOMAIN" "$SSHARGS" "
       $_HI_OPENSSL_CHECK
       export _HI_TMPDIR=\$(mktemp -d -t $(whoami).hi.XXXX)

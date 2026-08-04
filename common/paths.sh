@@ -21,6 +21,7 @@ export _HI_ZSH_CONFIG="$_HI_ROOT/shells/zsh.zsh"
 export _HI_FISH_CONFIG="$_HI_ROOT/shells/config.fish"
 
 export _HI_COLORGEN="$_HI_ROOT/scripts/colorgen.sh"
+export _HI_APPEND="$_HI_ROOT/scripts/append.sh"
 
 export _HI_LINUX_PATH="/etc/os-release"
 

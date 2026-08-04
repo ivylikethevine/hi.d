@@ -2,7 +2,7 @@
 # set -eou pipefail
 
 _HI_TMPDIR=${_HI_TMPDIR:-$HOME}
-# shellcheck source=./paths.sh
+# shellcheck source=./common/paths.sh
 source "$_HI_TMPDIR/hi.d/common/paths.sh"
 
 ## Shell Color Mapping Chart

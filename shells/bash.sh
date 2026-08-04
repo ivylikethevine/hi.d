@@ -4,11 +4,11 @@
 # === start required configuration ===
 # shellcheck disable=SC2010
 _HI_TMPDIR=${_HI_TMPDIR:-$HOME}
-# shellcheck source=./../common/paths.sh
+# shellcheck source=./common/paths.sh
 source "$_HI_TMPDIR/hi.d/common/paths.sh"
-# shellcheck source=./../common/colors.sh
+# shellcheck source=./common/colors.sh
 source "$_HI_COLORS"
-# shellcheck source=./../common/aliases.sh
+# shellcheck source=./shells/aliases.sh
 source "$_HI_ALIASES"
 
 complete -C hi ssh

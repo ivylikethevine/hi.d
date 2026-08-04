@@ -16,7 +16,6 @@ _Don't `ssh`ush your hosts, say `hi`!_
 ### Installation/Usage
 
 - clone this repo to `~/`
-- `mv ~/sshrc.d ~/hi.d`
 - `~/hi.d/scripts/install.sh`
 - reload your shell!
 - configure `~/.ssh/config` tags via sshm
@@ -24,7 +23,7 @@ _Don't `ssh`ush your hosts, say `hi`!_
   - then run `hi_colorgen` to regenerate colors
 - configure `~/hi.d/data/packages_config` to preferences
 - say `hi`!
-- [optional] modify `~/hi.d/aliases.sh`, `~/hi.d/common/check.sh`, `~/hi.d/misc/*`, and `~/hi.d/shells/*` to your liking! (required parts of those files are commented as such)
+- [optional] modify `~/hi.d/misc/*`, and `~/hi.d/shells/*` to your liking!
 
 --
 Usage: `hi foo` (just like ssh!)
@@ -41,7 +40,7 @@ Reminder - place local only changes after the "`# hi-config-end`" comment in the
 - `misc/vim.rc`
 - `hi.sh` - run on client
 - `load.sh` - chainloader executed on target
-- `common/aliases.sh` - shared aliases between bash, zsh, and fish
+- `shells/aliases.sh` - shared aliases between bash, zsh, and fish
 - `common/check.sh` - check for commonly used commands and displays results in header
 - `common/colors.sh` - unified coloration for usernames & hosts (see `scripts/colorgen`)
 - `scripts/install.sh` - configure local shells to use hi.d configurations, install, and update

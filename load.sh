@@ -69,7 +69,7 @@ function timers() {
 
 # required
 function load() {
-  local load_start_time host_color linux_flags
+  local load_start_time host_color
   load_start_time="$(perl -MTime::HiRes=time -e 'printf "%.3f", time')"
 
   if [[ -z ${ZSH_VERSION+x} ]]; then

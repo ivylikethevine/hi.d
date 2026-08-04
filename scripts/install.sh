@@ -94,7 +94,7 @@ function main() {
   config_hi
 
   cecho "===== Running hi_colorgen =====" "$BRCYAN"
-  # shellcheck source=./colorgen.sh
+  # shellcheck source=./scripts/colorgen.sh
   source "$_HI_COLORGEN"
   initial_colorgen
   rm -rf "$TMP"

@@ -1,13 +1,9 @@
 #hostname,color_bash,color_fish
 clyde,\e[0;32m,green
 bertha,\e[0;33m,yellow
-steamino,\e[0;33m,yellow
 sherrie,\e[0;33m,yellow
-keys,\e[0;32m,green
 balthasar,\e[0;32m,green
 brain,\e[0;32m,green
-nubie,\e[0;33m,yellow
-prod,\e[0;33m,bryellow
 liona,\e[0;35m,magenta
 ryoji,\e[0;32m,green
 gendo,\e[0;32m,green

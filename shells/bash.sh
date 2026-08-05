@@ -4,10 +4,8 @@
 # === start required configuration ===
 # shellcheck disable=SC2010
 _HI_TMPDIR=${_HI_TMPDIR:-$HOME}
-# shellcheck source=./common/paths.sh
-source "$_HI_TMPDIR/hi.d/common/paths.sh"
-# shellcheck source=./common/colors.sh
-source "$_HI_COLORS"
+# shellcheck source=./common/bootstrap.sh
+source "$_HI_TMPDIR/hi.d/common/bootstrap.sh"
 # shellcheck source=./common/git_prompt.sh
 source "$_HI_GIT_PROMPT"
 # shellcheck source=./shells/aliases.sh

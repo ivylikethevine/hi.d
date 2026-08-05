@@ -3,10 +3,8 @@
 # set -eou pipefail
 
 _HI_TMPDIR=${_HI_TMPDIR:-$HOME}
-# shellcheck source=./common/paths.sh
-source "$_HI_TMPDIR/hi.d/common/paths.sh"
-# shellcheck source=./common/colors.sh
-command -v cecho >/dev/null || source "$_HI_COLORS"
+# shellcheck source=./common/bootstrap.sh
+source "$_HI_TMPDIR/hi.d/common/bootstrap.sh"
 
 command -v openssl >/dev/null 2>&1 || {
   cecho >&2 "hi requires openssl to be installed on [$(_hi_hostname)], but it is not. Aborting..." "$RED"
@@ -19,13 +17,6 @@ if [ ! -f "$_HI_HOST_COLORS" ] || [ ! -f "$_HI_USER_COLORS" ]; then
   source "$_HI_COLORGEN"
   initial_colorgen
 fi
-
-_HI_LINUX_FLAGS=""
-if du --version >/dev/null 2>&1 && du --version | grep -q "GNU coreutils"; then
-  # busybox/bsd du (Alpine, macOS, *BSD, etc.) don't support this GNU-only flag
-  _HI_LINUX_FLAGS="--apparent-size"
-fi
-export _HI_LINUX_FLAGS
 
 # Unify as many parts of the process as possible
 export _HI_EXCLUDE=(--exclude README.md --exclude .git --exclude .gitignore --exclude scripts --exclude hi.sh --exclude hi.bashrc --exclude data/group_config --exclude .zed)
@@ -109,7 +100,7 @@ function _say_hi() {
     _HI_TRAP="TRAPEXIT() { rm -rf \$_HI_CLEANUP; }"
   fi
 
-  echo -ne "$YELLOW-> $remote_shell$NC $(du -sh "${_HI_EXCLUDE[@]}" "$_HI_LINUX_FLAGS" ~/.hi.d "$_HI_ROOT" | awk '{ print $1 }')"
+  echo -ne "$YELLOW-> $remote_shell$NC $(du -sh "${_HI_EXCLUDE[@]}" "$_HI_LINUX_FLAGS" "$_HI_ROOT" | awk '{ print $1 }')"
   ssh -t "$DOMAIN" "$SSHARGS" "
       $_HI_OPENSSL_CHECK
       export _HI_TMPDIR=\$(mktemp -d -t $(whoami).hi.XXXX)

@@ -4,10 +4,8 @@ set -eou pipefail
 
 # shellcheck disable=SC2010
 _HI_TMPDIR=${_HI_TMPDIR:-$HOME}
-# shellcheck source=./common/paths.sh
-source "$_HI_TMPDIR/hi.d/common/paths.sh"
-# shellcheck source=./common/colors.sh
-command -v cecho >/dev/null || source "$_HI_COLORS"
+# shellcheck source=./common/bootstrap.sh
+source "$_HI_TMPDIR/hi.d/common/bootstrap.sh"
 # shellcheck source=./common/check.sh
 source "$_HI_CHECK"
 # shellcheck source=./common/header.sh
@@ -16,13 +14,6 @@ command -v spacer >/dev/null || source "$_HI_HEADER"
 export _HI_CONFIG_START="# hi-config-start"
 export _HI_CONFIG_END="# hi-config-end"
 export _HI_COPY_TIME=-1
-
-_HI_LINUX_FLAGS=""
-if du --version >/dev/null 2>&1 && du --version | grep -q "GNU coreutils"; then
-  # busybox/bsd du (Alpine, macOS, *BSD, etc.) don't support this GNU-only flag
-  _HI_LINUX_FLAGS="--apparent-size"
-fi
-export _HI_LINUX_FLAGS
 
 # required
 function configure_file() {

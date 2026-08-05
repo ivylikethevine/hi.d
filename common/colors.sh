@@ -42,6 +42,15 @@ export BRPURPLE='\e[1;35m'
 export BRCYAN='\e[1;36m'
 
 # required
+# GNU coreutils' du supports --apparent-size; busybox/bsd du (Alpine, macOS,
+# *BSD, etc.) don't support this GNU-only flag
+_HI_LINUX_FLAGS=""
+if du --version >/dev/null 2>&1 && du --version | grep -q "GNU coreutils"; then
+  _HI_LINUX_FLAGS="--apparent-size"
+fi
+export _HI_LINUX_FLAGS
+
+# required
 # high-res-ish timestamp without shelling out to perl (not guaranteed to exist
 # on minimal/embedded targets); falls back to whole-second precision on bash <5
 function _hi_now() {

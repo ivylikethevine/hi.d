@@ -2,54 +2,38 @@
 # set -eou pipefail
 
 _HI_TMPDIR=${_HI_TMPDIR:-$HOME}
-# shellcheck source=./common/paths.sh
-source "$_HI_TMPDIR/hi.d/common/paths.sh"
-# shellcheck source=./common/colors.sh
-command -v cecho >/dev/null || source "$_HI_COLORS"
+# shellcheck source=./common/bootstrap.sh
+source "$_HI_TMPDIR/hi.d/common/bootstrap.sh"
 # shellcheck source=./scripts/append.sh
 command -v append >/dev/null || source "$_HI_APPEND"
 
+# shared by config_bashrc/config_zshrc/config_fish: write $content to a temp
+# file named $name under $tmpdir, then append any new lines onto $target
+function config_shell() {
+  local name="$1" content="$2" target="$3" tmpdir="$4"
+  cecho "=== Checking $name ===" "$YELLOW"
+
+  local tmpfile="$tmpdir/$name"
+  printf '%s\n' "$content" >> "$tmpfile"
+  append "$tmpfile" "$target" "$tmpdir"
+
+  cecho "local $name up to date :)" "$GREEN"
+}
+
 function config_bashrc() {
-  cecho "=== Checking bashrc ===" "$YELLOW"
-
-  local tmpdir="$1"
-  local tmp_bashrc="$tmpdir/bashrc"
-  cat <<'EOF' >> "$tmp_bashrc"
-# If not running interactively, exit   # added by hi during install
+  config_shell "bashrc" '# If not running interactively, exit   # added by hi during install
 [[ $- != *i* ]] && return              # added by hi during install
-source ~/hi.d/shells/bash.sh          # added by hi during install
-EOF
-  append "$tmp_bashrc" "$_HI_HOME_BASHRC" "$tmpdir"
-
-  cecho "local bashrc up to date :)" "$GREEN"
+source ~/hi.d/shells/bash.sh          # added by hi during install' "$_HI_HOME_BASHRC" "$1"
 }
 
 function config_zshrc() {
-  cecho "=== Checking zshrc ===" "$YELLOW"
-
-  local tmpdir="$1"
-  local tmp_zshrc="$tmpdir/zshrc"
-  cat <<'EOF' >> "$tmp_zshrc"
-source ~/hi.d/shells/zsh.zsh          # added by hi during install
-EOF
-  append "$tmp_zshrc" "$_HI_HOME_ZSHRC" "$tmpdir"
-
-  cecho "local zshrc up to date :)" "$GREEN"
+  config_shell "zshrc" 'source ~/hi.d/shells/zsh.zsh          # added by hi during install' "$_HI_HOME_ZSHRC" "$1"
 }
 
 function config_fish() {
-  cecho "=== Checking config.fish ===" "$YELLOW"
-
-  local tmpdir="$1"
-  local tmp_fish="$tmpdir/config.fish"
-  cat <<'EOF' >> "$tmp_fish"
-if status is-interactive               # added by hi during install
+  config_shell "config.fish" 'if status is-interactive               # added by hi during install
   source ~/hi.d/shells/config.fish    # added by hi during install
-end                                    # added by hi during install
-EOF
-  append "$tmp_fish" "$_HI_HOME_FISH_CONFIG" "$tmpdir"
-
-  cecho "local config.fish up to date :)" "$GREEN"
+end                                    # added by hi during install' "$_HI_HOME_FISH_CONFIG" "$1"
 }
 
 function config_hi() {
@@ -76,7 +60,7 @@ function main() {
 
   cecho "===== Checking $USER's login shell =====" "$BRCYAN"
   local shellname
-  shellname=$(cat /etc/passwd | grep -e "$USER" | xargs basename)
+  shellname=$(grep -e "$USER" /etc/passwd | xargs basename)
   cecho "===== [$shellname] shell detected! =====" "$CYAN"
 
   local TMP

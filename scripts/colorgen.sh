@@ -2,10 +2,8 @@
 # set -eou pipefail
 
 _HI_TMPDIR=${_HI_TMPDIR:-$HOME}
-# shellcheck source=./common/paths.sh
-source "$_HI_TMPDIR/hi.d/common/paths.sh"
-# shellcheck source=./common/colors.sh
-command -v cecho >/dev/null || source "$_HI_COLORS"
+# shellcheck source=./common/bootstrap.sh
+source "$_HI_TMPDIR/hi.d/common/bootstrap.sh"
 # shellcheck source=./scripts/append.sh
 command -v append >/dev/null || source "$_HI_APPEND"
 
@@ -14,7 +12,6 @@ declare -A host_or_user bash_colors fish_colors
 function create_basic_group_colors() {
   local TMP_GROUP_COLORS
   TMP_GROUP_COLORS=$(mktemp)
-  touch "$TMP_GROUP_COLORS"
   {
     printf '%s\n' "#username/hostname/hosttag,color_bash,color_fish";
     printf '%s\n' "hosttag,desktop,$GREEN,green";
@@ -32,26 +29,25 @@ function create_basic_group_colors() {
   cecho "Generated entries for: $(grep -c \, "$_HI_GROUP_CONFIG" | awk '{ print $1 }') groups" "$GREEN"
 }
 
-function create_basic_host_colors() {
-  local TMP_HOST_COLORS
-  TMP_HOST_COLORS=$(mktemp)
-  touch "$TMP_HOST_COLORS"
-  printf '%s\n' "#hostname,color_bash,color_fish" >> "$TMP_HOST_COLORS"
-  append "$TMP_HOST_COLORS" "$_HI_HOST_COLORS"
-  rm "$TMP_HOST_COLORS"
+# shared by create_basic_host_colors/create_basic_user_colors: reset $target
+# back down to just its header comment line
+function create_basic_colors_file() {
+  local header="$1" target="$2"
+  local tmpfile
+  tmpfile=$(mktemp)
+  printf '%s\n' "$header" > "$tmpfile"
+  append "$tmpfile" "$target"
+  rm "$tmpfile"
 
   cecho "Recreated!" "$GREEN"
 }
 
-function create_basic_user_colors() {
-  local TMP_USER_COLORS
-  TMP_USER_COLORS=$(mktemp)
-  touch "$TMP_USER_COLORS"
-  printf '%s\n' "#username,color_bash,color_fish" >> "$TMP_USER_COLORS"
-  append "$TMP_USER_COLORS" "$_HI_USER_COLORS"
-  rm "$TMP_USER_COLORS"
+function create_basic_host_colors() {
+  create_basic_colors_file "#hostname,color_bash,color_fish" "$_HI_HOST_COLORS"
+}
 
-  cecho "Recreated!" "$GREEN"
+function create_basic_user_colors() {
+  create_basic_colors_file "#username,color_bash,color_fish" "$_HI_USER_COLORS"
 }
 
 function read_group_colors() {
@@ -61,8 +57,6 @@ function read_group_colors() {
   local TMP_HOST_COLORS
   TMP_USER_COLORS=$(mktemp)
   TMP_HOST_COLORS=$(mktemp)
-  touch "$TMP_USER_COLORS"
-  touch "$TMP_HOST_COLORS"
 
   while IFS=',' read -r type tag color_bash color_fish; do
     [[ -z "$type" ]] && continue
@@ -92,7 +86,6 @@ function read_ssh_hosts() {
 
   local TMP_HOST_COLORS
   TMP_HOST_COLORS=$(mktemp)
-  touch "$TMP_HOST_COLORS"
 
   local prev_line=""
   while IFS=' ' read -r line; do

@@ -2,6 +2,7 @@
 # requires _HI_TMPDIR be set correctly by any scripts sourcing this file, ${var+x}/${var:-} will not work, since this file is sourced by fish
 export _HI_ROOT="$_HI_TMPDIR/hi.d"
 export _HI_LAUNCHER="$_HI_ROOT/hi.sh"
+export _HI_BOOTSTRAP="$_HI_ROOT/common/bootstrap.sh"
 export _HI_COLORS="$_HI_ROOT/common/colors.sh"
 export _HI_GIT_PROMPT="$_HI_ROOT/common/git_prompt.sh"
 export _HI_CHECK="$_HI_ROOT/common/check.sh"

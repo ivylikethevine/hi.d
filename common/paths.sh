@@ -3,6 +3,7 @@
 export _HI_ROOT="$_HI_TMPDIR/hi.d"
 export _HI_LAUNCHER="$_HI_ROOT/hi.sh"
 export _HI_COLORS="$_HI_ROOT/common/colors.sh"
+export _HI_GIT_PROMPT="$_HI_ROOT/common/git_prompt.sh"
 export _HI_CHECK="$_HI_ROOT/common/check.sh"
 export _HI_HEADER="$_HI_ROOT/common/header.sh"
 

@@ -6,6 +6,8 @@ _HI_TMPDIR=${_HI_TMPDIR:-$HOME}
 source "$_HI_TMPDIR/hi.d/common/paths.sh"
 # shellcheck source=./common/colors.sh
 source "$_HI_COLORS"
+# shellcheck source=./common/git_prompt.sh
+source "$_HI_GIT_PROMPT"
 # shellcheck source=./shells/aliases.sh
 source "$_HI_ALIASES"
 
@@ -30,32 +32,7 @@ else
   color_prompt=
 fi
 
-# git status
-autoload -Uz vcs_info
 setopt prompt_subst
-
-zstyle ':vcs_info:git:*' check-for-changes true
-zstyle ':vcs_info:git:*' stagedstr '*'
-zstyle ':vcs_info:git:*' unstagedstr '*'
-zstyle ':vcs_info:git:*' formats '%b%c%u%m'
-zstyle ':vcs_info:git+set-message:*' hooks git-aheadbehind
-
-# adds " ↑<n> ↓<n>" (commits ahead/behind the upstream) to vcs_info's %m,
-# mirroring the ahead/behind markers bash.sh's __git_info shows
-+vi-git-aheadbehind() {
-  local ahead behind
-  local -a marks
-
-  ahead=$(git rev-list --count '@{upstream}..HEAD' 2>/dev/null)
-  behind=$(git rev-list --count 'HEAD..@{upstream}' 2>/dev/null)
-
-  (( ${ahead:-0} > 0 )) && marks+=("↑${ahead}")
-  (( ${behind:-0} > 0 )) && marks+=("↓${behind}")
-
-  (( $#marks )) && hook_com[misc]=" ${(j: :)marks}"
-}
-
-precmd() { vcs_info }
 
 if [ "$color_prompt" = yes ]; then
   export CLICOLOR=1
@@ -68,9 +45,9 @@ if [ "$color_prompt" = yes ]; then
   if [[ -v SSH_TTY ]]; then
     AT_COLOR=yellow
   fi
-  PS1=$' ${debian_chroot:+($debian_chroot)}%F{$USER_COLOR}%n%f%F{$AT_COLOR}@%f%F{$HOST_COLOR}%m%f%F{cyan} %~%f%F{plain} $vcs_info_msg_0_| '
+  PS1=$' ${debian_chroot:+($debian_chroot)}%F{$USER_COLOR}%n%f%F{$AT_COLOR}@%f%F{$HOST_COLOR}%m%f%F{cyan} %~%f%F{plain}%{$(_hi_git_prompt)%} > '
 else
-  PS1=$' ${debian_chroot:+($debian_chroot)}%n@%m %~ $vcs_info_msg_0_| '
+  PS1=$' ${debian_chroot:+($debian_chroot)}%n@%m %~%{$(_hi_git_prompt)%} > '
 fi
 # === end required configuration ===
 

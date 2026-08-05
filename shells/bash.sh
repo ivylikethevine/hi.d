@@ -8,6 +8,8 @@ _HI_TMPDIR=${_HI_TMPDIR:-$HOME}
 source "$_HI_TMPDIR/hi.d/common/paths.sh"
 # shellcheck source=./common/colors.sh
 source "$_HI_COLORS"
+# shellcheck source=./common/git_prompt.sh
+source "$_HI_GIT_PROMPT"
 # shellcheck source=./shells/aliases.sh
 source "$_HI_ALIASES"
 
@@ -66,51 +68,19 @@ _hi_mirror_completion exa eza
 unset -f _hi_mirror_completion
 
 # modified from: https://github.com/riobard/bash-powerline/blob/master/bash-powerline.sh |
-__git_info() {
-  local git_eng="env LANG=C git"
-
-  local ref
-  ref=$($git_eng symbolic-ref --short HEAD 2>/dev/null)
-
-  if [[ ! -n "$ref" ]]; then
-    ref=$($git_eng describe --tags --always 2>/dev/null)
-  fi
-
-  [[ -n "$ref" ]] || return
-
-  local marks
-
-  # scan first two lines of output from `git status`
-  while IFS= read -r line; do
-    if [[ $line =~ ^## ]]; then # header line
-      [[ $line =~ ahead\ ([0-9]+) ]] && marks+=" ↑${BASH_REMATCH[1]}"
-      [[ $line =~ behind\ ([0-9]+) ]] && marks+=" ↓${BASH_REMATCH[1]}"
-    else # branch is modified if output contains more lines after the header line
-      marks="*$marks"
-      break
-    fi
-  done < <($git_eng status --porcelain --branch 2>/dev/null) # note the space between the two <
-
-  printf " ($BRPURPLE%s%s$NC)" "$ref" "$marks"
-}
-
 ps1() {
-  if [ $? -eq 0 ]; then
-    local symbol="$GREEN \$ $NC"
-  else
-    local symbol="$RED \$ $NC"
-  fi
+  local symbol="$WHITE \$ $NC"
 
   # Bash by default expands the content of PS1 unless promptvars is disabled.
   # We must use another layer of reference to prevent expanding any user
   # provided strings, which would cause security issues.
   # POC: https://github.com/njhartwell/pw3nage
   if shopt -q promptvars; then
-    __powerline_git_info="$(__git_info)"
-    local git="$WHITE\${__powerline_git_info}$NC"
+    __powerline_git_info="$(_hi_git_prompt)"
+    local git="\${__powerline_git_info}"
   else
     local git
-    git="$WHITE$(__git_info)$NC"
+    git="$(_hi_git_prompt)"
   fi
 
   PS1="$HI_PS1$git$symbol"

@@ -44,7 +44,7 @@ function clean_all() {
       fi
     fi
   done
-  rm -rf "$_HI_TMPDIR/hi.d"
+  rm -rfv "$_HI_TMPDIR/hi.d"
 }
 
 function timers() {

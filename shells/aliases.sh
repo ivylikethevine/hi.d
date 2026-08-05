@@ -110,7 +110,7 @@ alias chrontab="crontab"
 # pacman/yay updates
 alias yayy="yay -Syyu"
 alias yayc="yay -Sc --noconfirm"
-alias yaycc="sudo rm -rf /var/cache/pacman/pkg/download-* >/dev/null"
+alias yaycc="sudo rm -rfv /var/cache/pacman/pkg/download-* >/dev/null"
 
 # apt updates
 alias aptup="sudo apt update"

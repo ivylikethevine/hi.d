@@ -48,7 +48,7 @@ Reminder - place local only changes after the "`# hi-config-end`" comment in the
 - `common/check.sh` - check for commonly used commands and displays results in header
 - `common/colors.sh` - unified coloration for usernames & hosts (see `scripts/colorgen`)
 - `scripts/install.sh` - configure local shells to use hi.d configurations, install, and update
-- `scripts/colorgen.sh` - generates `data/user_colors` and `data/host_colors` from `~/.ssh/config`, `data/travel_config`, and `data/group_config`
+- `scripts/colorgen.sh` - generates `data/user_colors` and `data/host_colors` from `~/.ssh/config` and `data/group_config`
 - `data/group_config` - user defined coloration for hostnames/usernames (not copied to targets)
 
 ##### Hostname, Username, and Group/Tag Colors

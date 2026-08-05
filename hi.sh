@@ -21,7 +21,7 @@ fi
 export _HI_EXCLUDE=(--exclude README.md --exclude .git --exclude .gitignore --exclude scripts --exclude hi.sh --exclude hi.bashrc --exclude data/group_config --exclude .zed)
 export _HI_TR_CMD="tr -s ' ' '\n'"
 export _HI_OPENSSL_CMD="openssl enc -base64"
-export _HI_TRAP="trap 'rm -rf \$_HI_CLEANUP' exit"
+export _HI_TRAP="trap 'rm -rfv \$_HI_CLEANUP' exit"
 export _HI_SHELL_START
 
 function _hi_shell_elapsed() {
@@ -88,7 +88,7 @@ function _say_hi() {
 
   if [ "$remote_shell" = "" ]; then
     cecho " $(cat "$tmp")" "$BRRED"
-    rm -rf "$tmp"
+    rm -rfv "$tmp"
     exit 1
   fi
 
@@ -96,7 +96,7 @@ function _say_hi() {
   cecho " $(_hi_shell_elapsed "$_HI_SHELL_START" "$shell_end_time")" "$BLUE" 1
 
   if [ "$remote_shell" = "zsh" ]; then
-    _HI_TRAP="TRAPEXIT() { rm -rf \$_HI_CLEANUP; }"
+    _HI_TRAP="TRAPEXIT() { rm -rfv \$_HI_CLEANUP; }"
   fi
 
   echo -ne "$YELLOW-> $remote_shell$NC $(du -sh "${_HI_EXCLUDE[@]}" "$_HI_LINUX_FLAGS" "$_HI_ROOT" | awk '{ print $1 }')"
@@ -120,10 +120,9 @@ function _say_hi() {
 }
 
 function _say_hi_docker() {
-  local shell_end_time tmp has_bash fallback_shell container_tmpdir container_root hi_bashrc exit_code
+  local shell_end_time tmp has_bash fallback_shell container_tmpdir container_root hi_bashrc exit_code container_aliases container_zdotdir
 
   tmp="/tmp/$(date +%s).hi"
-
   has_bash=$(docker exec "$DOMAIN" sh -c 'command -v bash' 2>"$tmp")
   shell_end_time="$(_hi_now)"
 
@@ -133,12 +132,40 @@ function _say_hi_docker() {
     ' 2>"$tmp")
     if [ -z "$fallback_shell" ]; then
       cecho " $(cat "$tmp")" "$BRRED"
-      rm -rf "$tmp"
+      rm -rfv "$tmp"
       return 1
     fi
-    cecho " no bash in [$DOMAIN], skipping hi config -> plain $fallback_shell" "$YELLOW"
-    docker exec -it "$DOMAIN" "$fallback_shell"
-    return $?
+    cecho " no bash in [$DOMAIN], skipping hi config -> plain $fallback_shell w/ aliases" "$YELLOW"
+
+    container_aliases="/tmp/.hi_aliases.$$"
+    docker cp "$_HI_ROOT/shells/aliases.sh" "$DOMAIN:$container_aliases" 2>"$tmp" || {
+      cecho " failed to copy aliases.sh into [$DOMAIN]" "$BRRED"
+      rm -rfv "$tmp"
+      docker exec -it "$DOMAIN" "$fallback_shell"
+      return $?
+    }
+
+    case "$fallback_shell" in
+    zsh)
+      container_zdotdir="/tmp/.hi_zdotdir.$$"
+      docker exec "$DOMAIN" sh -c "mkdir -p '$container_zdotdir' && echo '. $container_aliases 2>/dev/null' > '$container_zdotdir/.zshrc'" 2>"$tmp"
+      docker exec -it -e "ZDOTDIR=$container_zdotdir" "$DOMAIN" zsh
+      exit_code=$?
+      docker exec "$DOMAIN" rm -rfv "$container_zdotdir" >/dev/null 2>&1
+      ;;
+    fish)
+      docker exec -it "$DOMAIN" fish -C "source $container_aliases 2>/dev/null"
+      exit_code=$?
+      ;;
+    *)
+      docker exec -it -e "ENV=$container_aliases" "$DOMAIN" "$fallback_shell"
+      exit_code=$?
+      ;;
+    esac
+
+    docker exec "$DOMAIN" rm -fv "$container_aliases" >/dev/null 2>&1
+    rm -rfv "$tmp"
+    return $exit_code
   fi
 
   cecho " $(_hi_shell_elapsed "$_HI_SHELL_START" "$shell_end_time")" "$BLUE" 1
@@ -150,7 +177,7 @@ function _say_hi_docker() {
 
   if ! tar czf - -h -C "$_HI_TMPDIR" "${_HI_EXCLUDE[@]}" hi.d | docker exec -i "$DOMAIN" sh -c "mkdir -p '$container_tmpdir' && tar mxzf - -C '$container_tmpdir'"; then
     cecho " failed to copy hi.d into [$DOMAIN]" "$BRRED"
-    docker exec "$DOMAIN" rm -rf "$container_tmpdir" >/dev/null 2>&1
+    docker exec "$DOMAIN" rm -rfv "$container_tmpdir" >/dev/null 2>&1
     return 1
   fi
 
@@ -162,12 +189,12 @@ function _say_hi_docker() {
     echo "$CMDARG"
   } >"$hi_bashrc"
   docker cp "$hi_bashrc" "$DOMAIN:$container_root/hi.bashrc"
-  rm -f "$hi_bashrc"
+  rm -fv "$hi_bashrc"
 
   docker exec -it -e "_HI_TMPDIR=$container_tmpdir" -e "_HI_ROOT=$container_root" "$DOMAIN" bash --rcfile "$container_root/hi.bashrc"
   exit_code=$?
 
-  docker exec "$DOMAIN" rm -rf "$container_tmpdir" >/dev/null 2>&1
+  docker exec "$DOMAIN" rm -rfv "$container_tmpdir" >/dev/null 2>&1
   return $exit_code
 }
 
@@ -208,10 +235,10 @@ function _run() {
     copy_start_time="$(_hi_now)"
     tmp="/tmp/$(date +%s).hi"
     if [[ -z ${ZSH_VERSION+x} ]]; then
-      trap 'rm -rf $tmp' exit
+      trap 'rm -rfv $tmp' exit
     else
       # shellcheck disable=SC2329
-      TRAPEXIT() { rm -rf "$tmp"; }
+      TRAPEXIT() { rm -rfv "$tmp"; }
     fi
 
     _hi_parse "$@"
@@ -223,8 +250,10 @@ function _run() {
     fi
 
     exit_code="$?"
-    errors="$(cat "$tmp")"
-    rm -rf "$tmp"
+    if [ -f "$tmp" ]; then
+      errors="$(cat "$tmp")"
+      rm -rfv "$tmp"
+    fi
 
     if [ "$exit_code" -ne 0 ]; then
       echo -ne "\r\r\r\r"

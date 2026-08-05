@@ -14,7 +14,7 @@ function config_shell() {
   cecho "=== Checking $name ===" "$YELLOW"
 
   local tmpfile="$tmpdir/$name"
-  printf '%s\n' "$content" >> "$tmpfile"
+  printf '%s\n' "$content" >>"$tmpfile"
   append "$tmpfile" "$target" "$tmpdir"
 
   cecho "local $name up to date :)" "$GREEN"
@@ -66,9 +66,9 @@ function main() {
   local TMP
   TMP=$(mktemp -d)
   if [ -z "$ZSH_VERSION" ]; then
-    trap 'rm -rf $TMP' exit
+    trap 'rm -rfv $TMP' exit
   else
-    TRAPEXIT() { rm -rf \$TMP; }
+    TRAPEXIT() { rm -rfv \$TMP; }
   fi
 
   config_bashrc "$TMP"
@@ -81,7 +81,7 @@ function main() {
   # shellcheck source=./scripts/colorgen.sh
   source "$_HI_COLORGEN"
   initial_colorgen
-  rm -rf "$TMP"
+  rm -rfv "$TMP"
 
   cecho "~~~~~ Installed! ~~~~~ " "$BRGREEN"
 }

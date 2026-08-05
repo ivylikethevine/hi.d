@@ -17,7 +17,9 @@ export _HI_CONFIG_START="# hi-config-start"
 export _HI_CONFIG_END="# hi-config-end"
 export _HI_COPY_TIME=-1
 
-if [ -f "$_HI_LINUX_PATH" ]; then
+_HI_LINUX_FLAGS=""
+if du --version >/dev/null 2>&1 && du --version | grep -q "GNU coreutils"; then
+  # busybox/bsd du (Alpine, macOS, *BSD, etc.) don't support this GNU-only flag
   _HI_LINUX_FLAGS="--apparent-size"
 fi
 export _HI_LINUX_FLAGS
@@ -64,13 +66,13 @@ function clean_all() {
 # required
 function timers() {
   spacer
-  cecho "load: $(echo "$(perl -MTime::HiRes=time -e 'printf "%.3f", time') $load_start_time" | awk '{ printf "%.3f\n", $1 - $2 }')s | copy: ${_HI_COPY_TIME}s"
+  cecho "load: $(echo "$(_hi_now) $load_start_time" | awk '{ printf "%.3f\n", $1 - $2 }')s | copy: ${_HI_COPY_TIME}s"
 }
 
 # required
 function load() {
   local load_start_time host_color
-  load_start_time="$(perl -MTime::HiRes=time -e 'printf "%.3f", time')"
+  load_start_time="$(_hi_now)"
 
   if [[ -z ${ZSH_VERSION+x} ]]; then
     trap 'clean_all' exit
@@ -79,8 +81,8 @@ function load() {
     TRAPEXIT() { clean_all; }
   fi
 
-  host_color=$(host_color "$(hostname)")
-  printf '%b\n' "${BRGREEN} ~~ Connected ${NC}[${host_color}$(hostname)${NC}]${BRGREEN} ~~~~~~~~~~~~~~~~~~~~~~~${NC}"
+  host_color=$(host_color "$(_hi_hostname)")
+  printf '%b\n' "${BRGREEN} ~~ Connected ${NC}[${host_color}$(_hi_hostname)${NC}]${BRGREEN} ~~~~~~~~~~~~~~~~~~~~~~~${NC}"
   timestamp
 
   system_info_line
@@ -115,7 +117,7 @@ function load() {
   fi
 
   cecho " $(du -sh "$_HI_LINUX_FLAGS" "$_HI_ROOT" | awk '{ print $1 }') " "$NC" 1
-  printf '%b\n' "${BRRED}~~~~~~~~~~~~~~~~~~~~~ Disconnected ${NC}[$host_color$(hostname)${NC}]$BRRED ~~~~~~~~~~~~~~~~~~~~~~~${NC}"
+  printf '%b\n' "${BRRED}~~~~~~~~~~~~~~~~~~~~~ Disconnected ${NC}[$host_color$(_hi_hostname)${NC}]$BRRED ~~~~~~~~~~~~~~~~~~~~~~~${NC}"
   timestamp
   cecho "hi closing! " "$BRPURPLE"
   exit 0

@@ -36,7 +36,7 @@ fi
 
 if [ "$color_prompt" = yes ]; then
   USER_COLOR=$(user_color "$(whoami)")
-  HOST_COLOR=$(host_color "$(hostname)")
+  HOST_COLOR=$(host_color "$(_hi_hostname)")
   AT_COLOR=$(at_color)
 
   HI_PS1=" ${debian_chroot:+($debian_chroot)}${USER_COLOR}\u${AT_COLOR}@${HOST_COLOR}\h${NC} ${BRBLUE}\w${NC}"

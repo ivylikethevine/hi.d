@@ -42,6 +42,23 @@ export BRPURPLE='\e[1;35m'
 export BRCYAN='\e[1;36m'
 
 # required
+# high-res-ish timestamp without shelling out to perl (not guaranteed to exist
+# on minimal/embedded targets); falls back to whole-second precision on bash <5
+function _hi_now() {
+  if [[ -n ${EPOCHREALTIME+x} ]]; then
+    printf '%s' "$EPOCHREALTIME"
+  else
+    date +%s
+  fi
+}
+
+# required
+# `hostname` isn't guaranteed to exist on minimal/container images; uname -n is
+function _hi_hostname() {
+  hostname 2>/dev/null || uname -n
+}
+
+# required
 function cecho() {
   local text=${1:-}
   local color=${2:-}
@@ -96,7 +113,7 @@ function read_color_file() {
 
 # required
 function host_color() {
-  read_color_file "$(hostname)" "$_HI_HOST_COLORS" ${1+x}
+  read_color_file "$(_hi_hostname)" "$_HI_HOST_COLORS" ${1+x}
 }
 
 # required

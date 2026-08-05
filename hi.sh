@@ -9,7 +9,7 @@ source "$_HI_TMPDIR/hi.d/common/paths.sh"
 command -v cecho >/dev/null || source "$_HI_COLORS"
 
 command -v openssl >/dev/null 2>&1 || {
-  cecho >&2 "hi requires openssl to be installed on [$(hostname)], but it is not. Aborting..." "$RED"
+  cecho >&2 "hi requires openssl to be installed on [$(_hi_hostname)], but it is not. Aborting..." "$RED"
   exit 1
 }
 
@@ -20,7 +20,9 @@ if [ ! -f "$_HI_HOST_COLORS" ] || [ ! -f "$_HI_USER_COLORS" ]; then
   initial_colorgen
 fi
 
-if [ -f "$_HI_LINUX_PATH" ]; then
+_HI_LINUX_FLAGS=""
+if du --version >/dev/null 2>&1 && du --version | grep -q "GNU coreutils"; then
+  # busybox/bsd du (Alpine, macOS, *BSD, etc.) don't support this GNU-only flag
   _HI_LINUX_FLAGS="--apparent-size"
 fi
 export _HI_LINUX_FLAGS
@@ -40,16 +42,29 @@ export _HI_TRAP="trap 'rm -rf \$_HI_CLEANUP' exit"
 function say_hi() {
   local shell_start_time remote_shell tmp shell_end_time
 
-  shell_start_time="$(perl -MTime::HiRes=time -e 'printf "%.3f", time')"
+  shell_start_time="$(_hi_now)"
   tmp="/tmp/$(date +%s).hi"
-  remote_shell=$(ssh "$DOMAIN" '[ ! -f /etc/os-release ] && dscl . -read ~/ UserShell 2>/dev/null | awk "{ print \$2 }" | xargs basename || cat /etc/passwd | grep -e $(whoami) | xargs basename' 2>"$tmp")
+  # prefer $SHELL (sshd sets it from the target user's account on virtually any
+  # unix), then getent (linux/busybox), then dscl (macOS), then an exact-match
+  # /etc/passwd read as a last resort for oddball systems with none of those
+  remote_shell=$(ssh "$DOMAIN" '
+    if [ -n "$SHELL" ]; then
+      basename "$SHELL"
+    elif command -v getent >/dev/null 2>&1; then
+      getent passwd "$(id -un)" | awk -F: "{ print \$NF }" | xargs basename
+    elif command -v dscl >/dev/null 2>&1; then
+      dscl . -read ~/ UserShell 2>/dev/null | awk "{ print \$2 }" | xargs basename
+    else
+      awk -F: -v u="$(id -un)" "\$1==u{print \$NF}" /etc/passwd | xargs basename
+    fi
+  ' 2>"$tmp")
 
   if [ "$remote_shell" = "" ]; then
     cecho " $(cat "$tmp")" "$BRRED"
     exit 1
   fi
 
-  shell_end_time="$(perl -MTime::HiRes=time -e 'printf "%.3f", time')"
+  shell_end_time="$(_hi_now)"
   cecho " $(echo "$shell_end_time $shell_start_time" | awk '{ printf "shell: %.3fs ", $1 - $2 }')" "$BLUE" 1
 
   if [ "$remote_shell" = "zsh" ]; then
@@ -73,7 +88,7 @@ function say_hi() {
       elif [ -r ~/.bash_login ]; then source ~/.bash_login
       elif [ -r ~/.profile ]; then source ~/.profile
       fi
-      export PATH=$PATH:${_HI_ROOT+x}
+      export PATH=$PATH:$_HI_ROOT
       source $_HI_ROOT/load.sh
       load
 EOF
@@ -82,7 +97,7 @@ EOF
       export _HI_TMPDIR=\$_HI_TMPDIR
       export _HI_ROOT=\$_HI_ROOT
       echo \"$CMDARG\" >> \$_HI_ROOT/hi.bashrc
-      echo \"export _HI_COPY_TIME='$(echo "$(perl -MTime::HiRes=time -e 'printf "%.3f", time') $copy_start_time" | awk '{ printf "%.3f\n", $1 - $2 }')'\" >> \$_HI_ROOT/load.sh
+      echo \"export _HI_COPY_TIME='$(echo "$(_hi_now) $copy_start_time" "$shell_start_time" "$shell_end_time" | awk '{ printf "%.3f\n", ($1 - $2) - ($4 - $3) }')'\" >> \$_HI_ROOT/load.sh
       bash --rcfile \$_HI_ROOT/hi.bashrc
       "
 }
@@ -121,7 +136,7 @@ function run() {
   local copy_start_time tmp exit_code errors
 
   if [ -d "$_HI_ROOT" ]; then
-    copy_start_time="$(perl -MTime::HiRes=time -e 'printf "%.3f", time')"
+    copy_start_time="$(_hi_now)"
     tmp="/tmp/$(date +%s).hi"
     if [[ -z ${ZSH_VERSION+x} ]]; then
       trap 'rm -rf $tmp' exit

@@ -22,7 +22,7 @@ function create_basic_group_colors() {
     printf '%s\n' "username,root,$RED,red";
 
     printf '%s\n' "hostname,prod,$YELLOW,bryellow";
-    printf '%s\n' "hostname,$(hostname),$PURPLE,magenta";
+    printf '%s\n' "hostname,$(_hi_hostname),$PURPLE,magenta";
 
   } >> "$TMP_GROUP_COLORS"
 

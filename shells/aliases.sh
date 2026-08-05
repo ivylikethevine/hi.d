@@ -3,15 +3,15 @@
 # shellcheck disable=SC2139
 
 # === start required variables/aliases ===
-alias hi_update="git -C $_HI_TMPDIR/hi.d pull"
-alias hi_status="git -C $_HI_TMPDIR/hi.d status"
-alias hi_install="$_HI_TMPDIR/hi.d/scripts/install.sh"
-alias hi_colorgen="sh -c 'source $_HI_TMPDIR/hi.d/scripts/colorgen.sh && colorgen'"
-alias hi="$_HI_TMPDIR/hi.d/hi.sh"
+alias hi_update="git -C $_HI_ROOT pull"
+alias hi_status="git -C $_HI_ROOT status"
+alias hi_install="$_HI_INSTALL"
+alias hi_colorgen="sh -c 'source $_HI_COLORGEN && colorgen'"
+alias hi="$_HI_LAUNCHER"
 
 export EDITOR="$(command -v nano || command -v pico || command -v micro || command -v vim || command -v vi)"
-alias nano="nano --rcfile $_HI_TMPDIR/hi.d/misc/nano.rc"
-alias vim="vim -u $_HI_TMPDIR/hi.d/misc/vim.rc"
+alias nano="nano --rcfile $_HI_NANORC"
+alias vim="vim -u $_HI_VIMRC"
 
 # nonsense for cat to be bat with options if present, cat otherwise
 export _HI_BAT_OPTS='-P --tabs 2 --theme Monokai\ Extended\ Bright --style changes,grid'

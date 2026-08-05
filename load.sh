@@ -11,7 +11,7 @@ command -v cecho >/dev/null || source "$_HI_COLORS"
 # shellcheck source=./common/check.sh
 source "$_HI_CHECK"
 # shellcheck source=./common/header.sh
-command -v spacer >/dev/null || source "$_HI_TMPDIR/hi.d/common/header.sh"
+command -v spacer >/dev/null || source "$_HI_HEADER"
 
 export _HI_CONFIG_START="# hi-config-start"
 export _HI_CONFIG_END="# hi-config-end"

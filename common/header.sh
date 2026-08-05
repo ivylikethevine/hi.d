@@ -21,47 +21,76 @@ function timestamp() {
 }
 
 function system_info_line() {
-  cecho "$(uname -s)" "$YELLOW" 1
+  local kernel arch uname_out
+  uname_out=$(uname -sm)
+  kernel=${uname_out%% *}
+  arch=${uname_out#* }
+  cecho "$kernel" "$YELLOW" 1
   spacer
-  cecho "$(uname -m)" "$PURPLE" 1
+  cecho "$arch" "$PURPLE" 1
   spacer
   if [ -f "$_HI_LINUX_PATH" ]; then
-    cecho "$(grep PRETTY_NAME "$_HI_LINUX_PATH" | cut -d= -f2 | tr -d '"')" "$GREEN" 1
+    local key value pretty_name=""
+    while IFS='=' read -r key value; do
+      if [[ "$key" == "PRETTY_NAME" ]]; then
+        pretty_name=${value//\"/}
+        break
+      fi
+    done <"$_HI_LINUX_PATH"
+    cecho "$pretty_name" "$GREEN" 1
     spacer
     cecho "CPUs: $(nproc)" "$BLUE" 1
     spacer
-    cecho "RAM: $(free -h --giga | awk '/^Mem:/ {print $2}GB') " "$CYAN"
+    local mem_output total
+    mem_output=$(free -h --giga)
+    if [[ "$mem_output" =~ Mem:[[:space:]]+([0-9.]+[A-Za-z]*) ]]; then
+      total="${BASH_REMATCH[1]}"
+    fi
+    cecho "RAM: $total " "$CYAN"
   else
-    local system_info
+    local system_info cores mem
     system_info=$(system_profiler SPHardwareDataType)
     cecho "macOS $(sw_vers -productVersion)" "$BLUE" 1
     spacer
-    cecho "CPUs: $(echo "$system_info" | grep -e Cores | awk '{ print $5 }')" "$BLUE" 1
+    read -r cores mem < <(awk -F': +' '/Cores/ {cores=$2} /Memory/ {mem=$2} END {print cores, mem}' <<<"$system_info")
+    cecho "CPUs: $cores" "$BLUE" 1
     spacer
-    cecho "RAM: $(echo "$system_info" | grep -e Memory | awk '{ print $2 }')GB" "$CYAN"
+    cecho "RAM: ${mem%% *}GB" "$CYAN" 1
   fi
 }
 
 function git_keys_docker_line() {
   spacer
   if [ -f "$_HI_HOME_GIT_CONFIG" ]; then
+    local line email_line=""
+    while IFS=$' ' read -r line; do
+      [[ "$line" == *email* ]] && email_line=$line
+    done <"$_HI_HOME_GIT_CONFIG"
+    local email=${email_line#*=}
+    email=${email// /}
+    local user=${email%%@*}
+    local domain=${email#*@}
+    local bullets=""
+    for ((i = 0; i < ${#domain}; i++)); do
+      bullets+="●"
+    done
     cecho "Git ID: " "$CYAN" 1
-    cecho "$(grep email "$_HI_HOME_GIT_CONFIG" | tail -n1 | cut -d= -f2 | tr -d ' ' | awk -F@ '{ for(i=0;i<length($2);i++) c=c"●"; print $1"@"c; c="" }')" "$YELLOW" 1
+    cecho "$user@$bullets" "$YELLOW" 1
   else
     cecho "No Git ID Found..." "$YELLOW" 1
   fi
   spacer
   if command -v "docker" &>/dev/null; then
-    cecho "Containers: $(docker container ls | wc -l | awk '{ print $1 - 1 }')" "$BLUE" 1
+    cecho "Containers: $(docker container ls -q | wc -l)" "$BLUE" 1
   else
     cecho "No docker :(" "$BRYELLOW" 1
   fi
   spacer
   if [ -f "$_HI_SSH_AUTHORIZED_KEYS" ]; then
-    cecho "Auth: $(wc -l "$_HI_SSH_AUTHORIZED_KEYS" | awk '{ print $1 }')" "$RED" 1
+    cecho "Auth: $(wc -l <"$_HI_SSH_AUTHORIZED_KEYS")" "$RED" 1
   else
     cecho "Auth: 0!" "$RED" 1
   fi
   spacer
-  cecho "Pub: $(find "$_HI_SSH_KEY_DIR" -type f -name "*.pub" | wc -l | awk '{ print $1 }')" "$PURPLE"
+  cecho "Pub: $(find "$_HI_SSH_KEY_DIR" -type f -name "*.pub" | wc -l)" "$PURPLE"
 }

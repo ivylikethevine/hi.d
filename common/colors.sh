@@ -52,12 +52,11 @@ function cecho() {
   else
     printf '%b' "$formatted_text"
   fi
-  return
 }
 
 # required
 function at_color() {
-  if [[ ! -z ${SSH_TTY+x} ]]; then
+  if [[ -v SSH_TTY ]]; then
     printf '%s' "$YELLOW"
   else
     printf '%s' "$NC"
@@ -70,25 +69,18 @@ function read_color_file() {
   local color_file=${2:-}
   local is_fish=${3+x}
 
-  local -a dataArray
-  local line
-  while IFS=$' ' read -r line; do
-    if [[ -z ${ZSH_VERSION+x} ]]; then
-      IFS=',' read -ra dataArray <<<"$line"
-    else
-      IFS=',' read -rA dataArray <<<"$line"
-    fi
-    current_val="${dataArray[0]}"
+  local current_val color_bash color_fish
+  while IFS=',' read -r current_val color_bash color_fish; do
     [[ "$current_val" =~ ^[[:space:]]*# ]] && continue
-    [[ -z ${current_val+x} ]] && continue
+    [[ -z "$current_val" ]] && continue
 
     if [ "$search_val" = "$current_val" ]; then
       if [[ -z $is_fish ]]; then
-        printf '%b\n' "${dataArray[2]}"
+        printf '%b\n' "$color_fish"
       elif [[ -z ${ZSH_VERSION+x} ]]; then
-        printf '%b' "${dataArray[1]}"
+        printf '%b' "$color_bash"
       else
-        printf '%b\n' "${dataArray[1]}"
+        printf '%b\n' "$color_bash"
       fi
       return
     fi
@@ -96,9 +88,9 @@ function read_color_file() {
   if [[ -z $is_fish ]]; then
     printf '%s\n' "brgreen"
   elif [[ -z ${ZSH_VERSION+x} ]]; then
-    printf '%s' "\e[0;32m"
+    printf '%s' "$GREEN"
   else
-    printf '%s\n' "\e[0;32m"
+    printf '%s\n' "$GREEN"
   fi
 }
 

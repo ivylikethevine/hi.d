@@ -98,26 +98,65 @@ end
 function fish_greeting
   if not set -q fish_greeting
     if [ -f "$_HI_LINUX_PATH" ]
-      set -g hi_distro (printf '%s%s' (set_color green) (grep PRETTY_NAME "$_HI_LINUX_PATH" | cut -d= -f2 | tr -d '\"'))
+      set -l pretty_name
+      while read -l key value -d '='
+        if test "$key" = PRETTY_NAME
+          set pretty_name (string trim -c '"' -- $value)
+          break
+        end
+      end < $_HI_LINUX_PATH
+      set -g hi_distro (printf '%s%s' (set_color green) $pretty_name)
       set -g hi_cpus (printf '%sCPUs: %s' (set_color brblue) (nproc))
-      set -g hi_ram (printf '%sRAM: %s' (set_color cyan) (free -h --giga | awk '/^Mem:/ {print $2}'))
+      set -l ram_total
+      for line in (free -h --giga)
+        set -l m (string match -r 'Mem:\s+(\S+)' -- $line)
+        if test (count $m) -gt 1
+          set ram_total $m[2]
+          break
+        end
+      end
+      set -g hi_ram (printf '%sRAM: %s' (set_color cyan) $ram_total)
     else
-      set -l hi_system_info $(system_profiler SPHardwareDataType)
+      set -l system_info (system_profiler SPHardwareDataType)
       set -g hi_distro "macOS $(sw_vers -productVersion)"
-      set -g hi_cpus (printf '%sCPUs: %s' (set_color brblue) (echo "$system_info" | grep -e Cores | awk '{ print $5 }'))
-      set -g hi_ram (printf '%sRAM: %s' (set_color cyan) (echo "$system_info" | grep -e Memory | awk '{ print $2 }'))
+      set -l cores mem
+      for line in $system_info
+        set -l m
+        if string match -qr 'Cores' -- $line
+          set cores (string split ' ' -- $line)[-1]
+        else if string match -qr 'Memory' -- $line
+          set mem (string split ' ' -- $line)[-1]
+        end
+      end
+      set -g hi_cpus (printf '%sCPUs: %s' (set_color brblue) $cores)
+      set -g hi_ram (printf '%sRAM: %s' (set_color cyan) $mem)
     end
 
-    set -l authorized_keys ([ -f "$_HI_SSH_AUTHORIZED_KEYS" ] && printf '%sAuth: %s' (set_color red) (wc -l "$_HI_SSH_AUTHORIZED_KEYS" | awk '{ print $1 }') || printf '%sAuth: 0!' (set_color red))
-    set -l running_containers ([ -f "/usr/bin/docker" ] && printf '%sContainers: %s' (set_color brblue) (docker container ls | wc -l | awk '{print $1 - 1}') || printf '%sCounting impossible, no docker :(' (set_color bryellow))
-    set -l git_identity ([ -f "$_HI_HOME_GIT_CONFIG" ] && printf '%sGit ID: %s%s' (set_color brcyan) (set_color yellow) (grep email "$_HI_HOME_GIT_CONFIG" | tail -n1 | cut -d= -f2 | tr -d ' ' | awk -F@ '{ for(i=0;i<length($2);i++) c=c"●"; print $1"@"c; c="" }') || printf '%sNo Git ID Found...' (set_color yellow))
-    set -l hi_change_status ([ -d "$_HI_ROOT/.git" ] && printf ' %s%s' (set_color bryellow) (git -C ~/hi.d status --short | wc -l | awk '{ print $1 }')' ↑' || printf '%s' "")
+    set -l authorized_keys ([ -f "$_HI_SSH_AUTHORIZED_KEYS" ] && printf '%sAuth: %s' (set_color red) (wc -l < "$_HI_SSH_AUTHORIZED_KEYS") || printf '%sAuth: 0!' (set_color red))
+    set -l running_containers ([ -f "/usr/bin/docker" ] && printf '%sContainers: %s' (set_color brblue) (docker container ls -q | wc -l) || printf '%sCounting impossible, no docker :(' (set_color bryellow))
+    set -l git_identity
+    if [ -f "$_HI_HOME_GIT_CONFIG" ]
+      set -l email_line
+      while read -l line
+        if string match -q '*email*' -- $line
+          set email_line $line
+        end
+      end < $_HI_HOME_GIT_CONFIG
+      set -l email (string replace -a ' ' '' -- (string split -m1 '=' -- $email_line)[2])
+      set -l parts (string split '@' -- $email)
+      set -l bullets (string repeat -n (string length -- $parts[2]) '●')
+      set git_identity (printf '%sGit ID: %s%s@%s' (set_color brcyan) (set_color yellow) $parts[1] $bullets)
+    else
+      set git_identity (printf '%sNo Git ID Found...' (set_color yellow))
+    end
+    set -l hi_change_status ([ -d "$_HI_ROOT/.git" ] && printf ' %s%s' (set_color bryellow) (git -C ~/hi.d status --short | wc -l)' ↑' || printf '%s' "")
     set -l spacer (printf '%s|' (set_color normal))
     set -l utctime (printf '%s%s' (set_color brblue) (date -u $_HI_HUMAN_CENTRIC_DATE))
     set -l localtime (printf '%s%s' (set_color bryellow) (date $_HI_HUMAN_CENTRIC_DATE))
     set -l public (printf '%sPub: %s' (set_color magenta) (find ~/.ssh -type f -name "*.pub" | wc -l))
-    set -l arch (printf '%s%s' (set_color brmagenta) (uname -m))
-    set -l os_type (printf '%s%s' (set_color bryellow) (uname -s))
+    set -l uname_out (string split ' ' -- (uname -sm))
+    set -l os_type (printf '%s%s' (set_color bryellow) $uname_out[1])
+    set -l arch (printf '%s%s' (set_color brmagenta) $uname_out[2])
 
     printf '%s %s~~~~~~~~~~~~~~~~~~~ Online %s[%s%s%s]%s ~~~~~~~~~~~~~~~~~~~~~~~~~~~%s\n' $hi_change_status (set_color brcyan) (set_color normal) (set_color $fish_color_host) (prompt_hostname) (set_color normal) (set_color brcyan) (set_color normal)
     printf " %s %s   %s   %s   %s\n" $spacer $utctime $spacer $localtime

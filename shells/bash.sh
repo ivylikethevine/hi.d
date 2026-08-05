@@ -28,17 +28,6 @@ if [ -z "${debian_chroot:-}" ] && [ -r /etc/debian_chroot ]; then
   debian_chroot=$(cat /etc/debian_chroot)
 fi
 
-case "$TERM" in
-xterm* | rxvt*)
-  HI_PS1="\[\e]0;${debian_chroot:+($debian_chroot)}\u@\h: \w\a\]$PS1"
-  ;;
-*) ;;
-esac
-
-case "$TERM" in
-xterm-color | *-256color) color_prompt=yes ;;
-esac
-
 if [ -x /usr/bin/tput ] && tput setaf 1 >&/dev/null; then
   color_prompt=yes
 else
@@ -115,10 +104,6 @@ ps1() {
   fi
 
   PS1="$HI_PS1$git$symbol"
-}
-
-hash git 2>/dev/null || {
-  PS1="$HI_PS1 \$"
 }
 
 PROMPT_COMMAND="ps1${PROMPT_COMMAND:+; $PROMPT_COMMAND}"

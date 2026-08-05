@@ -39,11 +39,7 @@ color_no[5]="$BRRED"
 function check_line() {
   local line="$1"
   local -a pairs
-  if [[ -z ${ZSH_VERSION+x} ]]; then
-    IFS=',' read -ra pairs <<<"$line"
-  else
-    IFS=',' read -rA pairs <<<"$line"
-  fi
+  IFS=',' read -ra pairs <<<"$line"
 
   local pair cmd priority
   local max_priority=-1
@@ -83,7 +79,9 @@ function check_line() {
 
   [[ "$color" == "hide" ]] && return
 
-  printf '%s\x1f%b %b %b\n' "$priority_out" "$color" "$cmd_out" "$symbol"
+  local formatted
+  printf -v formatted '%s\x1f%b %b %b' "$priority_out" "$color" "$cmd_out" "$symbol"
+  visible_output+=("$formatted")
 }
 
 function process_commands() {
@@ -94,8 +92,7 @@ function process_commands() {
   local line item
   while IFS=$'\n' read -r line; do
     [[ "$line" == *#* ]] && continue
-    item="$(check_line "$line")"
-    [[ -n "$item" ]] && visible_output+=("$item")
+    check_line "$line"
   done <"$_HI_PACKAGES_CONFIG"
 
   # sort the visible (non-"hide") entries by their priority, highest first,

@@ -11,9 +11,6 @@ source "$_HI_COLORS"
 # shellcheck source=./shells/aliases.sh
 source "$_HI_ALIASES"
 
-complete -C hi ssh
-complete -C exa eza
-
 if [ -d "$HOME"/Android ] && [ -d "$HOME"/Android/Sdk ]; then
   export ANDROID_HOME="$HOME"/Android/Sdk # for android dev on linux
 fi
@@ -54,6 +51,19 @@ if ! shopt -oq posix; then
     . /etc/bash_completion
   fi
 fi
+
+# make `hi`/`exa` complete exactly the way `ssh`/`eza` do, whatever function bash-completion bound to them
+_hi_mirror_completion() {
+  local target="$1" source_cmd="$2" spec
+  if ! complete -p "$source_cmd" &>/dev/null; then
+    command -v _completion_loader &>/dev/null && _completion_loader "$source_cmd" &>/dev/null
+  fi
+  spec=$(complete -p "$source_cmd" 2>/dev/null) || return 0
+  eval "${spec% "$source_cmd"} $target"
+}
+_hi_mirror_completion hi ssh
+_hi_mirror_completion exa eza
+unset -f _hi_mirror_completion
 
 # modified from: https://github.com/riobard/bash-powerline/blob/master/bash-powerline.sh |
 __git_info() {

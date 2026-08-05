@@ -6,7 +6,7 @@
 alias hi_update="git -C $_HI_ROOT pull"
 alias hi_status="git -C $_HI_ROOT status"
 alias hi_install="$_HI_INSTALL"
-alias hi_colorgen="sh -c 'source $_HI_COLORGEN && colorgen'"
+alias hi_colorgen="bash -c 'source $_HI_COLORGEN && colorgen'"
 alias hi="$_HI_LAUNCHER"
 
 export EDITOR="$(command -v nano || command -v pico || command -v micro || command -v vim || command -v vi)"
@@ -60,8 +60,7 @@ alias rm="rm -iv"
 # exa (back-compat) improved ls
 export _HI_EXA_SHARED_OPTS='-F -1 -l -m --group-directories-first'
 export _HI_EXA_OPTS="$_HI_EXA_SHARED_OPTS"' --group --no-filesize'
-alias eza="$(command -v eza || command -v exa || command -v ls)"
-alias exa="exa $_HI_EXA_OPTS"
+alias exa="$(command -v exa || command -v eza || command -v ls) $_HI_EXA_OPTS"
 alias lr="exa"
 alias lra="lr -a"
 alias lrt="lr -T -L2"
@@ -70,7 +69,7 @@ alias lrt="lr -T -L2"
 # per https://docs.rs/chrono/latest/chrono/format/strftime/index.html
 export _HI_EZA_OPTS="$_HI_EXA_SHARED_OPTS"' --smart-group --time-style="+%b %d %Y %H:%M"'
 export _HI_EZA_OPTS_SIZE="$_HI_EZA_OPTS --total-size"
-alias eza="eza $_HI_EZA_OPTS"
+alias eza="$(command -v eza || command -v exa || command -v ls) $_HI_EZA_OPTS"
 alias les="eza $_HI_EZA_OPTS_SIZE"
 alias lest="eza $_HI_EZA_OPTS_SIZE -T -L2"
 alias lesg="eza $_HI_EZA_OPTS_SIZE --git --git-repos-no-status"

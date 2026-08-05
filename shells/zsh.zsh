@@ -24,17 +24,6 @@ if [ -z "${debian_chroot:-}" ] && [ -r /etc/debian_chroot ]; then
   debian_chroot=$(cat /etc/debian_chroot)
 fi
 
-case "$TERM" in
-xterm* | rxvt*)
-  HI_PS1="\[\e]0;${debian_chroot:+($debian_chroot)}\u@\h: \w\a\]$PS1"
-  ;;
-*) ;;
-esac
-
-case "$TERM" in
-xterm-color | *-256color) color_prompt=yes ;;
-esac
-
 if [ -x /usr/bin/tput ] && tput setaf 1 >&/dev/null; then
   color_prompt=yes
 else
@@ -43,9 +32,30 @@ fi
 
 # git status
 autoload -Uz vcs_info
-precmd() { vcs_info; }
 setopt prompt_subst
-zstyle ':vcs_info:git:*' formats '%b'
+
+zstyle ':vcs_info:git:*' check-for-changes true
+zstyle ':vcs_info:git:*' stagedstr '*'
+zstyle ':vcs_info:git:*' unstagedstr '*'
+zstyle ':vcs_info:git:*' formats '%b%c%u%m'
+zstyle ':vcs_info:git+set-message:*' hooks git-aheadbehind
+
+# adds " ↑<n> ↓<n>" (commits ahead/behind the upstream) to vcs_info's %m,
+# mirroring the ahead/behind markers bash.sh's __git_info shows
++vi-git-aheadbehind() {
+  local ahead behind
+  local -a marks
+
+  ahead=$(git rev-list --count '@{upstream}..HEAD' 2>/dev/null)
+  behind=$(git rev-list --count 'HEAD..@{upstream}' 2>/dev/null)
+
+  (( ${ahead:-0} > 0 )) && marks+=("↑${ahead}")
+  (( ${behind:-0} > 0 )) && marks+=("↓${behind}")
+
+  (( $#marks )) && hook_com[misc]=" ${(j: :)marks}"
+}
+
+precmd() { vcs_info }
 
 if [ "$color_prompt" = yes ]; then
   export CLICOLOR=1
@@ -55,7 +65,7 @@ if [ "$color_prompt" = yes ]; then
   HOST_COLOR=$(host_color)
   HOST_COLOR="${HOST_COLOR//br/}"
   AT_COLOR=plain
-  if [[ ! -z ${SSH_TTY+x} ]]; then
+  if [[ -v SSH_TTY ]]; then
     AT_COLOR=yellow
   fi
   PS1=$' ${debian_chroot:+($debian_chroot)}%F{$USER_COLOR}%n%f%F{$AT_COLOR}@%f%F{$HOST_COLOR}%m%f%F{cyan} %~%f%F{plain} $vcs_info_msg_0_| '
@@ -89,6 +99,7 @@ autoload -Uz compinit
 autoload -Uz promptinit
 compinit
 compdef hi=ssh
+compdef exa=eza
 promptinit
 
 # configuration

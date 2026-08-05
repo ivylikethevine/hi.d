@@ -7,10 +7,8 @@ function append() {
   local tmpdir="${3:-$(mktemp -d)}"
   local appendfile="$tmpdir/append.tmp"
 
-  if ! test -f "$input"; then
-    touch "$input"
-  fi
-  cat "$input" | grep -vxF -f "$output" > "$appendfile"
-  cat "$output" >> "$appendfile"
+  touch "$input" "$output"
+  cat "$output" > "$appendfile"
+  grep -vxF -f "$output" "$input" >> "$appendfile"
   mv "$appendfile" "$output"
 }

@@ -13,6 +13,10 @@ _Don't `ssh`ush your hosts, say `hi`!_
 
 **_IMPORTANT: Local-only changes MUST remain in `~/.bashrc, ~/.zshrc, ~/.config/fish/config.fish`, etc._**
 
+### Docker containers
+
+`hi <name>` also works against a running docker container - if `<name>` isn't a `Host` alias in `~/.ssh/config` but is a running container (matched by name or ID), `hi` copies `~/hi.d` in and chainloads `load.sh` exactly like the ssh path, giving an identical session (colors, prompt, aliases, vim/nano configs, etc). No openssl armoring is needed here (`docker exec -i` already passes stdin through as raw bytes), and cleanup happens automatically once you exit the container shell. The container needs `bash` installed for the full experience; without it, `hi` drops you into the best available plain shell (`zsh`/`fish`/`sh`) with a warning instead.
+
 ### Installation/Usage
 
 - clone this repo to `~/`

@@ -41,10 +41,12 @@ function system_info_line() {
     spacer
     cecho "CPUs: $(nproc)" "$BLUE" 1
     spacer
-    local mem_output total
-    mem_output=$(free -h --giga)
-    if [[ "$mem_output" =~ Mem:[[:space:]]+([0-9.]+[A-Za-z]*) ]]; then
-      total="${BASH_REMATCH[1]}"
+    local mem_output total="N/A"
+    if command -v free &>/dev/null; then
+      mem_output=$(free -h --giga)
+      if [[ "$mem_output" =~ Mem:[[:space:]]+([0-9.]+[A-Za-z]*) ]]; then
+        total="${BASH_REMATCH[1]}"
+      fi
     fi
     cecho "RAM: $total " "$CYAN"
   else
@@ -92,5 +94,9 @@ function git_keys_docker_line() {
     cecho "Auth: 0!" "$RED" 1
   fi
   spacer
-  cecho "Pub: $(find "$_HI_SSH_KEY_DIR" -type f -name "*.pub" | wc -l)" "$PURPLE"
+  if [ -f "$_HI_SSH_KEY_DIR" ]; then
+    cecho "Pub: $(find "$_HI_SSH_KEY_DIR" -type f -name "*.pub" | wc -l)" "$PURPLE"
+  else
+    cecho "Pub: 0!" "$PURPLE"
+  fi
 }

@@ -153,7 +153,11 @@ function fish_greeting
     set -l spacer (printf '%s|' (set_color normal))
     set -l utctime (printf '%s%s' (set_color brblue) (date -u $_HI_HUMAN_CENTRIC_DATE))
     set -l localtime (printf '%s%s' (set_color bryellow) (date $_HI_HUMAN_CENTRIC_DATE))
-    set -l public (printf '%sPub: %s' (set_color magenta) (find ~/.ssh -type f -name "*.pub" | wc -l))
+    if [ -f "$_HI_HOME_GIT_CONFIG" ]
+      set -g public (printf '%sPub: %s' (set_color magenta) (find "$_HI_SSH_KEY_DIR" -type f -name "*.pub" | wc -l))
+    else
+      set -g public (printf '%sPub: %s' (set_color magenta) ("0!"))
+    end
     set -l uname_out (string split ' ' -- (uname -sm))
     set -l os_type (printf '%s%s' (set_color bryellow) $uname_out[1])
     set -l arch (printf '%s%s' (set_color brmagenta) $uname_out[2])

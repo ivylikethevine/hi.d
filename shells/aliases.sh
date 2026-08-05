@@ -44,12 +44,13 @@ alias dcl="docker container ls && docker compose ls"
 alias dcu="docker compose up"
 alias dcud="docker compose up -d"
 alias dcd="docker compose down"
+alias dps="dcl"
 
 # files/listing/transfer
 alias ls="ls -lh --color=auto"
-alias lsa="ls -lha --color=auto"
-alias lsd="ls -lhd .* --color=auto"
-alias lsr="ls -lhaR --color=auto"
+alias lsa="ls -a"
+alias lsd="ls -d .*"
+alias lsr="lsa -R"
 
 # enable color
 alias grep="grep --color=auto"

@@ -18,7 +18,6 @@ if [ ! -f "$_HI_HOST_COLORS" ] || [ ! -f "$_HI_USER_COLORS" ]; then
   initial_colorgen
 fi
 
-# Unify as many parts of the process as possible
 export _HI_EXCLUDE=(--exclude README.md --exclude .git --exclude .gitignore --exclude scripts --exclude hi.sh --exclude hi.bashrc --exclude data/group_config --exclude .zed)
 export _HI_TR_CMD="tr -s ' ' '\n'"
 export _HI_OPENSSL_CMD="openssl enc -base64"

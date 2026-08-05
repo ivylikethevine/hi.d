@@ -15,7 +15,6 @@ export _HI_CONFIG_START="# hi-config-start"
 export _HI_CONFIG_END="# hi-config-end"
 export _HI_COPY_TIME=-1
 
-# required
 function configure_file() {
   local source=${1}
   local target=${2}
@@ -31,36 +30,28 @@ function configure_file() {
   fi
 }
 
-# required
 function clean_all() {
-  local shells
+  local shells=("$_HI_HOME_BASHRC" "$_HI_HOME_ZSHRC")
   if [ -d "$_HI_FISH_DIR" ]; then
-    shells=("$_HI_HOME_BASHRC" "$_HI_HOME_ZSHRC" "$_HI_HOME_FISH_CONFIG")
-  else
-    shells=("$_HI_HOME_BASHRC" "$_HI_HOME_ZSHRC")
+    shells+=("$_HI_HOME_FISH_CONFIG")
   fi
   for shell in "${shells[@]}"; do
-    # Double up on sed's just to be sure
     if test -f "$shell"; then
       if [ -f "$_HI_LINUX_PATH" ]; then
         sed -i "/^$_HI_CONFIG_START/,/^$_HI_CONFIG_END/d" -- "$shell"
-        sed -i "/^$_HI_CONFIG_START/,/^$_HI_CONFIG_END/d" -- "$shell"
       else
-        sed -i '' "/^$_HI_CONFIG_START/,/^$_HI_CONFIG_END/d" "$shell"
         sed -i '' "/^$_HI_CONFIG_START/,/^$_HI_CONFIG_END/d" "$shell"
       fi
     fi
   done
-  rm -rfv "$_HI_TMPDIR/hi.d"
+  rm -rf "$_HI_TMPDIR/hi.d"
 }
 
-# required
 function timers() {
   spacer
   cecho "load: $(echo "$(_hi_now) $load_start_time" | awk '{ printf "%.3f\n", $1 - $2 }')s | copy: ${_HI_COPY_TIME}s"
 }
 
-# required
 function load() {
   local load_start_time host_color
   load_start_time="$(_hi_now)"

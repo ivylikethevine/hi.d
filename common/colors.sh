@@ -41,7 +41,6 @@ export BRBLUE='\e[1;34m'
 export BRPURPLE='\e[1;35m'
 export BRCYAN='\e[1;36m'
 
-# required
 # GNU coreutils' du supports --apparent-size; busybox/bsd du (Alpine, macOS,
 # *BSD, etc.) don't support this GNU-only flag
 _HI_LINUX_FLAGS=""
@@ -50,7 +49,6 @@ if du --version >/dev/null 2>&1 && du --version | grep -q "GNU coreutils"; then
 fi
 export _HI_LINUX_FLAGS
 
-# required
 # high-res-ish timestamp without shelling out to perl (not guaranteed to exist
 # on minimal/embedded targets); falls back to whole-second precision on bash <5
 function _hi_now() {
@@ -61,13 +59,11 @@ function _hi_now() {
   fi
 }
 
-# required
 # `hostname` isn't guaranteed to exist on minimal/container images; uname -n is
 function _hi_hostname() {
   hostname 2>/dev/null || uname -n
 }
 
-# required
 function cecho() {
   local text=${1:-}
   local color=${2:-}
@@ -80,7 +76,6 @@ function cecho() {
   fi
 }
 
-# required
 function at_color() {
   if [[ -v SSH_TTY ]]; then
     printf '%s' "$YELLOW"
@@ -89,7 +84,6 @@ function at_color() {
   fi
 }
 
-# required
 function read_color_file() {
   local search_val=${1:-}
   local color_file=${2:-}
@@ -120,12 +114,10 @@ function read_color_file() {
   fi
 }
 
-# required
 function host_color() {
   read_color_file "$(_hi_hostname)" "$_HI_HOST_COLORS" ${1+x}
 }
 
-# required
 function user_color() {
   read_color_file "$(whoami)" "$_HI_USER_COLORS" ${1+x}
 }

@@ -21,7 +21,6 @@ fi
 export _HI_EXCLUDE=(--exclude README.md --exclude .git --exclude .gitignore --exclude scripts --exclude hi.sh --exclude hi.bashrc --exclude data/group_config --exclude .zed)
 export _HI_TR_CMD="tr -s ' ' '\n'"
 export _HI_OPENSSL_CMD="openssl enc -base64"
-export _HI_OPENSSL_CHECK="command -v openssl >/dev/null 2>&1 || { echo >&2 \"hi requires openssl to be installed on [$DOMAIN], but it is not. Aborting.\"; exit 1; }"
 export _HI_TRAP="trap 'rm -rf \$_HI_CLEANUP' exit"
 export _HI_SHELL_START
 
@@ -89,6 +88,7 @@ function _say_hi() {
 
   if [ "$remote_shell" = "" ]; then
     cecho " $(cat "$tmp")" "$BRRED"
+    rm -rf "$tmp"
     exit 1
   fi
 
@@ -101,7 +101,7 @@ function _say_hi() {
 
   echo -ne "$YELLOW-> $remote_shell$NC $(du -sh "${_HI_EXCLUDE[@]}" "$_HI_LINUX_FLAGS" "$_HI_ROOT" | awk '{ print $1 }')"
   ssh -t "$DOMAIN" "$SSHARGS" "
-      $_HI_OPENSSL_CHECK
+      command -v openssl >/dev/null 2>&1 || { echo >&2 \"hi requires openssl to be installed on [$DOMAIN], but it is not. Aborting.\"; exit 1; }
       export _HI_TMPDIR=\$(mktemp -d -t $(whoami).hi.XXXX)
       mkdir \$_HI_TMPDIR/hi.d
       export _HI_ROOT=\$_HI_TMPDIR/hi.d
@@ -133,6 +133,7 @@ function _say_hi_docker() {
     ' 2>"$tmp")
     if [ -z "$fallback_shell" ]; then
       cecho " $(cat "$tmp")" "$BRRED"
+      rm -rf "$tmp"
       return 1
     fi
     cecho " no bash in [$DOMAIN], skipping hi config -> plain $fallback_shell" "$YELLOW"

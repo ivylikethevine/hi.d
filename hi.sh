@@ -32,21 +32,6 @@ function _hi_copy_time() {
   echo "$(_hi_now) $1" "$2" "$3" | awk '{ printf "%.3f\n", ($1 - $2) - ($4 - $3) }'
 }
 
-function _hi_bootstrap_rc() {
-  local extra="${1:-}"
-  cat <<EOF
-if [ -r /etc/profile ]; then source /etc/profile; fi
-if [ -r ~/.bash_profile ]; then source ~/.bash_profile
-elif [ -r ~/.bash_login ]; then source ~/.bash_login
-elif [ -r ~/.profile ]; then source ~/.profile
-fi
-export PATH=\$PATH:\$_HI_ROOT
-source \$_HI_ROOT/load.sh
-$extra
-load
-EOF
-}
-
 function _hi_is_ssh_host() {
   local host="$1"
   [ -f "$_HI_SSH_CONFIG_FILE" ] || return 1
@@ -64,6 +49,27 @@ function _hi_is_docker_container() {
   [ "$(docker container inspect -f '{{.State.Running}}' "$name" 2>/dev/null)" = "true" ]
 }
 
+function _hi_is_nomad_alloc() {
+  local name="$1"
+  command -v nomad >/dev/null 2>&1 || return 1
+  [ "$(nomad alloc status -t '{{.ClientStatus}}' "$name" 2>/dev/null)" = "running" ]
+}
+
+function _hi_bootstrap_rc() {
+  local extra="${1:-}"
+  cat <<EOF
+if [ -r /etc/profile ]; then source /etc/profile; fi
+if [ -r ~/.bash_profile ]; then source ~/.bash_profile
+elif [ -r ~/.bash_login ]; then source ~/.bash_login
+elif [ -r ~/.profile ]; then source ~/.profile
+fi
+export PATH=\$PATH:\$_HI_ROOT
+source \$_HI_ROOT/load.sh
+$extra
+load
+EOF
+}
+
 # Connect to remote host, determine shell, then copy hi.d & run load.sh.
 # This could be removed if we required all targets to run bash as the login shell.
 # This part takes usually 0.5-2s, which is noticeable and quite annoying.
@@ -74,6 +80,7 @@ function _say_hi() {
 
   tmp="/tmp/$(date +%s).hi"
 
+  # TODO: Fix this - it fails on a fish login shell
   remote_shell=$(ssh "$DOMAIN" '
     if [ -n "$SHELL" ]; then
       basename "$SHELL"
@@ -119,15 +126,22 @@ function _say_hi() {
       "
 }
 
-function _say_hi_docker() {
+# Shared docker/nomad session logic. Both engines are driven purely through
+# three exec-prefix arrays (probe: no tty/stdin, cp: stdin only, attach: tty+stdin),
+# so all copying goes through `sh -c "cat > path"` and all env vars are set via
+# a `sh -c "export ...; exec ..."` wrapper - the one interface both engines support.
+function _say_hi_remote() {
+  local label="$1"
+  local -n probe="$2" cp="$3" attach="$4"
   local shell_end_time tmp has_bash fallback_shell container_tmpdir container_root hi_bashrc exit_code container_aliases container_zdotdir
 
   tmp="/tmp/$(date +%s).hi"
-  has_bash=$(docker exec "$DOMAIN" sh -c 'command -v bash' 2>"$tmp")
+  has_bash=$("${probe[@]}" sh -c 'command -v bash' 2>"$tmp")
   shell_end_time="$(_hi_now)"
 
   if [ -z "$has_bash" ]; then
-    fallback_shell=$(docker exec "$DOMAIN" sh -c '
+    # shellcheck disable=SC2016
+    fallback_shell=$("${probe[@]}" sh -c '
       for s in zsh fish sh; do command -v "$s" >/dev/null 2>&1 && { echo "$s"; break; }; done
     ' 2>"$tmp")
     if [ -z "$fallback_shell" ]; then
@@ -138,32 +152,32 @@ function _say_hi_docker() {
     cecho " no bash in [$DOMAIN], skipping hi config -> plain $fallback_shell w/ aliases" "$YELLOW"
 
     container_aliases="/tmp/.hi_aliases.$$"
-    docker cp "$_HI_ROOT/shells/aliases.sh" "$DOMAIN:$container_aliases" 2>"$tmp" || {
+    if ! "${cp[@]}" sh -c "cat > '$container_aliases'" <"$_HI_ROOT/shells/aliases.sh" 2>"$tmp"; then
       cecho " failed to copy aliases.sh into [$DOMAIN]" "$BRRED"
       rm -rfv "$tmp"
-      docker exec -it "$DOMAIN" "$fallback_shell"
+      "${attach[@]}" "$fallback_shell"
       return $?
-    }
+    fi
 
     case "$fallback_shell" in
     zsh)
       container_zdotdir="/tmp/.hi_zdotdir.$$"
-      docker exec "$DOMAIN" sh -c "mkdir -p '$container_zdotdir' && echo '. $container_aliases 2>/dev/null' > '$container_zdotdir/.zshrc'" 2>"$tmp"
-      docker exec -it -e "ZDOTDIR=$container_zdotdir" "$DOMAIN" zsh
+      "${probe[@]}" sh -c "mkdir -p '$container_zdotdir' && echo '. $container_aliases 2>/dev/null' > '$container_zdotdir/.zshrc'" 2>"$tmp"
+      "${attach[@]}" sh -c "export ZDOTDIR='$container_zdotdir'; exec zsh"
       exit_code=$?
-      docker exec "$DOMAIN" rm -rfv "$container_zdotdir" >/dev/null 2>&1
+      "${probe[@]}" rm -rfv "$container_zdotdir" >/dev/null 2>&1
       ;;
     fish)
-      docker exec -it "$DOMAIN" fish -C "source $container_aliases 2>/dev/null"
+      "${attach[@]}" fish -C "source $container_aliases 2>/dev/null"
       exit_code=$?
       ;;
     *)
-      docker exec -it -e "ENV=$container_aliases" "$DOMAIN" "$fallback_shell"
+      "${attach[@]}" sh -c "export ENV='$container_aliases'; exec $fallback_shell"
       exit_code=$?
       ;;
     esac
 
-    docker exec "$DOMAIN" rm -fv "$container_aliases" >/dev/null 2>&1
+    "${probe[@]}" rm -fv "$container_aliases" >/dev/null 2>&1
     rm -rfv "$tmp"
     return $exit_code
   fi
@@ -173,29 +187,50 @@ function _say_hi_docker() {
   container_tmpdir="/tmp/$(whoami).hi.$$"
   container_root="$container_tmpdir/hi.d"
 
-  echo -ne "$YELLOW-> bash (docker)$NC $(du -sh "${_HI_EXCLUDE[@]}" "$_HI_LINUX_FLAGS" "$_HI_ROOT" | awk '{ print $1 }')"
+  echo -ne "$YELLOW-> bash ($label)$NC $(du -sh "${_HI_EXCLUDE[@]}" "$_HI_LINUX_FLAGS" "$_HI_ROOT" | awk '{ print $1 }')"
 
-  if ! tar czf - -h -C "$_HI_TMPDIR" "${_HI_EXCLUDE[@]}" hi.d | docker exec -i "$DOMAIN" sh -c "mkdir -p '$container_tmpdir' && tar mxzf - -C '$container_tmpdir'"; then
+  if ! tar czf - -h -C "$_HI_TMPDIR" "${_HI_EXCLUDE[@]}" hi.d | "${cp[@]}" sh -c "mkdir -p '$container_tmpdir' && tar mxzf - -C '$container_tmpdir'"; then
     cecho " failed to copy hi.d into [$DOMAIN]" "$BRRED"
-    docker exec "$DOMAIN" rm -rfv "$container_tmpdir" >/dev/null 2>&1
+    "${probe[@]}" rm -rfv "$container_tmpdir" >/dev/null 2>&1
     return 1
   fi
 
-  docker cp "$0" "$DOMAIN:$container_root/hi.sh"
+  "${cp[@]}" sh -c "cat > '$container_root/hi.sh'" <"$0"
+  "${probe[@]}" chmod +x "$container_root/hi.sh" >/dev/null 2>&1
 
   hi_bashrc="$tmp.bashrc"
   {
     _hi_bootstrap_rc "export _HI_COPY_TIME='$(_hi_copy_time "$copy_start_time" "$_HI_SHELL_START" "$shell_end_time")'"
     echo "$CMDARG"
   } >"$hi_bashrc"
-  docker cp "$hi_bashrc" "$DOMAIN:$container_root/hi.bashrc"
+  "${cp[@]}" sh -c "cat > '$container_root/hi.bashrc'" <"$hi_bashrc"
   rm -fv "$hi_bashrc"
 
-  docker exec -it -e "_HI_TMPDIR=$container_tmpdir" -e "_HI_ROOT=$container_root" "$DOMAIN" bash --rcfile "$container_root/hi.bashrc"
+  "${attach[@]}" sh -c "export _HI_TMPDIR='$container_tmpdir' _HI_ROOT='$container_root'; exec bash --rcfile '$container_root/hi.bashrc'"
   exit_code=$?
 
-  docker exec "$DOMAIN" rm -rfv "$container_tmpdir" >/dev/null 2>&1
+  "${probe[@]}" rm -rfv "$container_tmpdir" >/dev/null 2>&1
   return $exit_code
+}
+
+function _say_hi_docker() {
+  # shellcheck disable=SC2034 # read via nameref in _say_hi_remote
+  local -a exec_probe=(docker exec "$DOMAIN")
+  # shellcheck disable=SC2034
+  local -a exec_cp=(docker exec -i "$DOMAIN")
+  # shellcheck disable=SC2034
+  local -a exec_attach=(docker exec -it "$DOMAIN")
+  _say_hi_remote docker exec_probe exec_cp exec_attach
+}
+
+function _say_hi_nomad() {
+  # shellcheck disable=SC2034 # read via nameref in _say_hi_remote
+  local -a exec_probe=(nomad alloc exec -i=false -t=false "$DOMAIN")
+  # shellcheck disable=SC2034
+  local -a exec_cp=(nomad alloc exec -i=true -t=false "$DOMAIN")
+  # shellcheck disable=SC2034
+  local -a exec_attach=(nomad alloc exec "$DOMAIN")
+  _say_hi_remote nomad exec_probe exec_cp exec_attach
 }
 
 # Parse ssh arguments
@@ -245,6 +280,8 @@ function _run() {
     _HI_SHELL_START="$(_hi_now)"
     if ! _hi_is_ssh_host "$DOMAIN" && _hi_is_docker_container "$DOMAIN"; then
       _say_hi_docker 2>"$tmp"
+    elif ! _hi_is_ssh_host "$DOMAIN" && _hi_is_nomad_alloc "$DOMAIN"; then
+      _say_hi_nomad 2>"$tmp"
     else
       _say_hi 2>"$tmp"
     fi
@@ -268,4 +305,4 @@ function _run() {
 }
 
 _run "$@"
-# _run -> _hi_parse -> _say_hi | _say_hi_docker
+# _run -> _hi_parse -> _say_hi | _say_hi_docker | _say_hi_nomad

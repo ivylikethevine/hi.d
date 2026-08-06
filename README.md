@@ -17,6 +17,10 @@ _Don't `ssh`ush your hosts, say `hi`!_
 
 `hi <name>` also works against a running docker container - if `<name>` isn't a `Host` alias in `~/.ssh/config` but is a running container (matched by name or ID), `hi` copies `~/hi.d` in and chainloads `load.sh` exactly like the ssh path, giving an identical session (colors, prompt, aliases, vim/nano configs, etc). No openssl armoring is needed here (`docker exec -i` already passes stdin through as raw bytes), and cleanup happens automatically once you exit the container shell. The container needs `bash` installed for the full experience; without it, `hi` drops you into the best available plain shell (`zsh`/`fish`/`sh`) with a warning instead.
 
+### Nomad allocations
+
+`hi <alloc-id>` also works against a running Nomad allocation (matched by ID/prefix via `nomad alloc status`, checked after the ssh-host and docker-container checks) - same idea and same session as the docker path. Since `nomad alloc exec` has no `docker cp`/`-e` equivalent, files are streamed in with `exec -i` + `cat >` and env vars are set via a `sh -c "export ...; exec ..."` wrapper instead. If the allocation runs multiple tasks, `nomad alloc exec` may need `-task <name>` to disambiguate - `hi` doesn't currently support passing that through, so multi-task allocations need a single unambiguous task or targeting by `alloc:task` isn't available here. As with docker, no `bash` in the allocation means a plain fallback shell (`zsh`/`fish`/`sh`) with aliases instead.
+
 ### Installation/Usage
 
 - clone this repo to `~/`

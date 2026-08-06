@@ -1,132 +1,94 @@
 #!/bin/bash
+# Points the local shells at hi.d's configs and links hi.sh onto $PATH.
+# Safe to re-run: it repairs the lines it owns and leaves everything else alone.
 set -eou pipefail
 
-# Locate hi.d relative to this script (resolving symlinks) so install works no matter where the repo lives.
+# Locate hi.d relative to this script (resolving symlinks), so install works no
+# matter where the repo lives.
 _HI_SELF="${BASH_SOURCE[0]}"
 while [ -L "$_HI_SELF" ]; do
   _HI_SELF_DIR="$(cd -P "$(dirname "$_HI_SELF")" && pwd)"
   _HI_SELF="$(readlink "$_HI_SELF")"
   [[ $_HI_SELF == /* ]] || _HI_SELF="$_HI_SELF_DIR/$_HI_SELF"
 done
-_HI_SELF_DIR="$(cd -P "$(dirname "$_HI_SELF")" && pwd)"
-
-_HI_ROOT="$(dirname "$_HI_SELF_DIR")" # .../hi.d
-_HI_TMPDIR="$(dirname "$_HI_ROOT")"   # wherever hi.d's parent dir is (usually $HOME)
+_HI_TMPDIR="$(cd -P "$(dirname "$_HI_SELF")/../.." && pwd)" # hi.d's parent, usually $HOME
 export _HI_TMPDIR
 
-# shellcheck source=./common/bootstrap.sh
-source "$_HI_ROOT/common/bootstrap.sh"
+# shellcheck source=../common/bootstrap.sh
+source "$_HI_TMPDIR/hi.d/common/bootstrap.sh"
 
-readonly _HI_MARKER="# added by hi during install"
+_HI_MARKER="# added by hi during install"
+_HI_LINK="/usr/bin/hi"
 
 # Rewrite the block of hi-managed lines (tagged with $_HI_MARKER) in $target to
-# match $content, leaving any other user content untouched. This both installs
+# be exactly $@, leaving any other user content untouched. This both installs
 # the sourcing on a fresh machine and repairs it if hi.d has since moved -
 # stale lines pointing at an old location are replaced, not left dangling
-# alongside new ones.
+# alongside new ones. Empty arguments are skipped.
 function config_shell() {
-  local name="$1" content="$2" target="$3"
+  local name="$1" target="$2" line existing desired="" tmpfile
+  shift 2
   cecho "=== Checking $name ===" "$YELLOW"
 
   mkdir -p "$(dirname "$target")"
   touch "$target"
+  for line in "$@"; do
+    [ -n "$line" ] && desired+="$(printf '%-45s %s' "$line" "$_HI_MARKER")"$'\n'
+  done
 
-  local existing desired
   existing="$(grep -F "$_HI_MARKER" "$target" || true)"
-  desired="$(printf '%s\n' "$content" | grep -F "$_HI_MARKER" || true)"
-
-  if [ "$existing" = "$desired" ]; then
+  if [ "$existing" = "${desired%$'\n'}" ]; then
     cecho "local $name up to date :)" "$GREEN"
     return 0
   fi
 
   cecho "local $name out of date, updating..." "$YELLOW"
-  local tmpfile
   tmpfile="$(mktemp)"
   grep -vF "$_HI_MARKER" "$target" >"$tmpfile" || true
-  printf '%s\n' "$content" >>"$tmpfile"
+  printf '%s' "$desired" >>"$tmpfile"
   mv "$tmpfile" "$target"
   cecho "local $name updated :)" "$GREEN"
 }
 
-# Only emit an _HI_TMPDIR export when hi.d isn't at $HOME/hi.d - every
-# consumer already defaults _HI_TMPDIR to $HOME on its own, so the common
-# case stays free of an extra rc line.
-function hi_tmpdir_line_sh() {
+# Only emit an _HI_TMPDIR export when hi.d isn't at $HOME/hi.d - every consumer
+# already defaults _HI_TMPDIR to $HOME, so the common case stays free of it.
+function tmpdir_line() {
   [ "$_HI_TMPDIR" = "$HOME" ] && return 0
-  printf 'export _HI_TMPDIR="%s"                 %s' "$_HI_TMPDIR" "$_HI_MARKER"
-}
-
-function hi_tmpdir_line_fish() {
-  [ "$_HI_TMPDIR" = "$HOME" ] && return 0
-  printf 'set -gx _HI_TMPDIR "%s"                 %s' "$_HI_TMPDIR" "$_HI_MARKER"
-}
-
-function config_bashrc() {
-  local content line
-  content=""
-  line="$(hi_tmpdir_line_sh)"
-  [ -n "$line" ] && content+="$line"$'\n'
-  content+="# If not running interactively, exit   $_HI_MARKER"$'\n'
-  content+="[[ \$- != *i* ]] && return              $_HI_MARKER"$'\n'
-  content+="source \"$_HI_ROOT/shells/bash.sh\"          $_HI_MARKER"
-  config_shell "bashrc" "$content" "$_HI_HOME_BASHRC"
-}
-
-function config_zshrc() {
-  local content line
-  content=""
-  line="$(hi_tmpdir_line_sh)"
-  [ -n "$line" ] && content+="$line"$'\n'
-  content+="source \"$_HI_ROOT/shells/zsh.zsh\"          $_HI_MARKER"
-  config_shell "zshrc" "$content" "$_HI_HOME_ZSHRC"
-}
-
-function config_fish() {
-  local content line
-  content=""
-  line="$(hi_tmpdir_line_fish)"
-  [ -n "$line" ] && content+="$line"$'\n'
-  content+="if status is-interactive               $_HI_MARKER"$'\n'
-  content+="  source \"$_HI_ROOT/shells/config.fish\"    $_HI_MARKER"$'\n'
-  content+="end                                    $_HI_MARKER"
-  config_shell "config.fish" "$content" "$_HI_HOME_FISH_CONFIG"
+  case "$1" in
+  fish) printf 'set -gx _HI_TMPDIR "%s"' "$_HI_TMPDIR" ;;
+  *) printf 'export _HI_TMPDIR="%s"' "$_HI_TMPDIR" ;;
+  esac
 }
 
 function config_hi() {
   cecho "=== Checking hi.sh ===" "$YELLOW"
-  local INSTALLED_HI="/usr/bin/hi"
-  local NEW_HI="$_HI_ROOT/hi.sh"
-
-  chmod +x "$NEW_HI"
-
-  if diff --color=always -w -u "$NEW_HI" "$INSTALLED_HI" 2>/dev/null; then
-    cecho "$INSTALLED_HI is same as $NEW_HI :)" "$GREEN"
+  chmod +x "$_HI_LAUNCHER"
+  if [ "$(readlink "$_HI_LINK" 2>/dev/null)" = "$_HI_LAUNCHER" ]; then
+    cecho "$_HI_LINK already points at $_HI_LAUNCHER :)" "$GREEN"
     return 0
-  else
-    cecho "$INSTALLED_HI out of date, updating..." "$YELLOW"
-    cecho "Removing old $INSTALLED_HI... [password required]" "$BLUE"
-    sudo rm -f "$INSTALLED_HI"
-    cecho "Linking $INSTALLED_HI to latest hi.sh... [password required]" "$BLUE"
-    sudo ln -s "$NEW_HI" "$INSTALLED_HI"
   fi
+  cecho "Linking $_HI_LINK -> $_HI_LAUNCHER... [password required]" "$BLUE"
+  sudo ln -sfn "$_HI_LAUNCHER" "$_HI_LINK"
 }
 
-function main() {
-  cecho "~~~~~ Installing (or reinstalling) hi.sh! ~~~~~" "$BRGREEN"
-  echo "pwd: $PWD | hi_root: $_HI_ROOT | hi_tmpdir: $_HI_TMPDIR"
-  cecho "===== Checking $USER's login shell =====" "$BRCYAN"
-  local shellname
-  shellname=$(grep -e "$USER" /etc/passwd | xargs basename)
-  cecho "===== [$shellname] shell detected! =====" "$CYAN"
+cecho "~~~~~ Installing (or reinstalling) hi.sh! ~~~~~" "$BRGREEN"
+echo "pwd: $PWD | hi_root: $_HI_ROOT | hi_tmpdir: $_HI_TMPDIR | shell: ${SHELL##*/}"
 
-  config_bashrc
-  config_zshrc
-  config_fish
+config_shell bashrc "$_HI_HOME_BASHRC" \
+  "$(tmpdir_line sh)" \
+  '[[ $- != *i* ]] && return' \
+  "source \"$_HI_BASHRC\""
 
-  config_hi
+config_shell zshrc "$_HI_HOME_ZSHRC" \
+  "$(tmpdir_line sh)" \
+  "source \"$_HI_ZSHRC\""
 
-  cecho "~~~~~ Installed! ~~~~~ " "$BRGREEN"
-}
+config_shell config.fish "$_HI_HOME_FISH_CONFIG" \
+  "$(tmpdir_line fish)" \
+  'if status is-interactive' \
+  "  source \"$_HI_FISH_CONFIG\"" \
+  'end'
 
-main
+config_hi
+
+cecho "~~~~~ Installed! ~~~~~ " "$BRGREEN"

@@ -1,100 +1,80 @@
 #!/bin/bash
+# The banner hi prints on connect/disconnect, and the fish greeting prints
+# locally - one implementation for every shell (fish shells out to bash here).
 set -eou pipefail
 
-_HI_TMPDIR=${_HI_TMPDIR:-$HOME}
-# shellcheck source=./common/bootstrap.sh
-source "$_HI_TMPDIR/hi.d/common/bootstrap.sh"
+# shellcheck source=./bootstrap.sh
+source "${_HI_TMPDIR:-$HOME}/hi.d/common/bootstrap.sh"
+# shellcheck source=./check.sh
+source "$_HI_CHECK"
 
-# required
-function spacer() {
-  echo -n ' | '
+# " | cell | cell | ...", each cell already colored
+function _hi_row() {
+  local cell out=""
+  for cell in "$@"; do out+="$NC | $cell"; done
+  printf '%b\n' "$out$NC"
 }
 
-# required
 function timestamp() {
-  spacer
-  local _HI_HUMAN_CENTRIC_DATE="+%a %b %-e %Y %H:%M:%S %Z"
-  printf '%b\n' "${BRBLUE}$(date -u "$_HI_HUMAN_CENTRIC_DATE")   ${NC}|${BRYELLOW}   $(date "$_HI_HUMAN_CENTRIC_DATE")${NC}"
-  spacer
+  local fmt="+%a %b %-e %Y %H:%M:%S %Z"
+  _hi_row "$BRBLUE$(date -u "$fmt")  " "  $BRYELLOW$(date "$fmt")"
 }
 
+# kernel/arch/os/cpu/ram, without the (slow) system_profiler on macOS
 function system_info_line() {
-  local kernel arch uname_out
-  uname_out=$(uname -sm)
-  kernel=${uname_out%% *}
-  arch=${uname_out#* }
-  cecho "$kernel" "$YELLOW" 1
-  spacer
-  cecho "$arch" "$PURPLE" 1
-  spacer
+  local kernel arch os cpus ram
+  read -r kernel arch <<<"$(uname -sm)"
   if [ -f "$_HI_LINUX_RELEASE" ]; then
-    local key value pretty_name=""
-    while IFS='=' read -r key value; do
-      if [[ "$key" == "PRETTY_NAME" ]]; then
-        pretty_name=${value//\"/}
-        break
-      fi
-    done <"$_HI_LINUX_RELEASE"
-    cecho "$pretty_name" "$GREEN" 1
-    spacer
-    cecho "CPUs: $(nproc)" "$BLUE" 1
-    spacer
-    local mem_output total="N/A"
-    if command -v free &>/dev/null; then
-      mem_output=$(free -h --giga)
-      if [[ "$mem_output" =~ Mem:[[:space:]]+([0-9.]+[A-Za-z]*) ]]; then
-        total="${BASH_REMATCH[1]}"
-      fi
-    fi
-    cecho "RAM: $total " "$CYAN"
+    os=$(awk -F= '$1 == "PRETTY_NAME" { gsub(/"/, "", $2); print $2 }' "$_HI_LINUX_RELEASE")
+    cpus=$(nproc 2>/dev/null)
+    ram=$(free -h --giga 2>/dev/null | awk '$1 == "Mem:" { print $2 }')
   else
-    local system_info cores mem
-    system_info=$(system_profiler SPHardwareDataType)
-    cecho "macOS $(sw_vers -productVersion)" "$BLUE" 1
-    spacer
-    read -r cores mem < <(awk -F': +' '/Cores/ {cores=$2} /Memory/ {mem=$2} END {print cores, mem}' <<<"$system_info")
-    cecho "CPUs: $cores" "$BLUE" 1
-    spacer
-    cecho "RAM: ${mem%% *}GB" "$CYAN" 1
+    os="macOS $(sw_vers -productVersion 2>/dev/null)"
+    cpus=$(sysctl -n hw.ncpu 2>/dev/null)
+    ram=$(sysctl -n hw.memsize 2>/dev/null | awk '{ printf "%.0fG", $1 / 1073741824 }')
   fi
+  _hi_row "$YELLOW$kernel" "$PURPLE$arch" "$GREEN$os" "${BLUE}CPUs: ${cpus:-?}" "${CYAN}RAM: ${ram:-?}"
 }
 
-function git_keys_docker_line() {
-  spacer
-  if [ -f "$_HI_HOME_GITCONFIG" ]; then
-    local line email_line=""
-    while IFS=$' ' read -r line; do
-      [[ "$line" == *email* ]] && email_line=$line
-    done <"$_HI_HOME_GITCONFIG"
-    local email=${email_line#*=}
-    email=${email// /}
-    local user=${email%%@*}
-    local domain=${email#*@}
-    local bullets=""
-    for ((i = 0; i < ${#domain}; i++)); do
-      bullets+="●"
-    done
-    cecho "Git ID: " "$CYAN" 1
-    cecho "$user@$bullets" "$YELLOW" 1
+# git identity (domain masked), running containers, and ssh key counts
+function identity_line() {
+  local email="" domain user_part bullets containers="No docker :(" authorized=0 public=0
+  command -v git &>/dev/null && email=$(git config --get user.email 2>/dev/null || true)
+  if [ -n "$email" ]; then
+    domain=${email#*@}
+    bullets=$(printf "%*s" "${#domain}" "" | sed 's/ /●/g')
+    user_part="${CYAN}Git ID: $YELLOW${email%%@*}@$bullets"
   else
-    cecho "No Git ID Found..." "$YELLOW" 1
+    user_part="${YELLOW}No Git ID Found..."
   fi
-  spacer
-  if command -v "docker" &>/dev/null; then
-    cecho "Containers: $(docker container ls -q | wc -l)" "$BLUE" 1
-  else
-    cecho "No docker :(" "$BRYELLOW" 1
+  command -v docker &>/dev/null && containers="Containers: $(docker container ls -q | wc -l)"
+  [ -f "$_HI_SSH_AUTHORIZED_KEYS" ] && authorized=$(wc -l <"$_HI_SSH_AUTHORIZED_KEYS")
+  [ -d "$_HI_SSH_DIR" ] && public=$(find "$_HI_SSH_DIR" -type f -name "*.pub" | wc -l)
+  _hi_row "$user_part" "$BLUE$containers" "${RED}Auth: $authorized" "${PURPLE}Pub: $public"
+}
+
+# "~~~ <label> [host] ~~~", prefixed with hi.d's own dirty-file count when this
+# is the machine holding the git checkout
+function hi_banner() {
+  local label="$1" color="${2:-$BRGREEN}" changes=""
+  [ -d "$_HI_ROOT/.git" ] && changes="$BRYELLOW$(git -C "$_HI_ROOT" status --short | wc -l) ↑ "
+  local start_tildes="~~~~~~~~~~~~~~~~~~~~~"
+  local end_tildes="~~~~~~~~~~~~~~~~~~~~~~~~"
+  if [[ "$label" == "Connected" ]]; then
+    start_tildes="~~"
+    end_tildes="~~~~~~~~~~~~~~~~~~~~"
+  elif [[ "$label" == "Disconnected" ]]; then
+    start_tildes="~~~~~~~~~~~~~~~~~~"
+    end_tildes="~~~~~~~~~~~~~~~~~~~~~~~~"
   fi
-  spacer
-  if [ -f "$_HI_SSH_AUTHORIZED_KEYS" ]; then
-    cecho "Auth: $(wc -l <"$_HI_SSH_AUTHORIZED_KEYS")" "$RED" 1
-  else
-    cecho "Auth: 0!" "$RED" 1
-  fi
-  spacer
-  if [ -f "$_HI_SSH_DIR" ]; then
-    cecho "Pub: $(find "$_HI_SSH_DIR" -type f -name "*.pub" | wc -l)" "$PURPLE"
-  else
-    cecho "Pub: 0!" "$PURPLE"
-  fi
+  printf '%b\n' " $changes$color$start_tildes $label ${NC}[$(host_escape)$(_hi_hostname)$NC]$color $end_tildes$NC"
+}
+
+# the whole greeting: banner, clocks, system, identity, then package check
+function hi_header() {
+  hi_banner "$@"
+  timestamp
+  system_info_line
+  identity_line
+  full_check
 }

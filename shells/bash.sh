@@ -1,105 +1,62 @@
 #!/bin/bash
-# set -eou pipefail # this will cause an interactive shell to exit on first error
+# set -eou pipefail # cannot be enabled: an interactive shell would exit on the first error
 
 # === start required configuration ===
-# shellcheck disable=SC2010
-_HI_TMPDIR=${_HI_TMPDIR:-$HOME}
-# shellcheck source=./common/bootstrap.sh
-source "$_HI_TMPDIR/hi.d/common/bootstrap.sh"
-# shellcheck source=./common/git_prompt.sh
+# shellcheck source=../common/bootstrap.sh
+source "${_HI_TMPDIR:-$HOME}/hi.d/common/bootstrap.sh"
+# shellcheck source=../common/git_prompt.sh
 source "$_HI_GIT_PROMPT"
-# shellcheck source=./shells/aliases.sh
+# shellcheck source=./aliases.sh
 source "$_HI_ALIASES"
 
-if [ -d "$HOME"/Android ] && [ -d "$HOME"/Android/Sdk ]; then
-  export ANDROID_HOME="$HOME"/Android/Sdk # for android dev on linux
-fi
-
-export EZA_CONFIG_DIR="$_HI_TMPDIR"/hi.d/misc # for eza theme customization at misc/theme.yml
-
+[ -x /usr/bin/lesspipe ] && eval "$(SHELL=/bin/sh lesspipe)"
+[ -r /etc/debian_chroot ] && debian_chroot="($(cat /etc/debian_chroot)) "
 export GCC_COLORS='error=01;31:warning=01;35:note=01;36:caret=01;32:locus=01:quote=01'
 
-[ -x /usr/bin/lesspipe ] && eval "$(SHELL=/bin/sh lesspipe)"
-
-if [ -z "${debian_chroot:-}" ] && [ -r /etc/debian_chroot ]; then
-  debian_chroot=$(cat /etc/debian_chroot)
-fi
-
-if [ -x /usr/bin/tput ] && tput setaf 1 >&/dev/null; then
-  color_prompt=yes
+if tput setaf 1 >/dev/null 2>&1; then
+  HI_PS1=" ${debian_chroot:-}$(user_escape)\u$(at_color)@$(host_escape)\h$NC $BRBLUE\w$NC"
 else
-  color_prompt=
+  HI_PS1=" ${debian_chroot:-}\u@\h:\w"
 fi
-
-if [ "$color_prompt" = yes ]; then
-  USER_COLOR=$(user_color "$(whoami)")
-  HOST_COLOR=$(host_color "$(_hi_hostname)")
-  AT_COLOR=$(at_color)
-
-  HI_PS1=" ${debian_chroot:+($debian_chroot)}${USER_COLOR}\u${AT_COLOR}@${HOST_COLOR}\h${NC} ${BRBLUE}\w${NC}"
-else
-  HI_PS1=" ${debian_chroot:+($debian_chroot)}\u@\h:\w"
-fi
-
-unset color_prompt
 
 if ! shopt -oq posix; then
-  if [[ -f /usr/share/bash-completion/bash_completion ]]; then
-    . /usr/share/bash-completion/bash_completion
-  elif [[ -f /etc/bash_completion ]]; then
-    # shellcheck disable=SC1091
-    . /etc/bash_completion
-  fi
+  # shellcheck disable=SC1091
+  source /usr/share/bash-completion/bash_completion 2>/dev/null ||
+    source /etc/bash_completion 2>/dev/null
 fi
 
-# make `hi`/`exa` complete exactly the way `ssh`/`eza` do, whatever function bash-completion bound to them
-_hi_mirror_completion() {
-  local target="$1" source_cmd="$2" spec
-  if ! complete -p "$source_cmd" &>/dev/null; then
-    command -v _completion_loader &>/dev/null && _completion_loader "$source_cmd" &>/dev/null
-  fi
-  spec=$(complete -p "$source_cmd" 2>/dev/null) || return 0
-  eval "${spec% "$source_cmd"} $target"
+# complete `hi` from the same target list zsh/fish use, and make `exa` complete
+# exactly the way `eza` does, whatever bash-completion bound to it
+function _hi_complete() {
+  mapfile -t COMPREPLY < <(compgen -W "$(sh "$_HI_TARGETS" | cut -f1)" -- "${COMP_WORDS[COMP_CWORD]}")
 }
-_hi_mirror_completion hi ssh
-_hi_mirror_completion exa eza
-unset -f _hi_mirror_completion
+complete -F _hi_complete hi
+command -v _completion_loader &>/dev/null && _completion_loader eza &>/dev/null
+_hi_eza_spec=$(complete -p eza 2>/dev/null) && eval "${_hi_eza_spec% eza} exa"
+unset _hi_eza_spec
 
-# modified from: https://github.com/riobard/bash-powerline/blob/master/bash-powerline.sh |
-ps1() {
-  local symbol="$WHITE \$ $NC"
-
-  # Bash by default expands the content of PS1 unless promptvars is disabled.
-  # We must use another layer of reference to prevent expanding any user
-  # provided strings, which would cause security issues.
-  # POC: https://github.com/njhartwell/pw3nage
+# modified from: https://github.com/riobard/bash-powerline/blob/master/bash-powerline.sh
+function ps1() {
+  # Bash expands the content of PS1 unless promptvars is disabled, so the git
+  # info goes through another layer of reference - expanding user provided
+  # strings would be a security issue. POC: https://github.com/njhartwell/pw3nage
   if shopt -q promptvars; then
     __powerline_git_info="$(_hi_git_prompt)"
-    local git="\${__powerline_git_info}"
+    PS1="$HI_PS1\${__powerline_git_info}$NC \$ "
   else
-    local git
-    git="$(_hi_git_prompt)"
+    PS1="$HI_PS1$(_hi_git_prompt)$NC \$ "
   fi
-
-  PS1="$HI_PS1$git$symbol"
 }
-
 PROMPT_COMMAND="ps1${PROMPT_COMMAND:+; $PROMPT_COMMAND}"
-# end from: https://github.com/riobard/bash-powerline/blob/master/bash-powerline.sh |
 # === end required configuration ===
 
-HISTCONTROL=ignoreboth
 HISTSIZE=2000
 HISTFILESIZE=2000
-
-PROMPT_DIRTRIM=2
 HISTCONTROL="erasedups:ignoreboth"
 export HISTIGNORE="&:[ ]*:exit:ls:bg:fg:history:clear"
+PROMPT_DIRTRIM=2
 
-shopt -s histappend
-shopt -s checkwinsize
-shopt -s globstar
-shopt -s cmdhist
+shopt -s histappend checkwinsize globstar cmdhist
 
 bind "set completion-ignore-case on"
 bind "set completion-map-case on"

@@ -1,111 +1,87 @@
 #!/bin/bash
 # forked from sshrc: https://github.com/danrabinowitz/sshrc
+# Runs on the target: prints the header, grafts hi's shell configs onto the
+# host's rc files, hands over to the best shell available, then undoes it all.
 set -eou pipefail
 
-# shellcheck disable=SC2010
-_HI_TMPDIR=${_HI_TMPDIR:-$HOME}
 # shellcheck source=./common/bootstrap.sh
-source "$_HI_TMPDIR/hi.d/common/bootstrap.sh"
-# shellcheck source=./common/check.sh
-source "$_HI_CHECK"
+source "${_HI_TMPDIR:-$HOME}/hi.d/common/bootstrap.sh"
 # shellcheck source=./common/header.sh
-command -v spacer >/dev/null || source "$_HI_HEADER"
+source "$_HI_HEADER"
 
-export _HI_CONFIG_START="# hi-config-start"
-export _HI_CONFIG_END="# hi-config-end"
-export _HI_COPY_TIME=-1
+_HI_CONFIG_START="# hi-config-start"
+_HI_CONFIG_END="# hi-config-end"
 
-function configure_file() {
-  local source=${1}
-  local target=${2}
-  touch "$target"
-  if test -f "$source"; then
-    if ! grep -q "$_HI_CONFIG_START" "$target"; then
-      {
-        echo "$_HI_CONFIG_START"
-        cat "$source"
-        echo "$_HI_CONFIG_END"
-      } >>"$target"
-    fi
-  fi
+# rc file <- hi config, unless a previous session already added it. Fish only
+# gets one if fish is installed (its config dir won't exist otherwise).
+_HI_CONFIGS=("$_HI_BASHRC:$_HI_HOME_BASHRC" "$_HI_ZSHRC:$_HI_HOME_ZSHRC" "$_HI_FISH_CONFIG:$_HI_HOME_FISH_CONFIG")
+
+function configure_files() {
+  local pair target
+  for pair in "${_HI_CONFIGS[@]}"; do
+    target="${pair#*:}"
+    [ -d "$(dirname "$target")" ] || continue
+    touch "$target"
+    grep -q "$_HI_CONFIG_START" "$target" && continue
+    {
+      echo "$_HI_CONFIG_START"
+      cat "${pair%:*}"
+      echo "$_HI_CONFIG_END"
+    } >>"$target"
+  done
 }
 
+# strip our block back out of every rc file, then remove hi.d itself
 function clean_all() {
-  local shells=("$_HI_HOME_BASHRC" "$_HI_HOME_ZSHRC")
-  if [ -d "$_HI_HOME_FISH_DIR" ]; then
-    shells+=("$_HI_HOME_FISH_CONFIG")
-  fi
-  for shell in "${shells[@]}"; do
-    if test -f "$shell"; then
-      if [ -f "$_HI_LINUX_RELEASE" ]; then
-        sed -i "/^$_HI_CONFIG_START/,/^$_HI_CONFIG_END/d" -- "$shell"
-      else
-        sed -i '' "/^$_HI_CONFIG_START/,/^$_HI_CONFIG_END/d" "$shell"
-      fi
+  local pair target
+  for pair in "${_HI_CONFIGS[@]}"; do
+    target="${pair#*:}"
+    [ -f "$target" ] || continue
+    # BSD/macOS sed needs an explicit (empty) suffix argument for -i
+    if [ -f "$_HI_LINUX_RELEASE" ]; then
+      sed -i "/^$_HI_CONFIG_START/,/^$_HI_CONFIG_END/d" -- "$target"
+    else
+      sed -i '' "/^$_HI_CONFIG_START/,/^$_HI_CONFIG_END/d" "$target"
     fi
   done
-  rm -rfv "$_HI_TMPDIR/hi.d"
-}
-
-function timers() {
-  spacer
-  cecho "load: $(echo "$(_hi_now) $load_start_time" | awk '{ printf "%.3f\n", $1 - $2 }')s | copy: ${_HI_COPY_TIME}s"
+  rm -rfv "$_HI_ROOT"
 }
 
 function load() {
-  local load_start_time host_color
-  load_start_time="$(_hi_now)"
+  local start
+  start="$(_hi_now)"
+  _hi_on_exit clean_all
 
-  if [[ -z ${ZSH_VERSION+x} ]]; then
-    trap 'clean_all' exit
-  else
-    # shellcheck disable=SC2329
-    TRAPEXIT() { clean_all; }
-  fi
+  hi_header Connected
 
-  host_color=$(host_color "$(_hi_hostname)")
-  printf '%b\n' "${BRGREEN} ~~ Connected ${NC}[${host_color}$(_hi_hostname)${NC}]${BRGREEN} ~~~~~~~~~~~~~~~~~~~~~~~${NC}"
-  timestamp
-
-  system_info_line
-  git_keys_docker_line
-  printf '%b\n' "$(full_check)"
-
-  spacer
-  if command -v "vim" &>/dev/null; then
-    # Will cause errors if we load this with only VI
-    export VIMINIT="let \$MYVIMRC='$_HI_VIMRC' | source \$MYVIMRC"
-  fi
-  configure_file "$_HI_BASHRC" "$_HI_HOME_BASHRC"
-  configure_file "$_HI_ZSHRC" "$_HI_HOME_ZSHRC"
-  if [ -d "$_HI_HOME_FISH_DIR" ]; then
-    # This directory won't exist if fish isn't installed
-    configure_file "$_HI_FISH_CONFIG" "$_HI_HOME_FISH_CONFIG"
-  fi
+  # vim only: setting VIMINIT when all we have is vi breaks it
+  command -v vim &>/dev/null && export VIMINIT="let \$MYVIMRC='$_HI_VIMRC' | source \$MYVIMRC"
+  configure_files
+  cecho " | " "$NC" 1
   cecho "hi loaded with... " "$BRCYAN" 1
 
-  # guard against strict mode leaking into the interactive shell we're about
-  # to hand off to (e.g. via an exported SHELLOPTS).
-  # must be disabled in:
-  #   shells/bash.sh, common/git_prompt.sh, common/colors.sh
+  # guard against strict mode leaking into the interactive shell we hand off to
+  # (e.g. via an exported SHELLOPTS) - it would close the session on any error
   set +eou pipefail
 
-  if command -v "fish" &>/dev/null; then
-    cecho "fish shell! :^)" "$GREEN" 1
-    timers
-    fish -C "set fish_greeting ''" -i
-  elif command -v "zsh" &>/dev/null; then
-    cecho "zsh shell! :)" "$PURPLE" 1
-    timers
-    zsh -i
+  local shell=bash greeting="only bash today :(" color="$RED"
+  if command -v fish &>/dev/null; then
+    shell=fish greeting="fish shell! :^)" color="$GREEN"
+  elif command -v zsh &>/dev/null; then
+    shell=zsh greeting="zsh shell! :)" color="$PURPLE"
+  fi
+  cecho "$greeting" "$color" 1
+  cecho " | load: $(_hi_elapsed "$start" "$(_hi_now)")s | copy: ${_HI_COPY_TIME:--1}s"
+
+  if [ "$shell" = fish ]; then
+    fish -C "set fish_greeting ''" -i # the header above is our greeting
   else
-    cecho "only bash today :(" "$RED" 1
-    timers
-    bash -i
+    "$shell" -i
   fi
 
-  cecho " $(du -sh "$_HI_LINUX_FLAGS" "$_HI_ROOT" | awk '{ print $1 }') " "$NC" 1
-  printf '%b\n' "${BRRED}~~~~~~~~~~~~~~~~~~~~~ Disconnected ${NC}[$host_color$(_hi_hostname)${NC}]$BRRED ~~~~~~~~~~~~~~~~~~~~~~~${NC}"
+  # shellcheck disable=SC2086 # unquoted so an empty flag list disappears
+  cecho " $(du -sh $_HI_LINUX_FLAGS "$_HI_ROOT" | awk '{ print $1 }') " "$NC" 1
+  hi_banner Disconnected "$BRRED"
   timestamp
   cecho "hi closing! " "$BRPURPLE"
   exit 0

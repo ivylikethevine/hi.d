@@ -1,9 +1,12 @@
 #!/bin/bash
-# shared bootstrap for every bash consumer: locate hi.d (via $_HI_TMPDIR) and
-# load paths.sh + colors.sh. colors.sh is guarded so re-sourcing this file
-# within the same process (e.g. load.sh sourcing check.sh sourcing this again)
-# is a no-op. fish sources common/paths.sh directly instead of this file.
-# shellcheck source=./common/paths.sh
+# shared entry point for every bash/zsh consumer: locate hi.d and load
+# paths.sh + colors.sh. Sourcing this twice in one process is a no-op, so
+# scripts that source each other can each require it. Callers use:
+#   source "${_HI_TMPDIR:-$HOME}/hi.d/common/bootstrap.sh"
+# fish sources common/paths.sh directly instead.
+: "${_HI_TMPDIR:=$HOME}"
+export _HI_TMPDIR
+# shellcheck source=./paths.sh
 source "$_HI_TMPDIR/hi.d/common/paths.sh"
-# shellcheck source=./common/colors.sh
+# shellcheck source=./colors.sh
 command -v cecho >/dev/null || source "$_HI_COLORS"

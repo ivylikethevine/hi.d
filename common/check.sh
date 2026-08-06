@@ -1,126 +1,65 @@
 #!/bin/bash
+# Reads data/packages ("cmd:priority[,cmd:priority...]" per line) and prints
+# which of them this host has, highest priority first, in columns.
 set -eou pipefail
 
-_HI_TMPDIR=${_HI_TMPDIR:-$HOME}
-# shellcheck source=./common/bootstrap.sh
-source "$_HI_TMPDIR/hi.d/common/bootstrap.sh"
+# shellcheck source=./bootstrap.sh
+source "${_HI_TMPDIR:-$HOME}/hi.d/common/bootstrap.sh"
 
-declare -a color_yes
-declare -a color_no
-# bright blue if we have, ignore if we don't (ex: nice-to-haves, such netstat + distro specific tools)
-color_yes[0]="$BRBLUE"
-color_no[0]="hide"
+# How each priority is rendered when the command is installed / missing;
+# "hide" means don't print it at all. Suggested use per tier:
+#   0 nice-to-haves (netstat, distro tools)   1 second line (git, curl, ping)
+#   2 first line (sed, awk, bc)               3 runtimes (python, node, dotnet)
+#   4 favorites (eza, bat)                    5 workflow-defining (asdf, direnv)
+_HI_YES=("$BRBLUE" "$BRBLUE" hide "$GREEN" "$BRGREEN" "$BRGREEN")
+_HI_NO=(hide "$BRYELLOW" "$YELLOW" hide hide "$BRRED")
+_HI_COLUMNS=8
 
-# bright blue if we have, yellow if we don't (ex. 2nd line tools, such as git, curl, ping)
-color_yes[1]="$BRBLUE"
-color_no[1]="$BRYELLOW"
-
-# hide if we have, bright red if we don't (ex: 1st line tools, such as sed, awk, bc)
-color_yes[2]="hide"
-color_no[2]="$YELLOW"
-
-# green if we have, hide if we don't (ex: tools/languages such as python, node, docker, dotnet)
-color_yes[3]="$GREEN"
-color_no[3]="hide"
-
-# bright green if we have, hide if we don't (ex: favorites & complex tools such as eza/exa)
-color_yes[4]="$BRGREEN"
-color_no[4]="hide"
-
-# bright green if we have, bright red if we don't (ex: things that majorly change work such as asdf, direnv)
-color_yes[5]="$BRGREEN"
-color_no[5]="$BRRED"
-
-# for a single "cmd:priority[,cmd:priority...]" line, pick the installed
-# pair with the highest priority (falling back to the first pair if none
-# are installed), then emit it unless its priority maps to "hide"
+# For one "cmd:priority[,...]" line, pick the installed alternative with the
+# highest priority (or the first alternative if none are installed), then queue
+# it as "<priority><unit sep><rendered>" unless its tier says to hide it.
 function check_line() {
-  local line="$1"
+  local pair cmd priority color best="" best_priority=-1 found=0 rendered
   local -a pairs
-  IFS=',' read -ra pairs <<<"$line"
-
-  local pair cmd priority
-  local max_priority=-1
-  local max_cmd=""
-  local is_installed=0
-  local first_cmd=""
-  local first_priority=""
+  IFS=',' read -ra pairs <<<"$1"
 
   for pair in "${pairs[@]}"; do
     cmd="${pair%:*}"
     priority="${pair#*:}"
-
-    if [[ -z "$first_cmd" ]]; then
-      first_cmd="$cmd"
-      first_priority="$priority"
-    fi
-
-    if command -v "$cmd" &>/dev/null && ((priority > max_priority)); then
-      max_priority=$priority
-      max_cmd=$cmd
-      is_installed=1
+    [ -z "$best" ] && best="$cmd" && best_priority="$priority"
+    if command -v "$cmd" &>/dev/null && ((found == 0 || priority > best_priority)); then
+      best="$cmd"
+      best_priority="$priority"
+      found=1
     fi
   done
 
-  local color cmd_out symbol priority_out
-  if ((is_installed)); then
-    color="${color_yes[max_priority]}"
-    cmd_out="$max_cmd"
-    symbol="$GREEN✓"
-    priority_out="$max_priority"
+  if ((found)); then
+    color="${_HI_YES[best_priority]:-$NC}"
+    rendered="$color $best $GREEN✓"
   else
-    color="${color_no[first_priority]}"
-    cmd_out="$first_cmd"
-    symbol="$RED✗"
-    priority_out="$first_priority"
+    color="${_HI_NO[best_priority]:-$NC}"
+    rendered="$color $best $RED✗"
   fi
-
-  [[ "$color" == "hide" ]] && return
-
-  local formatted
-  printf -v formatted '%s\x1f%b %b %b' "$priority_out" "$color" "$cmd_out" "$symbol"
-  visible_output+=("$formatted")
+  [[ "$color" == hide ]] || visible+=("$best_priority"$'\x1f'"$rendered")
 }
 
-function process_commands() {
-  local is_fish="${1:-0}"
-  local columns=8
-
-  local -a visible_output=()
-  local line item
-  while IFS=$'\n' read -r line; do
-    [[ "$line" == *#* ]] && continue
-    check_line "$line"
-  done <"$_HI_PACKAGES"
-
-  # sort the visible (non-"hide") entries by their priority, highest first,
-  # ties keep file order, then drop the priority prefix used only for sorting
-  local -a checked_output=()
-  if ((${#visible_output[@]} > 0)); then
-    while IFS=$' ' read -r item; do
-      checked_output+=("${item#*$'\x1f'}")
-    done < <(printf '%s\n' "${visible_output[@]}" | sort -t $'\x1f' -k1,1nr -s)
-  fi
-
-  local count=1
-  for item in "${checked_output[@]}"; do
-    echo -ne "$NC|$item $NC"
-    if ((count % columns == 0)); then
-      if [[ $is_fish -eq 1 ]]; then
-        echo -n "newline"
-      else
-        echo -ne "\n "
-      fi
-    fi
-    ((count += 1))
-  done
-}
-
+# every checked package, priority-sorted (ties keep file order) and wrapped
 function full_check() {
-  echo -ne " "
-  process_commands 0
-}
+  local line item count=0
+  local -a visible=() # appended to by check_line
+  while IFS= read -r line; do
+    [[ "$line" == *#* || -z "$line" ]] || check_line "$line"
+  done <"$_HI_PACKAGES"
+  ((${#visible[@]})) || return 0
 
-function full_check_fish {
-  process_commands 1
+  while IFS= read -r item; do
+    if ((count % _HI_COLUMNS == 0)); then # start of a row
+      ((count == 0)) || printf '\n'
+      printf ' '
+    fi
+    printf '%b' "$NC|${item#*$'\x1f'} $NC"
+    ((++count))
+  done < <(printf '%s\n' "${visible[@]}" | sort -t $'\x1f' -k1,1nr -s)
+  printf '\n'
 }

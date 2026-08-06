@@ -1,0 +1,2 @@
+# resolve `source` targets relative to the sourcing file
+source-path=SCRIPTDIR

@@ -1,98 +1,52 @@
 #!/bin/fish
 
 # === start required configuration ===
-if not set -q _HI_TMPDIR
-  set -g _HI_TMPDIR ~
-end
+set -q _HI_TMPDIR; or set -gx _HI_TMPDIR ~
 source $_HI_TMPDIR/hi.d/common/paths.sh
-source $_HI_ALIASES;
+source $_HI_ALIASES
 
-function __hi_targets
-  set -l cfg $_HI_SSH_CONFIG
-  test -f "$cfg" 2>/dev/null; or set cfg ~/.ssh/config
-  if test -f "$cfg"
-    while read -la line
-      test (count $line) -ge 2; or continue
-      string match -qi 'host' -- $line[1]; or continue
-      for host in $line[2..-1]
-        string match -qr '[*?]' -- $host; and continue
-        printf '%s\tssh - %s\n' $host $host
-      end
-    end < $cfg
-  end
-
-  if command -q docker
-    for name in (docker ps --format '{{.Names}}' 2>/dev/null)
-      printf '%s\tdocker - %s\n' $name $name
-    end
-  end
-
-  if command -q nomad
-    for job in (nomad job status 2>/dev/null | tail -n +2 | awk '{print $1}')
-      for id in (nomad job allocs -t '{{range .}}{{if eq .ClientStatus "running"}}{{printf "%.8s" .ID}}{{"\n"}}{{end}}{{end}}' $job 2>/dev/null)
-        printf '%s\tnomad - %s\n' $id $id
-      end
-    end
-  end
-end
-
-complete -c hi -f -a '(__hi_targets)'
+complete -c hi -f -a '(sh $_HI_TARGETS)' # "<target>\ttype" lines
 complete exa --wraps eza
 
-if [ -d $HOME/Android ] && [ -d $HOME/Android/Sdk ]
-  set -gx ANDROID_HOME $HOME/Android/Sdk # for android dev on linux
+# fish can't run the bash/zsh side of hi, so the greeting, the package check
+# and the color resolution all come from one bash call each
+function fish_greeting
+    # on a hi session load.sh already printed this and sets $fish_greeting to
+    # suppress us; locally, nothing sets it and we print the header ourselves
+    set -q fish_greeting; or bash -c "source $_HI_HEADER; hi_header Online"
 end
 
-set -gx EZA_CONFIG_DIR $_HI_TMPDIR/hi.d/misc # for eza theme customization at misc/theme.yml
+set -l hi_colors (bash -c "source $_HI_COLORS; user_color; host_color")
+set -gx fish_color_user $hi_colors[1]
+set -gx fish_color_host $hi_colors[2]
+set -gx fish_color_host_remote $fish_color_host
 
-# wrapper for aliases to work in fish shell under sudo
+# wrapper so aliases (which are functions in fish) still work under sudo
 function sudo
-  if functions -q -- "$argv[1]"
-    set cmdline (
-      for arg in $argv
-        printf "\"%s\" " $arg
-      end
-    )
-    set -x function_src (string join "\n" (string escape --style=var (functions "$argv[1]")))
-    set argv fish -c 'string unescape --style=var (string split "\n" $function_src) | source; '$cmdline
-    command sudo -E $argv
-  else
-    command sudo $argv
-  end
+    if functions -q -- "$argv[1]"
+        set cmdline (for arg in $argv
+            printf "\"%s\" " $arg
+        end)
+        set -x function_src (string join "\n" (string escape --style=var (functions "$argv[1]")))
+        set argv fish -c 'string unescape --style=var (string split "\n" $function_src) | source; '$cmdline
+        command sudo -E $argv
+    else
+        command sudo $argv
+    end
 end
 
-# prompt
+# prompt: "<chroot> user@host cwd (git) [status] |", @ turning yellow over ssh
 function prompt_login --description "display user name for the prompt"
-  set -l last_status $status
-  if not test $last_status -eq 0
-    set_color $fish_color_error
-  end
-
-  # fish colors, chroot, and the ssh_tty @ coloring
-  if not set -q __fish_machine
-    set -g __fish_machine
-    set -l debian_chroot $debian_chroot
-
-    if test -r /etc/debian_chroot
-      set debian_chroot (cat /etc/debian_chroot)
+    if not set -q __fish_machine
+        set -g __fish_machine ""
+        test -r /etc/debian_chroot; and set -g __fish_machine "(chroot:"(cat /etc/debian_chroot)") "
     end
-
-    if set -q debian_chroot[1]
-      and test -n "$debian_chroot"
-      set -g __fish_machine "(chroot:$debian_chroot)"
-    end
-  end
-
-  if set -q __fish_machine[1]
-    echo -n -s (set_color yellow) "$__fish_machine" (set_color normal) ' '
-  end
-
-  set -g color_at normal
-  if set -q SSH_TTY;
-    set -g color_at yellow
-  end
-
-  echo -ns (set_color $fish_color_user) " $USER" (set_color $color_at) @ (set_color $fish_color_host) (prompt_hostname) (set_color normal)
+    set -l color_at normal
+    set -q SSH_TTY; and set color_at yellow
+    echo -ns (set_color yellow) "$__fish_machine" \
+        (set_color $fish_color_user) " $USER" \
+        (set_color $color_at) @ \
+        (set_color $fish_color_host) (prompt_hostname) (set_color normal)
 end
 
 # copied + modified from Lilly Ballard, fish default
@@ -104,112 +58,23 @@ function fish_prompt --description 'Write out the prompt'
     set -l color_cwd $fish_color_cwd
     set -l suffix ' |'
     if functions -q fish_is_root_user; and fish_is_root_user
-        if set -q fish_color_cwd_root
-            set color_cwd $fish_color_cwd_root
-        end
+        set -q fish_color_cwd_root; and set color_cwd $fish_color_cwd_root
         set suffix '#'
     end
 
+    # bold the status only when it changed since the last prompt
     set -l bold_flag --bold
     set -q __fish_prompt_status_generation; or set -g __fish_prompt_status_generation $status_generation
-    if test $__fish_prompt_status_generation = $status_generation
-        set bold_flag
-    end
+    test $__fish_prompt_status_generation = $status_generation; and set bold_flag
     set __fish_prompt_status_generation $status_generation
-    set -l status_color (set_color $fish_color_status)
-    set -l statusb_color (set_color $bold_flag $fish_color_status)
-    set -l prompt_status (__fish_print_pipestatus "[" "]" "|" "$status_color" "$statusb_color" $last_pipestatus)
 
-    echo -n -s (prompt_login)' ' (set_color $color_cwd) (prompt_pwd) $normal (fish_vcs_prompt) $normal " "$prompt_status $suffix " "
+    set -l prompt_status (__fish_print_pipestatus "[" "]" "|" \
+        (set_color $fish_color_status) (set_color $bold_flag $fish_color_status) $last_pipestatus)
+
+    echo -n -s (prompt_login)' ' (set_color $color_cwd) (prompt_pwd) $normal \
+        (fish_vcs_prompt) $normal " "$prompt_status $suffix " "
 end
-
-# header
-function fish_greeting
-  if not set -q fish_greeting
-    if [ -f "$_HI_LINUX_RELEASE" ]
-      set -l pretty_name
-      while read -l key value -d '='
-        if test "$key" = PRETTY_NAME
-          set pretty_name (string trim -c '"' -- $value)
-          break
-        end
-      end < $_HI_LINUX_RELEASE
-      set -g hi_distro (printf '%s%s' (set_color green) $pretty_name)
-      set -g hi_cpus (printf '%sCPUs: %s' (set_color brblue) (nproc))
-      set -l ram_total
-      for line in (free -h --giga)
-        set -l m (string match -r 'Mem:\s+(\S+)' -- $line)
-        if test (count $m) -gt 1
-          set ram_total $m[2]
-          break
-        end
-      end
-      set -g hi_ram (printf '%sRAM: %s' (set_color cyan) $ram_total)
-    else
-      set -l system_info (system_profiler SPHardwareDataType)
-      set -g hi_distro "macOS $(sw_vers -productVersion)"
-      set -l cores mem
-      for line in $system_info
-        set -l m
-        if string match -qr 'Cores' -- $line
-          set cores (string split ' ' -- $line)[-1]
-        else if string match -qr 'Memory' -- $line
-          set mem (string split ' ' -- $line)[-1]
-        end
-      end
-      set -g hi_cpus (printf '%sCPUs: %s' (set_color brblue) $cores)
-      set -g hi_ram (printf '%sRAM: %s' (set_color cyan) $mem)
-    end
-
-    set -l authorized_keys ([ -f "$_HI_SSH_AUTHORIZED_KEYS" ] && printf '%sAuth: %s' (set_color red) (wc -l < "$_HI_SSH_AUTHORIZED_KEYS") || printf '%sAuth: 0!' (set_color red))
-    set -l running_containers ([ -f "/usr/bin/docker" ] && printf '%sContainers: %s' (set_color brblue) (docker container ls -q | wc -l) || printf '%sCounting impossible, no docker :(' (set_color bryellow))
-    set -l git_identity
-    if [ -f "$_HI_HOME_GITCONFIG" ]
-      set -l email_line
-      while read -l line
-        if string match -q '*email*' -- $line
-          set email_line $line
-        end
-      end < $_HI_HOME_GITCONFIG
-      set -l email (string replace -a ' ' '' -- (string split -m1 '=' -- $email_line)[2])
-      set -l parts (string split '@' -- $email)
-      set -l bullets (string repeat -n (string length -- $parts[2]) '●')
-      set git_identity (printf '%sGit ID: %s%s@%s' (set_color brcyan) (set_color yellow) $parts[1] $bullets)
-    else
-      set git_identity (printf '%sNo Git ID Found...' (set_color yellow))
-    end
-    set -l hi_change_status ([ -d "$_HI_ROOT/.git" ] && printf ' %s%s' (set_color bryellow) (git -C ~/hi.d status --short | wc -l)' ↑' || printf '%s' "")
-    set -l spacer (printf '%s|' (set_color normal))
-    set -l utctime (printf '%s%s' (set_color brblue) (date -u $_HI_HUMAN_CENTRIC_DATE))
-    set -l localtime (printf '%s%s' (set_color bryellow) (date $_HI_HUMAN_CENTRIC_DATE))
-    if [ -f "$_HI_HOME_GITCONFIG" ]
-      set -g public (printf '%sPub: %s' (set_color magenta) (find "$_HI_SSH_DIR" -type f -name "*.pub" | wc -l))
-    else
-      set -g public (printf '%sPub: %s' (set_color magenta) ("0!"))
-    end
-    set -l uname_out (string split ' ' -- (uname -sm))
-    set -l os_type (printf '%s%s' (set_color bryellow) $uname_out[1])
-    set -l arch (printf '%s%s' (set_color brmagenta) $uname_out[2])
-
-    printf '%s %s~~~~~~~~~~~~~~~~~~~ Online %s[%s%s%s]%s ~~~~~~~~~~~~~~~~~~~~~~~~~~~%s\n' $hi_change_status (set_color brcyan) (set_color normal) (set_color $fish_color_host) (prompt_hostname) (set_color normal) (set_color brcyan) (set_color normal)
-    printf " %s %s   %s   %s   %s\n" $spacer $utctime $spacer $localtime
-    printf " %s %s %s %s %s %s %s %s %s %s %s\n" $spacer $os_type $spacer $arch $spacer $hi_distro $spacer $hi_cpus $spacer $hi_ram
-    printf " %s %s %s %s %s %s %s %s\n" $spacer $git_identity $spacer $running_containers $spacer $authorized_keys $spacer $public
-    check_packages
-  end
-end
-
-function check_packages --description 'Display a list of installed packages defined by hi.d/data/packages_config'
-  for line in (string split "newline" (bash -c "source $_HI_CHECK; full_check_fish"))
-    printf " %s\n" $line
-  end
-end
-
-set -gx _hi_colors (string split " " (bash -c "source $_HI_COLORS; user_color; host_color"))
-set -gx fish_color_user $_hi_colors[1]
-set -gx fish_color_host $_hi_colors[2]
-set -gx fish_color_host_remote $fish_color_host
-# === end required configurations ===
+# === end required configuration ===
 
 # keybinds
 bind \cH backward-kill-word
@@ -219,19 +84,19 @@ bind \e\[1\;5H beginning-of-line
 bind \e\[1\;5F end-of-line
 bind \e\[2\;5~ ''
 
-# color/themeing
-# ordered as per the table on:
+# syntax colors, ordered as per
 # https://fishshell.com/docs/4.5/interactive.html#syntax-highlighting-variables
+# (anything not listed keeps fish's default)
 set -gx fish_color_normal normal
 set -gx fish_color_command blue
-set -gx fish_color_keyword blue #
+set -gx fish_color_keyword blue
 set -gx fish_color_quote yellow
 set -gx fish_color_redirection cyan --bold
 set -gx fish_color_end green
 set -gx fish_color_error brred
 set -gx fish_color_param cyan
 set -gx fish_color_valid_path --underline=single
-set -gx fish_color_option brgreen #
+set -gx fish_color_option brgreen
 set -gx fish_color_comment red
 set -gx fish_color_selection white --bold --background=brblack
 set -gx fish_color_operator brcyan
@@ -244,32 +109,24 @@ set -gx fish_color_cancel --reverse
 set -gx fish_color_search_match white --background=brblack
 set -gx fish_color_history_current --bold
 
-# ordered as per the table on:
+# pager colors, as per
 # https://fishshell.com/docs/4.5/interactive.html#pager-color-variables
 set -gx fish_pager_color_progress brwhite --background=cyan
-set -gx fish_pager_color_background #
 set -gx fish_pager_color_prefix normal --bold --underline=single
 set -gx fish_pager_color_completion normal
 set -gx fish_pager_color_description yellow --italics
 set -gx fish_pager_color_selected_background --reverse
-set -gx fish_pager_color_selected_prefix #
-set -gx fish_pager_color_selected_completion #
-set -gx fish_pager_color_selected_description #
-set -gx fish_pager_color_secondary_background #
-set -gx fish_pager_color_secondary_prefix #
-set -gx fish_pager_color_secondary_completion #
-set -gx fish_pager_color_secondary_description #
 
-# fish git prompt settings
+# git prompt, matched by common/git_prompt.sh for bash & zsh
 set -g __fish_git_prompt_show_informative_status 1
+set -g __fish_git_prompt_showupstream informative
+set -g __fish_git_prompt_showdirtystate yes
+set -g __fish_git_prompt_showuntrackedfiles yes
+set -g __fish_git_prompt_showstashstate yes
+set -g __fish_git_prompt_showcolorhints yes
+set -g __fish_git_prompt_describe_style contains
+set -g __fish_git_prompt_shorten_branch_len 32
 set -g __fish_git_prompt_color_branch brmagenta
-set -g __fish_git_prompt_showupstream "informative"
-set -g __fish_git_prompt_showdirtystate "yes"
 set -g __fish_git_prompt_color_stagedstate yellow
 set -g __fish_git_prompt_color_invalidstate red
 set -g __fish_git_prompt_color_cleanstate brgreen
-set -g __fish_git_prompt_showuntrackedfiles "yes"
-set -g __fish_git_prompt_showstashstate "yes"
-set -g __fish_git_prompt_shorten_branch_len 32
-set -g __fish_git_prompt_describe_style "contains"
-set -g __fish_git_prompt_showcolorhints "yes"

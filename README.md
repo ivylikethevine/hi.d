@@ -27,8 +27,8 @@ _Don't `ssh`ush your hosts, say `hi`!_
 - `~/hi.d/scripts/install.sh`
 - reload your shell!
 - configure `~/.ssh/config` tags via sshm
-- configure `~/hi.d/data/group_config` to preferences
-  - then run `hi_colorgen` to regenerate colors
+- [optional] pin specific colors in `~/hi.d/data/color_overrides` - everything else gets a color automatically
+  - run `hi_colors` to preview what every ssh host/your user resolves to
 - configure `~/hi.d/data/packages_config` to preferences
 - say `hi`!
 - [optional] modify `~/hi.d/misc/*`, and `~/hi.d/shells/*` to your liking!
@@ -50,14 +50,13 @@ Reminder - place local only changes after the "`# hi-config-end`" comment in the
 - `load.sh` - chainloader executed on target
 - `shells/aliases.sh` - shared aliases between bash, zsh, and fish
 - `common/check.sh` - check for commonly used commands and displays results in header
-- `common/colors.sh` - unified coloration for usernames & hosts (see `scripts/colorgen`)
+- `common/colors.sh` - unified coloration for usernames & hosts, resolved on demand (see below)
 - `scripts/install.sh` - configure local shells to use hi.d configurations, install, and update
-- `scripts/colorgen.sh` - generates `data/user_colors` and `data/host_colors` from `~/.ssh/config` and `data/group_config`
-- `data/group_config` - user defined coloration for hostnames/usernames (not copied to targets)
+- `data/color_overrides` - optional user pins for specific hostnames/usernames/hosttags
 
 ##### Hostname, Username, and Group/Tag Colors
 
-`hi` uses the _leftmost_ tag in your `~/.ssh/config` tags for each host to determine which color to apply to the prompt hostname in all 3 shells on the client device.
+Every username and hostname gets a color automatically, deterministically derived from its name - there's nothing to generate and nothing that can go missing. To pin a specific color instead, add a line to `~/hi.d/data/color_overrides` (`username,root,red` / `hostname,prod-db,yellow` / `hosttag,desktop,green`); `hosttag` entries match the _leftmost_ tag in a `# Tags: ...` comment placed directly above a `Host` line in `~/.ssh/config`. Run `hi_colors` any time to preview what every ssh host and your user currently resolve to, rendered in their actual color.
 
 ###### Built from/with:
 

@@ -41,6 +41,14 @@ export BRBLUE='\e[1;34m'
 export BRPURPLE='\e[1;35m'
 export BRCYAN='\e[1;36m'
 
+# canonical color names usable in data/color_overrides and as the hash-derived
+# palette for host_color/user_color; names match fish's set_color vocabulary
+_HI_COLOR_NAMES=(red green yellow blue magenta cyan brred brgreen bryellow brblue brmagenta brcyan)
+declare -A _HI_COLOR_ESCAPES=(
+  [red]="$RED" [green]="$GREEN" [yellow]="$YELLOW" [blue]="$BLUE" [magenta]="$PURPLE" [cyan]="$CYAN"
+  [brred]="$BRRED" [brgreen]="$BRGREEN" [bryellow]="$BRYELLOW" [brblue]="$BRBLUE" [brmagenta]="$BRPURPLE" [brcyan]="$BRCYAN"
+)
+
 # GNU coreutils' du supports --apparent-size; busybox/bsd du (Alpine, macOS,
 # *BSD, etc.) don't support this GNU-only flag
 _HI_LINUX_FLAGS=""
@@ -84,40 +92,130 @@ function at_color() {
   fi
 }
 
-function read_color_file() {
-  local search_val=${1:-}
-  local color_file=${2:-}
-  local is_fish=${3+x}
+# deterministic name -> color bucket, so the same host/username always gets
+# the same color without any generated/cached state to go stale or go missing
+function _hi_hash_color() {
+  local name="$1" sum=0 i ord
+  for ((i = 0; i < ${#name}; i++)); do
+    printf -v ord '%d' "'${name:i:1}"
+    sum=$((sum + ord))
+  done
+  printf '%s' "${_HI_COLOR_NAMES[sum % ${#_HI_COLOR_NAMES[@]}]}"
+}
 
-  local current_val color_bash color_fish
-  while IFS=',' read -r current_val color_bash color_fish; do
-    [[ "$current_val" =~ ^[[:space:]]*# ]] && continue
-    [[ -z "$current_val" ]] && continue
+# look up an exact (type,name) pin from $_HI_COLOR_OVERRIDES, e.g.:
+#   username,root,red
+#   hostname,prod-db,yellow
+#   hosttag,desktop,green
+# missing file/no match is expected (most names are unpinned) - just returns 1
+function _hi_override_color() {
+  local type="$1" name="$2"
+  [[ -f "$_HI_COLOR_OVERRIDES" ]] || return 1
 
-    if [ "$search_val" = "$current_val" ]; then
-      if [[ -z $is_fish ]]; then
-        printf '%b\n' "$color_fish"
-      elif [[ -z ${ZSH_VERSION+x} ]]; then
-        printf '%b' "$color_bash"
-      else
-        printf '%b\n' "$color_bash"
-      fi
-      return
+  local cur_type cur_name color
+  while IFS=',' read -r cur_type cur_name color; do
+    [[ "$cur_type" =~ ^[[:space:]]*# ]] && continue
+    [[ -z "$cur_type" ]] && continue
+    if [[ "$cur_type" = "$type" && "$cur_name" = "$name" ]]; then
+      printf '%s' "$color"
+      return 0
     fi
-  done <"$color_file"
-  if [[ -z $is_fish ]]; then
-    printf '%s\n' "brgreen"
+  done <"$_HI_COLOR_OVERRIDES"
+  return 1
+}
+
+# find the leftmost "# Tags: a, b" comment directly above a matching
+# "Host <alias>" line in ~/.ssh/config, and resolve that tag as a hosttag
+# override; missing ssh config/no tag/untagged host is expected, returns 1
+function _hi_ssh_tag_color() {
+  local host="$1"
+  [[ -f "$_HI_SSH_CONFIG_FILE" ]] || return 1
+
+  local line tag=""
+  while IFS=$' ' read -r line; do
+    if [[ "$line" =~ ^[[:space:]]*#[[:space:]]*[Tt]ags[:=][[:space:]]*(.+)$ ]]; then
+      tag=${BASH_REMATCH[1]%%[,[:space:]]*}
+      continue
+    fi
+    if [[ "$line" =~ ^[[:space:]]*Host[[:space:]]+([^#]+) ]]; then
+      local alias
+      for alias in ${BASH_REMATCH[1]}; do
+        if [[ "$alias" = "$host" ]]; then
+          [[ -n "$tag" ]] && _hi_override_color hosttag "$tag" && return 0
+          return 1
+        fi
+      done
+      tag=""
+    elif [[ -n "$line" ]]; then
+      tag=""
+    fi
+  done <"$_HI_SSH_CONFIG_FILE"
+  return 1
+}
+
+# resolution order: explicit pin in $_HI_COLOR_OVERRIDES, then (hostnames
+# only) an ssh config hosttag, then a deterministic hash - always succeeds
+function _hi_resolve_color() {
+  local type="$1" name="$2" color
+
+  color=$(_hi_override_color "$type" "$name") && {
+    printf '%s' "$color"
+    return
+  }
+
+  if [[ "$type" = hostname ]]; then
+    color=$(_hi_ssh_tag_color "$name") && {
+      printf '%s' "$color"
+      return
+    }
+  fi
+
+  _hi_hash_color "$name"
+}
+
+# no third arg -> the color's name (fish set_color / zsh %F{} vocabulary);
+# third arg present -> the raw bash/zsh ANSI escape for that color
+function _hi_emit_color() {
+  local color_name="$1" want_escape="$2"
+  if [[ -z $want_escape ]]; then
+    printf '%s\n' "$color_name"
   elif [[ -z ${ZSH_VERSION+x} ]]; then
-    printf '%s' "$GREEN"
+    printf '%b' "${_HI_COLOR_ESCAPES[$color_name]}"
   else
-    printf '%s\n' "$GREEN"
+    printf '%b\n' "${_HI_COLOR_ESCAPES[$color_name]}"
   fi
 }
 
 function host_color() {
-  read_color_file "$(_hi_hostname)" "$_HI_HOST_COLORS" ${1+x}
+  _hi_emit_color "$(_hi_resolve_color hostname "$(_hi_hostname)")" ${1+x}
 }
 
 function user_color() {
-  read_color_file "$(whoami)" "$_HI_USER_COLORS" ${1+x}
+  _hi_emit_color "$(_hi_resolve_color username "$(whoami)")" ${1+x}
+}
+
+# preview what color each ssh host & the current user resolve to, rendered in
+# that actual color - handy when tuning data/color_overrides. Run via `hi_colors`.
+function list_colors() {
+  cecho "~~~~~ hi.sh color preview ~~~~~" "$BRGREEN"
+
+  cecho "=== user ===" "$YELLOW"
+  local ucolor
+  ucolor=$(_hi_resolve_color username "$(whoami)")
+  cecho "$(whoami)  ->  $ucolor" "${_HI_COLOR_ESCAPES[$ucolor]}"
+
+  cecho "=== ssh hosts ===" "$YELLOW"
+  if [[ -f "$_HI_SSH_CONFIG_FILE" ]]; then
+    local line host hcolor
+    while IFS=$' ' read -r line; do
+      [[ "$line" =~ ^[[:space:]]*Host[[:space:]]+([^#]+) ]] || continue
+      for host in ${BASH_REMATCH[1]}; do
+        [[ "$host" == *[*?]* ]] && continue
+        hcolor=$(_hi_resolve_color hostname "$host")
+        cecho "$host  ->  $hcolor" "${_HI_COLOR_ESCAPES[$hcolor]}"
+      done
+    done <"$_HI_SSH_CONFIG_FILE"
+  else
+    cecho "No ssh config found at $_HI_SSH_CONFIG_FILE" "$RED"
+  fi
 }

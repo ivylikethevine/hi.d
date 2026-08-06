@@ -27,8 +27,5 @@
 
 # data/
 # **/travel_config
-# **/host_colors
-# **/user_colors
-# **/group_colors
-# **/group_config
+# **/color_overrides
 # **/packages_config

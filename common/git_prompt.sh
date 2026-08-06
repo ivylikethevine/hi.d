@@ -58,7 +58,7 @@ _hi_git_prompt() {
   fi
 
   # shorten_branch_len 32, matching config.fish
-  if (( ${#ref} > 32 )); then
+  if ((${#ref} > 32)); then
     ref="${ref:0:31}…"
   fi
 
@@ -67,24 +67,24 @@ _hi_git_prompt() {
   ahead=$(LANG=C git rev-list --count '@{upstream}..HEAD' 2>/dev/null)
   behind=$(LANG=C git rev-list --count 'HEAD..@{upstream}' 2>/dev/null)
   if [[ -n "$ahead" && -n "$behind" ]]; then
-    (( ahead > 0 )) && upstream+="↑${ahead}"
-    (( behind > 0 )) && upstream+="↓${behind}"
+    ((ahead > 0)) && upstream+="↑${ahead}"
+    ((behind > 0)) && upstream+="↓${behind}"
   fi
 
   # dirty/staged/conflicted/untracked counts
   local staged=0 dirty=0 invalid=0 untracked=0
   local line x y
-  while IFS= read -r line; do
+  while IFS=$' ' read -r line; do
     [[ -z "$line" ]] && continue
     x=${line:0:1}
     y=${line:1:1}
     if [[ "$x" == "U" || "$y" == "U" || "$x$y" == "AA" || "$x$y" == "DD" ]]; then
-      (( invalid++ ))
+      ((invalid++))
     elif [[ "$x" == "?" && "$y" == "?" ]]; then
-      (( untracked++ ))
+      ((untracked++))
     else
-      [[ "$x" != " " ]] && (( staged++ ))
-      [[ "$y" != " " ]] && (( dirty++ ))
+      [[ "$x" != " " ]] && ((staged++))
+      [[ "$y" != " " ]] && ((dirty++))
     fi
   done < <(LANG=C git status --porcelain=v1 2>/dev/null)
 
@@ -93,15 +93,15 @@ _hi_git_prompt() {
   stash=${stash:-0}
 
   local flags=""
-  (( staged > 0 )) && flags+="${YELLOW}●${staged}${NC}"
-  (( dirty > 0 )) && flags+="${RED}✚${dirty}${NC}"
-  (( invalid > 0 )) && flags+="${RED}✖${invalid}${NC}"
-  (( untracked > 0 )) && flags+="${BRBLUE}…${untracked}${NC}"
-  (( stash > 0 )) && flags+="${BRBLUE}⚑${stash}${NC}"
+  ((staged > 0)) && flags+="${YELLOW}●${staged}${NC}"
+  ((dirty > 0)) && flags+="${RED}✚${dirty}${NC}"
+  ((invalid > 0)) && flags+="${RED}✖${invalid}${NC}"
+  ((untracked > 0)) && flags+="${BRBLUE}…${untracked}${NC}"
+  ((stash > 0)) && flags+="${BRBLUE}⚑${stash}${NC}"
   [[ -z "$flags" ]] && flags="${BRGREEN}✔${NC}"
 
   local branch_color="$BRPURPLE"
-  (( detached )) && branch_color="$RED"
+  ((detached)) && branch_color="$RED"
 
   local out="(${branch_color}${ref}${NC}"
   [[ -n "$state" ]] && out+="|${state}"

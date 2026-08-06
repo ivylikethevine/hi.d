@@ -6,7 +6,7 @@
 alias hi_update="git -C $_HI_ROOT pull"
 alias hi_status="git -C $_HI_ROOT status"
 alias hi_install="$_HI_INSTALL"
-alias hi_colorgen="bash -c 'source $_HI_COLORGEN && colorgen'"
+alias hi_colors="bash -c 'source $_HI_COLORS && list_colors'"
 alias hi_info="echo 'tmpdir: $_HI_TMPDIR | root: $_HI_ROOT | script: $_HI_LAUNCHER'"
 alias hi="$_HI_LAUNCHER"
 

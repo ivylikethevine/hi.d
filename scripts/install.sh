@@ -77,10 +77,6 @@ function main() {
 
   config_hi
 
-  cecho "===== Running hi_colorgen =====" "$BRCYAN"
-  # shellcheck source=./scripts/colorgen.sh
-  source "$_HI_COLORGEN"
-  initial_colorgen
   rm -rfv "$TMP"
 
   cecho "~~~~~ Installed! ~~~~~ " "$BRGREEN"

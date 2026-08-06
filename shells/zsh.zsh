@@ -78,7 +78,7 @@ _hi() {
   local cfg="${_HI_SSH_CONFIG_FILE:-$HOME/.ssh/config}"
   if [[ -f $cfg ]]; then
     local line h
-    while IFS= read -r line; do
+    while IFS=$' ' read -r line; do
       local -a words=(${=line})
       ((${#words} >= 2)) || continue
       [[ ${(L)words[1]} == host ]] || continue

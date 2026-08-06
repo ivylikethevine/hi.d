@@ -1,57 +1,102 @@
 #!/bin/bash
 set -eou pipefail
 
-_HI_TMPDIR=${_HI_TMPDIR:-$HOME}
+# Locate hi.d relative to this script (resolving symlinks) so install works no matter where the repo lives.
+_HI_SELF="${BASH_SOURCE[0]}"
+while [ -L "$_HI_SELF" ]; do
+  _HI_SELF_DIR="$(cd -P "$(dirname "$_HI_SELF")" && pwd)"
+  _HI_SELF="$(readlink "$_HI_SELF")"
+  [[ $_HI_SELF == /* ]] || _HI_SELF="$_HI_SELF_DIR/$_HI_SELF"
+done
+_HI_SELF_DIR="$(cd -P "$(dirname "$_HI_SELF")" && pwd)"
+
+_HI_ROOT="$(dirname "$_HI_SELF_DIR")" # .../hi.d
+_HI_TMPDIR="$(dirname "$_HI_ROOT")"   # wherever hi.d's parent dir is (usually $HOME)
+export _HI_TMPDIR
+
 # shellcheck source=./common/bootstrap.sh
-source "$_HI_TMPDIR/hi.d/common/bootstrap.sh"
+source "$_HI_ROOT/common/bootstrap.sh"
 
-export _HI_INSTALL_TMPDIR
+readonly _HI_MARKER="# added by hi during install"
 
-function append() {
-  local input="${1:-}"
-  local output="${2:-}"
-  local tmpdir="${3:-$(mktemp -d)}"
-  local appendfile="$tmpdir/append.tmp"
-
-  touch "$input" "$output" "$appendfile"
-  cat "$output" >"$appendfile"
-  # override the return code to prevent pipefail from exiting
-  grep -vxF -f "$output" "$input" >>"$appendfile" && return 0
-  mv "$appendfile" "$output"
-}
-
-# shared by config_bashrc/config_zshrc/config_fish: write $content to a temp
-# file named $name under $tmpdir, then append any new lines onto $target
+# Rewrite the block of hi-managed lines (tagged with $_HI_MARKER) in $target to
+# match $content, leaving any other user content untouched. This both installs
+# the sourcing on a fresh machine and repairs it if hi.d has since moved -
+# stale lines pointing at an old location are replaced, not left dangling
+# alongside new ones.
 function config_shell() {
-  local name="$1" content="$2" target="$3" tmpdir="$4"
+  local name="$1" content="$2" target="$3"
   cecho "=== Checking $name ===" "$YELLOW"
 
-  local tmpfile="$tmpdir/$name"
+  mkdir -p "$(dirname "$target")"
+  touch "$target"
+
+  local existing desired
+  existing="$(grep -F "$_HI_MARKER" "$target" || true)"
+  desired="$(printf '%s\n' "$content" | grep -F "$_HI_MARKER" || true)"
+
+  if [ "$existing" = "$desired" ]; then
+    cecho "local $name up to date :)" "$GREEN"
+    return 0
+  fi
+
+  cecho "local $name out of date, updating..." "$YELLOW"
+  local tmpfile
+  tmpfile="$(mktemp)"
+  grep -vF "$_HI_MARKER" "$target" >"$tmpfile" || true
   printf '%s\n' "$content" >>"$tmpfile"
-  append "$tmpfile" "$target" "$tmpdir"
-  cecho "local $name up to date :)" "$GREEN"
+  mv "$tmpfile" "$target"
+  cecho "local $name updated :)" "$GREEN"
+}
+
+# Only emit an _HI_TMPDIR export when hi.d isn't at $HOME/hi.d - every
+# consumer already defaults _HI_TMPDIR to $HOME on its own, so the common
+# case stays free of an extra rc line.
+function hi_tmpdir_line_sh() {
+  [ "$_HI_TMPDIR" = "$HOME" ] && return 0
+  printf 'export _HI_TMPDIR="%s"                 %s' "$_HI_TMPDIR" "$_HI_MARKER"
+}
+
+function hi_tmpdir_line_fish() {
+  [ "$_HI_TMPDIR" = "$HOME" ] && return 0
+  printf 'set -gx _HI_TMPDIR "%s"                 %s' "$_HI_TMPDIR" "$_HI_MARKER"
 }
 
 function config_bashrc() {
-  config_shell "bashrc" '# If not running interactively, exit   # added by hi during install
-[[ $- != *i* ]] && return              # added by hi during install
-source ~/hi.d/shells/bash.sh          # added by hi during install' "$_HI_HOME_BASHRC" "$1"
+  local content line
+  content=""
+  line="$(hi_tmpdir_line_sh)"
+  [ -n "$line" ] && content+="$line"$'\n'
+  content+="# If not running interactively, exit   $_HI_MARKER"$'\n'
+  content+="[[ \$- != *i* ]] && return              $_HI_MARKER"$'\n'
+  content+="source \"$_HI_ROOT/shells/bash.sh\"          $_HI_MARKER"
+  config_shell "bashrc" "$content" "$_HI_HOME_BASHRC"
 }
 
 function config_zshrc() {
-  config_shell "zshrc" 'source ~/hi.d/shells/zsh.zsh          # added by hi during install' "$_HI_HOME_ZSHRC" "$1"
+  local content line
+  content=""
+  line="$(hi_tmpdir_line_sh)"
+  [ -n "$line" ] && content+="$line"$'\n'
+  content+="source \"$_HI_ROOT/shells/zsh.zsh\"          $_HI_MARKER"
+  config_shell "zshrc" "$content" "$_HI_HOME_ZSHRC"
 }
 
 function config_fish() {
-  config_shell "config.fish" 'if status is-interactive               # added by hi during install
-  source ~/hi.d/shells/config.fish    # added by hi during install
-end                                    # added by hi during install' "$_HI_HOME_FISH_CONFIG" "$1"
+  local content line
+  content=""
+  line="$(hi_tmpdir_line_fish)"
+  [ -n "$line" ] && content+="$line"$'\n'
+  content+="if status is-interactive               $_HI_MARKER"$'\n'
+  content+="  source \"$_HI_ROOT/shells/config.fish\"    $_HI_MARKER"$'\n'
+  content+="end                                    $_HI_MARKER"
+  config_shell "config.fish" "$content" "$_HI_HOME_FISH_CONFIG"
 }
 
 function config_hi() {
   cecho "=== Checking hi.sh ===" "$YELLOW"
   local INSTALLED_HI="/usr/bin/hi"
-  local NEW_HI="$HOME/hi.d/hi.sh"
+  local NEW_HI="$_HI_ROOT/hi.sh"
 
   chmod +x "$NEW_HI"
 
@@ -61,7 +106,7 @@ function config_hi() {
   else
     cecho "$INSTALLED_HI out of date, updating..." "$YELLOW"
     cecho "Removing old $INSTALLED_HI... [password required]" "$BLUE"
-    sudo rm "$INSTALLED_HI"
+    sudo rm -f "$INSTALLED_HI"
     cecho "Linking $INSTALLED_HI to latest hi.sh... [password required]" "$BLUE"
     sudo ln -s "$NEW_HI" "$INSTALLED_HI"
   fi
@@ -75,23 +120,11 @@ function main() {
   shellname=$(grep -e "$USER" /etc/passwd | xargs basename)
   cecho "===== [$shellname] shell detected! =====" "$CYAN"
 
-  local TMP
-  TMP=$(mktemp -d)
-  _HI_INSTALL_TMPDIR="$TMP"
-
-  if [ -z "${ZSH_VERSION:-}" ]; then
-    trap 'rm -rfv $_HI_INSTALL_TMPDIR; unset $_HI_INSTALL_TMPDIR' exit
-  else
-    TRAPEXIT() { rm -rfv \$_HI_INSTALL_TMPDIR && unset \$_HI_INSTALL_TMPDIR; }
-  fi
-
-  config_bashrc "$TMP"
-  config_zshrc "$TMP"
-  config_fish "$TMP"
+  config_bashrc
+  config_zshrc
+  config_fish
 
   config_hi
-
-  rm -rfv "$TMP"
 
   cecho "~~~~~ Installed! ~~~~~ " "$BRGREEN"
 }

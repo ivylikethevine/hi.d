@@ -12,7 +12,7 @@ command -v openssl >/dev/null 2>&1 || {
   exit 1
 }
 
-export _HI_EXCLUDE=(--exclude README.md --exclude .git --exclude .gitignore --exclude scripts --exclude hi.sh --exclude hi.bashrc --exclude .zed)
+export _HI_EXCLUDE=(--exclude README.md --exclude .git --exclude .gitignore --exclude scripts --exclude hi.sh --exclude hi.bashrc --exclude .zed --exclude .vscode)
 export _HI_TR_CMD="tr -s ' ' '\n'"
 export _HI_OPENSSL_CMD="openssl enc -base64"
 export _HI_TRAP="trap 'rm -rfv \$_HI_CLEANUP' exit"

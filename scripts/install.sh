@@ -1,11 +1,24 @@
 #!/bin/bash
-# set -eou pipefail
+set -eou pipefail
 
 _HI_TMPDIR=${_HI_TMPDIR:-$HOME}
 # shellcheck source=./common/bootstrap.sh
 source "$_HI_TMPDIR/hi.d/common/bootstrap.sh"
-# shellcheck source=./scripts/append.sh
-command -v append >/dev/null || source "$_HI_APPEND"
+
+export _HI_INSTALL_TMPDIR
+
+function append() {
+  local input="${1:-}"
+  local output="${2:-}"
+  local tmpdir="${3:-$(mktemp -d)}"
+  local appendfile="$tmpdir/append.tmp"
+
+  touch "$input" "$output" "$appendfile"
+  cat "$output" >"$appendfile"
+  # override the return code to prevent pipefail from exiting
+  grep -vxF -f "$output" "$input" >>"$appendfile" && return 0
+  mv "$appendfile" "$output"
+}
 
 # shared by config_bashrc/config_zshrc/config_fish: write $content to a temp
 # file named $name under $tmpdir, then append any new lines onto $target
@@ -16,7 +29,6 @@ function config_shell() {
   local tmpfile="$tmpdir/$name"
   printf '%s\n' "$content" >>"$tmpfile"
   append "$tmpfile" "$target" "$tmpdir"
-
   cecho "local $name up to date :)" "$GREEN"
 }
 
@@ -65,10 +77,12 @@ function main() {
 
   local TMP
   TMP=$(mktemp -d)
-  if [ -z "$ZSH_VERSION" ]; then
-    trap 'rm -rfv $TMP' exit
+  _HI_INSTALL_TMPDIR="$TMP"
+
+  if [ -z "${ZSH_VERSION:-}" ]; then
+    trap 'rm -rfv $_HI_INSTALL_TMPDIR; unset $_HI_INSTALL_TMPDIR' exit
   else
-    TRAPEXIT() { rm -rfv \$TMP; }
+    TRAPEXIT() { rm -rfv \$_HI_INSTALL_TMPDIR && unset \$_HI_INSTALL_TMPDIR; }
   fi
 
   config_bashrc "$TMP"

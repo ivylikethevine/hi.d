@@ -2,7 +2,7 @@
 # shared bash/zsh git-status prompt segment, styled to match the fish prompt's
 # fish_vcs_prompt output (see shells/config.fish's __fish_git_prompt_* settings)
 # requires colors.sh to already be sourced (NC, RED, YELLOW, BRGREEN, BRBLUE, BRPURPLE)
-# set -eou pipefail
+# set -eou pipefail # fails when enabled
 
 _hi_git_prompt() {
   # NB: LANG=C is a command-prefix assignment (not a variable holding "git"),

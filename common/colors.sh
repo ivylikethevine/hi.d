@@ -1,5 +1,5 @@
 #!/bin/bash
-# set -eou pipefail
+# set -eou pipefail # fails when enabled
 
 _HI_TMPDIR=${_HI_TMPDIR:-$HOME}
 # shellcheck source=./common/paths.sh
@@ -176,7 +176,7 @@ function _hi_resolve_color() {
 # no third arg -> the color's name (fish set_color / zsh %F{} vocabulary);
 # third arg present -> the raw bash/zsh ANSI escape for that color
 function _hi_emit_color() {
-  local color_name="$1" want_escape="$2"
+  local color_name="${1:-}" want_escape="${2:-}"
   if [[ -z $want_escape ]]; then
     printf '%s\n' "$color_name"
   elif [[ -z ${ZSH_VERSION+x} ]]; then

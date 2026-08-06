@@ -1,7 +1,7 @@
 #!/bin/bash
 # forked from sshrc: https://github.com/danrabinowitz/sshrc
 # https://github.com/cdown/sshrc/tree/master
-# set -eou pipefail
+# set -eou pipefail # cannot be enabled (this script is part of the interactive shell - any error would cause the shell session to close)
 
 _HI_TMPDIR=${_HI_TMPDIR:-$HOME}
 # shellcheck source=./common/bootstrap.sh
@@ -28,13 +28,13 @@ function _hi_copy_time() {
 
 function _hi_is_ssh_host() {
   local host="$1"
-  [ -f "$_HI_SSH_CONFIG_FILE" ] || return 1
+  [ -f "$_HI_SSH_CONFIG" ] || return 1
   awk -v h="$host" '
     tolower($1) == "host" {
       for (i = 2; i <= NF; i++) if ($i == h) { found=1; exit }
     }
     END { exit !found }
-  ' "$_HI_SSH_CONFIG_FILE"
+  ' "$_HI_SSH_CONFIG"
 }
 
 function _hi_is_docker_container() {

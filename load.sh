@@ -32,12 +32,12 @@ function configure_file() {
 
 function clean_all() {
   local shells=("$_HI_HOME_BASHRC" "$_HI_HOME_ZSHRC")
-  if [ -d "$_HI_FISH_DIR" ]; then
+  if [ -d "$_HI_HOME_FISH_DIR" ]; then
     shells+=("$_HI_HOME_FISH_CONFIG")
   fi
   for shell in "${shells[@]}"; do
     if test -f "$shell"; then
-      if [ -f "$_HI_LINUX_PATH" ]; then
+      if [ -f "$_HI_LINUX_RELEASE" ]; then
         sed -i "/^$_HI_CONFIG_START/,/^$_HI_CONFIG_END/d" -- "$shell"
       else
         sed -i '' "/^$_HI_CONFIG_START/,/^$_HI_CONFIG_END/d" "$shell"
@@ -76,13 +76,19 @@ function load() {
     # Will cause errors if we load this with only VI
     export VIMINIT="let \$MYVIMRC='$_HI_VIMRC' | source \$MYVIMRC"
   fi
-  configure_file "$_HI_BASH_CONFIG" "$_HI_HOME_BASHRC"
-  configure_file "$_HI_ZSH_CONFIG" "$_HI_HOME_ZSHRC"
-  if [ -d "$_HI_FISH_DIR" ]; then
+  configure_file "$_HI_BASHRC" "$_HI_HOME_BASHRC"
+  configure_file "$_HI_ZSHRC" "$_HI_HOME_ZSHRC"
+  if [ -d "$_HI_HOME_FISH_DIR" ]; then
     # This directory won't exist if fish isn't installed
     configure_file "$_HI_FISH_CONFIG" "$_HI_HOME_FISH_CONFIG"
   fi
   cecho "hi loaded with... " "$BRCYAN" 1
+
+  # guard against strict mode leaking into the interactive shell we're about
+  # to hand off to (e.g. via an exported SHELLOPTS).
+  # must be disabled in:
+  #   shells/bash.sh, common/git_prompt.sh, common/colors.sh
+  set +eou pipefail
 
   if command -v "fish" &>/dev/null; then
     cecho "fish shell! :^)" "$GREEN" 1

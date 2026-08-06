@@ -27,14 +27,14 @@ function system_info_line() {
   spacer
   cecho "$arch" "$PURPLE" 1
   spacer
-  if [ -f "$_HI_LINUX_PATH" ]; then
+  if [ -f "$_HI_LINUX_RELEASE" ]; then
     local key value pretty_name=""
     while IFS='=' read -r key value; do
       if [[ "$key" == "PRETTY_NAME" ]]; then
         pretty_name=${value//\"/}
         break
       fi
-    done <"$_HI_LINUX_PATH"
+    done <"$_HI_LINUX_RELEASE"
     cecho "$pretty_name" "$GREEN" 1
     spacer
     cecho "CPUs: $(nproc)" "$BLUE" 1
@@ -61,11 +61,11 @@ function system_info_line() {
 
 function git_keys_docker_line() {
   spacer
-  if [ -f "$_HI_HOME_GIT_CONFIG" ]; then
+  if [ -f "$_HI_HOME_GITCONFIG" ]; then
     local line email_line=""
     while IFS=$' ' read -r line; do
       [[ "$line" == *email* ]] && email_line=$line
-    done <"$_HI_HOME_GIT_CONFIG"
+    done <"$_HI_HOME_GITCONFIG"
     local email=${email_line#*=}
     email=${email// /}
     local user=${email%%@*}
@@ -92,8 +92,8 @@ function git_keys_docker_line() {
     cecho "Auth: 0!" "$RED" 1
   fi
   spacer
-  if [ -f "$_HI_SSH_KEY_DIR" ]; then
-    cecho "Pub: $(find "$_HI_SSH_KEY_DIR" -type f -name "*.pub" | wc -l)" "$PURPLE"
+  if [ -f "$_HI_SSH_DIR" ]; then
+    cecho "Pub: $(find "$_HI_SSH_DIR" -type f -name "*.pub" | wc -l)" "$PURPLE"
   else
     cecho "Pub: 0!" "$PURPLE"
   fi

@@ -69,7 +69,7 @@ function config_hi() {
 
 function main() {
   cecho "~~~~~ Installing (or reinstalling) hi.sh! ~~~~~" "$BRGREEN"
-
+  echo "pwd: $PWD | hi_root: $_HI_ROOT | hi_tmpdir: $_HI_TMPDIR"
   cecho "===== Checking $USER's login shell =====" "$BRCYAN"
   local shellname
   shellname=$(grep -e "$USER" /etc/passwd | xargs basename)

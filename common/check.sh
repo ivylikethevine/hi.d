@@ -91,7 +91,7 @@ function process_commands() {
   while IFS=$'\n' read -r line; do
     [[ "$line" == *#* ]] && continue
     check_line "$line"
-  done <"$_HI_PACKAGES_CONFIG"
+  done <"$_HI_PACKAGES"
 
   # sort the visible (non-"hide") entries by their priority, highest first,
   # ties keep file order, then drop the priority prefix used only for sorting

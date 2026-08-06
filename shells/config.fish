@@ -8,7 +8,7 @@ source $_HI_TMPDIR/hi.d/common/paths.sh
 source $_HI_ALIASES;
 
 function __hi_targets
-  set -l cfg $_HI_SSH_CONFIG_FILE
+  set -l cfg $_HI_SSH_CONFIG
   test -f "$cfg" 2>/dev/null; or set cfg ~/.ssh/config
   if test -f "$cfg"
     while read -la line
@@ -126,14 +126,14 @@ end
 # header
 function fish_greeting
   if not set -q fish_greeting
-    if [ -f "$_HI_LINUX_PATH" ]
+    if [ -f "$_HI_LINUX_RELEASE" ]
       set -l pretty_name
       while read -l key value -d '='
         if test "$key" = PRETTY_NAME
           set pretty_name (string trim -c '"' -- $value)
           break
         end
-      end < $_HI_LINUX_PATH
+      end < $_HI_LINUX_RELEASE
       set -g hi_distro (printf '%s%s' (set_color green) $pretty_name)
       set -g hi_cpus (printf '%sCPUs: %s' (set_color brblue) (nproc))
       set -l ram_total
@@ -164,13 +164,13 @@ function fish_greeting
     set -l authorized_keys ([ -f "$_HI_SSH_AUTHORIZED_KEYS" ] && printf '%sAuth: %s' (set_color red) (wc -l < "$_HI_SSH_AUTHORIZED_KEYS") || printf '%sAuth: 0!' (set_color red))
     set -l running_containers ([ -f "/usr/bin/docker" ] && printf '%sContainers: %s' (set_color brblue) (docker container ls -q | wc -l) || printf '%sCounting impossible, no docker :(' (set_color bryellow))
     set -l git_identity
-    if [ -f "$_HI_HOME_GIT_CONFIG" ]
+    if [ -f "$_HI_HOME_GITCONFIG" ]
       set -l email_line
       while read -l line
         if string match -q '*email*' -- $line
           set email_line $line
         end
-      end < $_HI_HOME_GIT_CONFIG
+      end < $_HI_HOME_GITCONFIG
       set -l email (string replace -a ' ' '' -- (string split -m1 '=' -- $email_line)[2])
       set -l parts (string split '@' -- $email)
       set -l bullets (string repeat -n (string length -- $parts[2]) '●')
@@ -182,8 +182,8 @@ function fish_greeting
     set -l spacer (printf '%s|' (set_color normal))
     set -l utctime (printf '%s%s' (set_color brblue) (date -u $_HI_HUMAN_CENTRIC_DATE))
     set -l localtime (printf '%s%s' (set_color bryellow) (date $_HI_HUMAN_CENTRIC_DATE))
-    if [ -f "$_HI_HOME_GIT_CONFIG" ]
-      set -g public (printf '%sPub: %s' (set_color magenta) (find "$_HI_SSH_KEY_DIR" -type f -name "*.pub" | wc -l))
+    if [ -f "$_HI_HOME_GITCONFIG" ]
+      set -g public (printf '%sPub: %s' (set_color magenta) (find "$_HI_SSH_DIR" -type f -name "*.pub" | wc -l))
     else
       set -g public (printf '%sPub: %s' (set_color magenta) ("0!"))
     end

@@ -1,5 +1,5 @@
 #!/bin/bash
-# set -eou pipefail # fails when enabled
+# set -eou pipefail # cannot be enabled (this script is part of the interactive shell - any error would cause the shell session to close)
 
 _HI_TMPDIR=${_HI_TMPDIR:-$HOME}
 # shellcheck source=./common/paths.sh
@@ -129,7 +129,7 @@ function _hi_override_color() {
 # override; missing ssh config/no tag/untagged host is expected, returns 1
 function _hi_ssh_tag_color() {
   local host="$1"
-  [[ -f "$_HI_SSH_CONFIG_FILE" ]] || return 1
+  [[ -f "$_HI_SSH_CONFIG" ]] || return 1
 
   local line tag=""
   while IFS=$' ' read -r line; do
@@ -149,7 +149,7 @@ function _hi_ssh_tag_color() {
     elif [[ -n "$line" ]]; then
       tag=""
     fi
-  done <"$_HI_SSH_CONFIG_FILE"
+  done <"$_HI_SSH_CONFIG"
   return 1
 }
 
@@ -205,7 +205,7 @@ function list_colors() {
   cecho "$(whoami)  ->  $ucolor" "${_HI_COLOR_ESCAPES[$ucolor]}"
 
   cecho "=== ssh hosts ===" "$YELLOW"
-  if [[ -f "$_HI_SSH_CONFIG_FILE" ]]; then
+  if [[ -f "$_HI_SSH_CONFIG" ]]; then
     local line host hcolor
     while IFS=$' ' read -r line; do
       [[ "$line" =~ ^[[:space:]]*Host[[:space:]]+([^#]+) ]] || continue
@@ -214,8 +214,8 @@ function list_colors() {
         hcolor=$(_hi_resolve_color hostname "$host")
         cecho "$host  ->  $hcolor" "${_HI_COLOR_ESCAPES[$hcolor]}"
       done
-    done <"$_HI_SSH_CONFIG_FILE"
+    done <"$_HI_SSH_CONFIG"
   else
-    cecho "No ssh config found at $_HI_SSH_CONFIG_FILE" "$RED"
+    cecho "No ssh config found at $_HI_SSH_CONFIG" "$RED"
   fi
 }

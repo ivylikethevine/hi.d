@@ -75,7 +75,7 @@ autoload -Uz promptinit
 compinit
 _hi() {
   local -a hosts descs
-  local cfg="${_HI_SSH_CONFIG_FILE:-$HOME/.ssh/config}"
+  local cfg="${_HI_SSH_CONFIG:-$HOME/.ssh/config}"
   if [[ -f $cfg ]]; then
     local line h
     while IFS=$' ' read -r line; do

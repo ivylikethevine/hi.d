@@ -1,5 +1,6 @@
 #!/bin/bash
 # forked from sshrc: https://github.com/danrabinowitz/sshrc
+# https://github.com/cdown/sshrc/tree/master
 # set -eou pipefail
 
 _HI_TMPDIR=${_HI_TMPDIR:-$HOME}
@@ -80,18 +81,23 @@ function _say_hi() {
 
   tmp="/tmp/$(date +%s).hi"
 
-  # TODO: Fix this - it fails on a fish login shell
-  remote_shell=$(ssh "$DOMAIN" '
+  # The remote command line ("bash -s") is parsed by the user's login shell,
+  # so it must stay free of any bash/sh-specific syntax (e.g. if/fi), or it
+  # breaks on login shells with different grammar (e.g. fish uses if/end).
+  # The actual script is sent over stdin, where bash -s reads and runs it.
+  remote_shell=$(
+    ssh "$DOMAIN" bash -s 2>"$tmp" <<'EOF'
     if [ -n "$SHELL" ]; then
       basename "$SHELL"
     elif command -v getent >/dev/null 2>&1; then
-      getent passwd "$(id -un)" | awk -F: "{ print \$NF }" | xargs basename
+      getent passwd "$(id -un)" | awk -F: '{ print $NF }' | xargs basename
     elif command -v dscl >/dev/null 2>&1; then
-      dscl . -read ~/ UserShell 2>/dev/null | awk "{ print \$2 }" | xargs basename
+      dscl . -read ~/ UserShell 2>/dev/null | awk '{ print $2 }' | xargs basename
     else
-      awk -F: -v u="$(id -un)" "\$1==u{print \$NF}" /etc/passwd | xargs basename
+      awk -F: -v u="$(id -un)" '$1==u{print $NF}' /etc/passwd | xargs basename
     fi
-  ' 2>"$tmp")
+EOF
+  )
 
   if [ "$remote_shell" = "" ]; then
     cecho " $(cat "$tmp")" "$BRRED"

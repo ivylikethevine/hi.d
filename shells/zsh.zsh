@@ -73,7 +73,47 @@ zmodload zsh/complist
 autoload -Uz compinit
 autoload -Uz promptinit
 compinit
-compdef hi=ssh
+_hi() {
+  local -a hosts descs
+  local cfg="${_HI_SSH_CONFIG_FILE:-$HOME/.ssh/config}"
+  if [[ -f $cfg ]]; then
+    local line h
+    while IFS= read -r line; do
+      local -a words=(${=line})
+      ((${#words} >= 2)) || continue
+      [[ ${(L)words[1]} == host ]] || continue
+      for h in ${words[2,-1]}; do
+        [[ $h == *[*?]* ]] && continue
+        hosts+=("$h")
+        descs+=("ssh - $h")
+      done
+    done <"$cfg"
+  fi
+
+  if (($+commands[docker])); then
+    local name
+    for name in ${(f)"$(docker ps --format '{{.Names}}' 2>/dev/null)"}; do
+      [[ -z $name ]] && continue
+      hosts+=("$name")
+      descs+=("docker - $name")
+    done
+  fi
+
+  if (($+commands[nomad])); then
+    local job id
+    for job in ${(f)"$(nomad job status 2>/dev/null | tail -n +2 | awk '{print $1}')"}; do
+      [[ -z $job ]] && continue
+      for id in ${(f)"$(nomad job allocs -t '{{range .}}{{if eq .ClientStatus "running"}}{{printf "%.8s" .ID}}{{"\n"}}{{end}}{{end}}' "$job" 2>/dev/null)"}; do
+        [[ -z $id ]] && continue
+        hosts+=("$id")
+        descs+=("nomad - $id")
+      done
+    done
+  fi
+
+  compadd -d descs -a hosts
+}
+compdef _hi hi
 compdef exa=eza
 promptinit
 

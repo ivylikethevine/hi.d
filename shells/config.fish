@@ -7,7 +7,36 @@ end
 source $_HI_TMPDIR/hi.d/common/paths.sh
 source $_HI_ALIASES;
 
-complete hi --wraps ssh
+function __hi_targets
+  set -l cfg $_HI_SSH_CONFIG_FILE
+  test -f "$cfg" 2>/dev/null; or set cfg ~/.ssh/config
+  if test -f "$cfg"
+    while read -la line
+      test (count $line) -ge 2; or continue
+      string match -qi 'host' -- $line[1]; or continue
+      for host in $line[2..-1]
+        string match -qr '[*?]' -- $host; and continue
+        printf '%s\tssh - %s\n' $host $host
+      end
+    end < $cfg
+  end
+
+  if command -q docker
+    for name in (docker ps --format '{{.Names}}' 2>/dev/null)
+      printf '%s\tdocker - %s\n' $name $name
+    end
+  end
+
+  if command -q nomad
+    for job in (nomad job status 2>/dev/null | tail -n +2 | awk '{print $1}')
+      for id in (nomad job allocs -t '{{range .}}{{if eq .ClientStatus "running"}}{{printf "%.8s" .ID}}{{"\n"}}{{end}}{{end}}' $job 2>/dev/null)
+        printf '%s\tnomad - %s\n' $id $id
+      end
+    end
+  end
+end
+
+complete -c hi -f -a '(__hi_targets)'
 complete exa --wraps eza
 
 if [ -d $HOME/Android ] && [ -d $HOME/Android/Sdk ]

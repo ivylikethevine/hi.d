@@ -37,7 +37,7 @@ function _hi_copy_time() {
   echo "$(_hi_now) $1 $2 $3" | awk '{ printf "%.3f\n", ($1 - $2) - ($4 - $3) }'
 }
 
-function _hi_bootstrap_rc() {
+function _hi_bootloader() {
   cat <<EOF
 if [ -r /etc/profile ]; then source /etc/profile; fi
 if [ -r ~/.bash_profile ]; then source ~/.bash_profile
@@ -78,7 +78,7 @@ function _say_hi() {
       printf '%s %s%s' "$hi_esc" "$nc_esc" "$size"
       echo "$($_HI_ARMOR <"$0")" | $_HI_UNARMOR > \$_HI_ROOT/hi.sh
       chmod +x \$_HI_ROOT/hi.sh
-      echo "$(_hi_bootstrap_rc | $_HI_ARMOR)" | $_HI_UNARMOR > \$_HI_ROOT/hi.bashrc
+      echo "$(_hi_bootloader | $_HI_ARMOR)" | $_HI_UNARMOR > \$_HI_ROOT/hi.bashrc
       echo "$(tar czf - -h -C "$_HI_TMPDIR" "${_HI_EXCLUDE[@]}" hi.d | $_HI_ARMOR)" | $_HI_UNARMOR | tar mxzf - -C \$_HI_TMPDIR
       export _HI_COPY_TIME=\$(awk -v a="\$_hi_t0" -v b="\$(_hi_now)" 'BEGIN{printf "%.3f", b-a}')
       export _HI_CONNECT_PREFIX="-> $size"
@@ -140,7 +140,7 @@ function _say_hi_container() {
     *) "${attach[@]}" sh -c "export ENV='$root/aliases.sh'; exec $fallback" ;;
     esac
     exit_code=$?
-    "${probe[@]}" rm -rf "$root" >/dev/null 2>&1
+    "${probe[@]}" rm -rfv "$root" >/dev/null 2>&1
     return $exit_code
   fi
 
@@ -154,17 +154,17 @@ function _say_hi_container() {
   if ! tar czf - -h -C "$_HI_TMPDIR" "${_HI_EXCLUDE[@]}" hi.d |
     "${cp[@]}" sh -c "mkdir -p '$root' && tar mxzf - -C '$root'"; then
     cecho " failed to copy hi.d into [$DOMAIN]" "$BRRED"
-    "${probe[@]}" rm -rf "$root" >/dev/null 2>&1
+    "${probe[@]}" rm -rfv "$root" >/dev/null 2>&1
     return 1
   fi
 
   "${cp[@]}" sh -c "cat > '$root/hi.d/hi.sh' && chmod +x '$root/hi.d/hi.sh'" <"$0"
-  _hi_bootstrap_rc | "${cp[@]}" sh -c "cat > '$root/hi.d/hi.bashrc'"
+  _hi_bootloader | "${cp[@]}" sh -c "cat > '$root/hi.d/hi.bashrc'"
 
   "${attach[@]}" sh -c "export _HI_TMPDIR='$root' _HI_ROOT='$root/hi.d' _HI_COPY_TIME='$(_hi_copy_time "$copy_start" "$_HI_SHELL_START" "$shell_end")' _HI_CONNECT_PREFIX='$prefix'; exec bash --rcfile '$root/hi.d/hi.bashrc'"
   exit_code=$?
 
-  "${probe[@]}" rm -rf "$root" >/dev/null 2>&1
+  "${probe[@]}" rm -rfv "$root" >/dev/null 2>&1
   return $exit_code
 }
 
@@ -195,7 +195,7 @@ function _hi_parse() {
   }
 }
 
-function _run() {
+function _hi() {
   local copy_start tmp exit_code errors
 
   [ -d "$_HI_ROOT" ] || {
@@ -233,4 +233,4 @@ function _run() {
 
 set +eou pipefail # must be disabled after our code (this file is part of the interactive shell - any error would close the session)
 
-_run "$@"
+_hi "$@"

@@ -51,7 +51,7 @@ function _hi_test_shell() {
 
 cecho "~~~~~ testing aliases.sh across shells ~~~~~" "$BRGREEN"
 _HI_WORKDIR=$(mktemp -d)
-trap 'rm -rf "$_HI_WORKDIR"' EXIT
+trap 'rm -rfv "$_HI_WORKDIR"' EXIT
 
 _HI_FAILED=0
 for _hi_shell in dash bash zsh fish; do

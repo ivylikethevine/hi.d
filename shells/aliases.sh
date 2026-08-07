@@ -39,6 +39,8 @@ alias hey="ssh"
 alias zed="zeditor"
 alias ehi="zed $_HI_ROOT"
 alias essh="zed $_HI_SSH_DIR"
+
+# TODO: add script/compat for local config changes?
 alias elinks="zed ~/projects/links"
 
 # docker
@@ -93,6 +95,9 @@ alias gch="git checkout"
 alias gcl="git clone"
 alias gs="git status"
 alias gst="git stash"
+alias gss="git stash show"
+alias gsl="git stash list"
+alias gsa="git stash apply"
 alias gd="git diff --color=always"
 alias gps="echo ' Okay. Where are we going?'"
 alias gpsh='git push --set-upstream origin $(git rev-parse --abbrev-ref HEAD)'
@@ -104,14 +109,19 @@ alias ip="ip -color=always"
 alias ips="ip -br a"
 alias my_ip="ip route get 1.1.1.1"
 
-# package managers & updates
+# pacman: for arch-likes
 alias yayy="yay -Syyu"
 alias yayc="yay -Sc --noconfirm"
 alias yaycc="sudo rm -rfv /var/cache/pacman/pkg/download-* >/dev/null"
+alias yay_remove_orphans="pacman -Qdtq | sudo pacman -Rns -"
+
+# apt: for debian-likes
 alias aptup="sudo apt update"
 alias aptug="sudo apt upgrade"
 alias aptupg="sudo apt update && sudo apt upgrade"
 alias aptac="sudo apt autoclean && sudo apt autoremove"
+
+# fwupdmgr commands (laptops, device drivers, etc.)
 alias fw_check="fwupdmgr get-devices && fwupdmgr get-updates"
 alias fw_update="fwupdmgr update"
 

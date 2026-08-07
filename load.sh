@@ -52,7 +52,7 @@ function load() {
   start="$(_hi_now)"
   _hi_on_exit clean_all
 
-  hi_header Connected
+  hi_header Connected "" "${_HI_CONNECT_PREFIX:-}"
 
   # vim only: setting VIMINIT when all we have is vi breaks it
   command -v vim &>/dev/null && export VIMINIT="let \$MYVIMRC='$_HI_VIMRC' | source \$MYVIMRC"
@@ -79,10 +79,12 @@ function load() {
     "$shell" -i
   fi
 
+  local size
   # shellcheck disable=SC2086 # unquoted so an empty flag list disappears
-  cecho " $(du -sh $_HI_LINUX_FLAGS "$_HI_ROOT" | awk '{ print $1 }') " "$NC" 1
-  hi_banner Disconnected "$BRRED"
+  size="$(du -sh $_HI_LINUX_FLAGS "$_HI_ROOT" | awk '{ print $1 }')"
+  cecho " $size " "$NC" 1
+  hi_banner Disconnected "$BRRED" " $size "
   timestamp
-  cecho "hi closing! " "$BRPURPLE"
+  cecho " hi closing! " "$BRPURPLE"
   exit 0
 }

@@ -54,20 +54,36 @@ function identity_line() {
 }
 
 # "~~~ <label> [host] ~~~", prefixed with hi.d's own dirty-file count when this
-# is the machine holding the git checkout
+# is the machine holding the git checkout. Tilde runs are sized dynamically so
+# the whole line is always _HI_MAX_WIDTH columns, regardless of hostname,
+# label, or dirty-file count length.
 function hi_banner() {
-  local label="$1" color="${2:-$BRGREEN}" changes=""
-  [ -d "$_HI_ROOT/.git" ] && changes="$BRYELLOW$(git -C "$_HI_ROOT" status --short | wc -l) ↑ "
-  local start_tildes="~~~~~~~~~~~~~~~~~~~~~"
-  local end_tildes="~~~~~~~~~~~~~~~~~~~~~~~~"
-  if [[ "$label" == "Connected" ]]; then
-    start_tildes="~~"
-    end_tildes="~~~~~~~~~~~~~~~~~~~~"
-  elif [[ "$label" == "Disconnected" ]]; then
-    start_tildes="~~~~~~~~~~~~~~~~~~"
-    end_tildes="~~~~~~~~~~~~~~~~~~~~~~~~"
+  local label="$1" color="${2:-$BRGREEN}" prefix="${3:-}" changes_plain="" changes=""
+  if [ -d "$_HI_ROOT/.git" ]; then
+    changes_plain="$(git -C "$_HI_ROOT" status --short | wc -l) ↑ "
+    changes="$BRYELLOW$changes_plain"
   fi
-  printf '%b\n' " $changes$color$start_tildes $label ${NC}[$(host_escape)$(_hi_hostname)$NC]$color $end_tildes$NC"
+  local host tildes start_len end_len start_tildes end_tildes width left core
+  host="$(_hi_hostname)"
+  width=${_HI_MAX_WIDTH:-80}
+  # literal (non-tilde) chars: leading space, space+label+space, "[" + "]", space,
+  # plus $prefix - plain text already sitting on this line (e.g. hi.sh's
+  # "shell: 0.884s -> bash 43K " or load.sh's du -sh size) that the banner
+  # continues rather than starts fresh
+  tildes=$((width - 6 - ${#changes_plain} - ${#label} - ${#host} - ${#prefix}))
+  ((tildes < 4)) && tildes=4
+  # split the tildes so "label [host]" lands at the horizontal center of the
+  # whole line - prefix and the dirty-file count both count as left margin -
+  # but always leave at least one tilde between that margin and the label
+  left=$((${#prefix} + 1 + ${#changes_plain}))
+  core=$((${#label} + ${#host} + 4))
+  start_len=$((width / 2 - left - core / 2))
+  ((start_len < 1)) && start_len=1
+  ((start_len > tildes - 1)) && start_len=$((tildes - 1))
+  end_len=$((tildes - start_len))
+  start_tildes=$(printf '%*s' "$start_len" '' | tr ' ' '~')
+  end_tildes=$(printf '%*s' "$end_len" '' | tr ' ' '~')
+  printf '%b\n' " $changes$color$start_tildes $label ${NC}[$(host_escape)$host$NC]$color $end_tildes$NC"
 }
 
 # the whole greeting: banner, clocks, system, identity, then package check

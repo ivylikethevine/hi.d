@@ -44,6 +44,8 @@ function _hi_copy_time() {
 # The rc bash reads on the target: the host's own profile first, then hi's, and
 # finally either the command the user passed (`hi host 'cmd'`, just like ssh) or
 # an interactive session. $1 is how long the copy took, for load's timing line.
+# $2 is the plain text of the "shell: ...s -> ... <size>" line already printed
+# on the client, so the target's Connected banner can pick up where it left off.
 function _hi_bootstrap_rc() {
   cat <<EOF
 if [ -r /etc/profile ]; then source /etc/profile; fi
@@ -53,6 +55,7 @@ elif [ -r ~/.profile ]; then source ~/.profile
 fi
 export PATH=\$PATH:\$_HI_ROOT
 export _HI_COPY_TIME='$1'
+export _HI_CONNECT_PREFIX='$2'
 source \$_HI_ROOT/load.sh
 ${CMDARG:-load}
 EOF
@@ -69,7 +72,7 @@ function _hi_size() {
 # Ideally, we could stay on the target if we have login bash, reducing the overall
 # connection for most connections, but I haven't figured that out yet.
 function _say_hi() {
-  local remote_shell trap_cmd shell_end
+  local remote_shell trap_cmd shell_end shell_secs size prefix
 
   # This command line is parsed by the user's login shell, so it must stay free
   # of bash/sh-specific syntax (e.g. if/fi), or it breaks on login shells with a
@@ -91,12 +94,15 @@ EOF
   [ -n "$remote_shell" ] || return 1
 
   shell_end="$(_hi_now)"
-  cecho " shell: $(_hi_elapsed "$_HI_SHELL_START" "$shell_end")s " "$BLUE" 1
+  shell_secs="$(_hi_elapsed "$_HI_SHELL_START" "$shell_end")"
+  cecho " shell: ${shell_secs}s " "$BLUE" 1
 
   trap_cmd="trap 'rm -rfv \$_HI_CLEANUP' exit"
   [ "$remote_shell" = zsh ] && trap_cmd="TRAPEXIT() { rm -rfv \$_HI_CLEANUP; }"
 
-  echo -ne "$YELLOW-> $remote_shell$NC $(_hi_size)"
+  size="$(_hi_size)"
+  prefix=" shell: ${shell_secs}s -> $remote_shell $size"
+  echo -ne "$YELLOW-> $remote_shell$NC $size"
   # shellcheck disable=SC2029 # the client-side expansions here are the point
   ssh -t "${SSHARGS[@]}" "$DOMAIN" "
       command -v openssl >/dev/null 2>&1 || { echo >&2 \"hi requires openssl on [$DOMAIN], but it is not installed. Aborting.\"; exit 1; }
@@ -107,7 +113,7 @@ EOF
       $trap_cmd
       echo \"$($_HI_ARMOR <"$0")\" | $_HI_UNARMOR > \$_HI_ROOT/hi.sh
       chmod +x \$_HI_ROOT/hi.sh
-      echo \"$(_hi_bootstrap_rc "$(_hi_copy_time "$copy_start" "$_HI_SHELL_START" "$shell_end")" | $_HI_ARMOR)\" | $_HI_UNARMOR > \$_HI_ROOT/hi.bashrc
+      echo \"$(_hi_bootstrap_rc "$(_hi_copy_time "$copy_start" "$_HI_SHELL_START" "$shell_end")" "$prefix" | $_HI_ARMOR)\" | $_HI_UNARMOR > \$_HI_ROOT/hi.bashrc
       echo \"$(tar czf - -h -C "$_HI_TMPDIR" "${_HI_EXCLUDE[@]}" hi.d | $_HI_ARMOR)\" | $_HI_UNARMOR | tar mxzf - -C \$_HI_TMPDIR
       bash --rcfile \$_HI_ROOT/hi.bashrc
       "
@@ -118,7 +124,7 @@ EOF
 # copying goes through `sh -c "cat > path"` and all env vars are set via a
 # `sh -c "export ...; exec ..."` wrapper - the one interface both support.
 function _say_hi_engine() {
-  local label="$1" shell_end root fallback exit_code
+  local label="$1" shell_end root fallback exit_code shell_secs size prefix
   local -a probe cp attach
   case "$label" in
   docker)
@@ -163,8 +169,11 @@ function _say_hi_engine() {
     return $exit_code
   fi
 
-  cecho " shell: $(_hi_elapsed "$_HI_SHELL_START" "$shell_end")s " "$BLUE" 1
-  echo -ne "$YELLOW-> bash ($label)$NC $(_hi_size)"
+  shell_secs="$(_hi_elapsed "$_HI_SHELL_START" "$shell_end")"
+  cecho " shell: ${shell_secs}s " "$BLUE" 1
+  size="$(_hi_size)"
+  prefix=" shell: ${shell_secs}s -> bash ($label) $size"
+  echo -ne "$YELLOW-> bash ($label)$NC $size"
 
   if ! tar czf - -h -C "$_HI_TMPDIR" "${_HI_EXCLUDE[@]}" hi.d |
     "${cp[@]}" sh -c "mkdir -p '$root' && tar mxzf - -C '$root'"; then
@@ -174,7 +183,7 @@ function _say_hi_engine() {
   fi
 
   "${cp[@]}" sh -c "cat > '$root/hi.d/hi.sh' && chmod +x '$root/hi.d/hi.sh'" <"$0"
-  _hi_bootstrap_rc "$(_hi_copy_time "$copy_start" "$_HI_SHELL_START" "$shell_end")" |
+  _hi_bootstrap_rc "$(_hi_copy_time "$copy_start" "$_HI_SHELL_START" "$shell_end")" "$prefix" |
     "${cp[@]}" sh -c "cat > '$root/hi.d/hi.bashrc'"
 
   "${attach[@]}" sh -c "export _HI_TMPDIR='$root' _HI_ROOT='$root/hi.d'; exec bash --rcfile '$root/hi.d/hi.bashrc'"

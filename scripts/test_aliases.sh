@@ -7,6 +7,7 @@ set -eou pipefail
 # shellcheck source=../common/bootstrap.sh
 source "${_HI_TMPDIR:-$HOME}/hi.d/common/bootstrap.sh"
 
+# TODO: Make more exhaustive
 # a sample from aliases.sh's required block, not exhaustive
 _HI_SAMPLE_ALIASES="hi hi_update hi_status hi_install hi_colors hi_info nano vim"
 _HI_SAMPLE_VARS="EDITOR EZA_CONFIG_DIR _HI_BAT_OPTS _HI_HUMAN_CENTRIC_DATE"

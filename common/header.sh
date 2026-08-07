@@ -8,7 +8,6 @@ source "${_HI_TMPDIR:-$HOME}/hi.d/common/bootstrap.sh"
 # shellcheck source=./check.sh
 source "$_HI_CHECK"
 
-# " | cell | cell | ...", each cell already colored
 function _hi_row() {
   local cell out=""
   for cell in "$@"; do out+="$NC | $cell"; done
@@ -20,7 +19,6 @@ function timestamp() {
   _hi_row "$BRBLUE$(date -u "$fmt")  " "  $BRYELLOW$(date "$fmt")"
 }
 
-# kernel/arch/os/cpu/ram, without the (slow) system_profiler on macOS
 function system_info_line() {
   local kernel arch os cpus ram
   read -r kernel arch <<<"$(uname -sm)"
@@ -53,10 +51,8 @@ function identity_line() {
   _hi_row "$user_part" "$BLUE$containers" "${RED}Auth: $authorized" "${PURPLE}Pub: $public"
 }
 
-# "~~~ <label> [host] ~~~", prefixed with hi.d's own dirty-file count when this
-# is the machine holding the git checkout. Tilde runs are sized dynamically so
-# the whole line is always _HI_MAX_WIDTH columns, regardless of hostname,
-# label, or dirty-file count length.
+# "~~~ <label> [host] ~~~", prefixed with hi.d's local change count
+# this whole line is always _HI_MAX_WIDTH columns, regardless of other factors
 function hi_banner() {
   local label="$1" color="${2:-$BRGREEN}" prefix="${3:-}" changes_plain="" changes=""
   if [ -d "$_HI_ROOT/.git" ]; then
@@ -66,15 +62,9 @@ function hi_banner() {
   local host tildes start_len end_len start_tildes end_tildes width left core
   host="$(_hi_hostname)"
   width=${_HI_MAX_WIDTH:-80}
-  # literal (non-tilde) chars: leading space, space+label+space, "[" + "]", space,
-  # plus $prefix - plain text already sitting on this line (e.g. hi.sh's
-  # "shell: 0.884s -> bash 43K " or load.sh's du -sh size) that the banner
-  # continues rather than starts fresh
   tildes=$((width - 6 - ${#changes_plain} - ${#label} - ${#host} - ${#prefix}))
   ((tildes < 4)) && tildes=4
-  # split the tildes so "label [host]" lands at the horizontal center of the
-  # whole line - prefix and the dirty-file count both count as left margin -
-  # but always leave at least one tilde between that margin and the label
+  # split so "label [host]" lands at the center with at least 1 tilde on the left
   left=$((${#prefix} + 1 + ${#changes_plain}))
   core=$((${#label} + ${#host} + 4))
   start_len=$((width / 2 - left - core / 2))
@@ -86,7 +76,6 @@ function hi_banner() {
   printf '%b\n' " $changes$color$start_tildes $label ${NC}[$(host_escape)$host$NC]$color $end_tildes$NC"
 }
 
-# the whole greeting: banner, clocks, system, identity, then package check
 function hi_header() {
   hi_banner "$@"
   timestamp

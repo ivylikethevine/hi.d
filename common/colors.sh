@@ -6,9 +6,7 @@
 # shellcheck source=./paths.sh
 source "${_HI_TMPDIR:-$HOME}/hi.d/common/paths.sh"
 
-# The palette, in the order the escapes are derived from: the first six are
-# normal (\e[0;3Xm), the last six bright (\e[1;3Xm). Names match fish's
-# set_color vocabulary; greys are skipped, since fish has none.
+# color names match fish's set_color vocabulary; greys are skipped, since fish has none.
 _HI_COLOR_NAMES=(red green yellow blue magenta cyan brred brgreen bryellow brblue brmagenta brcyan)
 export _HI_MAX_WIDTH=80
 
@@ -26,24 +24,20 @@ export BRBLUE='\e[1;34m'
 export BRPURPLE='\e[1;35m'
 export BRCYAN='\e[1;36m'
 
-# GNU coreutils' du supports --apparent-size; busybox/bsd du (Alpine, macOS,
-# *BSD, etc.) don't support this GNU-only flag
+# --apparent-size is a GNU-only flag
 _HI_LINUX_FLAGS=""
 du --version 2>/dev/null | grep -q "GNU coreutils" && _HI_LINUX_FLAGS="--apparent-size"
 export _HI_LINUX_FLAGS
 
-# high-res-ish timestamp without shelling out to perl (not guaranteed to exist
-# on minimal/embedded targets); falls back to whole seconds on bash <5
+# high-res-ish timestamp that falls back to whole seconds on bash <5
 function _hi_now() {
   printf '%s' "${EPOCHREALTIME:-$(date +%s)}"
 }
 
-# seconds between two _hi_now stamps (bash can't do the float math itself)
 function _hi_elapsed() {
   echo "$1 $2" | awk '{ printf "%.3f", $2 - $1 }'
 }
 
-# `hostname` isn't guaranteed to exist on minimal/container images; uname -n is
 function _hi_hostname() {
   hostname 2>/dev/null || uname -n
 }
@@ -58,7 +52,7 @@ function _hi_on_exit() {
   fi
 }
 
-# cecho <text> [color] [any 3rd arg: stay on this line]
+# cecho <text> [color] [no_newline]
 function cecho() {
   local out="${2:-}${1:-}$NC"
   [ $# -ge 3 ] && printf '%b' "$out" || printf '%b\n' "$out"
@@ -93,9 +87,8 @@ function _hi_hash_color() {
   printf '%s\n' "${_HI_COLOR_NAMES[sum % ${#_HI_COLOR_NAMES[@]}]}"
 }
 
-# look up an exact "<type>,<name>,<color>" pin in $_HI_COLOR_OVERRIDES, e.g.
-# `username,root,red` / `hostname,prod-db,yellow` / `hosttag,desktop,green`.
-# Missing file/no match is expected (most names are unpinned) - returns 1.
+# look up an exact "<type>,<name>,<color>" override
+# most names won't have an override and will return 1.
 function _hi_override_color() {
   local cur_type cur_name color
   [[ -f "$_HI_COLOR_OVERRIDES" ]] || return 1
@@ -108,9 +101,8 @@ function _hi_override_color() {
   return 1
 }
 
-# resolve the leftmost tag of a "# Tags: a, b" comment sitting directly above a
-# matching "Host <alias>" line in ~/.ssh/config as a hosttag pin; an untagged or
-# unknown host is expected - returns 1
+# grab the "# Tags: a, b" comment sitting directly above
+# a "Host <alias>" line in ~/.ssh/config. an unknown host will return 1
 function _hi_ssh_tag_color() {
   local line tag=""
   [[ -f "$_HI_SSH_CONFIG" ]] || return 1
@@ -132,8 +124,6 @@ function _hi_ssh_tag_color() {
   return 1
 }
 
-# resolution order: explicit pin, then (hostnames only) an ssh config hosttag,
-# then a deterministic hash of the name - always succeeds
 function _hi_resolve_color() {
   _hi_override_color "$1" "$2" && return
   [[ "$1" = hostname ]] && _hi_ssh_tag_color "$2" && return

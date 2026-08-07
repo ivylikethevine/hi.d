@@ -3,8 +3,7 @@
 # Safe to re-run: it repairs the lines it owns and leaves everything else alone.
 set -eou pipefail
 
-# Locate hi.d relative to this script (resolving symlinks), so install works no
-# matter where the repo lives.
+# Locate hi.d relative to this script (resolving symlinks).
 _HI_SELF="${BASH_SOURCE[0]}"
 while [ -L "$_HI_SELF" ]; do
   _HI_SELF_DIR="$(cd -P "$(dirname "$_HI_SELF")" && pwd)"

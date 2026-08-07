@@ -1,8 +1,8 @@
 #!/bin/sh
 # Everything `hi <target>` can connect to, one "<name>\t<kind>" line each.
-# The bash, zsh and fish completions (and `hi_colors`) all read this same
-# output, so there is one implementation instead of three.
-# Usage: sh targets.sh [ssh|docker|nomad]   (no argument = all of them)
+# The bash, zsh and fish completions (and `hi_colors`) all read this for
+# connection, autocomplete, and autosuggest.
+# Usage: sh targets.sh [ssh|docker|nomad] (no argument = all of them)
 kind="${1:-all}"
 
 if [ "$kind" = ssh ] || [ "$kind" = all ]; then

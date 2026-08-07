@@ -1,25 +1,24 @@
 #!/bin/bash
 # Reads data/packages ("cmd:priority[,cmd:priority...]" per line) and prints
-# which of them this host has, highest priority first, in columns.
+# which of them are installed, sorting by priority.
 set -eou pipefail
 
 # shellcheck source=./bootstrap.sh
 source "${_HI_TMPDIR:-$HOME}/hi.d/common/bootstrap.sh"
 
-# How each priority is rendered when the command is installed / missing;
-# "hide" means don't print it at all. Suggested use per tier:
-#   0 nice-to-haves (netstat, distro tools)   1 second line (git, curl, ping)
-#   2 first line (sed, awk, bc)               3 runtimes (python, node, dotnet)
-#   4 favorites (eza, bat)                    5 workflow-defining (asdf, direnv)
+# priority, lowest to highest (more can be added)
+# 0 nice-to-haves (netstat, distro tools)
+# 1 second line (git, curl, ping)
+# 2 first line (sed, awk, bc)
+# 3 runtimes (python, node, dotnet)
+# 4 favorites (eza, bat)
+# 5 workflow-defining (asdf, direnv)
 _HI_YES=("$BRBLUE" "$BRBLUE" hide "$GREEN" "$BRGREEN" "$BRGREEN")
 _HI_NO=(hide "$BRYELLOW" "$YELLOW" hide hide "$BRRED")
 
-# For one "cmd:priority[,...]" line, pick the installed alternative with the
-# highest priority (or the first alternative if none are installed), then queue
-# it as "<priority><unit sep><visible width><unit sep><rendered>" unless its
-# tier says to hide it. Visible width covers only the non-ANSI characters
-# full_check will print for this item: "|", the two padding spaces, the
-# command name, and the check/cross mark.
+# For each "cmd:priority[,...]", pick the installed package with the
+# highest priority (or the first package if none are installed), then apply the
+# proper color and mark it as installed or missing (or hide it as per above)
 function check_line() {
   local pair cmd priority color best="" best_priority=-1 found=0 rendered
   local -a pairs
@@ -46,8 +45,7 @@ function check_line() {
   [[ "$color" == hide ]] || visible+=("$best_priority"$'\x1f'"$((${#best} + 5))"$'\x1f'"$rendered")
 }
 
-# every checked package, priority-sorted (ties keep file order) and wrapped to
-# at most _HI_MAX_WIDTH visible columns per row
+# print sorted package results limited by _HI_MAX_WIDTH
 function full_check() {
   local line priority width_item rendered count=0 width=0
   local -a visible=() # appended to by check_line

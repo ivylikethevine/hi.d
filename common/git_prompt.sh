@@ -4,13 +4,10 @@
 # shells/config.fish). Requires colors.sh to already be sourced.
 # set -eou pipefail # cannot be enabled (this file is part of the interactive shell - any error would close the session)
 
-# NB: LANG=C below is a command-prefix assignment (not a variable holding
-# "git"), so it expands safely under both bash's and zsh's word-splitting rules
 _hi_git_prompt() {
-  LANG=C git rev-parse --is-inside-work-tree &>/dev/null || return
-
-  local git_dir ref detached=0
-  git_dir=$(LANG=C git rev-parse --git-dir 2>/dev/null)
+  local rev_info git_dir ref detached=0
+  rev_info=$(LANG=C git rev-parse --is-inside-work-tree --git-dir 2>/dev/null) || return
+  git_dir="${rev_info#*$'\n'}"
 
   ref=$(LANG=C git symbolic-ref --short HEAD 2>/dev/null)
   if [[ -z "$ref" ]]; then
@@ -56,14 +53,11 @@ _hi_git_prompt() {
   # shorten_branch_len 32, matching config.fish
   ((${#ref} > 32)) && ref="${ref:0:31}…"
 
-  # ahead/behind vs upstream; "informative" style shows nothing when equal/unset
   local upstream="" ahead behind
-  ahead=$(LANG=C git rev-list --count '@{upstream}..HEAD' 2>/dev/null)
-  behind=$(LANG=C git rev-list --count 'HEAD..@{upstream}' 2>/dev/null)
+  read -r ahead behind < <(LANG=C git rev-list --left-right --count 'HEAD...@{upstream}' 2>/dev/null)
   ((${ahead:-0} > 0)) && upstream+="↑${ahead}"
   ((${behind:-0} > 0)) && upstream+="↓${behind}"
 
-  # staged/dirty/conflicted/untracked counts, from the two porcelain columns
   # (IFS= matters: leading spaces are significant here)
   local staged=0 dirty=0 invalid=0 untracked=0 line x y
   while IFS= read -r line; do
@@ -79,8 +73,13 @@ _hi_git_prompt() {
     fi
   done < <(LANG=C git status --porcelain=v1 2>/dev/null)
 
-  local stash
-  stash=$(LANG=C git rev-list --walk-reflogs --count refs/stash 2>/dev/null)
+  # one line per stash push/apply, same count `rev-list --walk-reflogs` gives
+  local stash=0 stash_line
+  if [[ -f "$git_dir/logs/refs/stash" ]]; then
+    while IFS= read -r stash_line || [[ -n "$stash_line" ]]; do
+      ((stash++))
+    done <"$git_dir/logs/refs/stash"
+  fi
 
   local flags=""
   ((staged > 0)) && flags+="${YELLOW}●${staged}${NC}"

@@ -1,9 +1,5 @@
 #!/bin/bash
-# shared entry point for every bash/zsh consumer: locate hi.d and load
-# paths.sh + colors.sh. Sourcing this twice in one process is a no-op, so
-# scripts that source each other can each require it. Callers use:
-#   source "${_HI_TMPDIR:-$HOME}/hi.d/common/bootstrap.sh"
-# fish sources common/paths.sh directly instead.
+# shared entry point for scripts
 : "${_HI_TMPDIR:=$HOME}"
 export _HI_TMPDIR
 # shellcheck source=./paths.sh

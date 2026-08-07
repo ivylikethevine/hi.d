@@ -11,9 +11,9 @@ complete exa --wraps eza
 # fish can't run the bash/zsh side of hi, so the greeting, the package check
 # and the color resolution all come from one bash call each
 function fish_greeting
-    # on a hi session load.sh already printed this and sets $fish_greeting to
-    # suppress us; locally, nothing sets it and we print the header ourselves
-    set -q fish_greeting; or bash -c "source $_HI_HEADER; hi_header Online"
+  # on a hi session load.sh already printed this and sets $fish_greeting to
+  # suppress us; locally, nothing sets it and we print the header ourselves
+  set -q fish_greeting; or bash -c "source $_HI_HEADER; hi_header Online"
 end
 
 set -l hi_colors (bash -c "source $_HI_COLORS; user_color; host_color")
@@ -23,56 +23,56 @@ set -gx fish_color_host_remote $fish_color_host
 
 # wrapper so aliases (which are functions in fish) still work under sudo
 function sudo
-    if functions -q -- "$argv[1]"
-        set cmdline (for arg in $argv
-            printf "\"%s\" " $arg
-        end)
-        set -x function_src (string join "\n" (string escape --style=var (functions "$argv[1]")))
-        set argv fish -c 'string unescape --style=var (string split "\n" $function_src) | source; '$cmdline
-        command sudo -E $argv
-    else
-        command sudo $argv
-    end
+  if functions -q -- "$argv[1]"
+    set cmdline (for arg in $argv
+      printf "\"%s\" " $arg
+    end)
+    set -x function_src (string join "\n" (string escape --style=var (functions "$argv[1]")))
+    set argv fish -c 'string unescape --style=var (string split "\n" $function_src) | source; '$cmdline
+    command sudo -E $argv
+  else
+    command sudo $argv
+  end
 end
 
 # prompt: "<chroot> user@host cwd (git) [status] |", @ turning yellow over ssh
 function prompt_login --description "display user name for the prompt"
-    if not set -q __fish_machine
-        set -g __fish_machine ""
-        test -r /etc/debian_chroot; and set -g __fish_machine "(chroot:"(cat /etc/debian_chroot)") "
-    end
-    set -l color_at normal
-    set -q SSH_TTY; and set color_at yellow
-    echo -ns (set_color yellow) "$__fish_machine" \
-        (set_color $fish_color_user) " $USER" \
-        (set_color $color_at) @ \
-        (set_color $fish_color_host) (prompt_hostname) (set_color normal)
+  if not set -q __fish_machine
+    set -g __fish_machine ""
+    test -r /etc/debian_chroot; and set -g __fish_machine "(chroot:"(cat /etc/debian_chroot)") "
+  end
+  set -l color_at normal
+  set -q SSH_TTY; and set color_at yellow
+  echo -ns (set_color yellow) "$__fish_machine" \
+    (set_color $fish_color_user) " $USER" \
+    (set_color $color_at) @ \
+    (set_color $fish_color_host) (prompt_hostname) (set_color normal)
 end
 
 # copied + modified from Lilly Ballard, fish default
 function fish_prompt --description 'Write out the prompt'
-    set -l last_pipestatus $pipestatus
-    set -lx __fish_last_status $status
-    set -l normal (set_color normal)
+  set -l last_pipestatus $pipestatus
+  set -lx __fish_last_status $status
+  set -l normal (set_color normal)
 
-    set -l color_cwd $fish_color_cwd
-    set -l suffix ' |'
-    if functions -q fish_is_root_user; and fish_is_root_user
-        set -q fish_color_cwd_root; and set color_cwd $fish_color_cwd_root
-        set suffix '#'
-    end
+  set -l color_cwd $fish_color_cwd
+  set -l suffix ' |'
+  if functions -q fish_is_root_user; and fish_is_root_user
+    set -q fish_color_cwd_root; and set color_cwd $fish_color_cwd_root
+    set suffix '#'
+  end
 
-    # bold the status only when it changed since the last prompt
-    set -l bold_flag --bold
-    set -q __fish_prompt_status_generation; or set -g __fish_prompt_status_generation $status_generation
-    test $__fish_prompt_status_generation = $status_generation; and set bold_flag
-    set __fish_prompt_status_generation $status_generation
+  # bold the status only when it changed since the last prompt
+  set -l bold_flag --bold
+  set -q __fish_prompt_status_generation; or set -g __fish_prompt_status_generation $status_generation
+  test $__fish_prompt_status_generation = $status_generation; and set bold_flag
+  set __fish_prompt_status_generation $status_generation
 
-    set -l prompt_status (__fish_print_pipestatus "[" "]" "|" \
-        (set_color $fish_color_status) (set_color $bold_flag $fish_color_status) $last_pipestatus)
+  set -l prompt_status (__fish_print_pipestatus "[" "]" "|" \
+    (set_color $fish_color_status) (set_color $bold_flag $fish_color_status) $last_pipestatus)
 
-    echo -n -s (prompt_login)' ' (set_color $color_cwd) (prompt_pwd) $normal \
-        (fish_vcs_prompt) $normal " "$prompt_status $suffix " "
+  echo -n -s (prompt_login)' ' (set_color $color_cwd) (prompt_pwd) $normal \
+    (fish_vcs_prompt) $normal " "$prompt_status $suffix " "
 end
 # === end required configuration ===
 

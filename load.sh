@@ -17,31 +17,33 @@ _HI_CONFIG_END="# hi-config-end"
 _HI_CONFIGS=("$_HI_BASHRC:$_HI_HOME_BASHRC" "$_HI_ZSHRC:$_HI_HOME_ZSHRC" "$_HI_FISH_CONFIG:$_HI_HOME_FISH_CONFIG")
 
 function configure_files() {
-  local pair target
+  local pair target block
   for pair in "${_HI_CONFIGS[@]}"; do
     target="${pair#*:}"
     [ -d "$(dirname "$target")" ] || continue
     touch "$target"
     grep -q "$_HI_CONFIG_START" "$target" && continue
-    {
-      echo "$_HI_CONFIG_START"
-      cat "${pair%:*}"
-      echo "$_HI_CONFIG_END"
-    } >>"$target"
+    block="$_HI_CONFIG_START"$'\n'"$(cat "${pair%:*}")"$'\n'"$_HI_CONFIG_END"
+    printf '%s\n' "$block" >>"$target"
   done
 }
 
 # strip our block back out of every rc file, then remove hi.d itself
 function clean_all() {
-  local pair target
+  local pair target pattern
   for pair in "${_HI_CONFIGS[@]}"; do
     target="${pair#*:}"
     [ -f "$target" ] || continue
+    if grep -q "^$_HI_CONFIG_END" "$target"; then
+      pattern="/^$_HI_CONFIG_START/,/^$_HI_CONFIG_END/d"
+    else
+      pattern="/^$_HI_CONFIG_START/d"
+    fi
     # BSD/macOS sed needs an explicit (empty) suffix argument for -i
     if [ -f "$_HI_LINUX_RELEASE" ]; then
-      sed -i "/^$_HI_CONFIG_START/,/^$_HI_CONFIG_END/d" -- "$target"
+      sed -i "$pattern" -- "$target"
     else
-      sed -i '' "/^$_HI_CONFIG_START/,/^$_HI_CONFIG_END/d" "$target"
+      sed -i '' "$pattern" "$target"
     fi
   done
   rm -rfv "$_HI_ROOT"

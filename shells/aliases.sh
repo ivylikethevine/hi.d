@@ -4,7 +4,7 @@
 # shellcheck disable=SC2139 # aliases are meant to expand $_HI_* now, not later
 # shellcheck disable=SC2155
 
-# === start required variables/aliases ===
+# # === start required variables/aliases ===
 alias hi="$_HI_LAUNCHER"
 alias hi_colors="bash -c 'source $_HI_COLORS && list_colors'"
 alias hi_install="$_HI_INSTALL"
@@ -12,27 +12,27 @@ alias hi_test_aliases="$_HI_TEST_ALIASES"
 alias hi_update="git -C $_HI_ROOT pull"
 alias hi_status="git -C $_HI_ROOT status"
 alias hi_info="echo 'tmpdir: $_HI_TMPDIR | root: $_HI_ROOT | script: $_HI_LAUNCHER'"
+alias sudo="command sudo " # works in bash/zsh, fish has a sudo wrapper in config.fish
+# # === end required variables/aliases ===
 
-export EZA_CONFIG_DIR="$_HI_ROOT/misc" # eza theme customization, misc/theme.yml
+# editor defaults with preferential fallthrough
 export EDITOR="$(command -v nano || command -v pico || command -v micro || command -v vim || command -v vi)"
 alias nano="nano --rcfile $_HI_NANORC"
 alias vim="vim -u $_HI_VIMRC"
 
 # cat is bat with our options when bat exists, plain cat otherwise
 export _HI_BAT_OPTS='-P --tabs 2 --theme Monokai\ Extended\ Bright --style changes,grid'
+# batcat is batcat on some Linux distros (fallback to cat)
 alias batcat="$(command -v bat || command -v batcat || command -v cat)"
 alias bat="batcat $_HI_BAT_OPTS"
 alias batn="batcat $_HI_BAT_OPTS,numbers"
 alias cat="batcat"
 alias catn="batn"
 
-# works in bash/zsh, fish has a sudo wrapper in config.fish
-alias sudo="command sudo "
-
+# time helpers
 export _HI_HUMAN_CENTRIC_DATE="+%a %b %-e %Y %H:%M:%S %Z"
 export _HI_HUMAN_SHORT_DATE="+%b %-e %y %H:%M %Z"
 alias now='echo "LOCAL: $(date $_HI_HUMAN_SHORT_DATE) => UTC: $(date -u $_HI_HUMAN_SHORT_DATE)"'
-# === end required variables/aliases ===
 
 # for working on this repo quickly
 alias hey="ssh"
@@ -50,11 +50,7 @@ alias dcud="docker compose up -d"
 alias dcd="docker compose down"
 alias dps="dcl"
 
-# listing, copying, and general safety
-alias ls="ls -lh --color=auto"
-alias lsa="ls -a"
-alias lsd="ls -d .*"
-alias lsr="lsa -R"
+# copying and general safety
 alias grep="grep --color=auto"
 alias rm="rm -iv"
 alias cp="cp -rv"
@@ -68,8 +64,15 @@ alias mindiff="diff -Bdw"
 alias ..="cd ../"
 alias ...="cd ../../"
 
+# ls basics
+alias ls="ls -lh --color=auto"
+alias lsa="ls -a"
+alias lsd="ls -d .*"
+alias lsr="lsa -R"
+
 # eza/exa (its predecessor) improved ls; time format per
 # https://docs.rs/chrono/latest/chrono/format/strftime/index.html
+export EZA_CONFIG_DIR="$_HI_ROOT/misc" # eza theme customization, misc/theme.yml
 export _HI_EXA_SHARED_OPTS='-F -1 -l -m --group-directories-first'
 export _HI_EXA_OPTS="$_HI_EXA_SHARED_OPTS --group --no-filesize"
 export _HI_EZA_OPTS="$_HI_EXA_SHARED_OPTS"' --smart-group --time-style="+%b %d %Y %H:%M"'

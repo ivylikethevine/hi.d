@@ -18,6 +18,13 @@ _Don't `ssh`ush your hosts, say `hi`!_
 
 `hi <name>` also works against a running docker container - if `<name>` isn't a `Host` in `~/.ssh/config` but is a running container (by name or ID), `hi` copies `~/hi.d` in and chainloads `load.sh` exactly like the ssh path, for an identical session (colors, prompt, aliases, vim/nano configs, etc). No openssl armoring is needed here (`docker exec -i` passes stdin through as raw bytes), and cleanup happens once you exit. The container needs `bash` for the full experience; without it, `hi` drops you into the best plain shell available (`zsh`/`fish`/`sh`) with our aliases and a warning.
 
+### Windows hosts
+
+`hi <target>` works against Windows OpenSSH targets too, at whatever level the target supports:
+
+- **WSL, Git Bash, Cygwin or MSYS2 reachable on `PATH`**: the full experience (header, colors, git prompt, aliases) - same code path as any other ssh host.
+- **Stock Windows OpenSSH with no `bash` at all**: `hi` falls back to a plain interactive PowerShell session (no hi.d styling - that's bash-only) instead of failing outright. This still happens over the _same single ssh connection_, since `cmd.exe` (Windows' default `DefaultShell`) understands `||` the same way a POSIX shell does; a target with `DefaultShell` set to PowerShell directly is outside what this fallback can detect.
+
 ### Nomad allocations
 
 `hi <alloc-id>` also works against a running Nomad allocation (matched by ID/prefix, checked after the ssh-host and docker-container checks) - same idea, same session, same code path as docker. Since `nomad alloc exec` has no `docker cp`/`-e` equivalent, files are streamed in with `exec -i` + `cat >` and env vars are set through a `sh -c "export ...; exec ..."` wrapper. Multi-task allocations would need `nomad alloc exec -task <name>`, which `hi` doesn't pass through, so they need a single unambiguous task.

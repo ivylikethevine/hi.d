@@ -2,14 +2,34 @@
 # Shared bash/zsh git status prompt segment, styled to match what fish's
 # built-in fish_vcs_prompt produces (see the __fish_git_prompt_* settings in
 # shells/config.fish). Requires colors.sh to already be sourced.
-# set -eou pipefail # cannot be enabled (this file is part of the interactive shell - any error would close the session)
+set -eou pipefail # must be disabled after our code (this file is part of the interactive shell - any error would close the session)
 
 _hi_git_prompt() {
-  local rev_info git_dir ref detached=0
+  local rev_info git_dir ref="" detached=0
   rev_info=$(LANG=C git rev-parse --is-inside-work-tree --git-dir 2>/dev/null) || return
   git_dir="${rev_info#*$'\n'}"
 
-  ref=$(LANG=C git symbolic-ref --short HEAD 2>/dev/null)
+  local ahead=0 behind=0 staged=0 dirty=0 invalid=0 untracked=0 line
+  while IFS= read -r line; do
+    case "$line" in
+    "# branch.head "*)
+      ref="${line#"# branch.head "}"
+      [[ "$ref" == "(detached)" || "$ref" == "(unknown)" ]] && ref=""
+      ;;
+    "# branch.ab "*)
+      local ab="${line#"# branch.ab "}" # "+<ahead> -<behind>"
+      ahead="${ab%% *}" ahead="${ahead#+}"
+      behind="${ab##* }" behind="${behind#-}"
+      ;;
+    "1 "* | "2 "*)
+      [[ "${line:2:1}" != "." ]] && ((staged++))
+      [[ "${line:3:1}" != "." ]] && ((dirty++))
+      ;;
+    "u "*) ((invalid++)) ;;
+    "? "*) ((untracked++)) ;;
+    esac
+  done < <(LANG=C git status --porcelain=v2 --branch 2>/dev/null)
+
   if [[ -z "$ref" ]]; then
     detached=1
     ref=$(LANG=C git describe --tags --contains HEAD 2>/dev/null)
@@ -53,25 +73,9 @@ _hi_git_prompt() {
   # shorten_branch_len 32, matching config.fish
   ((${#ref} > 32)) && ref="${ref:0:31}…"
 
-  local upstream="" ahead behind
-  read -r ahead behind < <(LANG=C git rev-list --left-right --count 'HEAD...@{upstream}' 2>/dev/null)
-  ((${ahead:-0} > 0)) && upstream+="↑${ahead}"
-  ((${behind:-0} > 0)) && upstream+="↓${behind}"
-
-  # (IFS= matters: leading spaces are significant here)
-  local staged=0 dirty=0 invalid=0 untracked=0 line x y
-  while IFS= read -r line; do
-    x=${line:0:1}
-    y=${line:1:1}
-    if [[ "$x" == "U" || "$y" == "U" || "$x$y" == "AA" || "$x$y" == "DD" ]]; then
-      ((invalid++))
-    elif [[ "$x$y" == "??" ]]; then
-      ((untracked++))
-    else
-      [[ "$x" != " " ]] && ((staged++))
-      [[ "$y" != " " ]] && ((dirty++))
-    fi
-  done < <(LANG=C git status --porcelain=v1 2>/dev/null)
+  local upstream=""
+  ((ahead > 0)) && upstream+="↑${ahead}"
+  ((behind > 0)) && upstream+="↓${behind}"
 
   # one line per stash push/apply, same count `rev-list --walk-reflogs` gives
   local stash=0 stash_line
@@ -97,3 +101,5 @@ _hi_git_prompt() {
   [[ -n "$upstream" ]] && out+="|${upstream}"
   printf ' %b' "$out|${flags})"
 }
+
+set +eou pipefail # must be disabled after our code (this file is part of the interactive shell - any error would close the session)

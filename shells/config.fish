@@ -21,15 +21,15 @@ set -gx fish_color_user $hi_colors[1]
 set -gx fish_color_host $hi_colors[2]
 set -gx fish_color_host_remote $fish_color_host
 
-# wrapper so aliases (which are functions in fish) still work under sudo
+# wrapper so aliases (which are functions in fish) still work under sudo.
+# args are passed through fish's own argv mechanism (after --), never spliced
+# into a string that gets re-parsed as fish syntax - anything else invites
+# command injection via quotes/parens/semicolons in an argument.
 function sudo
   if functions -q -- "$argv[1]"
-    set cmdline (for arg in $argv
-      printf "\"%s\" " $arg
-    end)
-    set -x function_src (string join "\n" (string escape --style=var (functions "$argv[1]")))
-    set argv fish -c 'string unescape --style=var (string split "\n" $function_src) | source; '$cmdline
-    command sudo -E $argv
+    set -lx hi_sudo_fn $argv[1]
+    set -lx function_src (string join "\n" (string escape --style=var (functions -- $hi_sudo_fn)))
+    command sudo -E fish -c 'string unescape --style=var (string split "\n" $function_src) | source; $hi_sudo_fn $argv' -- $argv[2..]
   else
     command sudo $argv
   end

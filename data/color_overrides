@@ -1,4 +1,3 @@
-#type,name,color
 #   type  = hosttag | username | hostname
 #   color = red, green, yellow, blue, magenta, cyan, brred, brgreen, bryellow, brblue, brmagenta, brcyan
 #
@@ -9,6 +8,7 @@
 #
 # unlisted usernames/hostnames get a deterministic color derived from their name -
 # run `hi_colors` to preview what everything currently resolves to.
+#type,name,color
 hosttag,desktop,green
 hosttag,work,green
 hosttag,laptop,yellow

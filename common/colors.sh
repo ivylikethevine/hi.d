@@ -1,7 +1,7 @@
 #!/bin/bash
 # colors + the handful of primitives every hi script needs (cecho, timing,
 # hostname). Loaded through common/bootstrap.sh.
-# set -eou pipefail # cannot be enabled (this file is part of the interactive shell - any error would close the session)
+set -eou pipefail # must be disabled after our code (this file is part of the interactive shell - any error would close the session)
 
 # shellcheck source=./paths.sh
 source "${_HI_TMPDIR:-$HOME}/hi.d/common/paths.sh"
@@ -40,6 +40,11 @@ function _hi_elapsed() {
 
 function _hi_hostname() {
   hostname 2>/dev/null || uname -n
+}
+
+function _hi_sanitize() {
+  # shellcheck disable=SC1003
+  printf '%s' "$1" | tr -d '[:cntrl:]\\'
 }
 
 # zsh's `trap ... EXIT` doesn't fire the way bash's does; it has TRAPEXIT instead
@@ -157,3 +162,5 @@ function list_colors() {
     cecho "$name  ->  $color" "$(_hi_color_escape "$color")"
   done < <(sh "$_HI_TARGETS" ssh)
 }
+
+set +eou pipefail # must be disabled after our code (this file is part of the interactive shell - any error would close the session)

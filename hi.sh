@@ -1,7 +1,7 @@
 #!/bin/bash
-# forked from sshrc: https://github.com/danrabinowitz/sshrc & https://github.com/cdown/sshrc
+# forked from sshrc by Russell Stewart: https://github.com/danrabinowitz/sshrc & https://github.com/cdown/sshrc
 # Runs on the client - copies hi.d to the target and chainloads load.sh there.
-# set -eou pipefail # cannot be enabled (this script is part of the interactive shell - any error would close the session)
+set -eou pipefail # must be disabled after our code (this file is part of the interactive shell - any error would close the session)
 
 # shellcheck source=./common/bootstrap.sh
 source "${_HI_TMPDIR:-$HOME}/hi.d/common/bootstrap.sh"
@@ -86,12 +86,13 @@ function _say_hi() {
 REMOTE
   )"
 
-  # POSIX-single-quote the whole script so any login shell hands it
-  # to `bash -c` as one untouched argument.
+  # POSIX-single-quote the whole script
   quoted="'$(printf '%s' "$script" | sed "s/'/'\\\\''/g")'"
 
   # shellcheck disable=SC2029
-  ssh -t "${SSHARGS[@]}" "$DOMAIN" bash -c "$quoted"
+  ssh -t "${SSHARGS[@]}" "$DOMAIN" bash -c "$quoted" '||' \
+    powershell -NoLogo -NoExit -Command \
+    "Write-Host 'hi from PowerShell - no bash on this host, hi.d colors/aliases are unavailable' -ForegroundColor Yellow"
 }
 
 # both container types use the same style of copying our configurations, but
@@ -229,5 +230,7 @@ function _run() {
   fi
   exit "$exit_code"
 }
+
+set +eou pipefail # must be disabled after our code (this file is part of the interactive shell - any error would close the session)
 
 _run "$@"

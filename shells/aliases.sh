@@ -3,6 +3,9 @@
 # parse: `alias`, `export`, `&&` chains - no if/then/fi, no $(...) conditionals.
 # shellcheck disable=SC2139 # aliases are meant to expand $_HI_* now, not later
 # shellcheck disable=SC2155
+# the following syntax resolves to the first command installed, changing order
+# changes preference (for users taste)
+# export z="$(command -v a || command -v b || command -v c)"
 
 # # === start required variables/aliases ===
 alias hi="$_HI_LAUNCHER"
@@ -15,16 +18,21 @@ alias hi_info="echo 'tmpdir: $_HI_TMPDIR | root: $_HI_ROOT | script: $_HI_LAUNCH
 alias sudo="command sudo " # works in bash/zsh, fish has a sudo wrapper in config.fish
 # # === end required variables/aliases ===
 
-# editor defaults with preferential fallthrough
-export EDITOR="$(command -v nano || command -v pico || command -v micro || command -v vim || command -v vi)"
+# cli text editor defaults with preferential fallthrough
+export EDITOR="$(command -v nano || command -v micro || command -v pico || command -v vim || command -v vi)"
 alias micro="micro -autoindent=true -colorscheme=darcula -colorcolumn=80 -diffgutter=true -softwrap=true -tabsize=2"
 alias nano="nano --rcfile $_HI_NANORC"
-alias vim="vim -u $_HI_VIMRC" # TODO: determine -u or -U?
+# TODO: determine -u or -U?
+alias vim="vim -u $_HI_VIMRC"
+
+# ide defaults with preferential fallthrough
+export IDE="$(command -v zeditor || command -v code || command -v vim || command -v vi)"
 
 # cat is bat with our options when bat exists, plain cat otherwise
 export _HI_BAT_OPTS='-P --tabs 2 --theme Monokai\ Extended\ Bright --style changes,grid'
-# batcat is batcat on some Linux distros (fallback to cat)
-alias batcat="$(command -v bat || command -v batcat || command -v cat)"
+# batcat is batcat on some Linux distros (fallback to ccat)
+# ccat is cat with syntax highlighting (fallback to cat)
+alias batcat="$(command -v bat || command -v batcat || command -v ccat || command -v cat)"
 alias bat="batcat $_HI_BAT_OPTS"
 alias batn="batcat $_HI_BAT_OPTS,numbers"
 alias cat="batcat"
@@ -40,11 +48,10 @@ alias hey="ssh"
 alias zed="zeditor"
 alias ehi="zed $_HI_ROOT"
 alias essh="zed $_HI_SSH_DIR"
-
 # TODO: add script/compat for local config changes?
 alias elinks="zed ~/projects/links"
 
-# docker
+# docker compose
 alias dcl="docker container ls && docker compose ls"
 alias dcu="docker compose up"
 alias dcud="docker compose up -d"
@@ -59,22 +66,30 @@ alias rsync="rsync -zvhPr --info=progress2"
 alias scp="scp -Cr"
 alias fc="ls | wc -l"
 alias mkex="chmod +x"
+
+# always forget how tar works
 alias ctar="tar -zcvf"
 alias utar="tar -zxvf"
-alias mindiff="diff -Bdw"
-alias ..="cd ../"
-alias ...="cd ../../"
 
-# ls basics
-alias ls="ls -lh --color=auto"
-alias lsa="ls -a"
-alias lsd="ls -d .*"
-alias lsr="lsa -R"
+# file diffing
+# TODO: test out these diffing tools
+# alias diff="$(command -v diff-so-fancy || command -v icdiff || command -v diff)"
+alias mindiff="diff -Bdw"
 
 # fallthrough aliases for improved basics
 alias du="$(command -v dua || command -v du)"
 alias df="$(command -v duf || command -v df)"
 alias dig="$(command -v dog || command -v dig)"
+
+# directory navigation
+alias ..="cd ../"
+alias ...="cd ../../"
+alias z="zoxide"
+
+# ls basics
+alias ls="ls -lh --color=auto"
+alias lsa="ls -a"
+alias lsr="lsa -R"
 
 # eza/exa (its predecessor) improved ls; time format per
 # https://docs.rs/chrono/latest/chrono/format/strftime/index.html
@@ -85,9 +100,11 @@ export _HI_EZA_OPTS="$_HI_EXA_SHARED_OPTS"' --smart-group --time-style="+%b %d %
 export _HI_EZA_OPTS_SIZE="$_HI_EZA_OPTS --total-size"
 alias exa="$(command -v exa || command -v eza || command -v ls) $_HI_EXA_OPTS"
 alias lr="exa"
+alias lsx="lr"
 alias lra="lr -a"
 alias lrt="lr -T -L2"
 alias eza="$(command -v eza || command -v exa || command -v ls) $_HI_EZA_OPTS"
+alias lsz="eza"
 alias les="eza $_HI_EZA_OPTS_SIZE"
 alias lest="eza $_HI_EZA_OPTS_SIZE -T -L2"
 alias lesg="eza $_HI_EZA_OPTS_SIZE --git --git-repos-no-status"
@@ -95,6 +112,10 @@ alias le="eza --no-filesize"
 alias lea="le -a"
 alias let="le -T -L2"
 alias leg="le --git --git-repos-no-status"
+alias l="$(command -v eza || command -v exa || command -v ls) -l"
+
+# lsd (another improved ls)
+alias lsd="lsd -lh --color=auto"
 
 # git
 alias gl="git log --abbrev-commit --graph"
@@ -124,6 +145,7 @@ alias my_ip="ip route get 1.1.1.1"
 alias yayy="yay -Syyu"
 alias yayc="yay -Sc --noconfirm"
 alias yaycc="sudo rm -rfv /var/cache/pacman/pkg/download-* >/dev/null"
+alias yay_list_orphans="pacman -Qdtq"
 alias yay_remove_orphans="pacman -Qdtq | sudo pacman -Rns -"
 
 # apt: for debian-likes

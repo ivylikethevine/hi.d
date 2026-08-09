@@ -71,7 +71,7 @@ function config_hi() {
 }
 
 cecho "~~~~~ Installing (or reinstalling) hi.sh! ~~~~~" "$BRGREEN"
-echo "pwd: $PWD | hi_root: $_HI_ROOT | hi_tmpdir: $_HI_TMPDIR | shell: ${SHELL##*/}"
+cecho "pwd: $PWD | hi_root: $_HI_ROOT | hi_tmpdir: $_HI_TMPDIR | shell: ${SHELL##*/}" "$BLUE"
 
 config_shell bashrc "$_HI_HOME_BASHRC" \
   "$(tmpdir_line sh)" \

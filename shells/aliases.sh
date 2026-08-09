@@ -17,6 +17,7 @@ alias sudo="command sudo " # works in bash/zsh, fish has a sudo wrapper in confi
 
 # editor defaults with preferential fallthrough
 export EDITOR="$(command -v nano || command -v pico || command -v micro || command -v vim || command -v vi)"
+alias micro="micro -autoindent=true -colorscheme=darcula -colorcolumn=80 -diffgutter=true -softwrap=true -tabsize=2"
 alias nano="nano --rcfile $_HI_NANORC"
 alias vim="vim -u $_HI_VIMRC"
 

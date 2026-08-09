@@ -1,3 +1,8 @@
+" must be first: launching as `vim -u <file>` implies 'compatible', which puts
+" < in 'cpoptions' and disables <> key notation entirely - every <C-x>, <CR>,
+" <Esc> and <Up> below would otherwise be mapped as literal text
+set nocompatible
+
 set autoread
 set ai
 set backspace=eol,start,indent
@@ -58,21 +63,13 @@ filetype plugin on
 filetype indent on
 set laststatus=1
 
-" TODO: Fix the following because none work...
-
-" Quickly quit
-map qq :qa!
-
-" Arrow keys in all modes...
-map <Up> j
-map <Down> k
-map <Left> h
-map <Right> l
-imap <Up> j
-imap <Down> k
-imap <Left> h
-imap <Right> l
-map! ^[OA ^[ka
-map! ^[OB ^[ja
-map! ^[OC ^[la
-map! ^[OD ^[ha
+" Ctrl-X quits from any mode (overrides insert-mode completion prefix)
+nnoremap <C-x> :qa!<CR>
+inoremap <C-x> <Esc>:qa!<CR>
+vnoremap <C-x> <Esc>:qa!<CR>
+snoremap <C-x> <Esc>:qa!<CR>
+onoremap <C-x> <Esc>:qa!<CR>
+cnoremap <C-x> <C-c>:qa!<CR>
+if exists(':tnoremap')
+  tnoremap <C-x> <C-\><C-n>:qa!<CR>
+endif

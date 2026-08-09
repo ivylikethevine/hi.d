@@ -4,6 +4,8 @@
 # shells/config.fish). Requires colors.sh to already be sourced.
 set -euo pipefail # must be disabled after our code (this file is part of the interactive shell - any error would close the session)
 
+# export _HI_GIT_PROMPT=0
+
 _hi_git_prompt() {
   [[ "${_HI_GIT_PROMPT:-1}" == 0 ]] && return
 

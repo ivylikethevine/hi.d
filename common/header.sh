@@ -8,6 +8,11 @@ source "${_HI_TMPDIR:-$HOME}/hi.d/common/bootstrap.sh"
 # shellcheck source=./check.sh
 source "$_HI_CHECK"
 
+# export _HI_HEADER_TIMESTAMP=0
+# export _HI_HEADER_SYSINFO=0
+# export _HI_HEADER_IDENTITY=0
+# export _HI_HEADER_CHECK=0
+
 function _hi_row() {
   local cell out=""
   for cell in "$@"; do out+="$NC | $cell"; done

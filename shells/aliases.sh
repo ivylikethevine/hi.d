@@ -19,7 +19,7 @@ alias sudo="command sudo " # works in bash/zsh, fish has a sudo wrapper in confi
 export EDITOR="$(command -v nano || command -v pico || command -v micro || command -v vim || command -v vi)"
 alias micro="micro -autoindent=true -colorscheme=darcula -colorcolumn=80 -diffgutter=true -softwrap=true -tabsize=2"
 alias nano="nano --rcfile $_HI_NANORC"
-alias vim="vim -u $_HI_VIMRC"
+alias vim="vim -u $_HI_VIMRC" # TODO: determine -u or -U?
 
 # cat is bat with our options when bat exists, plain cat otherwise
 export _HI_BAT_OPTS='-P --tabs 2 --theme Monokai\ Extended\ Bright --style changes,grid'

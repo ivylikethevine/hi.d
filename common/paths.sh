@@ -6,7 +6,7 @@
 # hi.d itself
 export _HI_ROOT="$_HI_TMPDIR/hi.d"
 export _HI_LAUNCHER="$_HI_ROOT/hi.sh"
-export _HI_COLORS="$_HI_ROOT/common/colors.sh"
+export _HI_SHARED="$_HI_ROOT/common/shared.sh"
 export _HI_CHECK="$_HI_ROOT/common/check.sh"
 export _HI_HEADER="$_HI_ROOT/common/header.sh"
 export _HI_GIT_PROMPT="$_HI_ROOT/common/git_prompt.sh"
@@ -15,7 +15,7 @@ export _HI_INSTALL="$_HI_ROOT/scripts/install.sh"
 export _HI_TEST_ALIASES="$_HI_ROOT/scripts/test_aliases.sh"
 
 # user configurable
-export _HI_COLOR_OVERRIDES="$_HI_ROOT/misc/color_overrides"
+export _HI_COLORS="$_HI_ROOT/misc/color_overrides"
 export _HI_PACKAGES="$_HI_ROOT/misc/packages"
 export _HI_VIMRC="$_HI_ROOT/misc/vim.rc"
 export _HI_NANORC="$_HI_ROOT/misc/nano.rc"

@@ -16,7 +16,7 @@ function fish_greeting
   set -q fish_greeting; or bash -c "source $_HI_HEADER; hi_header Online"
 end
 
-set -l hi_colors (bash -c "source $_HI_COLORS; user_color; host_color")
+set -l hi_colors (bash -c "source $_HI_SHARED; user_color; host_color")
 set -gx fish_color_user $hi_colors[1]
 set -gx fish_color_host $hi_colors[2]
 set -gx fish_color_host_remote $fish_color_host

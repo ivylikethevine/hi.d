@@ -95,13 +95,13 @@ function _hi_hash_color() {
 # most names won't have an override and will return 1.
 function _hi_override_color() {
   local cur_type cur_name color
-  [[ -f "$_HI_COLOR_OVERRIDES" ]] || return 1
+  [[ -f "$_HI_COLORS" ]] || return 1
   while IFS=',' read -r cur_type cur_name color; do
     if [[ "$cur_type" = "$1" && "$cur_name" = "$2" ]]; then
       printf '%s\n' "$color"
       return 0
     fi
-  done <"$_HI_COLOR_OVERRIDES"
+  done <"$_HI_COLORS"
   return 1
 }
 

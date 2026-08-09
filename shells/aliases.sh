@@ -71,6 +71,10 @@ alias lsa="ls -a"
 alias lsd="ls -d .*"
 alias lsr="lsa -R"
 
+# fallthrough aliases for improved basics
+alias du="$(command -v dua || command -v du)"
+alias dig="$(command -v dog || command -v dig)"
+
 # eza/exa (its predecessor) improved ls; time format per
 # https://docs.rs/chrono/latest/chrono/format/strftime/index.html
 export EZA_CONFIG_DIR="$_HI_ROOT/misc" # eza theme customization, misc/theme.yml

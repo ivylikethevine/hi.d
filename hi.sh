@@ -50,15 +50,24 @@ ${CMDARG:-load}
 EOF
 }
 
+function _hi_fallback_rc() {
+  cat <<EOF
+. \$_HI_ROOT/shells/aliases.sh 2>/dev/null
+${CMDARG:-}
+EOF
+}
+
 function _hi_size() {
   # shellcheck disable=SC2086 # unquoted so an empty flag list disappears
   du -sh "${_HI_EXCLUDE[@]}" $_HI_LINUX_FLAGS "$_HI_ROOT" | awk '{ print $1 }'
 }
 
 # Connect to the target, copy hi.d over, and hand off to load.sh.
-# The payload below is handed to `bash -c` rather than run directly by the
-# login shell, since not all of them handle the same syntax. Technically,
-# all of hi runs under a single bash sub-process that we start on the target.
+# The payload below is handed to `sh -c` rather than run directly by the login
+# shell, since not all of them handle the same syntax - every line up to the
+# bash/sh branch at the end is plain POSIX, so `sh` alone is enough to land it.
+# Technically, all of hi runs under a single sh sub-process that we start on
+# the target, which chainloads bash for the full experience when it's there.
 function _say_hi() {
   local size hi_esc nc_esc script quoted
 
@@ -82,7 +91,22 @@ function _say_hi() {
       echo "$(tar czf - -h -C "$_HI_TMPDIR" "${_HI_EXCLUDE[@]}" hi.d | $_HI_ARMOR)" | $_HI_UNARMOR | tar mxzf - -C \$_HI_TMPDIR
       export _HI_COPY_TIME=\$(awk -v a="\$_hi_t0" -v b="\$(_hi_now)" 'BEGIN{printf "%.3f", b-a}')
       export _HI_CONNECT_PREFIX="-> $size"
-      bash --rcfile \$_HI_ROOT/hi.bashrc
+      if command -v bash >/dev/null 2>&1; then
+        bash --rcfile \$_HI_ROOT/hi.bashrc
+      else
+        _hi_fallback=sh
+        for _hi_s in zsh fish sh; do command -v "\$_hi_s" >/dev/null 2>&1 && { _hi_fallback="\$_hi_s"; break; }; done
+        printf '%s no bash on [$DOMAIN], dropping into plain %s w/ aliases only %s\n' "$hi_esc" "\$_hi_fallback" "$nc_esc" >&2
+        echo "$(_hi_fallback_rc | $_HI_ARMOR)" | $_HI_UNARMOR > \$_HI_ROOT/.hi_fallback_rc
+        case "\$_hi_fallback" in
+        zsh)
+          cp \$_HI_ROOT/.hi_fallback_rc \$_HI_ROOT/.zshrc
+          ZDOTDIR=\$_HI_ROOT zsh -i
+          ;;
+        fish) fish -C "source \$_HI_ROOT/.hi_fallback_rc" ;;
+        *) ENV=\$_HI_ROOT/.hi_fallback_rc sh -i ;;
+        esac
+      fi
 REMOTE
   )"
 
@@ -90,9 +114,9 @@ REMOTE
   quoted="'$(printf '%s' "$script" | sed "s/'/'\\\\''/g")'"
 
   # shellcheck disable=SC2029
-  ssh -t "${SSHARGS[@]}" "$DOMAIN" bash -c "$quoted" '||' \
+  ssh -t "${SSHARGS[@]}" "$DOMAIN" sh -c "$quoted" '||' \
     powershell -NoLogo -NoExit -Command \
-    "Write-Host 'hi from PowerShell - no bash on this host, hi.d colors/aliases are unavailable' -ForegroundColor Yellow"
+    "Write-Host 'hi from PowerShell - no bash or sh on this host, hi.d colors/aliases are unavailable' -ForegroundColor Yellow"
 }
 
 # both container types use the same style of copying our configurations, but
@@ -131,13 +155,20 @@ function _say_hi_container() {
       return $?
     fi
 
+    # aliases.sh, plus CMDARG (already suffixed with "; exit" by _hi_parse) as
+    # its own raw line when running a one-off command instead of a session -
+    # not a quoted CLI arg, so it survives quotes/spaces in the user's command
+    { printf '. %s/aliases.sh 2>/dev/null\n' "$root"
+      [ -n "${CMDARG:-}" ] && printf '%s\n' "$CMDARG"; } |
+      "${cp[@]}" sh -c "cat > '$root/.hi_fallback_rc'" 2>"$tmp"
+
     case "$fallback" in
     zsh)
-      "${probe[@]}" sh -c "echo '. $root/aliases.sh 2>/dev/null' > '$root/.zshrc'" 2>"$tmp"
-      "${attach[@]}" sh -c "export ZDOTDIR='$root'; exec zsh"
+      "${cp[@]}" sh -c "cp '$root/.hi_fallback_rc' '$root/.zshrc'" 2>"$tmp"
+      "${attach[@]}" sh -c "export ZDOTDIR='$root'; exec zsh -i"
       ;;
-    fish) "${attach[@]}" fish -C "source $root/aliases.sh 2>/dev/null" ;;
-    *) "${attach[@]}" sh -c "export ENV='$root/aliases.sh'; exec $fallback" ;;
+    fish) "${attach[@]}" fish -C "source $root/.hi_fallback_rc" ;;
+    *) "${attach[@]}" sh -c "export ENV='$root/.hi_fallback_rc'; exec $fallback -i" ;;
     esac
     exit_code=$?
     "${probe[@]}" rm -rfv "$root" >/dev/null 2>&1

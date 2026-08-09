@@ -12,6 +12,8 @@ _Don't `ssh`ush your hosts, say `hi`!_
 4. When the session ends, `load.sh`'s `trap` strips those additions back out, and the `/tmp` directory is removed by the cleanup trap `hi.sh` set up on connect.
 5. `hi <target> 'some command'` skips the interactive session and just runs the command there, like `ssh` does.
 
+The setup in steps 1-2 is plain POSIX and runs under `sh`, so it works even if the target has no `bash` at all - `hi` still copies the whole of `~/hi.d` over in that case, but hands off to the best plain shell available (`zsh`/`fish`/`sh`) with just our aliases loaded, instead of the full `load.sh` experience, which needs `bash`.
+
 **_IMPORTANT: Local-only changes MUST stay in `~/.bashrc`, `~/.zshrc`, `~/.config/fish/config.fish`, etc. - anything in this directory is copied to every host you say `hi` to._**
 
 ### Docker containers

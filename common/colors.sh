@@ -8,7 +8,6 @@ source "${_HI_TMPDIR:-$HOME}/hi.d/common/paths.sh"
 
 # color names match fish's set_color vocabulary; greys are skipped, since fish has none.
 _HI_COLOR_NAMES=(red green yellow blue magenta cyan brred brgreen bryellow brblue brmagenta brcyan)
-export _HI_MAX_WIDTH=80
 
 export NC='\e[0m'
 export RED='\e[0;31m'

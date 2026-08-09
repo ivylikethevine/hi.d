@@ -72,7 +72,7 @@ function fish_prompt --description 'Write out the prompt'
     (set_color $fish_color_status) (set_color $bold_flag $fish_color_status) $last_pipestatus)
 
   echo -n -s (prompt_login)' ' (set_color $color_cwd) (prompt_pwd) $normal \
-    (fish_vcs_prompt) $normal " "$prompt_status $suffix " "
+    (test "$_HI_GIT_PROMPT" != 0; and fish_vcs_prompt) $normal " "$prompt_status $suffix " "
 end
 # === end required configuration ===
 

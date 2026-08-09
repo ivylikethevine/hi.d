@@ -40,6 +40,9 @@ The setup in steps 1-2 is plain POSIX and runs under `sh`, so it works even if t
 - [optional] pin specific colors in `~/hi.d/data/color_overrides` - everything else gets a color automatically
   - run `hi_colors` to preview what every ssh host/your user resolves to
 - configure `~/hi.d/data/packages` to your preferences
+- [optional] in `header.sh` set any of `_HI_HEADER_TIMESTAMP`, `_HI_HEADER_SYSINFO`, `_HI_HEADER_IDENTITY`, and `_HI_HEADER_CHECK` to `0` to turn off that piece of the header/greeting across shells
+- [optional] in `git_prompt.sh` set `_HI_GIT_PROMPT` to `0` to turn off the git prompt across shells
+- [optional] in `colors.sh` set `_HI_MAX_WIDTH` to your preferred terminal width (default is 80)
 - say `hi`!
 - [optional] modify `~/hi.d/misc/*` and `~/hi.d/shells/*` to your liking!
 

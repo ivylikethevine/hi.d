@@ -55,7 +55,7 @@ function full_check() {
   ((${#visible[@]})) || return 0
 
   while IFS=$'\x1f' read -r priority width_item rendered; do
-    if ((count == 0)) || ((width + width_item > _HI_MAX_WIDTH)); then # start of a row
+    if ((count == 0)) || ((width + width_item > ${_HI_MAX_WIDTH:-80})); then # start of a row
       ((count == 0)) || printf '\n'
       printf ' '
       width=1

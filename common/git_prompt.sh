@@ -5,6 +5,8 @@
 set -euo pipefail # must be disabled after our code (this file is part of the interactive shell - any error would close the session)
 
 _hi_git_prompt() {
+  [[ "${_HI_GIT_PROMPT:-1}" == 0 ]] && return
+
   local rev_info git_dir ref="" detached=0
   rev_info=$(LANG=C git rev-parse --is-inside-work-tree --git-dir 2>/dev/null) || return
   git_dir="${rev_info#*$'\n'}"

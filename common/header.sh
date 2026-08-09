@@ -95,8 +95,8 @@ function hi_banner() {
 
 function hi_header() {
   hi_banner "$@"
-  timestamp
-  system_info_line
-  identity_line
-  full_check
+  [[ "${_HI_HEADER_TIMESTAMP:-1}" == 0 ]] || timestamp
+  [[ "${_HI_HEADER_SYSINFO:-1}" == 0 ]] || system_info_line
+  [[ "${_HI_HEADER_IDENTITY:-1}" == 0 ]] || identity_line
+  [[ "${_HI_HEADER_CHECK:-1}" == 0 ]] || full_check
 }

@@ -1,7 +1,7 @@
 #!/bin/bash
 # Reads data/packages ("cmd:priority[,cmd:priority...]" per line) and prints
 # which of them are installed, sorting by priority.
-set -eou pipefail
+set -euo pipefail
 
 # shellcheck source=./bootstrap.sh
 source "${_HI_TMPDIR:-$HOME}/hi.d/common/bootstrap.sh"

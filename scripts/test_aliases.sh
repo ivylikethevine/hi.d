@@ -2,7 +2,7 @@
 # Sources shells/aliases.sh in a real instance of each target shell and checks
 # that a sample of its "required" aliases/vars actually landed - not just that
 # the file was found. Skips any shell that isn't installed.
-set -eou pipefail
+set -euo pipefail
 
 # shellcheck source=../common/bootstrap.sh
 source "${_HI_TMPDIR:-$HOME}/hi.d/common/bootstrap.sh"

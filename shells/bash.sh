@@ -1,5 +1,5 @@
 #!/bin/bash
-# set -eou pipefail # cannot be enabled: an interactive shell would exit on the first error
+# set -euo pipefail # cannot be enabled: an interactive shell would exit on the first error
 
 # === start required configuration ===
 # shellcheck source=../common/bootstrap.sh

@@ -2,7 +2,7 @@
 # forked from sshrc: https://github.com/danrabinowitz/sshrc
 # Runs on the target: prints the header, grafts hi's shell configs onto the
 # host's rc files, hands over to the best shell available, then undoes it all.
-set -eou pipefail
+set -euo pipefail
 
 # shellcheck source=./common/bootstrap.sh
 source "${_HI_TMPDIR:-$HOME}/hi.d/common/bootstrap.sh"
@@ -64,7 +64,7 @@ function load() {
 
   # guard against strict mode leaking into the interactive shell we hand off to
   # (e.g. via an exported SHELLOPTS) - it would close the session on any error
-  set +eou pipefail
+  set +euo pipefail
 
   local shell=bash greeting="only bash today :(" color="$RED"
   if command -v fish &>/dev/null; then

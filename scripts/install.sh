@@ -1,7 +1,7 @@
 #!/bin/bash
 # Points the local shells at hi.d's configs and links hi.sh onto $PATH.
 # Safe to re-run: it repairs the lines it owns and leaves everything else alone.
-set -eou pipefail
+set -euo pipefail
 
 # Locate hi.d relative to this script (resolving symlinks).
 _HI_SELF="${BASH_SOURCE[0]}"

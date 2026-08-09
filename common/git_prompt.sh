@@ -2,7 +2,7 @@
 # Shared bash/zsh git status prompt segment, styled to match what fish's
 # built-in fish_vcs_prompt produces (see the __fish_git_prompt_* settings in
 # shells/config.fish). Requires colors.sh to already be sourced.
-set -eou pipefail # must be disabled after our code (this file is part of the interactive shell - any error would close the session)
+set -euo pipefail # must be disabled after our code (this file is part of the interactive shell - any error would close the session)
 
 _hi_git_prompt() {
   local rev_info git_dir ref="" detached=0
@@ -102,4 +102,4 @@ _hi_git_prompt() {
   printf ' %b' "$out|${flags})"
 }
 
-set +eou pipefail # must be disabled after our code (this file is part of the interactive shell - any error would close the session)
+set +euo pipefail # must be disabled after our code (this file is part of the interactive shell - any error would close the session)

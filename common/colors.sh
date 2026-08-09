@@ -1,7 +1,7 @@
 #!/bin/bash
 # colors + the handful of primitives every hi script needs (cecho, timing,
 # hostname). Loaded through common/bootstrap.sh.
-set -eou pipefail # must be disabled after our code (this file is part of the interactive shell - any error would close the session)
+set -euo pipefail # must be disabled after our code (this file is part of the interactive shell - any error would close the session)
 
 # shellcheck source=./paths.sh
 source "${_HI_TMPDIR:-$HOME}/hi.d/common/paths.sh"
@@ -163,4 +163,4 @@ function list_colors() {
   done < <(sh "$_HI_TARGETS" ssh)
 }
 
-set +eou pipefail # must be disabled after our code (this file is part of the interactive shell - any error would close the session)
+set +euo pipefail # must be disabled after our code (this file is part of the interactive shell - any error would close the session)

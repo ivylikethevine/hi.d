@@ -107,6 +107,8 @@ alias gst="git stash"
 alias gss="git stash show"
 alias gsl="git stash list"
 alias gsa="git stash apply"
+alias gsd="git stash drop"
+alias gsda="git stash drop --all"
 alias gd="git diff --color=always"
 alias gps="echo ' Okay. Where are we going?'"
 alias gpsh='git push --set-upstream origin $(git rev-parse --abbrev-ref HEAD)'

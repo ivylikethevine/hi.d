@@ -1,7 +1,7 @@
 #!/bin/bash
 # The banner hi prints on connect/disconnect, and the fish greeting prints
 # locally - one implementation for every shell (fish shells out to bash here).
-set -eou pipefail
+set -euo pipefail
 
 # shellcheck source=./bootstrap.sh
 source "${_HI_TMPDIR:-$HOME}/hi.d/common/bootstrap.sh"

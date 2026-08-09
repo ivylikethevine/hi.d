@@ -1,7 +1,7 @@
 #!/bin/bash
 # forked from sshrc by Russell Stewart: https://github.com/danrabinowitz/sshrc & https://github.com/cdown/sshrc
 # Runs on the client - copies hi.d to the target and chainloads load.sh there.
-set -eou pipefail # must be disabled after our code (this file is part of the interactive shell - any error would close the session)
+set -euo pipefail # must be disabled after our code (this file is part of the interactive shell - any error would close the session)
 
 # shellcheck source=./common/bootstrap.sh
 source "${_HI_TMPDIR:-$HOME}/hi.d/common/bootstrap.sh"
@@ -262,6 +262,6 @@ function _hi() {
   exit "$exit_code"
 }
 
-set +eou pipefail # must be disabled after our code (this file is part of the interactive shell - any error would close the session)
+set +euo pipefail # must be disabled after our code (this file is part of the interactive shell - any error would close the session)
 
 _hi "$@"

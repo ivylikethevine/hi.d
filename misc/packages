@@ -19,12 +19,13 @@ tldr:4,man:3
 appimage:3
 flatpak:3
 sshfs:3
+sshm:3
 # 2: hidden if installed and yellow if not
 nano:4,micro:3,vim:2,pico:2,nvim:2,vi:1,emacs:0
 rust:0,rustc:2,rustup:2
 top:2,btop:2,htop:2,btm:2
 make:2,cmake:2
-ping:2,prettyping:0,gping:1
+ping:2,prettyping:1,gping:1
 jq:2,yq:2
 curl:2,httpie:2,httpstat:2
 aria2:2,wget:2
@@ -46,13 +47,15 @@ php:2
 gpg:2
 scp:2
 rsync:2
+ffmpeg:2
 # 1: bright blue if installed and bright yellow if not
 golang:1,go:1
 scc:1,cloc:1
 tmux:1,screen:0
 diff-so-fancy:1,icdiff:0
-dog:1,dig:0
-dua:1,dup:1
+# dog:1,dig:0
+# dua:1
+# duf:1
 zoxide:1
 pv:1
 symlinks:1
@@ -60,31 +63,24 @@ fdupes:1
 rg:1
 stow:1
 dust:1
-duf:1
 procs:1
 hyperfine:1
 most:1
-bandwhich:1
 ctop:1
 navi:1
-ffmpeg:1
-sshm:1
 progress:1
 # 0: bright blue if installed and hidden if not
 pip:0,pyenv:0,pyvenv:0
 n:0,npx:0,npm:0,nvm:0,node:0
-netstat:0
+netstat:0,bandwhich:0
 dpkg:0,wpkg:0
 delta:0,xdelta3:0
 chocolatey:0,choco:0
-pacman:0
-apt-get:0
-dnf:0
-rpm:0
-zypper:0
+pacman:0,apt-get:0
+dnf:0,rpm:0,zypper:0
 apk:0
 nix:0
-brew:0
+mas:0,brew:0
 snap:0
 grc:0
 has:0

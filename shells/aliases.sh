@@ -73,6 +73,7 @@ alias lsr="lsa -R"
 
 # fallthrough aliases for improved basics
 alias du="$(command -v dua || command -v du)"
+alias df="$(command -v duf || command -v df)"
 alias dig="$(command -v dog || command -v dig)"
 
 # eza/exa (its predecessor) improved ls; time format per

@@ -75,6 +75,8 @@ function _hi_remote_preamble() {
       export _HI_TARGET="$DOMAIN"
       export _HI_TARGET_COLOR="$(_hi_resolve_color hostname "$DOMAIN")"
       export _HI_TARGET_TAG="$(_hi_ssh_host_tag "$DOMAIN" 2>/dev/null || true)"
+      export _HI_LOCAL_USER="$(whoami)"
+      export _HI_LOCAL_HOSTNAME="$(_hi_hostname)"
       command -v openssl >/dev/null 2>&1 || { echo >&2 "hi requires openssl on [$DOMAIN], but it is not installed. Aborting."; exit 1; }
 REMOTE
 }

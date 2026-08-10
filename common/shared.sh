@@ -122,13 +122,40 @@ function _hi_hash_color() {
   printf '%s\n' "${_HI_COLOR_NAMES[sum % ${#_HI_COLOR_NAMES[@]}]}"
 }
 
+# the user/host of the machine hi.d is installed on - i.e. where you started
+# from, not whatever you've since ssh'd into. hi.sh ships these ahead as
+# _HI_LOCAL_USER/_HI_LOCAL_HOSTNAME (see hi.sh's _hi_remote_preamble) so a
+# freshly-shipped remote copy of hi.d still knows the origin's identity
+# instead of just seeing its own; a plain local shell has neither set, so
+# these fall back to the current user/host, i.e. themselves.
+function _hi_local_username() { printf '%s\n' "${_HI_LOCAL_USER:-$(whoami)}"; }
+function _hi_local_hostname() { printf '%s\n' "${_HI_LOCAL_HOSTNAME:-$(_hi_hostname)}"; }
+
 # look up an exact "<type>,<name>,<color>" override
 # most names won't have an override and will return 1.
+# exact matches always win; only once none exist does a "username,LOCALUSER,…"
+# or "hostname,LOCALHOSTNAME,…" line get a shot, and only when $2 is the local
+# machine's own user/host (see _hi_local_username/_hi_local_hostname above) -
+# e.g. LOCALUSER lets "the same username as home" get colored consistently
+# across every machine you ssh into, without hardcoding that username.
 function _hi_override_color() {
-  local cur_type cur_name color
+  local cur_type cur_name color special=""
   [[ -f "$_HI_COLORS" ]] || return 1
   while IFS=',' read -r cur_type cur_name color; do
     if [[ "$cur_type" = "$1" && "$cur_name" = "$2" ]]; then
+      printf '%s\n' "$color"
+      return 0
+    fi
+  done <"$_HI_COLORS"
+
+  case "$1" in
+  username) [[ "$2" = "$(_hi_local_username)" ]] && special="LOCALUSER" ;;
+  hostname) [[ "$2" = "$(_hi_local_hostname)" ]] && special="LOCALHOSTNAME" ;;
+  esac
+  [[ -n "$special" ]] || return 1
+
+  while IFS=',' read -r cur_type cur_name color; do
+    if [[ "$cur_type" = "$1" && "$cur_name" = "$special" ]]; then
       printf '%s\n' "$color"
       return 0
     fi

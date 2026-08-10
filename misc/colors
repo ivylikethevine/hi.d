@@ -5,23 +5,10 @@ hosttag,laptop,brgreen
 hosttag,proxmox,brred
 hosttag,personal,brgreen
 hosttag,windows,yellow
-hostname,liona,brmagenta
-hostname,mavie,brmagenta
-hostname,bertha,brmagenta
 username,root,magenta
 username,admin,red
-username,ivy,bryellow
-username,pc,cyan
-username,system,cyan
 username,ubuntu,yellow
 username,debian,brblue
 usertag,work,cyan
-# TODO: check if these matches are case-insensitive
-# TODO: add usertag? and special options for current device name/user?
-#   type  = hosttag | username | hostname
-#   color = red, green, yellow, blue, magenta, cyan, brred, brgreen, bryellow, brblue, brmagenta, brcyan
-#   hosttag entries are matched against the leftmost tag in a "# Tags: ..." comment
-#   directly above a "Host" line in ~/.ssh/config, e.g.:
-#     # Tags: desktop
-#     Host mymachine
-# run `hi_colors` to preview what everything currently resolves to.
+username,LOCALUSER,bryellow
+hostname,LOCALHOSTNAME,magenta

@@ -8,10 +8,14 @@ username,admin,red
 username,ubuntu,yellow
 username,debian,brblue
 usertag,work,cyan
-#   type  = hosttag | username | hostname
-#   color = red, green, yellow, blue, magenta, cyan, brred, brgreen, bryellow, brblue, brmagenta, brcyan
-#   hosttag entries are matched against the leftmost tag in a "# Tags: ..." comment
-#   directly above a "Host" line in ~/.ssh/config, e.g.:
-#     # Tags: desktop
-#     Host mymachine
-# run `hi_color_preview` to preview what everything currently resolves to.
+username,LOCALUSER,yellow
+hostname,LOCALHOSTNAME,magenta
+# type  = hosttag | username | hostname | usertag
+# color = red, green, yellow, blue, magenta, cyan, brred, brgreen, bryellow, brblue, brmagenta, brcyan
+# LOCALUSER and LOCALHOSTNAME are special username/hostname names that match
+# the user/host of the machine hi.d is installed on, wherever that user/host
+# shows up - e.g. "username,LOCALUSER,green" colors your own username green
+# even after ssh'ing into a machine where you're logged in under that same
+# name, without hardcoding the name itself. an exact "username,jeff,..." or
+# "hostname,jeff-desktop,..." override still takes priority over these.
+# run `hi_preview_colors` to preview what everything currently resolves to.

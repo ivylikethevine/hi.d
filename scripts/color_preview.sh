@@ -24,17 +24,28 @@ function _hi_color_source() {
 }
 
 # every username with a known color: the current user plus any "username,..."
-# overrides, deduped
+# overrides, deduped. LOCALUSER is excluded - it's not a real name to preview,
+# it gets its own "example" row further down instead
 function _hi_known_users() {
   local users=() cur_type cur_name
   users+=("$(whoami)")
   if [[ -f "$_HI_COLORS" ]]; then
     while IFS=',' read -r cur_type cur_name _; do
-      [[ "$cur_type" = "username" ]] || continue
+      [[ "$cur_type" = "username" && "$cur_name" != "LOCALUSER" ]] || continue
       users+=("$cur_name")
     done <"$_HI_COLORS"
   fi
   printf '%s\n' "${users[@]}" | awk '!seen[$0]++'
+}
+
+# every "usertag,<tag>,..." tag with a color override, deduped
+function _hi_known_usertags() {
+  local cur_type cur_name
+  [[ -f "$_HI_COLORS" ]] || return 0
+  while IFS=',' read -r cur_type cur_name _; do
+    [[ "$cur_type" = "usertag" ]] || continue
+    printf '%s\n' "$cur_name"
+  done <"$_HI_COLORS" | awk '!seen[$0]++'
 }
 
 # total plain-text width of a preview cell for a group of hostnames: every
@@ -59,8 +70,10 @@ function _hi_list_colors() {
   local cur_line sep candidate idx idx2 li total_lines itemtext previewtext
   local tag has_usertag
   local user_width=0 pw pad_preview
-  local users=() group_order=() group_names=() item_lines=()
+  local users=() usertags=() group_order=() group_names=() item_lines=()
   local -A group_hosts group_source group_color group_tag
+  local has_localuser=false has_localhostname=false
+  local localuser_color="" localhostname_color=""
 
   while IFS= read -r name; do users+=("$name"); done < <(_hi_known_users)
   for user in "${users[@]}"; do
@@ -104,6 +117,26 @@ function _hi_list_colors() {
     source=$(_hi_color_source username "$user")
     ((${#source} > w_source)) && w_source=${#source}
   done
+
+  # LOCALUSER/LOCALHOSTNAME and every usertag get their own "example" row
+  # further down (see below) - measure their SOURCE labels here too
+  while IFS= read -r tag; do usertags+=("$tag"); done < <(_hi_known_usertags)
+  if localuser_color=$(_hi_override_color username LOCALUSER 2>/dev/null); then
+    has_localuser=true
+    source="local:username"
+    ((${#source} > w_source)) && w_source=${#source}
+  fi
+  if localhostname_color=$(_hi_override_color hostname LOCALHOSTNAME 2>/dev/null); then
+    has_localhostname=true
+    source="local:hostname"
+    ((${#source} > w_source)) && w_source=${#source}
+  fi
+  for tag in "${usertags[@]}"; do
+    _hi_override_color usertag "$tag" >/dev/null 2>&1 || continue
+    source="usertag:$tag"
+    ((${#source} > w_source)) && w_source=${#source}
+  done
+
   for key in "${group_order[@]}"; do
     source="${group_source[$key]}"
     ((${#source} > w_source)) && w_source=${#source}
@@ -125,6 +158,33 @@ function _hi_list_colors() {
     printf '| %b ' "${name_escape}$(printf '%-*s' "$w_item" "$user")${NC}"
     printf '| %b ' "${name_escape}$(printf '%-*s' "$w_color" "$color_name")${NC}"
     printf '| %b ' "${name_escape}$(printf '%-*s' "$w_source" "$source")${NC}"
+    printf '| %*s |\n' "$w_preview" ""
+  done
+
+  # LOCALUSER, LOCALHOSTNAME and every usertag override each get a row too,
+  # under a placeholder "example" item, since none of them is a real name
+  if [[ "$has_localuser" = true ]]; then
+    name_escape=$(_hi_color_escape "$localuser_color")
+    printf '| %b ' "${name_escape}$(printf '%-*s' "$w_item" "example")${NC}"
+    printf '| %b ' "${name_escape}$(printf '%-*s' "$w_color" "$localuser_color")${NC}"
+    printf '| %b ' "${name_escape}$(printf '%-*s' "$w_source" "local:username")${NC}"
+    printf '| %*s |\n' "$w_preview" ""
+  fi
+
+  if [[ "$has_localhostname" = true ]]; then
+    name_escape=$(_hi_color_escape "$localhostname_color")
+    printf '| %b ' "${name_escape}$(printf '%-*s' "$w_item" "example")${NC}"
+    printf '| %b ' "${name_escape}$(printf '%-*s' "$w_color" "$localhostname_color")${NC}"
+    printf '| %b ' "${name_escape}$(printf '%-*s' "$w_source" "local:hostname")${NC}"
+    printf '| %*s |\n' "$w_preview" ""
+  fi
+
+  for tag in "${usertags[@]}"; do
+    color_name=$(_hi_override_color usertag "$tag") || continue
+    name_escape=$(_hi_color_escape "$color_name")
+    printf '| %b ' "${name_escape}$(printf '%-*s' "$w_item" "example")${NC}"
+    printf '| %b ' "${name_escape}$(printf '%-*s' "$w_color" "$color_name")${NC}"
+    printf '| %b ' "${name_escape}$(printf '%-*s' "$w_source" "usertag:$tag")${NC}"
     printf '| %*s |\n' "$w_preview" ""
   done
 

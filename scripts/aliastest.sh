@@ -51,7 +51,7 @@ function _hi_test_shell() {
 }
 
 _hi_h1 "Testing aliases.sh across shells"
-_HI_WORKDIR=$(mktemp -d hi.aliases.XXXXXX)
+_HI_WORKDIR=$(mktemp -d -t hi.aliases.XXXXXX)
 trap 'rm -rfv "$_HI_WORKDIR"' EXIT
 
 _HI_FAILED=0

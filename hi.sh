@@ -70,8 +70,42 @@ EOF
 }
 
 function _hi_size() {
-  # shellcheck disable=SC2086 # unquoted so an empty flag list disappears
-  du -sh "${_HI_EXCLUDE[@]}" $_HI_LINUX_FLAGS "$_HI_ROOT" | awk '{ print $1 }'
+  _hi_du_size "${_HI_EXCLUDE[@]}"
+}
+
+# the bit both _say_hi branches need before anything target-specific happens
+function _hi_remote_preamble() {
+  cat <<REMOTE
+      _hi_now() { d=\$(date +%s.%N 2>/dev/null); case "\$d" in *N*|'') date +%s ;; *) printf '%s' "\$d" ;; esac; }
+      _hi_t0=\$(_hi_now)
+      command -v openssl >/dev/null 2>&1 || { echo >&2 "hi requires openssl on [$DOMAIN], but it is not installed. Aborting."; exit 1; }
+REMOTE
+}
+
+# the bit both _say_hi branches need once their own setup is done: report copy
+# time, then hand off to bash if it's there, or the best fallback shell if not.
+# Expects \$_hi_rc_dir to already be set to wherever hi.bashrc/.hi_fallback_rc
+# should live for this branch.
+function _hi_remote_suffix() {
+  cat <<REMOTE
+      export _HI_COPY_TIME=\$(awk -v a="\$_hi_t0" -v b="\$(_hi_now)" 'BEGIN{printf "%.3f", b-a}')
+      if command -v bash >/dev/null 2>&1; then
+        bash --rcfile "\$_hi_rc_dir/hi.bashrc"
+      else
+        _hi_fallback=sh
+        for _hi_s in zsh fish sh; do command -v "\$_hi_s" >/dev/null 2>&1 && { _hi_fallback="\$_hi_s"; break; }; done
+        printf '%s no bash on [$DOMAIN], dropping into plain %s w/ aliases only %s\n' "$hi_esc" "\$_hi_fallback" "$nc_esc" >&2
+        echo "$(_hi_fallback_rc | $_HI_ARMOR)" | $_HI_UNARMOR > "\$_hi_rc_dir/.hi_fallback_rc"
+        case "\$_hi_fallback" in
+        zsh)
+          cp "\$_hi_rc_dir/.hi_fallback_rc" "\$_hi_rc_dir/.zshrc"
+          ZDOTDIR="\$_hi_rc_dir" zsh -i
+          ;;
+        fish) fish -C "source \$_hi_rc_dir/.hi_fallback_rc" ;;
+        *) ENV="\$_hi_rc_dir/.hi_fallback_rc" sh -i ;;
+        esac
+      fi
+REMOTE
 }
 
 # Connect to the target, copy hi.d over, and hand off to load.sh.
@@ -81,7 +115,7 @@ function _hi_size() {
 # Technically, all of hi runs under a single sh sub-process that we start on
 # the target, which chainloads bash for the full experience when it's there.
 function _say_hi() {
-  local size hi_esc nc_esc script b64 boot_tmp remote_root tmp_root ctl_path ec=0
+  local size hi_esc nc_esc script middle b64 boot_tmp remote_root tmp_root ctl_path ec=0
   local -a ctl_opts
 
   hi_esc="$(printf '%b' "$YELLOW")"
@@ -97,72 +131,37 @@ function _say_hi() {
     # scripts/install.sh has already run on the target - load that copy in
     # place instead of shipping a fresh one over, and never delete it
     tmp_root="${remote_root%/hi.d}"
-    script="$(cat <<REMOTE
-      _hi_now() { d=\$(date +%s.%N 2>/dev/null); case "\$d" in *N*|'') date +%s ;; *) printf '%s' "\$d" ;; esac; }
-      _hi_t0=\$(_hi_now)
-      command -v openssl >/dev/null 2>&1 || { echo >&2 "hi requires openssl on [$DOMAIN], but it is not installed. Aborting."; exit 1; }
+    middle="$(cat <<REMOTE
       export _HI_TMPDIR="$tmp_root"
       export _HI_ROOT="$remote_root"
-      _hi_boot="\$(dirname "\$0")"
+      _hi_rc_dir="\$(dirname "\$0")"
       printf '%s %s%s' "$hi_esc" "$nc_esc" "-> local hi.d install"
-      echo "$(_hi_bootloader | $_HI_ARMOR)" | $_HI_UNARMOR > "\$_hi_boot/hi.bashrc"
-      export _HI_COPY_TIME=\$(awk -v a="\$_hi_t0" -v b="\$(_hi_now)" 'BEGIN{printf "%.3f", b-a}')
+      echo "$(_hi_bootloader | $_HI_ARMOR)" | $_HI_UNARMOR > "\$_hi_rc_dir/hi.bashrc"
       export _HI_CONNECT_PREFIX="-> local hi.d install"
-      if command -v bash >/dev/null 2>&1; then
-        bash --rcfile "\$_hi_boot/hi.bashrc"
-      else
-        _hi_fallback=sh
-        for _hi_s in zsh fish sh; do command -v "\$_hi_s" >/dev/null 2>&1 && { _hi_fallback="\$_hi_s"; break; }; done
-        printf '%s no bash on [$DOMAIN], dropping into plain %s w/ aliases only %s\n' "$hi_esc" "\$_hi_fallback" "$nc_esc" >&2
-        echo "$(_hi_fallback_rc | $_HI_ARMOR)" | $_HI_UNARMOR > "\$_hi_boot/.hi_fallback_rc"
-        case "\$_hi_fallback" in
-        zsh)
-          cp "\$_hi_boot/.hi_fallback_rc" "\$_hi_boot/.zshrc"
-          ZDOTDIR="\$_hi_boot" zsh -i
-          ;;
-        fish) fish -C "source \$_hi_boot/.hi_fallback_rc" ;;
-        *) ENV="\$_hi_boot/.hi_fallback_rc" sh -i ;;
-        esac
-      fi
 REMOTE
     )"
   else
     size="$(_hi_size)"
-    script="$(cat <<REMOTE
-      _hi_now() { d=\$(date +%s.%N 2>/dev/null); case "\$d" in *N*|'') date +%s ;; *) printf '%s' "\$d" ;; esac; }
-      _hi_t0=\$(_hi_now)
-      command -v openssl >/dev/null 2>&1 || { echo >&2 "hi requires openssl on [$DOMAIN], but it is not installed. Aborting."; exit 1; }
+    middle="$(cat <<REMOTE
       export _HI_TMPDIR=\$(mktemp -d -t $(whoami).hi.XXXXXX) # busybox mktemp needs exactly six X
       export _HI_ROOT=\$_HI_TMPDIR/hi.d
       export _HI_CLEANUP=\$_HI_TMPDIR
-      mkdir \$_HI_ROOT
+      mkdir "\$_HI_ROOT"
       trap 'rm -rfv \$_HI_CLEANUP' exit
+      _hi_rc_dir="\$_HI_ROOT"
       printf '%s %s%s' "$hi_esc" "$nc_esc" "$size"
-      echo "$($_HI_ARMOR <"$0")" | $_HI_UNARMOR > \$_HI_ROOT/hi.sh
-      chmod +x \$_HI_ROOT/hi.sh
-      echo "$(_hi_bootloader | $_HI_ARMOR)" | $_HI_UNARMOR > \$_HI_ROOT/hi.bashrc
-      echo "$(tar czf - -h -C "$_HI_TMPDIR" "${_HI_EXCLUDE[@]}" hi.d | $_HI_ARMOR)" | $_HI_UNARMOR | tar mxzf - -C \$_HI_TMPDIR
-      export _HI_COPY_TIME=\$(awk -v a="\$_hi_t0" -v b="\$(_hi_now)" 'BEGIN{printf "%.3f", b-a}')
+      echo "$($_HI_ARMOR <"$0")" | $_HI_UNARMOR > "\$_HI_ROOT/hi.sh"
+      chmod +x "\$_HI_ROOT/hi.sh"
+      echo "$(_hi_bootloader | $_HI_ARMOR)" | $_HI_UNARMOR > "\$_hi_rc_dir/hi.bashrc"
+      echo "$(tar czf - -h -C "$_HI_TMPDIR" "${_HI_EXCLUDE[@]}" hi.d | $_HI_ARMOR)" | $_HI_UNARMOR | tar mxzf - -C "\$_HI_TMPDIR"
       export _HI_CONNECT_PREFIX="-> $size"
-      if command -v bash >/dev/null 2>&1; then
-        bash --rcfile \$_HI_ROOT/hi.bashrc
-      else
-        _hi_fallback=sh
-        for _hi_s in zsh fish sh; do command -v "\$_hi_s" >/dev/null 2>&1 && { _hi_fallback="\$_hi_s"; break; }; done
-        printf '%s no bash on [$DOMAIN], dropping into plain %s w/ aliases only %s\n' "$hi_esc" "\$_hi_fallback" "$nc_esc" >&2
-        echo "$(_hi_fallback_rc | $_HI_ARMOR)" | $_HI_UNARMOR > \$_HI_ROOT/.hi_fallback_rc
-        case "\$_hi_fallback" in
-        zsh)
-          cp \$_HI_ROOT/.hi_fallback_rc \$_HI_ROOT/.zshrc
-          ZDOTDIR=\$_HI_ROOT zsh -i
-          ;;
-        fish) fish -C "source \$_HI_ROOT/.hi_fallback_rc" ;;
-        *) ENV=\$_HI_ROOT/.hi_fallback_rc sh -i ;;
-        esac
-      fi
 REMOTE
     )"
   fi
+
+  script="$(_hi_remote_preamble)
+$middle
+$(_hi_remote_suffix)"
 
   # base64-armor the whole script, write to a file and run as `sh file`
   # rather than piped into `sh`, so sh's stdin - and hence the nested

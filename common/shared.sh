@@ -57,6 +57,13 @@ function _hi_elapsed() {
   echo "$1 $2" | awk '{ printf "%.3f", $2 - $1 }'
 }
 
+# du -sh on $_HI_ROOT with the size column pulled out; "$@" are any extra du
+# args (e.g. hi.sh's --exclude list, applied before the copy happens)
+function _hi_du_size() {
+  # shellcheck disable=SC2086 # unquoted so an empty flag list disappears
+  du -sh "$@" $_HI_LINUX_FLAGS "$_HI_ROOT" | awk '{ print $1 }'
+}
+
 function _hi_hostname() {
   hostname 2>/dev/null || uname -n
 }

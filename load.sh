@@ -82,8 +82,7 @@ function load() {
   fi
 
   local size
-  # shellcheck disable=SC2086 # unquoted so an empty flag list disappears
-  size="$(du -sh $_HI_LINUX_FLAGS "$_HI_ROOT" | awk '{ print $1 }')"
+  size="$(_hi_du_size)"
   _hi_cecho " $size " "$NC" 1
   banner Disconnected "$BRRED" " $size "
   timestamp

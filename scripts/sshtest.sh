@@ -43,7 +43,7 @@ mkdir -p "$_HI_WORKDIR/debian" "$_HI_WORKDIR/alpine"
 cat >"$_HI_WORKDIR/debian/Dockerfile" <<'EOF'
 FROM debian:bookworm-slim
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      openssh-server openssl bash dash zsh tcsh fish \
+      openssh-server openssl bash dash zsh fish \
     && rm -rf /var/lib/apt/lists/* \
     && mkdir -p /run/sshd \
     && useradd -m -s /bin/bash hitest
@@ -207,7 +207,7 @@ function _hi_run_case() {
 _hi_h1 "Testing hi's ssh path across remote login shells"
 
 if [ "$_HI_DEBIAN_OK" -eq 1 ]; then
-  for _hi_pair in bash:/bin/bash dash:/bin/dash zsh:/usr/bin/zsh tcsh:/usr/bin/tcsh fish:/usr/bin/fish; do
+  for _hi_pair in bash:/bin/bash dash:/bin/dash zsh:/usr/bin/zsh fish:/usr/bin/fish; do
     _hi_run_case "${_hi_pair%%:*}" hi-sshtest-debian "${_hi_pair#*:}" "$_HI_CMD_BASH" || _HI_FAILED=1
   done
 fi

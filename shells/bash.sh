@@ -12,10 +12,12 @@ source "$_HI_ALIASES"
 _hi_interactive_extras
 export GCC_COLORS='error=01;31:warning=01;35:note=01;36:caret=01;32:locus=01:quote=01'
 
-if tput setaf 1 >/dev/null 2>&1; then
-  HI_PS1=" ${debian_chroot:-}$(_hi_user_escape)\u$(_hi_at_color)@$(_hi_host_escape)\h$NC $BRBLUE\w$NC"
-else
-  HI_PS1=" ${debian_chroot:-}\u@\h:\w"
+if [[ "${_HI_DISABLE_PROMPT:-0}" != 1 ]]; then
+  if tput setaf 1 >/dev/null 2>&1; then
+    HI_PS1=" ${debian_chroot:-}$(_hi_user_escape)\u$(_hi_at_color)@$(_hi_host_escape)\h$NC $BRBLUE\w$NC"
+  else
+    HI_PS1=" ${debian_chroot:-}\u@\h:\w"
+  fi
 fi
 
 if ! shopt -oq posix; then
@@ -35,35 +37,39 @@ _hi_eza_spec=$(complete -p eza 2>/dev/null) && eval "${_hi_eza_spec% eza} exa"
 unset _hi_eza_spec
 
 # modified from: https://github.com/riobard/bash-powerline/blob/master/bash-powerline.sh
-function ps1() {
-  # Bash expands the content of PS1 unless promptvars is disabled, so the git
-  # info goes through another layer of reference - expanding user provided
-  # strings would be a security issue. POC: https://github.com/njhartwell/pw3nage
-  if shopt -q promptvars; then
-    __powerline_git_info="$(_hi_git_prompt)"
-    PS1="$HI_PS1\${__powerline_git_info}$NC \$ "
-  else
-    PS1="$HI_PS1$(_hi_git_prompt)$NC \$ "
-  fi
-}
-PROMPT_COMMAND="ps1${PROMPT_COMMAND:+; $PROMPT_COMMAND}"
+if [[ "${_HI_DISABLE_PROMPT:-0}" != 1 ]]; then
+  function ps1() {
+    # Bash expands the content of PS1 unless promptvars is disabled, so the git
+    # info goes through another layer of reference - expanding user provided
+    # strings would be a security issue. POC: https://github.com/njhartwell/pw3nage
+    if shopt -q promptvars; then
+      __powerline_git_info="$(_hi_git_prompt)"
+      PS1="$HI_PS1\${__powerline_git_info}$NC \$ "
+    else
+      PS1="$HI_PS1$(_hi_git_prompt)$NC \$ "
+    fi
+  }
+  PROMPT_COMMAND="ps1${PROMPT_COMMAND:+; $PROMPT_COMMAND}"
+fi
 # === end required configuration ===
 
-HISTSIZE=2000
-HISTFILESIZE=2000
-HISTCONTROL="erasedups:ignoreboth"
-export HISTIGNORE="&:[ ]*:exit:ls:bg:fg:history:clear"
-PROMPT_DIRTRIM=2
+if [[ "${_HI_DISABLE_PERSONAL:-0}" != 1 ]]; then
+  HISTSIZE=2000
+  HISTFILESIZE=2000
+  HISTCONTROL="erasedups:ignoreboth"
+  export HISTIGNORE="&:[ ]*:exit:ls:bg:fg:history:clear"
+  PROMPT_DIRTRIM=2
 
-shopt -s histappend checkwinsize globstar cmdhist
+  shopt -s histappend checkwinsize globstar cmdhist
 
-bind "set completion-ignore-case on"
-bind "set completion-map-case on"
-bind "set show-all-if-ambiguous on"
-bind "set mark-symlinked-directories on"
+  bind "set completion-ignore-case on"
+  bind "set completion-map-case on"
+  bind "set show-all-if-ambiguous on"
+  bind "set mark-symlinked-directories on"
 
-bind Space:magic-space
-bind '"\e[A": history-search-backward'
-bind '"\e[B": history-search-forward'
-bind '"\e[C": forward-char'
-bind '"\e[D": backward-char'
+  bind Space:magic-space
+  bind '"\e[A": history-search-backward'
+  bind '"\e[B": history-search-forward'
+  bind '"\e[C": forward-char'
+  bind '"\e[D": backward-char'
+fi

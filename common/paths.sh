@@ -13,6 +13,7 @@ export _HI_HEADER="$_HI_ROOT/common/header.sh"
 export _HI_GIT_PROMPT="$_HI_ROOT/common/git_prompt.sh"
 export _HI_TARGETS="$_HI_ROOT/common/targets.sh"
 export _HI_INSTALL="$_HI_ROOT/scripts/install.sh"
+export _HI_UNINSTALL="$_HI_ROOT/scripts/uninstall.sh"
 export _HI_COLOR_PREVIEW="$_HI_ROOT/scripts/color_preview.sh"
 export _HI_TEST_ALIASES="$_HI_ROOT/scripts/alias_test.sh"
 export _HI_TEST_SSH="$_HI_ROOT/scripts/ssh_test.sh"
@@ -41,3 +42,14 @@ export _HI_HOME_FISH_CONFIG="$HOME/.config/fish/config.fish"
 # android dev on linux; `|| true` since paths.sh is sourced under callers'
 # `set -e` (bootstrap.sh et al) and a false test here would otherwise abort them
 [ -d "$HOME/Android/Sdk" ] && export ANDROID_HOME="$HOME/Android/Sdk" || true
+
+# feature toggles - set any of these to 1 to turn that piece of hi's shell
+# config off everywhere (locally and on every host you `hi` to, since hi.d is
+# copied as-is). scripts/install.sh asks about these and writes the lines
+# below the marker for you; uncomment by hand instead if you'd rather skip
+# the prompts.
+# export _HI_DISABLE_HEADER=1   # common/header.sh's connect/disconnect banner
+# export _HI_DISABLE_PROMPT=1   # the colored user@host:cwd prompt
+# export _HI_DISABLE_PERSONAL=1 # history size, keybindings, completion tweaks
+# export _HI_DISABLE_GIT_STATUS=1 # git status in the prompt
+# export _HI_DISABLE_EDITORS=1  # the vim/nano aliases pointing at misc/vim.rc, misc/nano.rc

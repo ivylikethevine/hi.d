@@ -1,0 +1,21 @@
+#type,name,color
+hosttag,desktop,green
+hosttag,work,brblue
+hosttag,laptop,brgreen
+hosttag,proxmox,brred
+hosttag,personal,brgreen
+hosttag,windows,yellow
+username,root,magenta
+username,admin,red
+username,pc,cyan
+username,system,cyan
+username,ubuntu,yellow
+username,debian,brblue
+username,team,blue
+#   type  = hosttag | username | hostname
+#   color = red, green, yellow, blue, magenta, cyan, brred, brgreen, bryellow, brblue, brmagenta, brcyan
+#   hosttag entries are matched against the leftmost tag in a "# Tags: ..." comment
+#   directly above a "Host" line in ~/.ssh/config, e.g.:
+#     # Tags: desktop
+#     Host mymachine
+# run `hi_color_preview` to preview what everything currently resolves to.

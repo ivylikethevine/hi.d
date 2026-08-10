@@ -4,10 +4,8 @@
 # shells/config.fish). Requires colors.sh to already be sourced.
 set -euo pipefail # must be disabled after our code (this file is part of the interactive shell - any error would close the session)
 
-# export _HI_GIT_PROMPT=0
-
 _hi_git_prompt() {
-  [[ "${_HI_GIT_PROMPT:-1}" == 0 ]] && return
+  [[ "${_HI_DISABLE_GIT_STATUS:-0}" == 1 ]] && return
 
   local rev_info git_dir ref="" detached=0
   rev_info=$(LANG=C git rev-parse --is-inside-work-tree --git-dir 2>/dev/null) || return

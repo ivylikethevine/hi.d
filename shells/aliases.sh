@@ -11,6 +11,7 @@
 alias hi="$_HI_LAUNCHER"
 alias hey="ssh" # keeping it casual still
 alias hi_install="[ -f $_HI_INSTALL ] && $_HI_INSTALL"
+alias hi_uninstall="[ -f $_HI_UNINSTALL ] && $_HI_UNINSTALL"
 alias hi_update="git -C $_HI_ROOT pull"
 alias hi_status="git -C $_HI_ROOT status"
 alias hi_info="echo ' | hi_home: $_HI_HOME | hi_root: $_HI_ROOT | script: $_HI_LAUNCHER'"
@@ -26,8 +27,11 @@ alias sudo="command sudo " # works in bash/zsh, fish has a sudo wrapper in confi
 # cli text editor defaults with preferential fallthrough
 export EDITOR="$(command -v nano || command -v micro || command -v pico || command -v vim || command -v vi)"
 alias micro="micro -autoindent=true -colorscheme=darcula -colorcolumn=80 -diffgutter=true -softwrap=true -tabsize=2"
-alias nano="nano --rcfile $_HI_NANORC"
-alias vim="$(command -v nvim || command -v vim) -u $_HI_VIMRC"
+# skipped when _HI_DISABLE_EDITORS=1, leaving nano/vim at their own defaults.
+# `|| true`: some sourcers run under `set -e`, where a plain failed `[ ]`
+# guard would otherwise abort the whole shell.
+[ "$_HI_DISABLE_EDITORS" != 1 ] && alias nano="nano --rcfile $_HI_NANORC" || true
+[ "$_HI_DISABLE_EDITORS" != 1 ] && alias vim="$(command -v nvim || command -v vim) -u $_HI_VIMRC" || true
 
 # ide defaults with preferential fallthrough
 export IDE="$(command -v zeditor || command -v zed || command -v code || command -v vi)"

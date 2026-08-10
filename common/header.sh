@@ -123,6 +123,7 @@ function banner() {
 }
 
 function hi_header() {
+  [[ "${_HI_DISABLE_HEADER:-0}" == 1 ]] && return 0
   banner "$@"
   [[ "${_HI_HEADER_TIMESTAMP:-1}" == 0 ]] || timestamp
   [[ "${_HI_HEADER_SYSINFO:-1}" == 0 ]] || system_info

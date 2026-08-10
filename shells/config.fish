@@ -36,6 +36,9 @@ function sudo
 end
 
 # prompt: "<chroot> user@host cwd (git) [status] |", @ turning yellow over ssh
+# skipped entirely when disabled, leaving fish's own default prompt in place
+if test "$_HI_DISABLE_PROMPT" != 1
+
 function prompt_login --description "display user name for the prompt"
   if not set -q __fish_machine
     set -g __fish_machine ""
@@ -72,9 +75,13 @@ function fish_prompt --description 'Write out the prompt'
     (set_color $fish_color_status) (set_color $bold_flag $fish_color_status) $last_pipestatus)
 
   echo -n -s (prompt_login)' ' (set_color $color_cwd) (prompt_pwd) $normal \
-    (test "$_HI_GIT_PROMPT" != 0; and fish_vcs_prompt) $normal " "$prompt_status $suffix " "
+    (test "$_HI_DISABLE_GIT_STATUS" != 1; and fish_vcs_prompt) $normal " "$prompt_status $suffix " "
+end
+
 end
 # === end required configuration ===
+
+if test "$_HI_DISABLE_PERSONAL" != 1
 
 # keybinds
 bind \cH backward-kill-word
@@ -130,3 +137,5 @@ set -g __fish_git_prompt_color_branch brmagenta
 set -g __fish_git_prompt_color_stagedstate yellow
 set -g __fish_git_prompt_color_invalidstate red
 set -g __fish_git_prompt_color_cleanstate brgreen
+
+end

@@ -109,7 +109,7 @@ function _hi_override_color() {
 
 # grab the "# Tags: a, b" comment sitting directly above
 # a "Host <alias>" line in ~/.ssh/config. an unknown host will return 1
-function _hi_ssh_tag_color() {
+function _hi_ssh_host_tag() {
   local line tag=""
   [[ -f "$_HI_SSH_CONFIG" ]] || return 1
   while IFS=$' ' read -r line; do
@@ -119,7 +119,7 @@ function _hi_ssh_tag_color() {
       local alias
       for alias in ${BASH_REMATCH[1]}; do
         [[ "$alias" = "$1" ]] || continue
-        [[ -n "$tag" ]] && _hi_override_color hosttag "$tag" && return 0
+        [[ -n "$tag" ]] && printf '%s\n' "$tag" && return 0
         return 1
       done
       tag=""
@@ -127,6 +127,12 @@ function _hi_ssh_tag_color() {
       tag=""
     fi
   done <"$_HI_SSH_CONFIG"
+  return 1
+}
+
+function _hi_ssh_tag_color() {
+  local tag
+  tag=$(_hi_ssh_host_tag "$1") && _hi_override_color hosttag "$tag" && return
   return 1
 }
 
@@ -142,26 +148,5 @@ function _hi_host_color() { _hi_resolve_color hostname "$(_hi_hostname)"; }
 function _hi_user_color() { _hi_resolve_color username "$(whoami)"; }
 function _hi_host_escape() { _hi_color_escape "$(_hi_host_color)"; }
 function _hi_user_escape() { _hi_color_escape "$(_hi_user_color)"; }
-
-# preview what every ssh host & the current user resolve to, rendered in that
-# actual color - handy when tuning data/color_overrides. Run via `hi_colors`.
-function _hi_list_colors() {
-  local name color
-  _hi_cecho "~~~~~ hi.sh color preview ~~~~~" "$BRGREEN"
-
-  _hi_cecho "=== user ===" "$YELLOW"
-  color=$(_hi_user_color)
-  _hi_cecho "$(whoami)  ->  $color" "$(_hi_color_escape "$color")"
-
-  _hi_cecho "=== ssh hosts ===" "$YELLOW"
-  if [[ ! -f "$_HI_SSH_CONFIG" ]]; then
-    _hi_cecho "No ssh config found at $_HI_SSH_CONFIG" "$RED"
-    return
-  fi
-  while IFS=$'\t' read -r name _; do
-    color=$(_hi_resolve_color hostname "$name")
-    _hi_cecho "$name  ->  $color" "$(_hi_color_escape "$color")"
-  done < <(sh "$_HI_TARGETS" ssh)
-}
 
 set +euo pipefail # must be disabled after our code (this file is part of the interactive shell - any error would close the session)

@@ -69,7 +69,7 @@ function _hi_size() {
 # Technically, all of hi runs under a single sh sub-process that we start on
 # the target, which chainloads bash for the full experience when it's there.
 function _say_hi() {
-  local size hi_esc nc_esc script quoted
+  local size hi_esc nc_esc script b64 boot_tmp
 
   size="$(_hi_size)"
   hi_esc="$(printf '%b' "$YELLOW")"
@@ -110,11 +110,16 @@ function _say_hi() {
 REMOTE
   )"
 
-  # POSIX-single-quote the whole script
-  quoted="'$(printf '%s' "$script" | sed "s/'/'\\\\''/g")'"
+  # base64-armor the whole script, write to a file and run as `sh file`
+  # rather than piped into `sh`, so sh's stdin - and hence the nested
+  # `bash --rcfile`'s - stays attached to the pty ssh -t allocated, instead
+  # of being consumed by the decode pipe.
+  b64="$(printf '%s' "$script" | openssl enc -base64 -A)"
+  boot_tmp="/tmp/.hi_$$_$(_hi_now | tr -d '.')"
 
   # shellcheck disable=SC2029
-  ssh -t "${SSHARGS[@]}" "$DOMAIN" sh -c "$quoted" '||' \
+  ssh -t "${SSHARGS[@]}" "$DOMAIN" \
+    "mkdir -m 700 $boot_tmp && echo $b64 | openssl enc -base64 -d -A > $boot_tmp/s && sh $boot_tmp/s; rm -rf $boot_tmp" '||' \
     powershell -NoLogo -NoExit -Command \
     "Write-Host 'hi from PowerShell - no bash or sh on this host, hi.d colors/aliases are unavailable' -ForegroundColor Yellow"
 }

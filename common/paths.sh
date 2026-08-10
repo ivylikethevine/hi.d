@@ -14,6 +14,7 @@ export _HI_TARGETS="$_HI_ROOT/common/targets.sh"
 export _HI_INSTALL="$_HI_ROOT/scripts/install.sh"
 export _HI_TEST_ALIASES="$_HI_ROOT/scripts/aliastest.sh"
 export _HI_TEST_COLORS="$_HI_ROOT/scripts/colortest.sh"
+export _HI_TEST_SSH="$_HI_ROOT/scripts/sshtest.sh"
 
 # user configurable
 export _HI_COLORS="$_HI_ROOT/misc/colors"

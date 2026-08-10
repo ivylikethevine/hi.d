@@ -14,11 +14,11 @@ alias hi_install="[ -f $_HI_INSTALL ] && $_HI_INSTALL"
 alias hi_update="git -C $_HI_ROOT pull"
 alias hi_status="git -C $_HI_ROOT status"
 alias hi_info="echo ' | hi_home: $_HI_HOME | hi_root: $_HI_ROOT | script: $_HI_LAUNCHER'"
-alias hi_test_colors="[ -f $_HI_TEST_COLORS ] && $_HI_TEST_COLORS"
+alias hi_color_preview="[ -f $_HI_COLOR_PREVIEW ] && $_HI_COLOR_PREVIEW"
 alias hi_test_aliases="[ -f $_HI_TEST_ALIASES ] && $_HI_TEST_ALIASES"
 alias hi_test_ssh="[ -f $_HI_TEST_SSH ] && $_HI_TEST_SSH"
-alias hi_test_shellcheck="[ -f $_HI_SHELLCHECK ] && $_HI_SHELLCHECK"
-alias hi_test_all="hi_test_aliases && hi_test_ssh && hi_test_colors && hi_test_shellcheck"
+alias hi_test_shellcheck="[ -f $_HI_TEST_SHELLCHECK ] && $_HI_TEST_SHELLCHECK"
+alias hi_test_all="hi_test_aliases && hi_test_ssh && hi_test_shellcheck"
 alias sudo="command sudo " # works in bash/zsh, fish has a sudo wrapper in config.fish
 # # === end required variables/aliases ===
 

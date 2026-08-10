@@ -19,6 +19,7 @@ command -v docker >/dev/null 2>&1 || { _hi_cecho "docker not installed, skipping
 docker info >/dev/null 2>&1 || { _hi_cecho "docker daemon not reachable, skipping" "$YELLOW"; exit 0; }
 
 _HI_WORKDIR="$(mktemp -d -t hi.sshtest.XXXXXX)"
+_hi_cecho "  workdir: $_HI_WORKDIR"
 declare -a _HI_STARTED=()
 
 # shellcheck disable=SC2329 # trap function is never invoked directly
@@ -27,10 +28,11 @@ function _hi_cleanup() {
   for c in "${_HI_STARTED[@]:-}"; do
     [ -n "$c" ] && docker stop -t 0 "$c" >/dev/null 2>&1
   done
-  rm -rfv "$_HI_WORKDIR"
+  rm -rf "$_HI_WORKDIR"
 }
 trap _hi_cleanup EXIT
 
+_hi_cecho "  generating throwaway ed25519 keypair at $_HI_WORKDIR/id"
 ssh-keygen -t ed25519 -N '' -q -f "$_HI_WORKDIR/id"
 _HI_PUBKEY="$(cat "$_HI_WORKDIR/id.pub")"
 
@@ -44,7 +46,7 @@ cat >"$_HI_WORKDIR/debian/Dockerfile" <<'EOF'
 FROM debian:bookworm-slim
 RUN apt-get update && apt-get install -y --no-install-recommends \
       openssh-server openssl bash dash zsh fish \
-    && rm -rfv /var/lib/apt/lists/* \
+    && rm -rf /var/lib/apt/lists/* \
     && mkdir -p /run/sshd \
     && useradd -m -s /bin/bash hitest
 COPY entrypoint.sh /entrypoint.sh
@@ -91,7 +93,9 @@ EOF
 _hi_h2 "Building test images"
 _HI_DEBIAN_OK=1
 _HI_ALPINE_OK=1
+_hi_cecho "  building hi-sshtest-debian from $_HI_WORKDIR/debian (log: $_HI_WORKDIR/debian.log)"
 docker build -q -t hi-sshtest-debian "$_HI_WORKDIR/debian" >/dev/null 2>"$_HI_WORKDIR/debian.log" || _HI_DEBIAN_OK=0
+_hi_cecho "  building hi-sshtest-alpine from $_HI_WORKDIR/alpine (log: $_HI_WORKDIR/alpine.log)"
 docker build -q -t hi-sshtest-alpine "$_HI_WORKDIR/alpine" >/dev/null 2>"$_HI_WORKDIR/alpine.log" || _HI_ALPINE_OK=0
 
 [ "$_HI_DEBIAN_OK" -eq 1 ] || _hi_cecho "  debian image failed to build, skipping its shells (see $_HI_WORKDIR/debian.log)" "$YELLOW"
@@ -111,6 +115,7 @@ RUN chmod +x /home/hitest/hi.d/hi.sh \
     && touch /home/hitest/hi.d/.installed_sentinel \
     && chown hitest:hitest /home/hitest/hi.d/.installed_sentinel
 EOF
+  _hi_cecho "  building hi-sshtest-debian-installed from $_HI_ROOT (log: $_HI_WORKDIR/debian-installed.log)"
   docker build -q -t hi-sshtest-debian-installed \
     -f "$_HI_WORKDIR/debian-installed/Dockerfile" "$_HI_ROOT" \
     >/dev/null 2>"$_HI_WORKDIR/debian-installed.log" || _HI_INSTALLED_OK=0
@@ -178,13 +183,16 @@ function _hi_run_case() {
     return 1
   fi
   _HI_STARTED+=("$name")
+  _hi_cecho "  container: $name (login shell: $login_shell)"
 
   port="$(docker port "$name" 22/tcp | head -1 | sed 's/.*://')"
+  _hi_cecho "  waiting for sshd on 127.0.0.1:$port"
   if ! _hi_wait_for_ssh "$port" "$_HI_WORKDIR/id"; then
     _hi_cecho "  sshd never came up" "$RED"
     return 1
   fi
 
+  _hi_cecho "  running: $_HI_LAUNCHER -p $port hitest@127.0.0.1 $cmd"
   out="$("${_HI_PTY_WRAP[@]}" "$_HI_LAUNCHER" -p "$port" -i "$_HI_WORKDIR/id" -o StrictHostKeyChecking=no \
     -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o IdentitiesOnly=yes \
     -o ConnectTimeout=5 hitest@127.0.0.1 "$cmd" 2>&1)" || exit_code=$?

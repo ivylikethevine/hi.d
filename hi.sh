@@ -143,7 +143,7 @@ REMOTE
       export _HI_ROOT=\$_HI_HOME/hi.d
       export _HI_CLEANUP=\$_HI_HOME
       mkdir "\$_HI_ROOT"
-      trap 'rm -rfv \$_HI_CLEANUP' exit
+      trap 'rm -rf \$_HI_CLEANUP' exit
       _hi_rc_dir="\$_HI_ROOT"
       printf '%s %s%s' "$hi_esc" "$nc_esc" "$size"
       echo "$($_HI_ARMOR <"$0")" | $_HI_UNARMOR > "\$_HI_ROOT/hi.sh"
@@ -164,16 +164,16 @@ $(_hi_remote_suffix)"
   # `bash --rcfile`'s - stays attached to the pty ssh -t allocated, instead
   # of being consumed by the decode pipe.
   b64="$(printf '%s' "$script" | openssl enc -base64 -A)"
-  boot_tmp="/tmp/.hi_$$_$(_hi_now | tr -d '.')"
+  boot_tmp="$(mktemp -t hi.boot.XXXXXX)"
 
   # shellcheck disable=SC2029
   ssh -t "${ctl_opts[@]}" "${SSHARGS[@]}" "$DOMAIN" \
-    "mkdir -m 700 $boot_tmp && echo $b64 | openssl enc -base64 -d -A > $boot_tmp/s && sh $boot_tmp/s; rm -rf $boot_tmp" '||' \
+    "mkdir -m 700 $boot_tmp && echo $b64 | openssl enc -base64 -d -A > $boot_tmp/bootloader && sh $boot_tmp/bootloader; rm -rf $boot_tmp" '||' \
     powershell -NoLogo -NoExit -Command \
     "Write-Host 'hi from PowerShell - no bash or sh on this host, hi.d colors/aliases are unavailable' -ForegroundColor Yellow" || ec=$?
 
   ssh -O exit "${ctl_opts[@]}" "$DOMAIN" >/dev/null 2>&1 || true
-  rm -fv "$ctl_path" 2>/dev/null || true
+  rm -rf "$ctl_path" 2>/dev/null || true
   return "$ec"
 }
 
@@ -229,7 +229,7 @@ function _say_hi_container() {
     *) "${attach[@]}" sh -c "export ENV='$root/.hi_fallback_rc'; exec $fallback -i" ;;
     esac
     exit_code=$?
-    "${probe[@]}" rm -rfv "$root" >/dev/null 2>&1
+    "${probe[@]}" rm -rf "$root" >/dev/null 2>&1
     return $exit_code
   fi
 
@@ -243,7 +243,7 @@ function _say_hi_container() {
   if ! tar czf - -h -C "$_HI_HOME" "${_HI_EXCLUDE[@]}" hi.d |
     "${cp[@]}" sh -c "mkdir -p '$root' && tar mxzf - -C '$root'"; then
     _hi_cecho " failed to copy hi.d into [$DOMAIN]" "$BRRED"
-    "${probe[@]}" rm -rfv "$root" >/dev/null 2>&1
+    "${probe[@]}" rm -rf "$root" >/dev/null 2>&1
     return 1
   fi
 
@@ -253,7 +253,7 @@ function _say_hi_container() {
   "${attach[@]}" sh -c "export _HI_HOME='$root' _HI_ROOT='$root/hi.d' _HI_COPY_TIME='$(_hi_copy_time "$copy_start" "$_HI_SHELL_START" "$shell_end")' _HI_CONNECT_PREFIX='$prefix'; exec bash --rcfile '$root/hi.d/hi.bashrc'"
   exit_code=$?
 
-  "${probe[@]}" rm -rfv "$root" >/dev/null 2>&1
+  "${probe[@]}" rm -rf "$root" >/dev/null 2>&1
   return $exit_code
 }
 
@@ -295,7 +295,7 @@ function _hi() {
   copy_start="$(_hi_now)"
   tmp="$(mktemp -t hi.log.XXXXXX)"
   # shellcheck disable=SC2016 # $tmp is resolved when the trap fires
-  _hi_on_exit 'rm -fv "$tmp"'
+  _hi_on_exit 'rm -f "$tmp"'
 
   # parse the args and determine the target type
   _hi_parse "$@"

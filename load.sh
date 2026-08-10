@@ -59,7 +59,7 @@ function clean_all() {
       sed -i '' "$pattern" "$target"
     fi
   done
-  rm -rfv "$_HI_ROOT"
+  rm -rf "$_HI_ROOT"
 }
 
 function load() {

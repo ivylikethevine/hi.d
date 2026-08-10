@@ -13,6 +13,8 @@ source "${_HI_HOME:-$HOME}/hi.d/common/bootstrap.sh"
 _HI_SAMPLE_ALIASES=$(grep -oE '^alias +[A-Za-z_][A-Za-z0-9_]*=' "$_HI_ALIASES" | sed -E 's/^alias +//; s/=$//' | tr '\n' ' ')
 _HI_SAMPLE_VARS=$(grep -oE '^export +[A-Za-z_][A-Za-z0-9_]*=' "$_HI_ALIASES" | sed -E 's/^export +//; s/=$//' | tr '\n' ' ')
 
+_hi_cecho "  sampled $(wc -w <<<"$_HI_SAMPLE_ALIASES") aliases and $(wc -w <<<"$_HI_SAMPLE_VARS") vars from $_HI_ALIASES"
+
 # posix `alias name` / `test -n "${v+x}"` work unmodified in dash, bash and zsh;
 # fish has neither - aliases are functions there, and `set -q` is its "is set"
 # shellcheck disable=SC2016 # these are the scripts we write out, not code to run here
@@ -38,7 +40,9 @@ function _hi_test_shell() {
     return 0
   fi
 
+  _hi_cecho "  $shell -- writing test script to $script"
   _hi_test_script "$shell" >"$script"
+  _hi_cecho "  $shell -- running: $shell $script"
   output=$("$shell" "$script" 2>&1) || exit_code=$?
 
   if [ "$exit_code" -eq 0 ]; then
@@ -52,7 +56,8 @@ function _hi_test_shell() {
 
 _hi_h1 "Testing aliases.sh across shells"
 _HI_WORKDIR=$(mktemp -d -t hi.aliases.XXXXXX)
-trap 'rm -rfv "$_HI_WORKDIR"' EXIT
+_hi_cecho "  workdir: $_HI_WORKDIR"
+trap 'rm -rf "$_HI_WORKDIR"' EXIT
 
 _HI_FAILED=0
 for _hi_shell in dash bash zsh fish; do

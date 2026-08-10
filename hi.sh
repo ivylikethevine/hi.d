@@ -51,12 +51,6 @@ function _hi_copy_time() {
 
 function _hi_bootloader() {
   cat <<EOF
-if [ -r /etc/profile ]; then source /etc/profile; fi
-if [ -r ~/.bash_profile ]; then source ~/.bash_profile
-elif [ -r ~/.bash_login ]; then source ~/.bash_login
-elif [ -r ~/.profile ]; then source ~/.profile
-fi
-export PATH=\$PATH:\$_HI_ROOT
 source \$_HI_ROOT/load.sh
 ${CMDARG:-load}
 EOF

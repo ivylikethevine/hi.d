@@ -68,6 +68,15 @@ function _hi_hostname() {
   hostname 2>/dev/null || uname -n
 }
 
+# lesspipe (colorized paging for less) plus the debian_chroot prompt label -
+# identical bash/zsh interactive-shell setup, shared between shells/bash.sh
+# and shells/zsh.zsh. Sets $debian_chroot in the caller's scope.
+function _hi_interactive_extras() {
+  [ -x /usr/bin/lesspipe ] && eval "$(SHELL=/bin/sh lesspipe)"
+  # shellcheck disable=SC2034 # read by shells/bash.sh and shells/zsh.zsh's PS1
+  [ -r /etc/debian_chroot ] && debian_chroot="($(cat /etc/debian_chroot)) "
+}
+
 function _hi_sanitize() {
   # shellcheck disable=SC1003
   printf '%s' "$1" | tr -d '[:cntrl:]\\'

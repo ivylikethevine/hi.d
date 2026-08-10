@@ -8,11 +8,7 @@ source "$_HI_ALIASES"
 setopt KSH_ARRAYS # required for sanity & some of the other scripts we run
 setopt prompt_subst
 
-# android dev on linux (never last: a false test would make `source` return 1)
-[ -d "$HOME/Android/Sdk" ] && export ANDROID_HOME="$HOME/Android/Sdk"
-
-[ -x /usr/bin/lesspipe ] && eval "$(SHELL=/bin/sh lesspipe)"
-[ -r /etc/debian_chroot ] && debian_chroot="($(cat /etc/debian_chroot)) "
+_hi_interactive_extras
 
 if tput setaf 1 >/dev/null 2>&1; then
   export CLICOLOR=1

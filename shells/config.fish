@@ -8,9 +8,6 @@ source $_HI_ALIASES
 complete -c hi -f -a '(sh $_HI_TARGETS)' # "<target>\ttype" lines
 complete exa --wraps eza
 
-# android dev on linux (never last: a false test would make `source` return 1)
-[ -d "$HOME/Android/Sdk" ] && export ANDROID_HOME="$HOME/Android/Sdk"
-
 # fish can't run the bash/zsh side of hi, so the greeting, the package check
 # and the color resolution all come from one bash call each
 function fish_greeting

@@ -2,6 +2,19 @@
 # forked from sshrc: https://github.com/danrabinowitz/sshrc
 # Runs on the target: prints the header, grafts hi's shell configs onto the
 # host's rc files, hands over to the best shell available, then undoes it all.
+
+# `bash --rcfile` (how hi.sh hands off to us) skips the normal startup file
+# chain, so restore it here before anything else runs - deliberately before
+# `set -euo pipefail` below, since arbitrary profile scripts on the target
+# aren't guaranteed to be safe under -e/-u.
+if [ -r /etc/profile ]; then source /etc/profile; fi
+# shellcheck disable=SC1090 # target-specific files, no fixed location
+if [ -r ~/.bash_profile ]; then source ~/.bash_profile
+elif [ -r ~/.bash_login ]; then source ~/.bash_login
+elif [ -r ~/.profile ]; then source ~/.profile
+fi
+export PATH="$PATH:$_HI_ROOT"
+
 set -euo pipefail
 
 # shellcheck source=./common/bootstrap.sh

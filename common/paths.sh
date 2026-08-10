@@ -1,6 +1,7 @@
 #!/bin/sh
 # every path hi uses, in one place. Sourced by fish as well as bash/zsh, so it
-# must stay to plain `export NAME=value` lines - no functions, no ${var:-...}.
+# must stay to plain `export NAME=value` lines (plus simple `[ ] && export`
+# guards) - no functions, no ${var:-...}.
 # $_HI_TMPDIR must already be set (common/bootstrap.sh does that for bash/zsh).
 
 # hi.d itself
@@ -35,3 +36,7 @@ export _HI_HOME_BASHRC="$HOME/.bashrc"
 export _HI_HOME_ZSHRC="$HOME/.zshrc"
 export _HI_HOME_FISH_DIR="$HOME/.config/fish" # absent unless fish is installed
 export _HI_HOME_FISH_CONFIG="$HOME/.config/fish/config.fish"
+
+# android dev on linux; `|| true` since paths.sh is sourced under callers'
+# `set -e` (bootstrap.sh et al) and a false test here would otherwise abort them
+[ -d "$HOME/Android/Sdk" ] && export ANDROID_HOME="$HOME/Android/Sdk" || true

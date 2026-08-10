@@ -15,6 +15,7 @@ alias hi_update="git -C $_HI_ROOT pull"
 alias hi_status="git -C $_HI_ROOT status"
 alias hi_info="echo ' | hi_home: $_HI_HOME | hi_root: $_HI_ROOT | script: $_HI_LAUNCHER'"
 alias hi_color_preview="[ -f $_HI_COLOR_PREVIEW ] && $_HI_COLOR_PREVIEW"
+alias hi_check_packages="sh -c 'source \"$_HI_CHECK\" && full_check'"
 alias hi_test_aliases="[ -f $_HI_TEST_ALIASES ] && $_HI_TEST_ALIASES"
 alias hi_test_ssh="[ -f $_HI_TEST_SSH ] && $_HI_TEST_SSH"
 alias hi_test_shellcheck="[ -f $_HI_TEST_SHELLCHECK ] && $_HI_TEST_SHELLCHECK"
@@ -29,7 +30,7 @@ alias nano="nano --rcfile $_HI_NANORC"
 alias vim="$(command -v nvim || command -v vim) -u $_HI_VIMRC"
 
 # ide defaults with preferential fallthrough
-export IDE="$(command -v zeditor || command -v code || command -v vi)"
+export IDE="$(command -v zeditor || command -v zed || command -v code || command -v vi)"
 
 # cat is bat with our options when bat exists, plain cat otherwise
 export _HI_BAT_OPTS='-P --tabs 2 --theme Monokai\ Extended\ Bright --style changes,grid'
@@ -47,7 +48,7 @@ export _HI_HUMAN_SHORT_DATE="+%b %-e %y %H:%M %Z"
 alias now='echo "LOCAL: $(date $_HI_HUMAN_SHORT_DATE) => UTC: $(date -u $_HI_HUMAN_SHORT_DATE)"'
 
 # for working on this repo quickly
-alias zed="zeditor"
+alias zed="$(command -v zeditor || command -v zed || command -v vi)"
 alias ehi="zed $_HI_ROOT"
 alias essh="zed $_HI_SSH_DIR"
 # TODO: add script/compat for local config changes?

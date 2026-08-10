@@ -11,8 +11,9 @@
 *.ts
 *.bat
 *.cmd
-*.ps1
 *.ps
+*.ps1
+*.ps2
 *.psd
 *.doc
 *.docx

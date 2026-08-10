@@ -6,7 +6,7 @@ _Don't `ssh`ush your hosts, say `hi`!_
 
 ## How it works
 
-1. `~/hi.d/hi.sh` runs on the client. It archives `~/hi.d/` (minus `.git`, this README, and `scripts/`) and sends it to the target, which unpacks it into a `/tmp` directory. `_HI_ROOT` is `~/hi.d` on the client and `$_HI_HOME/hi.d` on the target.
+1. `hi.sh` runs on the client. It archives `hi.d/` (minus `.git`, this README, and `scripts/`) and sends it to the target, which unpacks it into a `/tmp` directory. `_HI_ROOT` is `$INSTALL_DIR/hi.d` on the client and `$_HI_HOME/hi.d` on the target.
 2. On the target, `$_HI_ROOT/hi.bashrc` sources `$_HI_ROOT/load.sh` and calls `load`.
 3. `load.sh` prints the header, appends hi's shell configs to the host's own rc files, and starts a session in the highest priority shell available (fish > zsh > bash).
 4. When the session ends, `load.sh`'s `trap` strips those additions back out, and the `/tmp` directory is removed by the cleanup trap `hi.sh` set up on connect.

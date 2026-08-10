@@ -1,6 +1,7 @@
 " must be first: launching as `vim -u <file>` implies 'compatible', which puts
 " < in 'cpoptions' and disables <> key notation entirely - every <C-x>, <CR>,
 " <Esc> and <Up> below would otherwise be mapped as literal text
+" using -U might work as well, but would require modifications to this file
 set nocompatible
 
 set autoread

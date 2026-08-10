@@ -61,20 +61,20 @@ function system_info() {
     base_mhz=$(sysctl -n hw.cpufrequency 2>/dev/null | awk '{ printf "%.0f", $1 / 1000000 }')
   fi
   os=$(_hi_sanitize "$os")
-  header_row "$YELLOW$kernel" "$PURPLE$arch" "$GREEN$os" "${BLUE}Cores: ${cpus:-?}" \
+  header_row "$PURPLE$arch" "$GREEN$os" "${YELLOW}Cores: ${cpus:-?}" \
     "${CYAN}RAM: ${ram:-?}" "${BRBLUE}CPU: ${base_mhz:-?}/${boost_mhz:-?} MHz"
 }
 
-# git identity (domain masked), running containers, and ssh key counts
+# git identity (domain masked), running containers, nomad jobs, and ssh key counts
 function identity() {
-  local email="" domain user_part bullets containers="No docker :(" authorized=0 public=0
-  local -a lines
+  local email="" domain user_part bullets containers="No docker :(" jobs="" authorized=0 public=0
+  local -a lines cells
   command -v git &>/dev/null && email=$(git config --get user.email 2>/dev/null || true)
   email=$(_hi_sanitize "$email")
   if [ -n "$email" ]; then
     domain=${email#*@}
     printf -v bullets '%*s' "${#domain}" ''
-    user_part="${CYAN}Git ID: $YELLOW${email%%@*}@${bullets// /●}"
+    user_part="$YELLOW${email%%@*}@${bullets// /●}"
   else
     user_part="${YELLOW}No Git ID Found..."
   fi
@@ -82,9 +82,16 @@ function identity() {
     mapfile -t lines < <(docker container ls -q)
     containers="Containers: ${#lines[@]}"
   fi
+  if command -v nomad &>/dev/null; then
+    mapfile -t lines < <(nomad job status 2>/dev/null | tail -n +2)
+    jobs="Jobs: ${#lines[@]}"
+  fi
   [ -f "$_HI_SSH_AUTHORIZED_KEYS" ] && mapfile -t lines <"$_HI_SSH_AUTHORIZED_KEYS" && authorized=${#lines[@]}
   [ -d "$_HI_SSH_DIR" ] && mapfile -t lines < <(find "$_HI_SSH_DIR" -type f -name "*.pub") && public=${#lines[@]}
-  header_row "$user_part" "$BLUE$containers" "${RED}Auth: $authorized" "${PURPLE}Pub: $public"
+  cells=("$user_part" "$BLUE$containers")
+  [ -n "$jobs" ] && cells+=("$CYAN$jobs")
+  cells+=("${RED}Auth: $authorized" "${PURPLE}Pub: $public")
+  header_row "${cells[@]}"
 }
 
 # "~~~ <label> [host] ~~~", prefixed with hi.d's local change count

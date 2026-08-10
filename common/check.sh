@@ -52,7 +52,7 @@ function check_line() {
 function full_check() {
   local line priority width_item rendered count=0 width=0
   local -a visible=() # appended to by check_line
-  while IFS= read -r line; do
+  while IFS=$' ' read -r line; do
     [[ "$line" == *#* || -z "$line" ]] || check_line "$line"
   done <"$_HI_PACKAGES"
   ((${#visible[@]})) || return 0

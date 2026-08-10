@@ -173,7 +173,7 @@ $(_hi_remote_suffix)"
     "Write-Host 'hi from PowerShell - no bash or sh on this host, hi.d colors/aliases are unavailable' -ForegroundColor Yellow" || ec=$?
 
   ssh -O exit "${ctl_opts[@]}" "$DOMAIN" >/dev/null 2>&1 || true
-  rm -rf "$ctl_path" 2>/dev/null || true
+  rm -rf "$ctl_path" "$boot_tmp" 2>/dev/null || true
   return "$ec"
 }
 

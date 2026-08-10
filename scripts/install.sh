@@ -3,74 +3,55 @@
 # Safe to re-run: it repairs the lines it owns and leaves everything else alone.
 set -euo pipefail
 
-_HI_DIR_ARG=""
 _HI_FEATURES_ONLY=""
+_HI_CHECK_CONFIGS_ONLY=""
 while [ $# -gt 0 ]; do
   case "$1" in
-  --dir)
-    [ $# -ge 2 ] || {
-      echo "install.sh: --dir requires a path" >&2
-      exit 1
-    }
-    _HI_DIR_ARG="$2"
-    shift 2
-    ;;
-  --dir=*)
-    _HI_DIR_ARG="${1#--dir=}"
-    shift
-    ;;
   --features-only)
     _HI_FEATURES_ONLY=1
     shift
     ;;
+  --check-configs)
+    _HI_CHECK_CONFIGS_ONLY=1
+    shift
+    ;;
   -h | --help)
     cat <<'EOF'
-Usage: install.sh [--dir <install-dir>] [--features-only]
+Usage: install.sh [--features-only] [--check-configs]
 
 Wires up the local shells to source this hi.d checkout and links hi.sh onto
 PATH. Safe to re-run any time - it repairs its own lines and leaves
-everything else alone.
+everything else alone. The install location is always wherever this script
+lives (hi.d's parent directory), not a path you pass in - hi.d installs in
+place.
 
-  --dir <path>     Make the install location explicit instead of relying on
-                   wherever this script happens to be running from. hi.d
-                   must already be checked out at <path>/hi.d - this
-                   doesn't move or copy anything, it just states (and
-                   validates) the location, which does not have to be
-                   $HOME.
   --features-only  Skip the shell rc wiring and the hi.sh symlink - just
                    re-run the feature toggle prompts. This is what
                    `hi_configure` calls once hi.d is installed.
+  --check-configs  Only run the pre-install validation of your existing
+                   ~/.bashrc, ~/.zshrc and ~/.config/fish/config.fish -
+                   skip everything else. This is what `hi_check_configs`
+                   calls.
 EOF
     exit 0
     ;;
   *)
     echo "install.sh: unrecognized argument: $1" >&2
-    echo "Usage: install.sh [--dir <install-dir>] [--features-only]" >&2
+    echo "Usage: install.sh [--features-only] [--check-configs]" >&2
     exit 1
     ;;
   esac
 done
 
-# Locate hi.d relative to this script (resolving symlinks).
+# Locate hi.d relative to this script (resolving symlinks) - hi.d's parent
+# directory is always the install dir, since this installs in place.
 _HI_SELF="${BASH_SOURCE[0]}"
 while [ -L "$_HI_SELF" ]; do
   _HI_SELF_DIR="$(cd -P "$(dirname "$_HI_SELF")" && pwd)"
   _HI_SELF="$(readlink "$_HI_SELF")"
   [[ $_HI_SELF == /* ]] || _HI_SELF="$_HI_SELF_DIR/$_HI_SELF"
 done
-_HI_AUTO_HOME="$(cd -P "$(dirname "$_HI_SELF")/../.." && pwd)" # hi.d's parent, usually $HOME
-
-if [ -n "$_HI_DIR_ARG" ]; then
-  mkdir -p "$_HI_DIR_ARG"
-  _HI_HOME="$(cd -P "$_HI_DIR_ARG" && pwd)"
-  if [ "$_HI_HOME" != "$_HI_AUTO_HOME" ]; then
-    echo "install.sh: --dir $_HI_DIR_ARG doesn't match where hi.d is actually checked out ($_HI_AUTO_HOME/hi.d)." >&2
-    echo "This installs in place - move (or re-clone) hi.d so it lives at $_HI_HOME/hi.d, then re-run." >&2
-    exit 1
-  fi
-else
-  _HI_HOME="$_HI_AUTO_HOME"
-fi
+_HI_HOME="$(cd -P "$(dirname "$_HI_SELF")/../.." && pwd)"
 export _HI_HOME
 
 # shellcheck source=../common/bootstrap.sh
@@ -222,6 +203,52 @@ function config_max_width() {
   config_shell "terminal width" "$target" "${value:+export _HI_MAX_WIDTH=$value}"
 }
 
+# Runs $shell's syntax-check flag against an existing rc file (without
+# executing it) and reports what it finds. Skipped silently when $shell
+# isn't installed or $target doesn't exist/is empty - nothing to validate.
+function check_one_config() {
+  local label="$1" target="$2" shell="$3" out
+  shift 3
+  command -v "$shell" >/dev/null 2>&1 || return 0
+  [ -s "$target" ] || return 0
+  if out="$("$@" "$target" 2>&1)"; then
+    _hi_cecho " $label ($target) looks valid :)" "$GREEN"
+    return 0
+  fi
+  _hi_cecho " $label ($target) has issues:" "$RED"
+  printf '%s\n' "$out" | sed 's/^/   /'
+  return 1
+}
+
+# Validates whatever of ~/.bashrc, ~/.zshrc and ~/.config/fish/config.fish
+# already exist, before install.sh's own lines get appended to them. Returns
+# non-zero if anything failed so callers can decide what to do about it.
+function check_shell_configs() {
+  _hi_h2 "Checking existing shell configs"
+  local bad=0
+  check_one_config bash "$_HI_HOME_BASHRC" bash bash -n || bad=1
+  check_one_config zsh "$_HI_HOME_ZSHRC" zsh zsh -n || bad=1
+  check_one_config "config.fish" "$_HI_HOME_FISH_CONFIG" fish fish --no-execute || bad=1
+  return $bad
+}
+
+# Gate the install on check_shell_configs: if issues turn up, ask whether to
+# proceed anyway. Non-interactive runs (no tty) continue automatically rather
+# than hang on a prompt nobody can answer - same convention as ask_setting.
+function config_validate_shells() {
+  check_shell_configs && return 0
+  _hi_cecho " found issues in your existing shell config(s) above" "$YELLOW"
+  if [ ! -t 0 ]; then
+    _hi_cecho " non-interactive run, continuing anyway" "$YELLOW"
+    return 0
+  fi
+  local reply=""
+  read -r -p " Continue installing anyway? [y/N] " reply || reply=""
+  [[ "$reply" =~ ^[Yy] ]] && return 0
+  _hi_cecho " aborting install" "$RED"
+  exit 1
+}
+
 function config_hi() {
   _hi_h2 "Checking hi.sh"
   chmod +x "$_HI_LAUNCHER"
@@ -233,12 +260,23 @@ function config_hi() {
   sudo ln -sfn "$_HI_LAUNCHER" "$_HI_LINK"
 }
 
+if [ -n "$_HI_CHECK_CONFIGS_ONLY" ]; then
+  _hi_h1 "Checking existing shell configs!"
+  _hi_cecho " | hi_home: $_HI_HOME | hi_root: $_HI_ROOT | login shell: ${SHELL##*/}" "$BLUE"
+  check_shell_configs
+  exit $?
+fi
+
 if [ -n "$_HI_FEATURES_ONLY" ]; then
   _hi_h1 "Configuring hi.sh features!"
 else
   _hi_h1 "Installing (or reinstalling) hi.sh!"
 fi
 _hi_cecho " | hi_home: $_HI_HOME | hi_root: $_HI_ROOT | login shell: ${SHELL##*/}" "$BLUE"
+
+if [ -z "$_HI_FEATURES_ONLY" ]; then
+  config_validate_shells
+fi
 
 config_features
 config_header_details

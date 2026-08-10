@@ -30,9 +30,8 @@ Strips hi's lines back out of ~/.bashrc, ~/.zshrc and
 hi.d. Safe to re-run any time. hi.d itself is left in place - remove it
 yourself (rm -rf) once you're done with it.
 
-  --dir <path>  Same meaning as install.sh's --dir: state explicitly which
-                install this is undoing instead of auto-detecting it from
-                where this script lives.
+  --dir <path>  State explicitly which install this is undoing instead of
+                auto-detecting it from where this script lives.
 EOF
     exit 0
     ;;

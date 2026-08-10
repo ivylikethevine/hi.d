@@ -36,9 +36,10 @@ For ssh targets specifically, `hi` first checks (over the same connection, so it
 ### Installation/Usage
 
 - clone this repo to `~/`
-- `~/hi.d/scripts/install.sh` (re-run it any time; it repairs its own lines, even if hi.d moved)
+- `~/hi.d/scripts/install.sh` (re-run it any time; it repairs its own lines, even if hi.d moved) - before touching your shell rc files it validates your existing `~/.bashrc`, `~/.zshrc` and `~/.config/fish/config.fish` (whichever are installed) with each shell's own syntax checker, and asks whether to continue if any of them have issues
 - reload your shell!
 - run `hi_configure` any time afterward to revisit the feature toggle prompts (header, prompt, personal settings, git status, editors, header details, terminal width) without touching the shell rc wiring
+- run `hi_check_configs` any time to just re-run that shell rc validation, without the rest of the install
 - configure `~/.ssh/config` tags via sshm
 - [optional] pin specific colors in `~/hi.d/misc/colors` - everything else gets a color automatically
   - run `hi_colors` to preview what every ssh host/your user resolves to

@@ -96,8 +96,8 @@ function load() {
 
   local size
   size="$(_hi_du_size)"
-  _hi_cecho " $size " "$NC" 1
-  banner Disconnected "$BRRED" " $size "
+  _hi_cecho " $size" "$NC" 1
+  banner Disconnected "$BRRED" " $size"
   timestamp
   _hi_cecho " hi closing! " "$BRPURPLE"
   exit 0

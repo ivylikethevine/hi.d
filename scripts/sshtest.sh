@@ -27,7 +27,7 @@ function _hi_cleanup() {
   for c in "${_HI_STARTED[@]:-}"; do
     [ -n "$c" ] && docker stop -t 0 "$c" >/dev/null 2>&1
   done
-  rm -rf "$_HI_WORKDIR"
+  rm -rfv "$_HI_WORKDIR"
 }
 trap _hi_cleanup EXIT
 
@@ -44,7 +44,7 @@ cat >"$_HI_WORKDIR/debian/Dockerfile" <<'EOF'
 FROM debian:bookworm-slim
 RUN apt-get update && apt-get install -y --no-install-recommends \
       openssh-server openssl bash dash zsh fish \
-    && rm -rf /var/lib/apt/lists/* \
+    && rm -rfv /var/lib/apt/lists/* \
     && mkdir -p /run/sshd \
     && useradd -m -s /bin/bash hitest
 COPY entrypoint.sh /entrypoint.sh

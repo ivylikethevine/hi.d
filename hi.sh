@@ -150,7 +150,7 @@ REMOTE
       chmod +x "\$_HI_ROOT/hi.sh"
       echo "$(_hi_bootloader | $_HI_ARMOR)" | $_HI_UNARMOR > "\$_hi_rc_dir/hi.bashrc"
       echo "$(tar czf - -h -C "$_HI_TMPDIR" "${_HI_EXCLUDE[@]}" hi.d | $_HI_ARMOR)" | $_HI_UNARMOR | tar mxzf - -C "\$_HI_TMPDIR"
-      export _HI_CONNECT_PREFIX="-> $size"
+      export _HI_CONNECT_PREFIX=" $size"
 REMOTE
     )"
   fi
@@ -173,7 +173,7 @@ $(_hi_remote_suffix)"
     "Write-Host 'hi from PowerShell - no bash or sh on this host, hi.d colors/aliases are unavailable' -ForegroundColor Yellow" || ec=$?
 
   ssh -O exit "${ctl_opts[@]}" "$DOMAIN" >/dev/null 2>&1 || true
-  rm -f "$ctl_path" 2>/dev/null || true
+  rm -fv "$ctl_path" 2>/dev/null || true
   return "$ec"
 }
 

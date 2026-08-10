@@ -78,6 +78,7 @@ Reminder - place local only changes after the "`# hi-config-end`" comment in the
 | `scripts/aliastest.sh`                          | check `aliases.sh` still loads in dash/bash/zsh/fish                |
 | `scripts/colortest.sh`                          | preview what every ssh host/user resolves to (`hi_colors`)          |
 | `scripts/sshtest.sh`                            | end-to-end test of hi's ssh path across remote login shells         |
+| `scripts/shellcheck.sh`                         | runs shellcheck over every `*.sh` file in the repo                  |
 
 ##### Hostname, username, and group/tag colors
 

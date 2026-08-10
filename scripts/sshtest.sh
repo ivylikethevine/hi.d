@@ -13,7 +13,7 @@
 set -euo pipefail
 
 # shellcheck source=../common/bootstrap.sh
-source "${_HI_TMPDIR:-$HOME}/hi.d/common/bootstrap.sh"
+source "${_HI_HOME:-$HOME}/hi.d/common/bootstrap.sh"
 
 command -v docker >/dev/null 2>&1 || { _hi_cecho "docker not installed, skipping" "$YELLOW"; exit 0; }
 docker info >/dev/null 2>&1 || { _hi_cecho "docker daemon not reachable, skipping" "$YELLOW"; exit 0; }

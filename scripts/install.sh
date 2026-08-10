@@ -10,11 +10,11 @@ while [ -L "$_HI_SELF" ]; do
   _HI_SELF="$(readlink "$_HI_SELF")"
   [[ $_HI_SELF == /* ]] || _HI_SELF="$_HI_SELF_DIR/$_HI_SELF"
 done
-_HI_TMPDIR="$(cd -P "$(dirname "$_HI_SELF")/../.." && pwd)" # hi.d's parent, usually $HOME
-export _HI_TMPDIR
+_HI_HOME="$(cd -P "$(dirname "$_HI_SELF")/../.." && pwd)" # hi.d's parent, usually $HOME
+export _HI_HOME
 
 # shellcheck source=../common/bootstrap.sh
-source "$_HI_TMPDIR/hi.d/common/bootstrap.sh"
+source "$_HI_HOME/hi.d/common/bootstrap.sh"
 
 _HI_MARKER="# added by hi during install"
 _HI_LINK="/usr/bin/hi"
@@ -49,13 +49,13 @@ function config_shell() {
   _hi_cecho " local $name updated :)" "$GREEN"
 }
 
-# Only emit an _HI_TMPDIR export when hi.d isn't at $HOME/hi.d - every consumer
-# already defaults _HI_TMPDIR to $HOME, so the common case stays free of it.
+# Only emit an _HI_HOME export when hi.d isn't at $HOME/hi.d - every consumer
+# already defaults _HI_HOME to $HOME, so the common case stays free of it.
 function tmpdir_line() {
-  [ "$_HI_TMPDIR" = "$HOME" ] && return 0
+  [ "$_HI_HOME" = "$HOME" ] && return 0
   case "$1" in
-  fish) printf 'set -gx _HI_TMPDIR "%s"' "$_HI_TMPDIR" ;;
-  *) printf 'export _HI_TMPDIR="%s"' "$_HI_TMPDIR" ;;
+  fish) printf 'set -gx _HI_HOME "%s"' "$_HI_HOME" ;;
+  *) printf 'export _HI_HOME="%s"' "$_HI_HOME" ;;
   esac
 }
 
@@ -72,7 +72,7 @@ function config_hi() {
 
 # _hi_cecho " ~~~~~ Installing (or reinstalling) hi.sh! ~~~~~" "$BRGREEN"
 _hi_h1 "Installing (or reinstalling) hi.sh!"
-_hi_cecho " | hi_tmpdir: $_HI_TMPDIR | hi_root: $_HI_ROOT | login shell: ${SHELL##*/}" "$BLUE"
+_hi_cecho " | hi_home: $_HI_HOME | hi_root: $_HI_ROOT | login shell: ${SHELL##*/}" "$BLUE"
 
 config_shell bashrc "$_HI_HOME_BASHRC" \
   "$(tmpdir_line sh)" \

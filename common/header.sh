@@ -4,7 +4,7 @@
 set -euo pipefail
 
 # shellcheck source=./bootstrap.sh
-source "${_HI_TMPDIR:-$HOME}/hi.d/common/bootstrap.sh"
+source "${_HI_HOME:-$HOME}/hi.d/common/bootstrap.sh"
 # shellcheck source=./check.sh
 source "$_HI_CHECK"
 

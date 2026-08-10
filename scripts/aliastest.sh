@@ -5,7 +5,7 @@
 set -euo pipefail
 
 # shellcheck source=../common/bootstrap.sh
-source "${_HI_TMPDIR:-$HOME}/hi.d/common/bootstrap.sh"
+source "${_HI_HOME:-$HOME}/hi.d/common/bootstrap.sh"
 
 # derived straight from aliases.sh so this test can't drift out of sync with
 # it; only unconditional top-of-line `alias name=`/`export name=` are picked

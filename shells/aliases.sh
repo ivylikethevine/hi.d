@@ -13,7 +13,7 @@ alias hey="ssh" # keeping it casual still
 alias hi_install="[ -f $_HI_INSTALL ] && $_HI_INSTALL"
 alias hi_update="git -C $_HI_ROOT pull"
 alias hi_status="git -C $_HI_ROOT status"
-alias hi_info="echo ' | hi_tmpdir: $_HI_TMPDIR | hi_root: $_HI_ROOT | script: $_HI_LAUNCHER'"
+alias hi_info="echo ' | hi_home: $_HI_HOME | hi_root: $_HI_ROOT | script: $_HI_LAUNCHER'"
 alias hi_test_colors="[ -f $_HI_TEST_COLORS ] && $_HI_TEST_COLORS"
 alias hi_test_aliases="[ -f $_HI_TEST_ALIASES ] && $_HI_TEST_ALIASES"
 alias hi_test_ssh="[ -f $_HI_TEST_SSH ] && $_HI_TEST_SSH"
@@ -58,6 +58,7 @@ alias dcu="docker compose up"
 alias dcud="docker compose up -d"
 alias dcd="docker compose down"
 alias dps="dcl"
+alias dsp="docker system prune -fa"
 
 # defaults for basics
 alias grep="grep --color=auto"

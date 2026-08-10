@@ -1,8 +1,8 @@
 #!/bin/fish
 
 # === start required configuration ===
-set -q _HI_TMPDIR; or set -gx _HI_TMPDIR ~
-source $_HI_TMPDIR/hi.d/common/paths.sh
+set -q _HI_HOME; or set -gx _HI_HOME ~
+source $_HI_HOME/hi.d/common/paths.sh
 source $_HI_ALIASES
 
 complete -c hi -f -a '(sh $_HI_TARGETS)' # "<target>\ttype" lines

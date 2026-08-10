@@ -4,7 +4,7 @@
 set -euo pipefail # must be disabled after our code (this file is part of the interactive shell - any error would close the session)
 
 # shellcheck source=./paths.sh
-source "${_HI_TMPDIR:-$HOME}/hi.d/common/paths.sh"
+source "${_HI_HOME:-$HOME}/hi.d/common/paths.sh"
 
 # color names match fish's set_color vocabulary; greys are skipped, since fish has none.
 _HI_COLOR_NAMES=(red green yellow blue magenta cyan brred brgreen bryellow brblue brmagenta brcyan)

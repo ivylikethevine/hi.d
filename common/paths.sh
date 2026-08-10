@@ -2,10 +2,10 @@
 # every path hi uses, in one place. Sourced by fish as well as bash/zsh, so it
 # must stay to plain `export NAME=value` lines (plus simple `[ ] && export`
 # guards) - no functions, no ${var:-...}.
-# $_HI_TMPDIR must already be set (common/bootstrap.sh does that for bash/zsh).
+# $_HI_HOME must already be set (common/bootstrap.sh does that for bash/zsh).
 
 # hi.d itself
-export _HI_ROOT="$_HI_TMPDIR/hi.d"
+export _HI_ROOT="$_HI_HOME/hi.d"
 export _HI_LAUNCHER="$_HI_ROOT/hi.sh"
 export _HI_SHARED="$_HI_ROOT/common/shared.sh"
 export _HI_CHECK="$_HI_ROOT/common/check.sh"

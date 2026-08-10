@@ -5,7 +5,7 @@
 set -euo pipefail
 
 # shellcheck source=../common/bootstrap.sh
-source "${_HI_TMPDIR:-$HOME}/hi.d/common/bootstrap.sh"
+source "${_HI_HOME:-$HOME}/hi.d/common/bootstrap.sh"
 
 # human-readable reason a name got the color it did: an exact override (tagged
 # with which type it was, since username and hostname overrides both just say

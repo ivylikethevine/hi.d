@@ -4,7 +4,7 @@
 set -euo pipefail # must be disabled after our code (this file is part of the interactive shell - any error would close the session)
 
 # shellcheck source=./common/bootstrap.sh
-source "${_HI_TMPDIR:-$HOME}/hi.d/common/bootstrap.sh"
+source "${_HI_HOME:-$HOME}/hi.d/common/bootstrap.sh"
 
 command -v openssl >/dev/null 2>&1 || {
   _hi_cecho >&2 "hi requires openssl on [$(_hi_hostname)], but it is not installed. Aborting..." "$RED"
@@ -128,7 +128,7 @@ function _say_hi() {
     # place instead of shipping a fresh one over, and never delete it
     tmp_root="${remote_root%/hi.d}"
     middle="$(cat <<REMOTE
-      export _HI_TMPDIR="$tmp_root"
+      export _HI_HOME="$tmp_root"
       export _HI_ROOT="$remote_root"
       _hi_rc_dir="\$(dirname "\$0")"
       printf '%s %s%s' "$hi_esc" "$nc_esc" "-> local hi.d install"
@@ -139,9 +139,9 @@ REMOTE
   else
     size="$(_hi_size)"
     middle="$(cat <<REMOTE
-      export _HI_TMPDIR=\$(mktemp -d -t $(whoami).hi.XXXXXX) # busybox mktemp needs exactly six X
-      export _HI_ROOT=\$_HI_TMPDIR/hi.d
-      export _HI_CLEANUP=\$_HI_TMPDIR
+      export _HI_HOME=\$(mktemp -d -t $(whoami).hi.XXXXXX) # busybox mktemp needs exactly six X
+      export _HI_ROOT=\$_HI_HOME/hi.d
+      export _HI_CLEANUP=\$_HI_HOME
       mkdir "\$_HI_ROOT"
       trap 'rm -rfv \$_HI_CLEANUP' exit
       _hi_rc_dir="\$_HI_ROOT"
@@ -149,7 +149,7 @@ REMOTE
       echo "$($_HI_ARMOR <"$0")" | $_HI_UNARMOR > "\$_HI_ROOT/hi.sh"
       chmod +x "\$_HI_ROOT/hi.sh"
       echo "$(_hi_bootloader | $_HI_ARMOR)" | $_HI_UNARMOR > "\$_hi_rc_dir/hi.bashrc"
-      echo "$(tar czf - -h -C "$_HI_TMPDIR" "${_HI_EXCLUDE[@]}" hi.d | $_HI_ARMOR)" | $_HI_UNARMOR | tar mxzf - -C "\$_HI_TMPDIR"
+      echo "$(tar czf - -h -C "$_HI_HOME" "${_HI_EXCLUDE[@]}" hi.d | $_HI_ARMOR)" | $_HI_UNARMOR | tar mxzf - -C "\$_HI_HOME"
       export _HI_CONNECT_PREFIX=" $size"
 REMOTE
     )"
@@ -240,7 +240,7 @@ function _say_hi_container() {
   echo -ne "$YELLOW-> bash ($label)$NC $size"
 
   # this is a failure state, so we exit early
-  if ! tar czf - -h -C "$_HI_TMPDIR" "${_HI_EXCLUDE[@]}" hi.d |
+  if ! tar czf - -h -C "$_HI_HOME" "${_HI_EXCLUDE[@]}" hi.d |
     "${cp[@]}" sh -c "mkdir -p '$root' && tar mxzf - -C '$root'"; then
     _hi_cecho " failed to copy hi.d into [$DOMAIN]" "$BRRED"
     "${probe[@]}" rm -rfv "$root" >/dev/null 2>&1
@@ -250,7 +250,7 @@ function _say_hi_container() {
   "${cp[@]}" sh -c "cat > '$root/hi.d/hi.sh' && chmod +x '$root/hi.d/hi.sh'" <"$0"
   _hi_bootloader | "${cp[@]}" sh -c "cat > '$root/hi.d/hi.bashrc'"
 
-  "${attach[@]}" sh -c "export _HI_TMPDIR='$root' _HI_ROOT='$root/hi.d' _HI_COPY_TIME='$(_hi_copy_time "$copy_start" "$_HI_SHELL_START" "$shell_end")' _HI_CONNECT_PREFIX='$prefix'; exec bash --rcfile '$root/hi.d/hi.bashrc'"
+  "${attach[@]}" sh -c "export _HI_HOME='$root' _HI_ROOT='$root/hi.d' _HI_COPY_TIME='$(_hi_copy_time "$copy_start" "$_HI_SHELL_START" "$shell_end")' _HI_CONNECT_PREFIX='$prefix'; exec bash --rcfile '$root/hi.d/hi.bashrc'"
   exit_code=$?
 
   "${probe[@]}" rm -rfv "$root" >/dev/null 2>&1

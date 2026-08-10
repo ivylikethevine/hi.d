@@ -3,7 +3,7 @@
 
 # === start required configuration ===
 # shellcheck source=../common/bootstrap.sh
-source "${_HI_TMPDIR:-$HOME}/hi.d/common/bootstrap.sh"
+source "${_HI_HOME:-$HOME}/hi.d/common/bootstrap.sh"
 # shellcheck source=../common/git_prompt.sh
 source "$_HI_GIT_PROMPT"
 # shellcheck source=./aliases.sh

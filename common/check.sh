@@ -4,7 +4,7 @@
 set -euo pipefail
 
 # shellcheck source=./bootstrap.sh
-source "${_HI_TMPDIR:-$HOME}/hi.d/common/bootstrap.sh"
+source "${_HI_HOME:-$HOME}/hi.d/common/bootstrap.sh"
 
 # priority, lowest to highest (more can be added)
 # 0 nice-to-haves (netstat, distro tools)

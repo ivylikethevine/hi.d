@@ -18,7 +18,7 @@ export PATH="$PATH:$_HI_ROOT"
 set -euo pipefail
 
 # shellcheck source=./common/bootstrap.sh
-source "${_HI_TMPDIR:-$HOME}/hi.d/common/bootstrap.sh"
+source "${_HI_HOME:-$HOME}/hi.d/common/bootstrap.sh"
 # shellcheck source=./common/header.sh
 source "$_HI_HEADER"
 

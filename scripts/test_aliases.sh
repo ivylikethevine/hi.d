@@ -50,7 +50,7 @@ function _hi_test_shell() {
 }
 
 cecho "~~~~~ testing aliases.sh across shells ~~~~~" "$BRGREEN"
-_HI_WORKDIR=$(mktemp -d)
+_HI_WORKDIR=$(mktemp -d hi.aliases.XXXXXX)
 trap 'rm -rfv "$_HI_WORKDIR"' EXIT
 
 _HI_FAILED=0

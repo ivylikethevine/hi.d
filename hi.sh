@@ -139,7 +139,7 @@ function _say_hi_container() {
     ;;
   esac
 
-  root="/tmp/$(whoami).hi.$$"
+  root="/tmp/$(whoami).hi.log.$$"
   shell_end="$(_hi_now)"
 
   # no bash on the target means no fancy stuff, just our aliases
@@ -235,7 +235,7 @@ function _hi() {
   }
 
   copy_start="$(_hi_now)"
-  tmp="$(mktemp -t hi.XXXXXX)"
+  tmp="$(mktemp -t hi.log.XXXXXX)"
   # shellcheck disable=SC2016 # $tmp is resolved when the trap fires
   _hi_on_exit 'rm -fv "$tmp"'
 

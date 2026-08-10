@@ -42,7 +42,7 @@ function config_shell() {
   fi
 
   cecho "local $name out of date, updating..." "$YELLOW"
-  tmpfile="$(mktemp)"
+  tmpfile="$(mktemp -t hi.append.XXXXXX)"
   grep -vF "$_HI_MARKER" "$target" >"$tmpfile" || true
   printf '%s' "$desired" >>"$tmpfile"
   mv "$tmpfile" "$target"

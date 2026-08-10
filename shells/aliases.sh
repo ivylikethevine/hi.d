@@ -6,35 +6,26 @@
 # the following syntax resolves to the first command installed, changing order
 # changes preference (for users taste)
 # export z="$(command -v a || command -v b || command -v c)"
+# This file is an example of my personal setup. Feel free to change it to suit your needs,
+# but these are the only patterns that are safe to use, since this file must be
+# POSIX+fish compliant.
 
-# # === start required variables/aliases ===
-alias hi="$_HI_LAUNCHER"
-alias hey="ssh" # keeping it casual still
-alias hi_install="[ -f $_HI_INSTALL ] && $_HI_INSTALL"
-alias hi_uninstall="[ -f $_HI_UNINSTALL ] && $_HI_UNINSTALL"
-alias hi_configure="[ -f $_HI_INSTALL ] && $_HI_INSTALL --features-only"
-alias hi_check_configs="[ -f $_HI_INSTALL ] && $_HI_INSTALL --check-configs"
-alias hi_update="git -C $_HI_ROOT pull"
-alias hi_status="git -C $_HI_ROOT status"
-alias hi_info="echo ' | hi_home: $_HI_HOME | hi_root: $_HI_ROOT | script: $_HI_LAUNCHER'"
-alias hi_color_preview="[ -f $_HI_COLOR_PREVIEW ] && $_HI_COLOR_PREVIEW"
-alias hi_check_packages="sh -c 'source \"$_HI_CHECK\" && full_check'"
-alias hi_test_aliases="[ -f $_HI_TEST_ALIASES ] && $_HI_TEST_ALIASES"
-alias hi_test_ssh="[ -f $_HI_TEST_SSH ] && $_HI_TEST_SSH"
-alias hi_test_shellcheck="[ -f $_HI_TEST_SHELLCHECK ] && $_HI_TEST_SHELLCHECK"
-alias hi_test_all="hi_test_aliases && hi_test_ssh && hi_test_shellcheck"
-alias sudo="command sudo " # works in bash/zsh, fish has a sudo wrapper in config.fish
-# # === end required variables/aliases ===
-
-# cli text editor defaults with preferential fallthrough
-export EDITOR="$(command -v nano || command -v micro || command -v pico || command -v vim || command -v vi)"
-alias micro="micro -autoindent=true -colorscheme=darcula -colorcolumn=80 -diffgutter=true -softwrap=true -tabsize=2"
 # skipped when _HI_DISABLE_EDITORS=1, leaving nano/vim at their own defaults.
 # `|| true`: some sourcers run under `set -e`, where a plain failed `[ ]`
 # guard would otherwise abort the whole shell.
 [ "$_HI_DISABLE_EDITORS" != 1 ] && alias nano="nano --rcfile $_HI_NANORC" || true
 [ "$_HI_DISABLE_EDITORS" != 1 ] && alias vim="$(command -v nvim || command -v vim) -u $_HI_VIMRC" || true
 
+# everything below this line is purely personal preference, freely editable
+# without touching hi's own functionality (that all lives in
+# common/bootstrap.sh now). Skip it wholesale when _HI_DISABLE_ALIASES=1.
+[ "$_HI_DISABLE_ALIASES" = 1 ] && return || true
+
+alias sudo="command sudo " # works in bash/zsh, fish has a sudo wrapper in config.fish
+
+# cli text editor defaults with preferential fallthrough
+export EDITOR="$(command -v nano || command -v micro || command -v pico || command -v vim || command -v vi)"
+alias micro="micro -autoindent=true -colorscheme=darcula -colorcolumn=80 -diffgutter=true -softwrap=true -tabsize=2"
 # ide defaults with preferential fallthrough
 export IDE="$(command -v zeditor || command -v zed || command -v code || command -v vi)"
 
@@ -48,9 +39,6 @@ alias batn="batcat $_HI_BAT_OPTS,numbers"
 alias cat="batcat"
 alias catn="batn"
 
-# time helpers
-export _HI_HUMAN_CENTRIC_DATE="+%a %b %-e %Y %H:%M:%S %Z"
-export _HI_HUMAN_SHORT_DATE="+%b %-e %y %H:%M %Z"
 alias now='echo "LOCAL: $(date $_HI_HUMAN_SHORT_DATE) => UTC: $(date -u $_HI_HUMAN_SHORT_DATE)"'
 
 # for working on this repo quickly
@@ -120,7 +108,10 @@ alias lr="exa"
 alias lsx="lr"
 alias lra="lr -a"
 alias lrt="lr -T -L2"
-alias eza="$(command -v eza || command -v exa || command -v ls) $_HI_EZA_OPTS"
+# eza and l share the same eza-first fallback chain (exa above picks exa
+# first instead), so resolve it once instead of running command -v twice
+export _HI_EZA_BIN="$(command -v eza || command -v exa || command -v ls)"
+alias eza="$_HI_EZA_BIN $_HI_EZA_OPTS"
 alias lsz="eza"
 alias les="eza $_HI_EZA_OPTS_SIZE"
 alias lest="eza $_HI_EZA_OPTS_SIZE -T -L2"
@@ -129,7 +120,7 @@ alias le="eza --no-filesize"
 alias lea="le -a"
 alias let="le -T -L2"
 alias leg="le --git --git-repos-no-status"
-alias l="$(command -v eza || command -v exa || command -v ls) -l"
+alias l="$_HI_EZA_BIN -l"
 
 # lsd (another improved ls)
 alias lsd="lsd -lh --color=auto"

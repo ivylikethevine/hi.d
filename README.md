@@ -38,11 +38,11 @@ For ssh targets specifically, `hi` first checks (over the same connection, so it
 - clone this repo to `~/`
 - `~/hi.d/scripts/install.sh` (re-run it any time; it repairs its own lines, even if hi.d moved) - before touching your shell rc files it validates your existing `~/.bashrc`, `~/.zshrc` and `~/.config/fish/config.fish` (whichever are installed) with each shell's own syntax checker, and asks whether to continue if any of them have issues
 - reload your shell!
-- run `hi_configure` any time afterward to revisit the feature toggle prompts (header, prompt, personal settings, git status, editors, header details, terminal width) without touching the shell rc wiring
+- run `hi_configure` any time afterward to revisit the feature toggle prompts (header, prompt, personal settings, git status, editors, aliases, header details, terminal width) without touching the shell rc wiring
 - run `hi_check_configs` any time to just re-run that shell rc validation, without the rest of the install
 - configure `~/.ssh/config` tags via sshm
 - [optional] pin specific colors in `~/hi.d/misc/colors` - everything else gets a color automatically
-  - run `hi_colors` to preview what every ssh host/your user resolves to
+  - run `hi_color_preview` to preview what every ssh host/your user resolves to
 - configure `~/hi.d/misc/packages` to your preferences
 - [optional] in `common/header.sh` set any of `_HI_HEADER_TIMESTAMP`, `_HI_HEADER_SYSINFO`, `_HI_HEADER_IDENTITY`, and `_HI_HEADER_CHECK` to `0` to turn off that piece of the header/greeting across shells
 - [optional] in `common/git_prompt.sh` set `_HI_GIT_PROMPT` to `0` to turn off the git prompt across shells
@@ -59,35 +59,35 @@ Reminder - place local only changes after the "`# hi-config-end`" comment in the
 
 #### File list
 
-| file                                            | what it does                                                        |
-| ----------------------------------------------- | ------------------------------------------------------------------- |
-| `hi.sh`                                         | runs on the client: pick the target, copy hi.d, chainload `load.sh` |
-| `load.sh`                                       | runs on the target: header, rc grafting, shell handoff, cleanup     |
-| `common/paths.sh`                               | every path hi uses (the only file fish and sh both source)          |
-| `common/bootstrap.sh`                           | one-line entry point for bash/zsh: paths + colors                   |
-| `common/shared.sh`                              | palette, `_hi_cecho`, host/user color resolution (see below)        |
-| `common/check.sh`                               | reads `misc/packages`, reports what the host has                    |
-| `common/header.sh`                              | the connect/disconnect banner, shared by every shell                |
-| `common/git_prompt.sh`                          | bash/zsh git prompt, matching fish's built-in `fish_vcs_prompt`     |
-| `common/targets.sh`                             | every `hi` target (ssh/docker/nomad), for all three completions     |
-| `shells/aliases.sh`                             | aliases shared by bash, zsh and fish                                |
-| `shells/bash.sh`                                | bash config                                                         |
-| `shells/zsh.zsh`                                | zsh config                                                          |
-| `shells/config.fish`                            | fish config                                                         |
-| `misc/vim.rc`, `misc/nano.rc`, `misc/theme.yml` | vim, nano and eza configs                                           |
-| `misc/packages`                                 | what `check.sh` looks for, as `cmd:priority[,alternative:priority]` |
-| `misc/colors`                                   | optional color pins for hostnames/usernames/hosttags                |
-| `scripts/install.sh`                            | configure the local shells, install and update                      |
-| `scripts/aliastest.sh`                          | check `aliases.sh` still loads in dash/bash/zsh/fish                |
-| `scripts/colortest.sh`                          | preview what every ssh host/user resolves to (`hi_colors`)          |
-| `scripts/sshtest.sh`                            | end-to-end test of hi's ssh path across remote login shells         |
-| `scripts/shellcheck.sh`                         | runs shellcheck over every `*.sh` file in the repo                  |
+| file                                            | what it does                                                                                               |
+| ----------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `hi.sh`                                         | runs on the client: pick the target, copy hi.d, chainload `load.sh`                                        |
+| `load.sh`                                       | runs on the target: header, rc grafting, shell handoff, cleanup                                            |
+| `common/paths.sh`                               | every path hi uses (the only file fish and sh both source)                                                 |
+| `common/bootstrap.sh`                           | one-line entry point for bash/zsh: paths, colors, hi's own aliases                                         |
+| `common/shared.sh`                              | palette, `_hi_cecho`, host/user color resolution (see below)                                               |
+| `common/check.sh`                               | reads `misc/packages`, reports what the host has                                                           |
+| `common/header.sh`                              | the connect/disconnect banner, shared by every shell                                                       |
+| `common/git_prompt.sh`                          | bash/zsh git prompt, matching fish's built-in `fish_vcs_prompt`                                            |
+| `common/targets.sh`                             | every `hi` target (ssh/docker/nomad), for all three completions                                            |
+| `shells/aliases.sh`                             | personal aliases shared by bash, zsh and fish - freely editable, off wholesale via `_HI_DISABLE_ALIASES=1` |
+| `shells/bash.sh`                                | bash config                                                                                                |
+| `shells/zsh.zsh`                                | zsh config                                                                                                 |
+| `shells/config.fish`                            | fish config                                                                                                |
+| `misc/vim.rc`, `misc/nano.rc`, `misc/theme.yml` | vim, nano and eza configs                                                                                  |
+| `misc/packages`                                 | what `check.sh` looks for, as `cmd:priority[,alternative:priority]`                                        |
+| `misc/colors`                                   | optional color pins for hostnames/usernames/hosttags                                                       |
+| `scripts/install.sh`                            | configure the local shells, install and update                                                             |
+| `scripts/alias_test.sh`                         | check `aliases.sh` still loads in dash/bash/zsh/fish                                                       |
+| `scripts/color_preview.sh`                      | preview what every ssh host/user resolves to (`hi_color_preview`)                                          |
+| `scripts/ssh_test.sh`                           | end-to-end test of hi's ssh path across remote login shells                                                |
+| `scripts/shellcheck_test.sh`                    | runs shellcheck over every `*.sh` file in the repo                                                         |
 
 ##### Hostname, username, and group/tag colors
 
-Every username and hostname gets a color automatically, deterministically derived from its name - there's nothing to generate and nothing that can go missing. To pin a specific color instead, add a line to `~/hi.d/misc/colors` (`username,root,red` / `hostname,prod-db,yellow` / `hosttag,desktop,green`); `hosttag` entries match the _leftmost_ tag in a `# Tags: ...` comment placed directly above a `Host` line in `~/.ssh/config`. Run `hi_colors` any time to preview what every ssh host and your user currently resolve to, rendered in their actual color.
+Every username and hostname gets a color automatically, deterministically derived from its name - there's nothing to generate and nothing that can go missing. To pin a specific color instead, add a line to `~/hi.d/misc/colors` (`username,root,red` / `hostname,prod-db,yellow` / `hosttag,desktop,green`); `hosttag` entries match the _leftmost_ tag in a `# Tags: ...` comment placed directly above a `Host` line in `~/.ssh/config`. Run `hi_color_preview` any time to preview what every ssh host and your user currently resolve to, rendered in their actual color.
 
 ###### Built from/with
 
 - sshrc - https://github.com/cdown/sshrc (forked/became `hi.sh`)
-- sshm - https://github.com/Gu1llaum-3/sshm (optional, but _highly_ recommended to configure `~/.ssh/config`)
+- sshm - https://github.com/Gu1llaum-3/sshm (optional, but _highly_ recommended to configure `~/.ssh/config` hosttags)

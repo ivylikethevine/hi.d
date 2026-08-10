@@ -53,6 +53,7 @@ export _HI_HOME_FISH_CONFIG="$HOME/.config/fish/config.fish"
 # export _HI_DISABLE_PERSONAL=1 # history size, keybindings, completion tweaks
 # export _HI_DISABLE_GIT_STATUS=1 # git status in the prompt
 # export _HI_DISABLE_EDITORS=1  # the vim/nano aliases pointing at misc/vim.rc, misc/nano.rc
+# export _HI_DISABLE_ALIASES=1  # the personal aliases in shells/aliases.sh (sudo, cat/eza, git, docker, pacman/apt, etc) - hi's own essentials in common/bootstrap.sh always load regardless
 
 # local-only disable - set to 1 to turn off every toggle above on the machine
 # hi.d is installed on, while still applying them when hi is used to reach a
@@ -67,4 +68,5 @@ export _HI_DISABLE_LOCAL
   export _HI_DISABLE_PERSONAL=1
   export _HI_DISABLE_GIT_STATUS=1
   export _HI_DISABLE_EDITORS=1
+  export _HI_DISABLE_ALIASES=1
 } || true

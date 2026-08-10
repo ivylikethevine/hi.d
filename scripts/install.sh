@@ -135,7 +135,7 @@ function ask_setting() {
 # and on every host hi.d gets copied to.
 function config_features() {
   local target="$_HI_ROOT/common/paths.sh"
-  local dis_header="" dis_prompt="" dis_personal="" dis_git="" dis_editors="" dis_local=""
+  local dis_header="" dis_prompt="" dis_personal="" dis_git="" dis_editors="" dis_aliases="" dis_local=""
   _hi_h2 "Choosing features"
   ask_setting _HI_DISABLE_HEADER \
     " Enable the connect/disconnect header (system info, git identity, package check)?" "$target" ||
@@ -152,11 +152,14 @@ function config_features() {
   ask_setting _HI_DISABLE_EDITORS \
     " Enable the vim/nano config overrides?" "$target" ||
     dis_editors="export _HI_DISABLE_EDITORS=1"
+  ask_setting _HI_DISABLE_ALIASES \
+    " Enable the personal aliases in shells/aliases.sh (sudo, cat/eza, git, docker, pacman/apt, etc)?" "$target" ||
+    dis_aliases="export _HI_DISABLE_ALIASES=1"
   ask_setting _HI_DISABLE_LOCAL \
     " Enable all of the above on this machine (the one hi.d is installed on), not just when you hi elsewhere?" "$target" ||
     dis_local="export _HI_DISABLE_LOCAL=1"
   config_shell "feature toggles" "$target" \
-    "$dis_header" "$dis_prompt" "$dis_personal" "$dis_git" "$dis_editors" "$dis_local"
+    "$dis_header" "$dis_prompt" "$dis_personal" "$dis_git" "$dis_editors" "$dis_aliases" "$dis_local"
 }
 
 # Prompt for the header's optional detail lines and write _HI_HEADER_*=0

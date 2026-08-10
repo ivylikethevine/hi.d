@@ -7,7 +7,7 @@ set -euo pipefail # must be disabled after our code (this file is part of the in
 source "${_HI_TMPDIR:-$HOME}/hi.d/common/bootstrap.sh"
 
 command -v openssl >/dev/null 2>&1 || {
-  cecho >&2 "hi requires openssl on [$(_hi_hostname)], but it is not installed. Aborting..." "$RED"
+  _hi_cecho >&2 "hi requires openssl on [$(_hi_hostname)], but it is not installed. Aborting..." "$RED"
   exit 1
 }
 
@@ -147,10 +147,10 @@ function _say_hi_container() {
     # shellcheck disable=SC2016
     fallback=$("${probe[@]}" sh -c 'for s in zsh fish sh; do command -v "$s" >/dev/null 2>&1 && { echo "$s"; break; }; done' 2>"$tmp")
     [ -n "$fallback" ] || return 1
-    cecho " no bash in [$DOMAIN], skipping hi config -> plain $fallback w/ aliases" "$YELLOW"
+    _hi_cecho " no bash in [$DOMAIN], skipping hi config -> plain $fallback w/ aliases" "$YELLOW"
 
     if ! "${cp[@]}" sh -c "mkdir -p '$root' && cat > '$root/aliases.sh'" <"$_HI_ALIASES" 2>"$tmp"; then
-      cecho " failed to copy aliases.sh into [$DOMAIN]" "$BRRED"
+      _hi_cecho " failed to copy aliases.sh into [$DOMAIN]" "$BRRED"
       "${attach[@]}" "$fallback"
       return $?
     fi
@@ -176,7 +176,7 @@ function _say_hi_container() {
   fi
 
   shell_secs="$(_hi_elapsed "$_HI_SHELL_START" "$shell_end")"
-  cecho " shell: ${shell_secs}s " "$BLUE" 1
+  _hi_cecho " shell: ${shell_secs}s " "$BLUE" 1
   size="$(_hi_size)"
   prefix=" shell: ${shell_secs}s -> bash ($label) $size"
   echo -ne "$YELLOW-> bash ($label)$NC $size"
@@ -184,7 +184,7 @@ function _say_hi_container() {
   # this is a failure state, so we exit early
   if ! tar czf - -h -C "$_HI_TMPDIR" "${_HI_EXCLUDE[@]}" hi.d |
     "${cp[@]}" sh -c "mkdir -p '$root' && tar mxzf - -C '$root'"; then
-    cecho " failed to copy hi.d into [$DOMAIN]" "$BRRED"
+    _hi_cecho " failed to copy hi.d into [$DOMAIN]" "$BRRED"
     "${probe[@]}" rm -rfv "$root" >/dev/null 2>&1
     return 1
   fi
@@ -230,7 +230,7 @@ function _hi() {
   local copy_start tmp exit_code errors
 
   [ -d "$_HI_ROOT" ] || {
-    cecho "No such directory: $_HI_ROOT" "$RED" >&2
+    _hi_cecho "No such directory: $_HI_ROOT" "$RED" >&2
     exit 1
   }
 
@@ -256,8 +256,8 @@ function _hi() {
   if [ "$exit_code" -ne 0 ]; then
     errors="$(cat "$tmp")"
     echo -ne "\r\r\r\r"
-    cecho "hi failed [code: $exit_code]" "$BRRED"
-    cecho "$errors" "$BRRED"
+    _hi_cecho "hi failed [code: $exit_code]" "$BRRED"
+    _hi_cecho "$errors" "$BRRED"
   fi
   exit "$exit_code"
 }

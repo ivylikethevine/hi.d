@@ -33,7 +33,7 @@ function _hi_test_shell() {
   local shell="$1" script="$2/$1.test" output exit_code=0
 
   if ! command -v "$shell" >/dev/null 2>&1; then
-    cecho "  $shell -- not installed, skipped" "$YELLOW"
+    _hi_cecho "  $shell -- not installed, skipped" "$YELLOW"
     return 0
   fi
 
@@ -41,15 +41,15 @@ function _hi_test_shell() {
   output=$("$shell" "$script" 2>&1) || exit_code=$?
 
   if [ "$exit_code" -eq 0 ]; then
-    cecho "  $shell -- aliases.sh loaded OK" "$GREEN"
+    _hi_cecho "  $shell -- aliases.sh loaded OK" "$GREEN"
   else
-    cecho "  $shell -- FAILED" "$RED"
+    _hi_cecho "  $shell -- FAILED" "$RED"
     [ -n "$output" ] && printf '%s\n' "$output" | sed 's/^/      /'
   fi
   return "$exit_code"
 }
 
-cecho "~~~~~ testing aliases.sh across shells ~~~~~" "$BRGREEN"
+_hi_cecho "~~~~~ testing aliases.sh across shells ~~~~~" "$BRGREEN"
 _HI_WORKDIR=$(mktemp -d hi.aliases.XXXXXX)
 trap 'rm -rfv "$_HI_WORKDIR"' EXIT
 
@@ -59,8 +59,8 @@ for _hi_shell in dash bash zsh fish; do
 done
 
 if [ "$_HI_FAILED" -eq 0 ]; then
-  cecho "~~~~~ all installed shells loaded aliases.sh cleanly ~~~~~" "$BRGREEN"
+  _hi_cecho "~~~~~ all installed shells loaded aliases.sh cleanly ~~~~~" "$BRGREEN"
 else
-  cecho "~~~~~ one or more shells FAILED to load aliases.sh ~~~~~" "$BRRED"
+  _hi_cecho "~~~~~ one or more shells FAILED to load aliases.sh ~~~~~" "$BRRED"
 fi
 exit "$_HI_FAILED"

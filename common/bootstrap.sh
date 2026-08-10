@@ -5,4 +5,4 @@ export _HI_TMPDIR
 # shellcheck source=./paths.sh
 source "$_HI_TMPDIR/hi.d/common/paths.sh"
 # shellcheck source=./shared.sh
-command -v cecho >/dev/null || source "$_HI_SHARED"
+command -v _hi_cecho >/dev/null || source "$_HI_SHARED"

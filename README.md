@@ -60,7 +60,7 @@ Reminder - place local only changes after the "`# hi-config-end`" comment in the
 | `load.sh`                 | runs on the target: header, rc grafting, shell handoff, cleanup     |
 | `common/paths.sh`         | every path hi uses (the only file fish and sh both source)          |
 | `common/bootstrap.sh`     | one-line entry point for bash/zsh: paths + colors                   |
-| `common/colors.sh`        | palette, `cecho`, host/user color resolution (see below)            |
+| `common/colors.sh`        | palette, `_hi_cecho`, host/user color resolution (see below)        |
 | `common/check.sh`         | reads `data/packages`, reports what the host has                    |
 | `common/header.sh`        | the connect/disconnect banner, shared by every shell                |
 | `common/git_prompt.sh`    | bash/zsh git prompt, matching fish's built-in `fish_vcs_prompt`     |

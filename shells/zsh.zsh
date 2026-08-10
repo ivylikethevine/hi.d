@@ -15,11 +15,11 @@ if tput setaf 1 >/dev/null 2>&1; then
   export CLICOLOR=1
   export LSCOLORS=gafacadabaegedabagacad
   # %F{} has no bright variants, so brred/brblue/... fall back to their base color
-  USER_COLOR="${$(user_color)//br/}"
-  HOST_COLOR="${$(host_color)//br/}"
-  AT_COLOR=plain
-  [ -n "${SSH_TTY:-}" ] && AT_COLOR=yellow
-  PS1=$' ${debian_chroot:-}%F{$USER_COLOR}%n%f%F{$AT_COLOR}@%f%F{$HOST_COLOR}%m%f%F{cyan} %~%f%F{plain}%{$(_hi_git_prompt)%} > '
+  USER_COLOR="${$(_hi_user_color)//br/}"
+  HOST_COLOR="${$(_hi_host_color)//br/}"
+  _hi_at_color=plain
+  [ -n "${SSH_TTY:-}" ] && _hi_at_color=yellow
+  PS1=$' ${debian_chroot:-}%F{$USER_COLOR}%n%f%F{$_hi_at_color}@%f%F{$HOST_COLOR}%m%f%F{cyan} %~%f%F{plain}%{$(_hi_git_prompt)%} > '
 else
   PS1=$' ${debian_chroot:-}%n@%m %~%{$(_hi_git_prompt)%} > '
 fi

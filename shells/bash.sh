@@ -14,7 +14,7 @@ source "$_HI_ALIASES"
 export GCC_COLORS='error=01;31:warning=01;35:note=01;36:caret=01;32:locus=01:quote=01'
 
 if tput setaf 1 >/dev/null 2>&1; then
-  HI_PS1=" ${debian_chroot:-}$(user_escape)\u$(at_color)@$(host_escape)\h$NC $BRBLUE\w$NC"
+  HI_PS1=" ${debian_chroot:-}$(_hi_user_escape)\u$(_hi_at_color)@$(_hi_host_escape)\h$NC $BRBLUE\w$NC"
 else
   HI_PS1=" ${debian_chroot:-}\u@\h:\w"
 fi

@@ -13,7 +13,7 @@ source "$_HI_CHECK"
 # export _HI_HEADER_IDENTITY=0
 # export _HI_HEADER_CHECK=0
 
-function _hi_row() {
+function header_row() {
   local cell out=""
   for cell in "$@"; do out+="$NC | $cell"; done
   printf '%b\n' "$out$NC"
@@ -21,10 +21,10 @@ function _hi_row() {
 
 function timestamp() {
   local fmt="+%a %b %-e %Y %H:%M:%S %Z"
-  _hi_row "$BRBLUE$(date -u "$fmt")  " "  $BRYELLOW$(date "$fmt")"
+  header_row "$BRBLUE$(date -u "$fmt")  " "  $BRYELLOW$(date "$fmt")"
 }
 
-function system_info_line() {
+function system_info() {
   local kernel arch os cpus ram base_mhz boost_mhz
   read -r kernel arch <<<"$(uname -sm)"
   kernel=$(_hi_sanitize "$kernel")
@@ -61,12 +61,12 @@ function system_info_line() {
     base_mhz=$(sysctl -n hw.cpufrequency 2>/dev/null | awk '{ printf "%.0f", $1 / 1000000 }')
   fi
   os=$(_hi_sanitize "$os")
-  _hi_row "$YELLOW$kernel" "$PURPLE$arch" "$GREEN$os" "${BLUE}Cores: ${cpus:-?}" \
+  header_row "$YELLOW$kernel" "$PURPLE$arch" "$GREEN$os" "${BLUE}Cores: ${cpus:-?}" \
     "${CYAN}RAM: ${ram:-?}" "${BRBLUE}CPU: ${base_mhz:-?}/${boost_mhz:-?} MHz"
 }
 
 # git identity (domain masked), running containers, and ssh key counts
-function identity_line() {
+function identity() {
   local email="" domain user_part bullets containers="No docker :(" authorized=0 public=0
   local -a lines
   command -v git &>/dev/null && email=$(git config --get user.email 2>/dev/null || true)
@@ -84,7 +84,7 @@ function identity_line() {
   fi
   [ -f "$_HI_SSH_AUTHORIZED_KEYS" ] && mapfile -t lines <"$_HI_SSH_AUTHORIZED_KEYS" && authorized=${#lines[@]}
   [ -d "$_HI_SSH_DIR" ] && mapfile -t lines < <(find "$_HI_SSH_DIR" -type f -name "*.pub") && public=${#lines[@]}
-  _hi_row "$user_part" "$BLUE$containers" "${RED}Auth: $authorized" "${PURPLE}Pub: $public"
+  header_row "$user_part" "$BLUE$containers" "${RED}Auth: $authorized" "${PURPLE}Pub: $public"
 }
 
 # "~~~ <label> [host] ~~~", prefixed with hi.d's local change count
@@ -111,13 +111,13 @@ function hi_banner() {
   end_len=$((tildes - start_len))
   start_tildes=$(printf '%*s' "$start_len" '' | tr ' ' '~')
   end_tildes=$(printf '%*s' "$end_len" '' | tr ' ' '~')
-  printf '%b\n' " $changes$color$start_tildes $label ${NC}[$(host_escape)$host$NC]$color $end_tildes$NC"
+  printf '%b\n' " $changes$color$start_tildes $label ${NC}[$(_hi_host_escape)$host$NC]$color $end_tildes$NC"
 }
 
 function hi_header() {
   hi_banner "$@"
   [[ "${_HI_HEADER_TIMESTAMP:-1}" == 0 ]] || timestamp
-  [[ "${_HI_HEADER_SYSINFO:-1}" == 0 ]] || system_info_line
-  [[ "${_HI_HEADER_IDENTITY:-1}" == 0 ]] || identity_line
+  [[ "${_HI_HEADER_SYSINFO:-1}" == 0 ]] || system_info
+  [[ "${_HI_HEADER_IDENTITY:-1}" == 0 ]] || identity
   [[ "${_HI_HEADER_CHECK:-1}" == 0 ]] || full_check
 }

@@ -59,8 +59,8 @@ function load() {
   # vim only: setting VIMINIT when all we have is vi breaks it
   command -v vim &>/dev/null && export VIMINIT="let \$MYVIMRC='$_HI_VIMRC' | source \$MYVIMRC"
   configure_files
-  cecho " | " "$NC" 1
-  cecho "hi loaded with... " "$BRCYAN" 1
+  _hi_cecho " | " "$NC" 1
+  _hi_cecho "hi loaded with... " "$BRCYAN" 1
 
   # guard against strict mode leaking into the interactive shell we hand off to
   # (e.g. via an exported SHELLOPTS) - it would close the session on any error
@@ -72,8 +72,8 @@ function load() {
   elif command -v zsh &>/dev/null; then
     shell=zsh greeting="zsh shell! :)" color="$PURPLE"
   fi
-  cecho "$greeting" "$color" 1
-  cecho " | load: $(_hi_elapsed "$start" "$(_hi_now)")s | copy: ${_HI_COPY_TIME:--1}s"
+  _hi_cecho "$greeting" "$color" 1
+  _hi_cecho " | load: $(_hi_elapsed "$start" "$(_hi_now)")s | copy: ${_HI_COPY_TIME:--1}s"
 
   if [ "$shell" = fish ]; then
     fish -C "set fish_greeting ''" -i # the header above is our greeting
@@ -84,9 +84,9 @@ function load() {
   local size
   # shellcheck disable=SC2086 # unquoted so an empty flag list disappears
   size="$(du -sh $_HI_LINUX_FLAGS "$_HI_ROOT" | awk '{ print $1 }')"
-  cecho " $size " "$NC" 1
+  _hi_cecho " $size " "$NC" 1
   hi_banner Disconnected "$BRRED" " $size "
   timestamp
-  cecho " hi closing! " "$BRPURPLE"
+  _hi_cecho " hi closing! " "$BRPURPLE"
   exit 0
 }

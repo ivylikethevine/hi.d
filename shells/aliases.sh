@@ -9,7 +9,7 @@
 
 # # === start required variables/aliases ===
 alias hi="$_HI_LAUNCHER"
-alias hi_colors="bash -c 'source $_HI_SHARED && list_colors'"
+alias hi_colors="bash -c 'source $_HI_SHARED && _hi_list_colors'"
 alias hi_install="$_HI_INSTALL"
 alias hi_test_aliases="$_HI_TEST_ALIASES"
 alias hi_update="git -C $_HI_ROOT pull"

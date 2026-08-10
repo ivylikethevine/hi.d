@@ -1,5 +1,5 @@
 #!/bin/bash
-# colors + the handful of primitives every hi script needs (cecho, timing,
+# colors + the handful of primitives every hi script needs (_hi_cecho, timing,
 # hostname). Loaded through common/bootstrap.sh.
 set -euo pipefail # must be disabled after our code (this file is part of the interactive shell - any error would close the session)
 
@@ -30,6 +30,12 @@ _HI_LINUX_FLAGS=""
 du --version 2>/dev/null | grep -q "GNU coreutils" && _HI_LINUX_FLAGS="--apparent-size"
 export _HI_LINUX_FLAGS
 
+# _hi_cecho <text> [color] [no_newline]
+function _hi_cecho() {
+  local out="${2:-}${1:-}$NC"
+  [ $# -ge 3 ] && printf '%b' "$out" || printf '%b\n' "$out"
+}
+
 # high-res-ish timestamp that falls back to whole seconds on bash <5
 function _hi_now() {
   printf '%s' "${EPOCHREALTIME:-$(date +%s)}"
@@ -58,14 +64,8 @@ function _hi_on_exit() {
   fi
 }
 
-# cecho <text> [color] [no_newline]
-function cecho() {
-  local out="${2:-}${1:-}$NC"
-  [ $# -ge 3 ] && printf '%b' "$out" || printf '%b\n' "$out"
-}
-
 # the "@" between user and host is yellow when the session came in over ssh
-function at_color() {
+function _hi_at_color() {
   [ -n "${SSH_TTY:-}" ] && printf '%b' "$YELLOW" || printf '%b' "$NC"
 }
 
@@ -138,29 +138,29 @@ function _hi_resolve_color() {
 
 # *_color -> a palette name (fish set_color / zsh %F{} vocabulary)
 # *_escape -> the same color as a raw ANSI escape, for bash prompts & printf
-function host_color() { _hi_resolve_color hostname "$(_hi_hostname)"; }
-function user_color() { _hi_resolve_color username "$(whoami)"; }
-function host_escape() { _hi_color_escape "$(host_color)"; }
-function user_escape() { _hi_color_escape "$(user_color)"; }
+function _hi_host_color() { _hi_resolve_color hostname "$(_hi_hostname)"; }
+function _hi_user_color() { _hi_resolve_color username "$(whoami)"; }
+function _hi_host_escape() { _hi_color_escape "$(_hi_host_color)"; }
+function _hi_user_escape() { _hi_color_escape "$(_hi_user_color)"; }
 
 # preview what every ssh host & the current user resolve to, rendered in that
 # actual color - handy when tuning data/color_overrides. Run via `hi_colors`.
-function list_colors() {
+function _hi_list_colors() {
   local name color
-  cecho "~~~~~ hi.sh color preview ~~~~~" "$BRGREEN"
+  _hi_cecho "~~~~~ hi.sh color preview ~~~~~" "$BRGREEN"
 
-  cecho "=== user ===" "$YELLOW"
-  color=$(user_color)
-  cecho "$(whoami)  ->  $color" "$(_hi_color_escape "$color")"
+  _hi_cecho "=== user ===" "$YELLOW"
+  color=$(_hi_user_color)
+  _hi_cecho "$(whoami)  ->  $color" "$(_hi_color_escape "$color")"
 
-  cecho "=== ssh hosts ===" "$YELLOW"
+  _hi_cecho "=== ssh hosts ===" "$YELLOW"
   if [[ ! -f "$_HI_SSH_CONFIG" ]]; then
-    cecho "No ssh config found at $_HI_SSH_CONFIG" "$RED"
+    _hi_cecho "No ssh config found at $_HI_SSH_CONFIG" "$RED"
     return
   fi
   while IFS=$'\t' read -r name _; do
     color=$(_hi_resolve_color hostname "$name")
-    cecho "$name  ->  $color" "$(_hi_color_escape "$color")"
+    _hi_cecho "$name  ->  $color" "$(_hi_color_escape "$color")"
   done < <(sh "$_HI_TARGETS" ssh)
 }
 

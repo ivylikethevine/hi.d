@@ -25,7 +25,7 @@ function timestamp() {
 }
 
 function system_info_line() {
-  local kernel arch os cpus ram
+  local kernel arch os cpus ram base_mhz boost_mhz
   read -r kernel arch <<<"$(uname -sm)"
   kernel=$(_hi_sanitize "$kernel")
   arch=$(_hi_sanitize "$arch")
@@ -34,19 +34,35 @@ function system_info_line() {
     os=$(awk -F= '$1 == "PRETTY_NAME" { gsub(/"/, "", $2); print $2 }' "$_HI_LINUX_RELEASE")
     cpus=$(nproc 2>/dev/null)
     ram=$(free -h --giga 2>/dev/null | awk '$1 == "Mem:" { print $2 }')
+    # base clock: try the model name first (eg "... @ 2.80GHz") - AMD chips (Ryzen/EPYC) don't
+    # print one, so fall back to cpufreq's base_frequency (Intel P-State / amd-pstate only)
+    base_mhz=$(awk -F'@ *' '/model name/ && NF>1 { gsub(/GHz.*/, "", $2); printf "%.0f", $2 * 1000; exit }' /proc/cpuinfo 2>/dev/null)
+    if [ -z "$base_mhz" ]; then
+      base_mhz=$(($(cat /sys/devices/system/cpu/cpu0/cpufreq/base_frequency 2>/dev/null || echo 0) / 1000))
+      ((base_mhz)) || base_mhz=""
+    fi
+    # boost/max clock: cpufreq first (works for any driver that exposes it), falling back to lscpu
+    boost_mhz=$(($(cat /sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq 2>/dev/null ||
+      cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq 2>/dev/null || echo 0) / 1000))
+    ((boost_mhz)) || boost_mhz=$(lscpu 2>/dev/null | awk -F: '/CPU max MHz/ { gsub(/ /, "", $2); printf "%.0f", $2 }' || true)
   elif [[ "$kernel" == MINGW* || "$kernel" == MSYS* || "$kernel" == CYGWIN* ]]; then
     # git-bash/MSYS2/Cygwin on native Windows - no /etc/os-release, no sysctl
     os="Windows ($kernel)"
     cpus="${NUMBER_OF_PROCESSORS:-?}"
     ram=$(wmic ComputerSystem get TotalPhysicalMemory 2>/dev/null |
       awk 'NR==2 && $1 ~ /^[0-9]+$/ { printf "%.0fG", $1 / 1073741824 }')
+    # wmic only exposes the rated (base) clock; turbo/boost isn't queryable this way
+    base_mhz=$(wmic cpu get MaxClockSpeed 2>/dev/null | awk 'NR==2 && $1 ~ /^[0-9]+$/ { print $1 }')
   else
     os="macOS $(sw_vers -productVersion 2>/dev/null)"
     cpus=$(sysctl -n hw.ncpu 2>/dev/null)
     ram=$(sysctl -n hw.memsize 2>/dev/null | awk '{ printf "%.0fG", $1 / 1073741824 }')
+    # Apple Silicon doesn't expose either clock via sysctl; only Intel Macs get a value here
+    base_mhz=$(sysctl -n hw.cpufrequency 2>/dev/null | awk '{ printf "%.0f", $1 / 1000000 }')
   fi
   os=$(_hi_sanitize "$os")
-  _hi_row "$YELLOW$kernel" "$PURPLE$arch" "$GREEN$os" "${BLUE}CPUs: ${cpus:-?}" "${CYAN}RAM: ${ram:-?}"
+  _hi_row "$YELLOW$kernel" "$PURPLE$arch" "$GREEN$os" "${BLUE}Cores: ${cpus:-?}" \
+    "${CYAN}RAM: ${ram:-?}" "${BRBLUE}CPU: ${base_mhz:-?}/${boost_mhz:-?} MHz"
 }
 
 # git identity (domain masked), running containers, and ssh key counts

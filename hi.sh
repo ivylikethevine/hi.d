@@ -87,6 +87,10 @@ REMOTE
 # time, then hand off to bash if it's there, or the best fallback shell if not.
 # Expects \$_hi_rc_dir to already be set to wherever hi.bashrc/.hi_fallback_rc
 # should live for this branch.
+# fish's exit only unwinds the source call it's invoked from, not the whole
+# shell, so a sourced .hi_fallback_rc's trailing "; exit" never lands - the
+# fish case below feeds the file's content to -C directly instead of
+# sourcing it, so exit applies to the fish process itself.
 function _hi_remote_suffix() {
   cat <<REMOTE
       export _HI_COPY_TIME=\$(awk -v a="\$_hi_t0" -v b="\$(_hi_now)" 'BEGIN{printf "%.3f", b-a}')
@@ -102,7 +106,7 @@ function _hi_remote_suffix() {
           cp "\$_hi_rc_dir/.hi_fallback_rc" "\$_hi_rc_dir/.zshrc"
           ZDOTDIR="\$_hi_rc_dir" zsh -i
           ;;
-        fish) fish -C "source \$_hi_rc_dir/.hi_fallback_rc" ;;
+        fish) fish -C "\$(cat "\$_hi_rc_dir/.hi_fallback_rc")" ;;
         *) ENV="\$_hi_rc_dir/.hi_fallback_rc" sh -i ;;
         esac
       fi
@@ -230,7 +234,9 @@ function _say_hi_container() {
       "${cp[@]}" sh -c "cp '$root/.hi_fallback_rc' '$root/.zshrc'" 2>"$tmp"
       "${attach[@]}" sh -c "export ZDOTDIR='$root'; exec zsh -i"
       ;;
-    fish) "${attach[@]}" fish -C "source $root/.hi_fallback_rc" ;;
+    # see the ssh path's identical fish case in _hi_remote_suffix for why this
+    # reads the file into -C directly instead of `source`ing it
+    fish) "${attach[@]}" fish -C "$("${probe[@]}" cat "$root/.hi_fallback_rc")" ;;
     *) "${attach[@]}" sh -c "export ENV='$root/.hi_fallback_rc'; exec $fallback -i" ;;
     esac
     exit_code=$?

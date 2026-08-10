@@ -2,6 +2,10 @@
 # shared entry point for scripts
 : "${_HI_HOME:=$HOME}"
 export _HI_HOME
+: "${_HI_DISABLE_LOCAL:=0}"
+export _HI_DISABLE_LOCAL
+: "${_HI_REMOTE_SESSION:=0}"
+export _HI_REMOTE_SESSION
 # shellcheck source=./paths.sh
 source "$_HI_HOME/hi.d/common/paths.sh"
 # shellcheck source=./shared.sh

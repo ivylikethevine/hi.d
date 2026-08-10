@@ -17,6 +17,12 @@ export PATH="$PATH:$_HI_ROOT"
 
 set -euo pipefail
 
+# every remote/container/alloc path chainloads this file to get here - the
+# local install's own shells never do - so this is what lets common/paths.sh
+# tell "reached via hi" apart from "the machine hi.d lives on", for
+# _HI_DISABLE_LOCAL below.
+export _HI_REMOTE_SESSION=1
+
 # shellcheck source=./common/bootstrap.sh
 source "${_HI_HOME:-$HOME}/hi.d/common/bootstrap.sh"
 # shellcheck source=./common/header.sh
@@ -97,8 +103,11 @@ function load() {
   local size
   size="$(_hi_du_size)"
   _hi_cecho " $size" "$NC" 1
-  banner Disconnected "$BRRED" " $size"
-  timestamp
-  _hi_cecho " hi closing! " "$BRPURPLE"
+  if [[ "${_HI_DISABLE_HEADER:-0}" != 1 ]]; then
+    banner Disconnected "$BRRED" " $size"
+    timestamp
+  fi
+  _hi_cecho " | " "$NC" 1
+  _hi_cecho "hi closing! " "$BRPURPLE"
   exit 0
 }

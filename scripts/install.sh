@@ -4,6 +4,7 @@
 set -euo pipefail
 
 _HI_DIR_ARG=""
+_HI_FEATURES_ONLY=""
 while [ $# -gt 0 ]; do
   case "$1" in
   --dir)
@@ -18,25 +19,33 @@ while [ $# -gt 0 ]; do
     _HI_DIR_ARG="${1#--dir=}"
     shift
     ;;
+  --features-only)
+    _HI_FEATURES_ONLY=1
+    shift
+    ;;
   -h | --help)
     cat <<'EOF'
-Usage: install.sh [--dir <install-dir>]
+Usage: install.sh [--dir <install-dir>] [--features-only]
 
 Wires up the local shells to source this hi.d checkout and links hi.sh onto
 PATH. Safe to re-run any time - it repairs its own lines and leaves
 everything else alone.
 
-  --dir <path>  Make the install location explicit instead of relying on
-                wherever this script happens to be running from. hi.d must
-                already be checked out at <path>/hi.d - this doesn't move
-                or copy anything, it just states (and validates) the
-                location, which does not have to be $HOME.
+  --dir <path>     Make the install location explicit instead of relying on
+                   wherever this script happens to be running from. hi.d
+                   must already be checked out at <path>/hi.d - this
+                   doesn't move or copy anything, it just states (and
+                   validates) the location, which does not have to be
+                   $HOME.
+  --features-only  Skip the shell rc wiring and the hi.sh symlink - just
+                   re-run the feature toggle prompts. This is what
+                   `hi_configure` calls once hi.d is installed.
 EOF
     exit 0
     ;;
   *)
     echo "install.sh: unrecognized argument: $1" >&2
-    echo "Usage: install.sh [--dir <install-dir>]" >&2
+    echo "Usage: install.sh [--dir <install-dir>] [--features-only]" >&2
     exit 1
     ;;
   esac
@@ -145,7 +154,7 @@ function ask_setting() {
 # and on every host hi.d gets copied to.
 function config_features() {
   local target="$_HI_ROOT/common/paths.sh"
-  local dis_header="" dis_prompt="" dis_personal="" dis_git="" dis_editors=""
+  local dis_header="" dis_prompt="" dis_personal="" dis_git="" dis_editors="" dis_local=""
   _hi_h2 "Choosing features"
   ask_setting _HI_DISABLE_HEADER \
     " Enable the connect/disconnect header (system info, git identity, package check)?" "$target" ||
@@ -162,8 +171,11 @@ function config_features() {
   ask_setting _HI_DISABLE_EDITORS \
     " Enable the vim/nano config overrides?" "$target" ||
     dis_editors="export _HI_DISABLE_EDITORS=1"
+  ask_setting _HI_DISABLE_LOCAL \
+    " Enable all of the above on this machine (the one hi.d is installed on), not just when you hi elsewhere?" "$target" ||
+    dis_local="export _HI_DISABLE_LOCAL=1"
   config_shell "feature toggles" "$target" \
-    "$dis_header" "$dis_prompt" "$dis_personal" "$dis_git" "$dis_editors"
+    "$dis_header" "$dis_prompt" "$dis_personal" "$dis_git" "$dis_editors" "$dis_local"
 }
 
 # Prompt for the header's optional detail lines and write _HI_HEADER_*=0
@@ -221,13 +233,21 @@ function config_hi() {
   sudo ln -sfn "$_HI_LAUNCHER" "$_HI_LINK"
 }
 
-# _hi_cecho " ~~~~~ Installing (or reinstalling) hi.sh! ~~~~~" "$BRGREEN"
-_hi_h1 "Installing (or reinstalling) hi.sh!"
+if [ -n "$_HI_FEATURES_ONLY" ]; then
+  _hi_h1 "Configuring hi.sh features!"
+else
+  _hi_h1 "Installing (or reinstalling) hi.sh!"
+fi
 _hi_cecho " | hi_home: $_HI_HOME | hi_root: $_HI_ROOT | login shell: ${SHELL##*/}" "$BLUE"
 
 config_features
 config_header_details
 config_max_width
+
+if [ -n "$_HI_FEATURES_ONLY" ]; then
+  _hi_h1 "Features updated!"
+  exit 0
+fi
 
 config_shell bashrc "$_HI_HOME_BASHRC" \
   "$(tmpdir_line sh)" \

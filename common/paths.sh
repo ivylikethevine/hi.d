@@ -53,3 +53,18 @@ export _HI_HOME_FISH_CONFIG="$HOME/.config/fish/config.fish"
 # export _HI_DISABLE_PERSONAL=1 # history size, keybindings, completion tweaks
 # export _HI_DISABLE_GIT_STATUS=1 # git status in the prompt
 # export _HI_DISABLE_EDITORS=1  # the vim/nano aliases pointing at misc/vim.rc, misc/nano.rc
+
+# local-only disable - set to 1 to turn off every toggle above on the machine
+# hi.d is installed on, while still applying them when hi is used to reach a
+# remote host/container/alloc. _HI_REMOTE_SESSION is exported by load.sh, the
+# chainload entry point every remote path goes through and the local
+# install's own shells never do, so it's what tells the two apart.
+export _HI_DISABLE_LOCAL
+
+[ -z "$_HI_DISABLE_LOCAL" ] && [ "$_HI_DISABLE_LOCAL" = 1 ] && [ "$_HI_REMOTE_SESSION" != 1 ] && {
+  export _HI_DISABLE_HEADER=1
+  export _HI_DISABLE_PROMPT=1
+  export _HI_DISABLE_PERSONAL=1
+  export _HI_DISABLE_GIT_STATUS=1
+  export _HI_DISABLE_EDITORS=1
+} || true

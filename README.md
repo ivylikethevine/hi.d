@@ -38,6 +38,7 @@ For ssh targets specifically, `hi` first checks (over the same connection, so it
 - clone this repo to `~/`
 - `~/hi.d/scripts/install.sh` (re-run it any time; it repairs its own lines, even if hi.d moved)
 - reload your shell!
+- run `hi_configure` any time afterward to revisit the feature toggle prompts (header, prompt, personal settings, git status, editors, header details, terminal width) without touching the shell rc wiring
 - configure `~/.ssh/config` tags via sshm
 - [optional] pin specific colors in `~/hi.d/misc/colors` - everything else gets a color automatically
   - run `hi_colors` to preview what every ssh host/your user resolves to
@@ -45,6 +46,7 @@ For ssh targets specifically, `hi` first checks (over the same connection, so it
 - [optional] in `common/header.sh` set any of `_HI_HEADER_TIMESTAMP`, `_HI_HEADER_SYSINFO`, `_HI_HEADER_IDENTITY`, and `_HI_HEADER_CHECK` to `0` to turn off that piece of the header/greeting across shells
 - [optional] in `common/git_prompt.sh` set `_HI_GIT_PROMPT` to `0` to turn off the git prompt across shells
 - [optional] in `common/shared.sh` set `_HI_MAX_WIDTH` to your preferred terminal width (default is 80)
+- [optional] in `common/paths.sh` set `_HI_DISABLE_LOCAL=1` to keep all of the above off on this machine (the one hi.d is installed on) while still applying it when you `hi` elsewhere - `hi_configure`/`install.sh` ask about this too
 - say `hi`!
 - [optional] modify `~/hi.d/misc/*` and `~/hi.d/shells/*` to your liking!
 

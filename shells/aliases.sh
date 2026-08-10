@@ -12,6 +12,7 @@ alias hi="$_HI_LAUNCHER"
 alias hey="ssh" # keeping it casual still
 alias hi_install="[ -f $_HI_INSTALL ] && $_HI_INSTALL"
 alias hi_uninstall="[ -f $_HI_UNINSTALL ] && $_HI_UNINSTALL"
+alias hi_configure="[ -f $_HI_INSTALL ] && $_HI_INSTALL --features-only"
 alias hi_update="git -C $_HI_ROOT pull"
 alias hi_status="git -C $_HI_ROOT status"
 alias hi_info="echo ' | hi_home: $_HI_HOME | hi_root: $_HI_ROOT | script: $_HI_LAUNCHER'"

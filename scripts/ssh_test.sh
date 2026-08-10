@@ -19,7 +19,6 @@ command -v docker >/dev/null 2>&1 || { _hi_cecho "docker not installed, skipping
 docker info >/dev/null 2>&1 || { _hi_cecho "docker daemon not reachable, skipping" "$YELLOW"; exit 0; }
 
 _HI_WORKDIR="$(mktemp -d -t hi.sshtest.XXXXXX)"
-_hi_cecho "  workdir: $_HI_WORKDIR"
 declare -a _HI_STARTED=()
 
 # shellcheck disable=SC2329 # trap function is never invoked directly
@@ -31,8 +30,8 @@ function _hi_cleanup() {
   rm -rf "$_HI_WORKDIR"
 }
 trap _hi_cleanup EXIT
-
-_hi_cecho "  generating throwaway ed25519 keypair at $_HI_WORKDIR/id"
+_hi_h1 "Testing hi's ssh path across remote login shells"
+_hi_h2 "generating throwaway ed25519 keypair at $_HI_WORKDIR/id"
 ssh-keygen -t ed25519 -N '' -q -f "$_HI_WORKDIR/id"
 _HI_PUBKEY="$(cat "$_HI_WORKDIR/id.pub")"
 
@@ -93,13 +92,13 @@ EOF
 _hi_h2 "Building test images"
 _HI_DEBIAN_OK=1
 _HI_ALPINE_OK=1
-_hi_cecho "  building hi-sshtest-debian from $_HI_WORKDIR/debian (log: $_HI_WORKDIR/debian.log)"
+_hi_h3 "building hi-sshtest-debian from $_HI_WORKDIR/debian (log: $_HI_WORKDIR/debian.log)"
 docker build -q -t hi-sshtest-debian "$_HI_WORKDIR/debian" >/dev/null 2>"$_HI_WORKDIR/debian.log" || _HI_DEBIAN_OK=0
-_hi_cecho "  building hi-sshtest-alpine from $_HI_WORKDIR/alpine (log: $_HI_WORKDIR/alpine.log)"
+_hi_h3 "building hi-sshtest-alpine from $_HI_WORKDIR/alpine (log: $_HI_WORKDIR/alpine.log)"
 docker build -q -t hi-sshtest-alpine "$_HI_WORKDIR/alpine" >/dev/null 2>"$_HI_WORKDIR/alpine.log" || _HI_ALPINE_OK=0
 
-[ "$_HI_DEBIAN_OK" -eq 1 ] || _hi_cecho "  debian image failed to build, skipping its shells (see $_HI_WORKDIR/debian.log)" "$YELLOW"
-[ "$_HI_ALPINE_OK" -eq 1 ] || _hi_cecho "  alpine image failed to build, skipping the no-bash case (see $_HI_WORKDIR/alpine.log)" "$YELLOW"
+[ "$_HI_DEBIAN_OK" -eq 1 ] || _hi_cecho " | debian image failed to build, skipping its shells (see $_HI_WORKDIR/debian.log)" "$YELLOW"
+[ "$_HI_ALPINE_OK" -eq 1 ] || _hi_cecho " | alpine image failed to build, skipping the no-bash case (see $_HI_WORKDIR/alpine.log)" "$YELLOW"
 
 # a third image, layered on the debian one, with a real checkout of this repo
 # already sitting at ~/hi.d - i.e. what a host looks like after
@@ -115,12 +114,12 @@ RUN chmod +x /home/hitest/hi.d/hi.sh \
     && touch /home/hitest/hi.d/.installed_sentinel \
     && chown hitest:hitest /home/hitest/hi.d/.installed_sentinel
 EOF
-  _hi_cecho "  building hi-sshtest-debian-installed from $_HI_ROOT (log: $_HI_WORKDIR/debian-installed.log)"
+  _hi_cecho " | building hi-sshtest-debian-installed from $_HI_ROOT (log: $_HI_WORKDIR/debian-installed.log)"
   docker build -q -t hi-sshtest-debian-installed \
     -f "$_HI_WORKDIR/debian-installed/Dockerfile" "$_HI_ROOT" \
     >/dev/null 2>"$_HI_WORKDIR/debian-installed.log" || _HI_INSTALLED_OK=0
 fi
-[ "$_HI_INSTALLED_OK" -eq 1 ] || _hi_cecho "  debian-installed image failed to build, skipping the pre-installed case (see $_HI_WORKDIR/debian-installed.log)" "$YELLOW"
+[ "$_HI_INSTALLED_OK" -eq 1 ] || _hi_cecho " | debian-installed image failed to build, skipping the pre-installed case (see $_HI_WORKDIR/debian-installed.log)" "$YELLOW"
 
 # --- the actual per-shell test -----------------------------------------
 _HI_MARKER="HI_SSH_TEST_OK"
@@ -152,7 +151,7 @@ if [ ! -t 0 ]; then
   if command -v python3 >/dev/null 2>&1; then
     _HI_PTY_WRAP=(python3 -c 'import pty, sys; sys.exit(pty.spawn(sys.argv[1:]))')
   else
-    _hi_cecho "no tty and no python3 to fake one - ssh -t may not get a real pty, results may be unreliable" "$YELLOW"
+    _hi_cecho " | no tty and no python3 to fake one - ssh -t may not get a real pty, results may be unreliable" "$YELLOW"
   fi
 fi
 
@@ -179,32 +178,32 @@ function _hi_run_case() {
 
   if ! docker run -d --rm --name "$name" -p 127.0.0.1::22 \
     -e "PUBKEY=$_HI_PUBKEY" -e "LOGIN_SHELL=$login_shell" "$image" >/dev/null 2>"$_HI_WORKDIR/$label.log"; then
-    _hi_cecho "  failed to start container" "$RED"
+    _hi_cecho " | failed to start container" "$RED"
     return 1
   fi
   _HI_STARTED+=("$name")
-  _hi_cecho "  container: $name (login shell: $login_shell)"
+  _hi_cecho " | container: $name (login shell: $login_shell)"
 
   port="$(docker port "$name" 22/tcp | head -1 | sed 's/.*://')"
-  _hi_cecho "  waiting for sshd on 127.0.0.1:$port"
+  _hi_cecho " | waiting for sshd on 127.0.0.1:$port"
   if ! _hi_wait_for_ssh "$port" "$_HI_WORKDIR/id"; then
-    _hi_cecho "  sshd never came up" "$RED"
+    _hi_cecho " |  sshd never came up" "$RED"
     return 1
   fi
 
-  _hi_cecho "  running: $_HI_LAUNCHER -p $port hitest@127.0.0.1 $cmd"
+  _hi_cecho " | running: $_HI_LAUNCHER -p $port hitest@127.0.0.1 $cmd"
   out="$("${_HI_PTY_WRAP[@]}" "$_HI_LAUNCHER" -p "$port" -i "$_HI_WORKDIR/id" -o StrictHostKeyChecking=no \
     -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o IdentitiesOnly=yes \
     -o ConnectTimeout=5 hitest@127.0.0.1 "$cmd" 2>&1)" || exit_code=$?
 
   if printf '%s' "$out" | grep -q "$_HI_MARKER"; then
-    _hi_cecho "  $label -- ssh path OK" "$GREEN"
+    _hi_cecho " | $label -- ssh path OK" "$GREEN"
     if [ -n "$post" ] && ! docker exec "$name" sh -c "$post" >/dev/null 2>&1; then
-      _hi_cecho "  $label -- post-check FAILED: $post" "$RED"
+      _hi_h3 " |  $label -- post-check FAILED: $post"
       _HI_FAILED=1
     fi
   else
-    _hi_cecho "  $label -- FAILED (exit $exit_code)" "$RED"
+    _hi_h3 " | $label -- FAILED (exit $exit_code)"
     printf '%s\n' "$out" | sed 's/^/      /'
     _HI_FAILED=1
   fi
@@ -212,7 +211,6 @@ function _hi_run_case() {
   docker stop -t 0 "$name" >/dev/null 2>&1
 }
 
-_hi_h1 "Testing hi's ssh path across remote login shells"
 
 if [ "$_HI_DEBIAN_OK" -eq 1 ]; then
   for _hi_pair in bash:/bin/bash dash:/bin/dash zsh:/usr/bin/zsh fish:/usr/bin/fish; do
@@ -234,4 +232,6 @@ if [ "$_HI_FAILED" -eq 0 ]; then
 else
   _hi_h1 "hi's ssh path FAILED for one or more login shells"
 fi
+
+docker image rm -f hi-sshtest-debian hi-sshtest-alpine hi-sshtest-debian-installed
 exit "$_HI_FAILED"

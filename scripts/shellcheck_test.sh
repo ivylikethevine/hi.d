@@ -11,12 +11,13 @@ if ! command -v shellcheck >/dev/null 2>&1; then
   exit 1
 fi
 
-_hi_cecho "  shellcheck version: $(shellcheck --version | awk '/^version:/ {print $2}')"
 
 mapfile -t _HI_SH_FILES < <(find "$_HI_ROOT" -name '*.sh' -not -path '*/.git/*' | sort)
 
 _hi_h1 "Running shellcheck on ${#_HI_SH_FILES[@]} files"
-printf '  %s\n' "${_HI_SH_FILES[@]}"
+_hi_h2 "shellcheck version: $(shellcheck --version | awk '/^version:/ {print $2}')"
+
+_hi_cecho "$(printf ' | %s\n' "${_HI_SH_FILES[@]}")" "$YELLOW"
 
 if shellcheck -x -Calways -S style "${_HI_SH_FILES[@]}"; then
   _hi_h1 "shellcheck found no issues"

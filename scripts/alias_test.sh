@@ -13,8 +13,6 @@ source "${_HI_HOME:-$HOME}/hi.d/common/bootstrap.sh"
 _HI_SAMPLE_ALIASES=$(grep -oE '^alias +[A-Za-z_][A-Za-z0-9_]*=' "$_HI_ALIASES" | sed -E 's/^alias +//; s/=$//' | tr '\n' ' ')
 _HI_SAMPLE_VARS=$(grep -oE '^export +[A-Za-z_][A-Za-z0-9_]*=' "$_HI_ALIASES" | sed -E 's/^export +//; s/=$//' | tr '\n' ' ')
 
-_hi_cecho "  sampled $(wc -w <<<"$_HI_SAMPLE_ALIASES") aliases and $(wc -w <<<"$_HI_SAMPLE_VARS") vars from $_HI_ALIASES"
-
 # posix `alias name` / `test -n "${v+x}"` work unmodified in dash, bash and zsh;
 # fish has neither - aliases are functions there, and `set -q` is its "is set"
 # shellcheck disable=SC2016 # these are the scripts we write out, not code to run here
@@ -34,39 +32,45 @@ function _hi_test_script() {
 
 function _hi_test_shell() {
   local shell="$1" script="$2/$1.test" output exit_code=0
+  _hi_h2 "$shell -- starting"
 
   if ! command -v "$shell" >/dev/null 2>&1; then
-    _hi_cecho "  $shell -- not installed, skipped" "$YELLOW"
+    _hi_h3 "$shell -- not installed, skipped"
     return 0
   fi
 
-  _hi_cecho "  $shell -- writing test script to $script"
+  _hi_cecho " | $shell -- writing test script to $script"
   _hi_test_script "$shell" >"$script"
-  _hi_cecho "  $shell -- running: $shell $script"
+  _hi_cecho " | $shell -- running: $shell $script"
   output=$("$shell" "$script" 2>&1) || exit_code=$?
 
   if [ "$exit_code" -eq 0 ]; then
-    _hi_cecho "  $shell -- aliases.sh loaded OK" "$GREEN"
+    _hi_h3 "$shell -- aliases.sh loaded OK"
   else
-    _hi_cecho "  $shell -- FAILED" "$RED"
+    _hi_h3 "$shell -- FAILED"
     [ -n "$output" ] && printf '%s\n' "$output" | sed 's/^/      /'
   fi
   return "$exit_code"
 }
 
-_hi_h1 "Testing aliases.sh across shells"
-_HI_WORKDIR=$(mktemp -d -t hi.aliases.XXXXXX)
-_hi_cecho "  workdir: $_HI_WORKDIR"
-trap 'rm -rf "$_HI_WORKDIR"' EXIT
+function run_alias_test() {
+  _hi_h1 "Testing aliases.sh across shells"
+  _hi_h2 "Sampled $(wc -w <<<"$_HI_SAMPLE_ALIASES") aliases and $(wc -w <<<"$_HI_SAMPLE_VARS") variables"
 
-_HI_FAILED=0
-for _hi_shell in dash bash zsh fish; do
-  _hi_test_shell "$_hi_shell" "$_HI_WORKDIR" || _HI_FAILED=1
-done
+  _HI_WORKDIR=$(mktemp -d -t hi.aliases.XXXXXX)
+  trap 'rm -rf "$_HI_WORKDIR"' EXIT
 
-if [ "$_HI_FAILED" -eq 0 ]; then
-  _hi_h1 "All installed shells loaded aliases.sh cleanly"
-else
-  _hi_h1 "One or more shells FAILED to load aliases.sh"
-fi
-exit "$_HI_FAILED"
+  _HI_FAILED=0
+  for _hi_shell in dash bash zsh fish; do
+    _hi_test_shell "$_hi_shell" "$_HI_WORKDIR" || _HI_FAILED=1
+  done
+
+  if [ "$_HI_FAILED" -eq 0 ]; then
+    _hi_h1 "All installed shells loaded aliases.sh cleanly"
+  else
+    _hi_h1 "One or more shells FAILED to load aliases.sh"
+  fi
+  exit "$_HI_FAILED"
+}
+
+run_alias_test

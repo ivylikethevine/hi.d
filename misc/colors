@@ -1,10 +1,3 @@
-#   type  = hosttag | username | hostname
-#   color = red, green, yellow, blue, magenta, cyan, brred, brgreen, bryellow, brblue, brmagenta, brcyan
-#   hosttag entries are matched against the leftmost tag in a "# Tags: ..." comment
-#   directly above a "Host" line in ~/.ssh/config, e.g.:
-#     # Tags: desktop
-#     Host mymachine
-# run `hi_colors` to preview what everything currently resolves to.
 #type,name,color
 hosttag,desktop,green
 hosttag,work,brblue
@@ -13,6 +6,13 @@ hosttag,proxmox,brred
 username,root,red
 username,ivy,bryellow
 username,team,blue
-hostname,liona,magenta
+hostname,liona,brmagenta
 hostname,mavie,brmagenta
 hostname,wertha,bryellow
+#   type  = hosttag | username | hostname
+#   color = red, green, yellow, blue, magenta, cyan, brred, brgreen, bryellow, brblue, brmagenta, brcyan
+#   hosttag entries are matched against the leftmost tag in a "# Tags: ..." comment
+#   directly above a "Host" line in ~/.ssh/config, e.g.:
+#     # Tags: desktop
+#     Host mymachine
+# run `hi_colors` to preview what everything currently resolves to.

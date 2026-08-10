@@ -9,6 +9,9 @@ source "$_HI_GIT_PROMPT"
 # shellcheck source=./aliases.sh
 source "$_HI_ALIASES"
 
+# android dev on linux (never last: a false test would make `source` return 1)
+[ -d "$HOME/Android/Sdk" ] && export ANDROID_HOME="$HOME/Android/Sdk"
+
 [ -x /usr/bin/lesspipe ] && eval "$(SHELL=/bin/sh lesspipe)"
 [ -r /etc/debian_chroot ] && debian_chroot="($(cat /etc/debian_chroot)) "
 export GCC_COLORS='error=01;31:warning=01;35:note=01;36:caret=01;32:locus=01:quote=01'

@@ -1,16 +1,17 @@
 #!/bin/bash
 # Sources shells/aliases.sh in a real instance of each target shell and checks
-# that a sample of its "required" aliases/vars actually landed - not just that
-# the file was found. Skips any shell that isn't installed.
+# that every alias/var it unconditionally defines actually landed - not just
+# that the file was found. Skips any shell that isn't installed.
 set -euo pipefail
 
 # shellcheck source=../common/bootstrap.sh
 source "${_HI_TMPDIR:-$HOME}/hi.d/common/bootstrap.sh"
 
-# TODO: Make more exhaustive
-# a sample from aliases.sh's required block, not exhaustive
-_HI_SAMPLE_ALIASES="hi hi_update hi_status hi_install hi_colors hi_info nano vim"
-_HI_SAMPLE_VARS="EDITOR EZA_CONFIG_DIR _HI_BAT_OPTS _HI_HUMAN_CENTRIC_DATE"
+# derived straight from aliases.sh so this test can't drift out of sync with
+# it; only unconditional top-of-line `alias name=`/`export name=` are picked
+# up, so conditionally-set vars (e.g. ANDROID_HOME) are correctly skipped
+_HI_SAMPLE_ALIASES=$(grep -oE '^alias +[A-Za-z_][A-Za-z0-9_]*=' "$_HI_ALIASES" | sed -E 's/^alias +//; s/=$//' | tr '\n' ' ')
+_HI_SAMPLE_VARS=$(grep -oE '^export +[A-Za-z_][A-Za-z0-9_]*=' "$_HI_ALIASES" | sed -E 's/^export +//; s/=$//' | tr '\n' ' ')
 
 # posix `alias name` / `test -n "${v+x}"` work unmodified in dash, bash and zsh;
 # fish has neither - aliases are functions there, and `set -q` is its "is set"

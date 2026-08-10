@@ -9,12 +9,14 @@
 
 # # === start required variables/aliases ===
 alias hi="$_HI_LAUNCHER"
-alias hi_colors="$_HI_TEST_COLORS"
-alias hi_install="$_HI_INSTALL"
-alias hi_test_aliases="$_HI_TEST_ALIASES"
+alias hey="ssh" # keeping it casual still
+alias hi_install="[ -f $_HI_INSTALL ] && $_HI_INSTALL"
 alias hi_update="git -C $_HI_ROOT pull"
 alias hi_status="git -C $_HI_ROOT status"
 alias hi_info="echo ' | hi_tmpdir: $_HI_TMPDIR | hi_root: $_HI_ROOT | script: $_HI_LAUNCHER'"
+alias hi_colors="[ -f $_HI_TEST_COLORS ] && $_HI_TEST_COLORS"
+alias hi_test_aliases="[ -f $_HI_TEST_ALIASES ] && $_HI_TEST_ALIASES"
+alias hi_test_ssh="[ -f $_HI_TEST_SSH ] && $_HI_TEST_SSH"
 alias sudo="command sudo " # works in bash/zsh, fish has a sudo wrapper in config.fish
 # # === end required variables/aliases ===
 
@@ -43,7 +45,6 @@ export _HI_HUMAN_SHORT_DATE="+%b %-e %y %H:%M %Z"
 alias now='echo "LOCAL: $(date $_HI_HUMAN_SHORT_DATE) => UTC: $(date -u $_HI_HUMAN_SHORT_DATE)"'
 
 # for working on this repo quickly
-alias hey="ssh"
 alias zed="zeditor"
 alias ehi="zed $_HI_ROOT"
 alias essh="zed $_HI_SSH_DIR"
@@ -163,9 +164,6 @@ alias aptac="sudo apt autoclean && sudo apt autoremove"
 # fwupdmgr commands (laptops, device drivers, etc.)
 alias fw_check="fwupdmgr get-devices && fwupdmgr get-updates"
 alias fw_update="fwupdmgr update"
-
-# android dev on linux (never last: a false test would make `source` return 1)
-[ -d "$HOME/Android/Sdk" ] && export ANDROID_HOME="$HOME/Android/Sdk"
 
 # prevent misspellings/save my fingers
 alias sctl="sudo systemctl"

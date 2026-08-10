@@ -163,7 +163,12 @@ function _hi_resolve_color() {
 
 # *_color -> a palette name (fish set_color / zsh %F{} vocabulary)
 # *_escape -> the same color as a raw ANSI escape, for bash prompts & printf
-function _hi_host_color() { _hi_resolve_color hostname "$(_hi_hostname)"; }
+# hi.sh pre-resolves this over ssh (using the alias connected with, plus the
+# *local* misc/colors and ~/.ssh/config Tags - the only place both are
+# available) and ships the result as _HI_TARGET_COLOR, so this matches what
+# hi_colors previews instead of re-deriving from the target's own `hostname`
+# output against its own (usually unrelated) ssh config
+function _hi_host_color() { printf '%s\n' "${_HI_TARGET_COLOR:-$(_hi_resolve_color hostname "$(_hi_hostname)")}"; }
 function _hi_user_color() { _hi_resolve_color username "$(whoami)"; }
 function _hi_host_escape() { _hi_color_escape "$(_hi_host_color)"; }
 function _hi_user_escape() { _hi_color_escape "$(_hi_user_color)"; }

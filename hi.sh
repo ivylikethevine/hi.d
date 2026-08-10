@@ -78,6 +78,8 @@ function _hi_remote_preamble() {
   cat <<REMOTE
       _hi_now() { d=\$(date +%s.%N 2>/dev/null); case "\$d" in *N*|'') date +%s ;; *) printf '%s' "\$d" ;; esac; }
       _hi_t0=\$(_hi_now)
+      export _HI_TARGET="$DOMAIN"
+      export _HI_TARGET_COLOR="$(_hi_resolve_color hostname "$DOMAIN")"
       command -v openssl >/dev/null 2>&1 || { echo >&2 "hi requires openssl on [$DOMAIN], but it is not installed. Aborting."; exit 1; }
 REMOTE
 }

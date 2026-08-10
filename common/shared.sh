@@ -165,10 +165,18 @@ function _hi_ssh_tag_color() {
   return 1
 }
 
+# type is "hostname" or "username"; tag is only meaningful for "username" -
+# it's the hosttag of whatever host the user is currently on (see
+# _HI_TARGET_TAG below), letting a "usertag,<tag>,<color>" entry color every
+# user on a tagged host, unless that user also has its own exact override
 function _hi_resolve_color() {
-  _hi_override_color "$1" "$2" && return
-  [[ "$1" = hostname ]] && _hi_ssh_tag_color "$2" && return
-  _hi_hash_color "$2"
+  local type="$1" name="$2" tag="${3:-}"
+  _hi_override_color "$type" "$name" && return
+  case "$type" in
+  hostname) _hi_ssh_tag_color "$name" && return ;;
+  username) [[ -n "$tag" ]] && _hi_override_color usertag "$tag" && return ;;
+  esac
+  _hi_hash_color "$name"
 }
 
 # *_color -> a palette name (fish set_color / zsh %F{} vocabulary)
@@ -179,7 +187,10 @@ function _hi_resolve_color() {
 # hi_colors previews instead of re-deriving from the target's own `hostname`
 # output against its own (usually unrelated) ssh config
 function _hi_host_color() { printf '%s\n' "${_HI_TARGET_COLOR:-$(_hi_resolve_color hostname "$(_hi_hostname)")}"; }
-function _hi_user_color() { _hi_resolve_color username "$(whoami)"; }
+# _HI_TARGET_TAG is the connected-to host's tag, pre-resolved locally the same
+# way as _HI_TARGET_COLOR; unset on a plain local shell, since there's no
+# ssh alias/Tags comment for the machine you're already sitting at
+function _hi_user_color() { _hi_resolve_color username "$(whoami)" "${_HI_TARGET_TAG:-}"; }
 function _hi_host_escape() { _hi_color_escape "$(_hi_host_color)"; }
 function _hi_user_escape() { _hi_color_escape "$(_hi_user_color)"; }
 

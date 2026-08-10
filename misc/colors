@@ -15,7 +15,7 @@ username,pc,cyan
 username,system,cyan
 username,ubuntu,yellow
 username,debian,brblue
-username,team,blue
+usertag,work,cyan
 # TODO: check if these matches are case-insensitive
 # TODO: add usertag? and special options for current device name/user?
 #   type  = hosttag | username | hostname

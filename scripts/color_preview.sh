@@ -57,9 +57,10 @@ function _hi_hbar() {
 function _hi_list_colors() {
   local name color_name source user user_color user_escape name_escape key
   local cur_line sep candidate idx idx2 li total_lines itemtext previewtext
+  local tag has_usertag
   local user_width=0 pw pad_preview
   local users=() group_order=() group_names=() item_lines=()
-  local -A group_hosts group_source group_color
+  local -A group_hosts group_source group_color group_tag
 
   while IFS= read -r name; do users+=("$name"); done < <(_hi_known_users)
   for user in "${users[@]}"; do
@@ -72,13 +73,21 @@ function _hi_list_colors() {
   if [[ -f "$_HI_SSH_CONFIG" ]]; then
     while IFS=$'\t' read -r name _; do
       source=$(_hi_color_source hostname "$name")
-      [[ "$source" = default ]] && continue
+      tag=$(_hi_ssh_host_tag "$name" 2>/dev/null) || tag=""
+      has_usertag=false
+      [[ -n "$tag" ]] && _hi_override_color usertag "$tag" >/dev/null 2>&1 && has_usertag=true
+      # skip hosts that wouldn't render any differently from a bare `hi`: no
+      # hostname override/hosttag color of their own, and no usertag either
+      [[ "$source" = default && "$has_usertag" = false ]] && continue
       color_name=$(_hi_resolve_color hostname "$name")
-      key="$source"$'\x1f'"$color_name"
+      # tag is part of the key (not just source/color) since it changes which
+      # users get colored via usertag, even when the hostname cell looks identical
+      key="$source"$'\x1f'"$color_name"$'\x1f'"$tag"
       if [[ -z "${group_hosts[$key]+x}" ]]; then
         group_order+=("$key")
         group_source[$key]="$source"
         group_color[$key]="$color_name"
+        group_tag[$key]="$tag"
       fi
       group_hosts[$key]+="${group_hosts[$key]:+ }$name"
     done < <(sh "$_HI_TARGETS" ssh)
@@ -175,7 +184,7 @@ function _hi_list_colors() {
 
       if ((li < ${#users[@]})); then
         user="${users[li]}"
-        user_color=$(_hi_resolve_color username "$user")
+        user_color=$(_hi_resolve_color username "$user" "${group_tag[$key]}")
         user_escape=$(_hi_color_escape "$user_color")
         previewtext=""
         for idx2 in "${!group_names[@]}"; do

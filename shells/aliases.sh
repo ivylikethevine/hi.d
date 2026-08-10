@@ -57,12 +57,19 @@ alias dcud="docker compose up -d"
 alias dcd="docker compose down"
 alias dps="dcl"
 
-# copying and general safety
+# defaults for basics
 alias grep="grep --color=auto"
+alias ps="ps aux"
+
+# good safety mechanism
 alias rm="rm -iv"
+
+# default recursive copy with progress
 alias cp="cp -rv"
 alias rsync="rsync -zvhPr --info=progress2"
 alias scp="scp -Cr"
+
+# file count + executability
 alias fc="ls | wc -l"
 alias mkex="chmod +x"
 

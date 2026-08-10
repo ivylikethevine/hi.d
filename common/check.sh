@@ -20,28 +20,31 @@ _HI_NO=(hide "$BRYELLOW" "$YELLOW" hide hide "$BRRED")
 # highest priority (or the first package if none are installed), then apply the
 # proper color and mark it as installed or missing (or hide it as per above)
 function check_line() {
-  local pair cmd priority color best="" best_priority=-1 found=0 rendered
+  local pair cmd priority color best="" best_priority=-1 best_idx=0 idx=0 found=0 symbol rendered
   local -a pairs
   IFS=',' read -ra pairs <<<"$1"
 
   for pair in "${pairs[@]}"; do
     cmd="${pair%:*}"
     priority="${pair#*:}"
-    [ -z "$best" ] && best="$cmd" && best_priority="$priority"
+    [ -z "$best" ] && best="$cmd" && best_priority="$priority" && best_idx=$idx
     if command -v "$cmd" &>/dev/null && ((found == 0 || priority > best_priority)); then
       best="$cmd"
       best_priority="$priority"
+      best_idx=$idx
       found=1
     fi
+    ((++idx))
   done
 
   if ((found)); then
     color="${_HI_YES[best_priority]:-$NC}"
-    rendered="$color $best $GREEN✓"
+    if ((best_idx == 0)); then symbol="$GREEN✓"; else symbol="$YELLOW~$NC"; fi
   else
     color="${_HI_NO[best_priority]:-$NC}"
-    rendered="$color $best $RED✗"
+    symbol="$RED✗"
   fi
+  rendered="$color $best $symbol"
   [[ "$color" == hide ]] || visible+=("$best_priority"$'\x1f'"$((${#best} + 5))"$'\x1f'"$rendered")
 }
 

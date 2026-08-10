@@ -98,8 +98,6 @@ function _hi_list_colors() {
     ((pw > w_preview)) && w_preview=$pw
   done
 
-  _hi_h1 "hi.sh color preview"
-
   _hi_hbar "$w_item" "$w_color" "$w_source" "$w_preview"
   printf '| %-*s | %-*s | %-*s | %-*s |\n' \
     "$w_item" "ITEM" "$w_color" "COLOR" "$w_source" "SOURCE" "$w_preview" "PREVIEW"
@@ -112,7 +110,7 @@ function _hi_list_colors() {
     name_escape=$(_hi_color_escape "$color_name")
     printf '| %b ' "${name_escape}$(printf '%-*s' "$w_item" "$user")${NC}"
     printf '| %b ' "${name_escape}$(printf '%-*s' "$w_color" "$color_name")${NC}"
-    printf '| %-*s ' "$w_source" "$source"
+    printf '| %b ' "${name_escape}$(printf '%-*s' "$w_source" "$source")${NC}"
     printf '| %*s |\n' "$w_preview" ""
   done
 
@@ -167,7 +165,7 @@ function _hi_list_colors() {
 
       if ((li == 0)); then
         printf '| %b ' "${name_escape}$(printf '%-*s' "$w_color" "$color_name")${NC}"
-        printf '| %-*s ' "$w_source" "$source"
+        printf '| %b ' "${name_escape}$(printf '%-*s' "$w_source" "$source")${NC}"
       else
         printf '| %-*s ' "$w_color" ""
         printf '| %-*s ' "$w_source" ""

@@ -13,9 +13,9 @@ export _HI_HEADER="$_HI_ROOT/common/header.sh"
 export _HI_GIT_PROMPT="$_HI_ROOT/common/git_prompt.sh"
 export _HI_TARGETS="$_HI_ROOT/common/targets.sh"
 export _HI_INSTALL="$_HI_ROOT/scripts/install.sh"
-export _HI_TEST_ALIASES="$_HI_ROOT/scripts/aliastest.sh"
-export _HI_TEST_COLORS="$_HI_ROOT/scripts/colortest.sh"
-export _HI_TEST_SSH="$_HI_ROOT/scripts/sshtest.sh"
+export _HI_TEST_ALIASES="$_HI_ROOT/scripts/alias_test.sh"
+export _HI_TEST_COLORS="$_HI_ROOT/scripts/color_test.sh"
+export _HI_TEST_SSH="$_HI_ROOT/scripts/ssh_test.sh"
 
 # user configurable
 export _HI_COLORS="$_HI_ROOT/misc/colors"

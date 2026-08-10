@@ -1,10 +1,33 @@
-**.pem**
-**.pub**
 **output**
+**build**
+**tmp**
 **secret**
 **private**
 **key**
+**local**
+**personal**
 
+*.js
+*.ts
+*.bat
+*.cmd
+*.ps1
+*.ps
+*.psd
+*.doc
+*.docx
+*.id
+*.py
+*.pyc
+*.pem
+*.pub
+*.env
+*.direnv
+*.envrc
+*.rsa
+*.crt
+*.pub
+*.pfx
 *.bmp
 *.cert
 *.key
@@ -24,8 +47,3 @@
 !theme.yml
 
 *docker*
-
-# data/
-# **/travel_config
-# **/color_overrides
-# **/packages_config

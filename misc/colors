@@ -3,12 +3,21 @@ hosttag,desktop,green
 hosttag,work,brblue
 hosttag,laptop,brgreen
 hosttag,proxmox,brred
-username,root,red
-username,ivy,bryellow
-username,team,blue
+hosttag,personal,brgreen
+hosttag,windows,yellow
 hostname,liona,brmagenta
 hostname,mavie,brmagenta
-hostname,wertha,bryellow
+hostname,bertha,brmagenta
+username,root,magenta
+username,admin,red
+username,ivy,bryellow
+username,pc,cyan
+username,system,cyan
+username,ubuntu,yellow
+username,debian,brblue
+username,team,blue
+# TODO: check if these matches are case-insensitive
+# TODO: add usertag? and special options for current device name/user?
 #   type  = hosttag | username | hostname
 #   color = red, green, yellow, blue, magenta, cyan, brred, brgreen, bryellow, brblue, brmagenta, brcyan
 #   hosttag entries are matched against the leftmost tag in a "# Tags: ..." comment

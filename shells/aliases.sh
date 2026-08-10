@@ -14,7 +14,7 @@ alias hi_install="$_HI_INSTALL"
 alias hi_test_aliases="$_HI_TEST_ALIASES"
 alias hi_update="git -C $_HI_ROOT pull"
 alias hi_status="git -C $_HI_ROOT status"
-alias hi_info="echo 'tmpdir: $_HI_TMPDIR | root: $_HI_ROOT | script: $_HI_LAUNCHER'"
+alias hi_info="echo ' | hi_tmpdir: $_HI_TMPDIR | hi_root: $_HI_ROOT | script: $_HI_LAUNCHER'"
 alias sudo="command sudo " # works in bash/zsh, fish has a sudo wrapper in config.fish
 # # === end required variables/aliases ===
 

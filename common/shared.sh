@@ -36,6 +36,18 @@ function _hi_cecho() {
   [ $# -ge 3 ] && printf '%b' "$out" || printf '%b\n' "$out"
 }
 
+function _hi_h1() {
+  _hi_cecho " ============== $1 ==============" "$BRGREEN"
+}
+
+function _hi_h2() {
+  _hi_cecho " ======= $1 ========" "$BRBLUE"
+}
+
+function _hi_h3() {
+  _hi_cecho " ===== $1 =====" "$BRCYAN"
+}
+
 # high-res-ish timestamp that falls back to whole seconds on bash <5
 function _hi_now() {
   printf '%s' "${EPOCHREALTIME:-$(date +%s)}"

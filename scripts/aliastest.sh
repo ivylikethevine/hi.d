@@ -49,7 +49,7 @@ function _hi_test_shell() {
   return "$exit_code"
 }
 
-_hi_cecho "~~~~~ testing aliases.sh across shells ~~~~~" "$BRGREEN"
+_hi_h1 "Testing aliases.sh across shells"
 _HI_WORKDIR=$(mktemp -d hi.aliases.XXXXXX)
 trap 'rm -rfv "$_HI_WORKDIR"' EXIT
 
@@ -59,8 +59,8 @@ for _hi_shell in dash bash zsh fish; do
 done
 
 if [ "$_HI_FAILED" -eq 0 ]; then
-  _hi_cecho "~~~~~ all installed shells loaded aliases.sh cleanly ~~~~~" "$BRGREEN"
+  _hi_h1 "All installed shells loaded aliases.sh cleanly"
 else
-  _hi_cecho "~~~~~ one or more shells FAILED to load aliases.sh ~~~~~" "$BRRED"
+  _hi_h1 "One or more shells FAILED to load aliases.sh"
 fi
 exit "$_HI_FAILED"

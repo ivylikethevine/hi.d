@@ -89,7 +89,7 @@ function identity() {
 
 # "~~~ <label> [host] ~~~", prefixed with hi.d's local change count
 # this whole line is always _HI_MAX_WIDTH columns, regardless of other factors
-function hi_banner() {
+function banner() {
   local label="$1" color="${2:-$BRGREEN}" prefix="${3:-}" changes_plain="" changes=""
   if [ -d "$_HI_ROOT/.git" ]; then
     local -a lines
@@ -115,7 +115,7 @@ function hi_banner() {
 }
 
 function hi_header() {
-  hi_banner "$@"
+  banner "$@"
   [[ "${_HI_HEADER_TIMESTAMP:-1}" == 0 ]] || timestamp
   [[ "${_HI_HEADER_SYSINFO:-1}" == 0 ]] || system_info
   [[ "${_HI_HEADER_IDENTITY:-1}" == 0 ]] || identity

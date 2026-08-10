@@ -27,7 +27,7 @@ _HI_LINK="/usr/bin/hi"
 function config_shell() {
   local name="$1" target="$2" line existing desired="" tmpfile
   shift 2
-  _hi_cecho "=== Checking $name ===" "$YELLOW"
+  _hi_h2 "Checking $name"
 
   mkdir -p "$(dirname "$target")"
   touch "$target"
@@ -37,16 +37,16 @@ function config_shell() {
 
   existing="$(grep -F "$_HI_MARKER" "$target" || true)"
   if [ "$existing" = "${desired%$'\n'}" ]; then
-    _hi_cecho "local $name up to date :)" "$GREEN"
+    _hi_cecho " local $name up to date :)" "$GREEN"
     return 0
   fi
 
-  _hi_cecho "local $name out of date, updating..." "$YELLOW"
+  _hi_cecho " local $name out of date, updating..." "$YELLOW"
   tmpfile="$(mktemp -t hi.append.XXXXXX)"
   grep -vF "$_HI_MARKER" "$target" >"$tmpfile" || true
   printf '%s' "$desired" >>"$tmpfile"
   mv "$tmpfile" "$target"
-  _hi_cecho "local $name updated :)" "$GREEN"
+  _hi_cecho " local $name updated :)" "$GREEN"
 }
 
 # Only emit an _HI_TMPDIR export when hi.d isn't at $HOME/hi.d - every consumer
@@ -60,18 +60,19 @@ function tmpdir_line() {
 }
 
 function config_hi() {
-  _hi_cecho "=== Checking hi.sh ===" "$YELLOW"
+  _hi_h2 "Checking hi.sh"
   chmod +x "$_HI_LAUNCHER"
   if [ "$(readlink "$_HI_LINK" 2>/dev/null)" = "$_HI_LAUNCHER" ]; then
-    _hi_cecho "$_HI_LINK already points at $_HI_LAUNCHER :)" "$GREEN"
+    _hi_cecho " $_HI_LINK already points at $_HI_LAUNCHER :)" "$GREEN"
     return 0
   fi
-  _hi_cecho "Linking $_HI_LINK -> $_HI_LAUNCHER... [password required]" "$BLUE"
+  _hi_cecho " Linking $_HI_LINK -> $_HI_LAUNCHER... [password required]" "$BLUE"
   sudo ln -sfn "$_HI_LAUNCHER" "$_HI_LINK"
 }
 
-_hi_cecho "~~~~~ Installing (or reinstalling) hi.sh! ~~~~~" "$BRGREEN"
-_hi_cecho "pwd: $PWD | hi_root: $_HI_ROOT | hi_tmpdir: $_HI_TMPDIR | shell: ${SHELL##*/}" "$BLUE"
+# _hi_cecho " ~~~~~ Installing (or reinstalling) hi.sh! ~~~~~" "$BRGREEN"
+_hi_h1 "Installing (or reinstalling) hi.sh!"
+_hi_cecho " | hi_tmpdir: $_HI_TMPDIR | hi_root: $_HI_ROOT | login shell: ${SHELL##*/}" "$BLUE"
 
 config_shell bashrc "$_HI_HOME_BASHRC" \
   "$(tmpdir_line sh)" \
@@ -90,4 +91,4 @@ config_shell config.fish "$_HI_HOME_FISH_CONFIG" \
 
 config_hi
 
-_hi_cecho "~~~~~ Installed! ~~~~~ " "$BRGREEN"
+_hi_h1 "Installed!"

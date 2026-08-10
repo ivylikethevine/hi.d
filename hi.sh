@@ -33,6 +33,18 @@ function _hi_is_nomad_alloc() {
     [ "$(nomad alloc status -t '{{.ClientStatus}}' "$1" 2>/dev/null)" = running ]
 }
 
+# Cheap check for a permanent hi.d already sitting on $DOMAIN (i.e.
+# scripts/install.sh has been run there): prints its path if so. Runs over
+# the ssh ControlMaster passed in "$@" so this costs no extra authentication
+# - _say_hi's real connection right after multiplexes through the same
+# socket instead of asking again.
+function _hi_remote_root() {
+  local out
+  out="$(ssh "$@" -o ConnectTimeout=5 "${SSHARGS[@]}" "$DOMAIN" \
+    '_r="$HOME/hi.d"; [ -x "$_r/hi.sh" ] && [ -f "$_r/common/paths.sh" ] && printf "%s" "$_r"' 2>/dev/null)" || out=""
+  printf '%s' "$out"
+}
+
 function _hi_copy_time() {
   echo "$(_hi_now) $1 $2 $3" | awk '{ printf "%.3f\n", ($1 - $2) - ($4 - $3) }'
 }
@@ -69,13 +81,54 @@ function _hi_size() {
 # Technically, all of hi runs under a single sh sub-process that we start on
 # the target, which chainloads bash for the full experience when it's there.
 function _say_hi() {
-  local size hi_esc nc_esc script b64 boot_tmp
+  local size hi_esc nc_esc script b64 boot_tmp remote_root tmp_root ctl_path ec=0
+  local -a ctl_opts
 
-  size="$(_hi_size)"
   hi_esc="$(printf '%b' "$YELLOW")"
   nc_esc="$(printf '%b' "$NC")"
 
-  script="$(cat <<REMOTE
+  # multiplex the install-probe and the real session over one ssh connection,
+  # so checking for an existing install never costs a second authentication
+  ctl_path="$(mktemp -u -t hi.cm.XXXXXX)"
+  ctl_opts=(-o ControlMaster=auto -o ControlPath="$ctl_path" -o ControlPersist=30)
+  remote_root="$(_hi_remote_root "${ctl_opts[@]}")"
+
+  if [ -n "$remote_root" ]; then
+    # scripts/install.sh has already run on the target - load that copy in
+    # place instead of shipping a fresh one over, and never delete it
+    tmp_root="${remote_root%/hi.d}"
+    script="$(cat <<REMOTE
+      _hi_now() { d=\$(date +%s.%N 2>/dev/null); case "\$d" in *N*|'') date +%s ;; *) printf '%s' "\$d" ;; esac; }
+      _hi_t0=\$(_hi_now)
+      command -v openssl >/dev/null 2>&1 || { echo >&2 "hi requires openssl on [$DOMAIN], but it is not installed. Aborting."; exit 1; }
+      export _HI_TMPDIR="$tmp_root"
+      export _HI_ROOT="$remote_root"
+      _hi_boot="\$(dirname "\$0")"
+      printf '%s %s%s' "$hi_esc" "$nc_esc" "-> local hi.d install"
+      echo "$(_hi_bootloader | $_HI_ARMOR)" | $_HI_UNARMOR > "\$_hi_boot/hi.bashrc"
+      export _HI_COPY_TIME=\$(awk -v a="\$_hi_t0" -v b="\$(_hi_now)" 'BEGIN{printf "%.3f", b-a}')
+      export _HI_CONNECT_PREFIX="-> local hi.d install"
+      if command -v bash >/dev/null 2>&1; then
+        bash --rcfile "\$_hi_boot/hi.bashrc"
+      else
+        _hi_fallback=sh
+        for _hi_s in zsh fish sh; do command -v "\$_hi_s" >/dev/null 2>&1 && { _hi_fallback="\$_hi_s"; break; }; done
+        printf '%s no bash on [$DOMAIN], dropping into plain %s w/ aliases only %s\n' "$hi_esc" "\$_hi_fallback" "$nc_esc" >&2
+        echo "$(_hi_fallback_rc | $_HI_ARMOR)" | $_HI_UNARMOR > "\$_hi_boot/.hi_fallback_rc"
+        case "\$_hi_fallback" in
+        zsh)
+          cp "\$_hi_boot/.hi_fallback_rc" "\$_hi_boot/.zshrc"
+          ZDOTDIR="\$_hi_boot" zsh -i
+          ;;
+        fish) fish -C "source \$_hi_boot/.hi_fallback_rc" ;;
+        *) ENV="\$_hi_boot/.hi_fallback_rc" sh -i ;;
+        esac
+      fi
+REMOTE
+    )"
+  else
+    size="$(_hi_size)"
+    script="$(cat <<REMOTE
       _hi_now() { d=\$(date +%s.%N 2>/dev/null); case "\$d" in *N*|'') date +%s ;; *) printf '%s' "\$d" ;; esac; }
       _hi_t0=\$(_hi_now)
       command -v openssl >/dev/null 2>&1 || { echo >&2 "hi requires openssl on [$DOMAIN], but it is not installed. Aborting."; exit 1; }
@@ -108,7 +161,8 @@ function _say_hi() {
         esac
       fi
 REMOTE
-  )"
+    )"
+  fi
 
   # base64-armor the whole script, write to a file and run as `sh file`
   # rather than piped into `sh`, so sh's stdin - and hence the nested
@@ -118,10 +172,14 @@ REMOTE
   boot_tmp="/tmp/.hi_$$_$(_hi_now | tr -d '.')"
 
   # shellcheck disable=SC2029
-  ssh -t "${SSHARGS[@]}" "$DOMAIN" \
+  ssh -t "${ctl_opts[@]}" "${SSHARGS[@]}" "$DOMAIN" \
     "mkdir -m 700 $boot_tmp && echo $b64 | openssl enc -base64 -d -A > $boot_tmp/s && sh $boot_tmp/s; rm -rf $boot_tmp" '||' \
     powershell -NoLogo -NoExit -Command \
-    "Write-Host 'hi from PowerShell - no bash or sh on this host, hi.d colors/aliases are unavailable' -ForegroundColor Yellow"
+    "Write-Host 'hi from PowerShell - no bash or sh on this host, hi.d colors/aliases are unavailable' -ForegroundColor Yellow" || ec=$?
+
+  ssh -O exit "${ctl_opts[@]}" "$DOMAIN" >/dev/null 2>&1 || true
+  rm -f "$ctl_path" 2>/dev/null || true
+  return "$ec"
 }
 
 # both container types use the same style of copying our configurations, but

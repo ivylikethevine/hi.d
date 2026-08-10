@@ -3,10 +3,13 @@
 # hi.sh's real ssh path (_say_hi) against each of them over actual ssh. This
 # proves the base64 armor/quoting in _say_hi survives whichever shell sshd
 # hands the incoming "sh -c '...'" command to server-side, not just bash/dash.
+# Also boots one extra debian container with hi.d pre-installed (as
+# scripts/install.sh would leave it) to prove _say_hi detects it and loads it
+# in place instead of copying a fresh one over.
 # Everything is ephemeral and bound to 127.0.0.1 only; nothing touches the
 # user's real ~/.ssh/config or ~/.ssh/known_hosts. Skips cleanly if docker
 # isn't installed/running. Needs network access the first time it runs, to
-# build the two test images (cached by docker afterwards).
+# build the test images (cached by docker afterwards).
 set -euo pipefail
 
 # shellcheck source=../common/bootstrap.sh
@@ -94,6 +97,26 @@ docker build -q -t hi-sshtest-alpine "$_HI_WORKDIR/alpine" >/dev/null 2>"$_HI_WO
 [ "$_HI_DEBIAN_OK" -eq 1 ] || _hi_cecho "  debian image failed to build, skipping its shells (see $_HI_WORKDIR/debian.log)" "$YELLOW"
 [ "$_HI_ALPINE_OK" -eq 1 ] || _hi_cecho "  alpine image failed to build, skipping the no-bash case (see $_HI_WORKDIR/alpine.log)" "$YELLOW"
 
+# a third image, layered on the debian one, with a real checkout of this repo
+# already sitting at ~/hi.d - i.e. what a host looks like after
+# scripts/install.sh has run there. The build context is $_HI_ROOT itself
+# (this checkout), so it's an exact copy, uncommitted changes included.
+_HI_INSTALLED_OK=$_HI_DEBIAN_OK
+if [ "$_HI_DEBIAN_OK" -eq 1 ]; then
+  mkdir -p "$_HI_WORKDIR/debian-installed"
+  cat >"$_HI_WORKDIR/debian-installed/Dockerfile" <<'EOF'
+FROM hi-sshtest-debian
+COPY --chown=hitest:hitest . /home/hitest/hi.d
+RUN chmod +x /home/hitest/hi.d/hi.sh \
+    && touch /home/hitest/hi.d/.installed_sentinel \
+    && chown hitest:hitest /home/hitest/hi.d/.installed_sentinel
+EOF
+  docker build -q -t hi-sshtest-debian-installed \
+    -f "$_HI_WORKDIR/debian-installed/Dockerfile" "$_HI_ROOT" \
+    >/dev/null 2>"$_HI_WORKDIR/debian-installed.log" || _HI_INSTALLED_OK=0
+fi
+[ "$_HI_INSTALLED_OK" -eq 1 ] || _hi_cecho "  debian-installed image failed to build, skipping the pre-installed case (see $_HI_WORKDIR/debian-installed.log)" "$YELLOW"
+
 # --- the actual per-shell test -----------------------------------------
 _HI_MARKER="HI_SSH_TEST_OK"
 # with bash on the target, _say_hi's bootloader hands off straight to
@@ -106,6 +129,11 @@ _HI_CMD_BASH='test -f "$_HI_ROOT/hi.sh" && source "$_HI_ALIASES" && alias hi_inf
 # command, so this only needs to assert the copy landed and the alias took
 # shellcheck disable=2016 # this expands later
 _HI_CMD_FALLBACK='test -f "$_HI_ROOT/hi.sh" && alias hi_info >/dev/null 2>&1 && echo '"$_HI_MARKER"
+# the target already has a permanent hi.d - this asserts _say_hi pointed
+# straight at it ($_HI_ROOT = ~/hi.d, never a mktemp'd copy) instead of
+# shipping a fresh tree over
+# shellcheck disable=2016 # this expands later
+_HI_CMD_INSTALLED='test "$_HI_ROOT" = "$HOME/hi.d" && source "$_HI_ALIASES" && alias hi_info >/dev/null 2>&1 && echo '"$_HI_MARKER"
 
 # _say_hi's bash branch only sources hi.bashrc if bash *is* interactive,
 # which it only is if ssh actually allocated a remote pty. A lone `ssh -t`
@@ -139,7 +167,7 @@ function _hi_wait_for_ssh() {
 }
 
 function _hi_run_case() {
-  local label="$1" image="$2" login_shell="$3" cmd="$4" name port out exit_code=0
+  local label="$1" image="$2" login_shell="$3" cmd="$4" post="${5:-}" name port out exit_code=0
 
   name="hi-sshtest-$label-$$"
   _hi_h3 "Testing login shell: $label"
@@ -162,7 +190,11 @@ function _hi_run_case() {
     -o ConnectTimeout=5 hitest@127.0.0.1 "$cmd" 2>&1)" || exit_code=$?
 
   if printf '%s' "$out" | grep -q "$_HI_MARKER"; then
-    _hi_cecho "  $label -- ssh path copied + bootstrapped OK" "$GREEN"
+    _hi_cecho "  $label -- ssh path OK" "$GREEN"
+    if [ -n "$post" ] && ! docker exec "$name" sh -c "$post" >/dev/null 2>&1; then
+      _hi_cecho "  $label -- post-check FAILED: $post" "$RED"
+      _HI_FAILED=1
+    fi
   else
     _hi_cecho "  $label -- FAILED (exit $exit_code)" "$RED"
     printf '%s\n' "$out" | sed 's/^/      /'
@@ -182,6 +214,11 @@ fi
 
 if [ "$_HI_ALPINE_OK" -eq 1 ]; then
   _hi_run_case nobash hi-sshtest-alpine /bin/ash "$_HI_CMD_FALLBACK" || _HI_FAILED=1
+fi
+
+if [ "$_HI_INSTALLED_OK" -eq 1 ]; then
+  _hi_run_case installed hi-sshtest-debian-installed /bin/bash "$_HI_CMD_INSTALLED" \
+    'test -f /home/hitest/hi.d/.installed_sentinel' || _HI_FAILED=1
 fi
 
 if [ "$_HI_FAILED" -eq 0 ]; then

@@ -46,7 +46,7 @@ function _hi_remote_root() {
 }
 
 function _hi_copy_time() {
-  echo "$(_hi_now) $1 $2 $3" | awk '{ printf "%.3f\n", ($1 - $2) - ($4 - $3) }'
+  awk -v now="$(_hi_now)" -v a="$1" -v b="$2" -v c="$3" 'BEGIN { printf "%.3f", (now - a) - (c - b) }'
 }
 
 function _hi_bootloader() {

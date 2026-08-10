@@ -58,7 +58,8 @@ function run_alias_test() {
   _hi_h2 "Sampled $(wc -w <<<"$_HI_SAMPLE_ALIASES") aliases and $(wc -w <<<"$_HI_SAMPLE_VARS") variables"
 
   _HI_WORKDIR=$(mktemp -d -t hi.aliases.XXXXXX)
-  trap 'rm -rf "$_HI_WORKDIR"' EXIT
+  # shellcheck disable=SC2016 # $_HI_WORKDIR is resolved when the trap fires
+  _hi_on_exit 'rm -rf "$_HI_WORKDIR"'
 
   _HI_FAILED=0
   for _hi_shell in dash bash zsh fish; do

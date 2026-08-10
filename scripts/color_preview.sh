@@ -37,6 +37,14 @@ function _hi_known_users() {
   printf '%s\n' "${users[@]}" | awk '!seen[$0]++'
 }
 
+# total plain-text width of a preview cell for a group of hostnames: every
+# user gets "user@host" padded to user_width, joined by two spaces
+function _hi_group_preview_width() {
+  local h n=$# pw=0
+  for h in "$@"; do pw=$((pw + user_width + 1 + ${#h})); done
+  printf '%s' $((pw + 2 * (n - 1)))
+}
+
 # a "+----+----+" style divider sized to the given column widths
 function _hi_hbar() {
   local seg="+" w
@@ -49,7 +57,7 @@ function _hi_hbar() {
 function _hi_list_colors() {
   local name color_name source user user_color user_escape name_escape key
   local cur_line sep candidate idx idx2 li total_lines itemtext previewtext
-  local user_width=0 pw pad_preview n h
+  local user_width=0 pw pad_preview
   local users=() group_order=() group_names=() item_lines=()
   local -A group_hosts group_source group_color
 
@@ -91,10 +99,7 @@ function _hi_list_colors() {
     source="${group_source[$key]}"
     ((${#source} > w_source)) && w_source=${#source}
     read -ra group_names <<< "${group_hosts[$key]}"
-    n=${#group_names[@]}
-    pw=0
-    for h in "${group_names[@]}"; do pw=$((pw + user_width + 1 + ${#h})); done
-    pw=$((pw + 2 * (n - 1)))
+    pw=$(_hi_group_preview_width "${group_names[@]}")
     ((pw > w_preview)) && w_preview=$pw
   done
 
@@ -146,10 +151,7 @@ function _hi_list_colors() {
 
     # every preview line in this group has identical plain-text width (users
     # are right-padded to user_width) so one pad amount covers the whole group
-    n=${#group_names[@]}
-    pw=0
-    for h in "${group_names[@]}"; do pw=$((pw + user_width + 1 + ${#h})); done
-    pw=$((pw + 2 * (n - 1)))
+    pw=$(_hi_group_preview_width "${group_names[@]}")
     pad_preview=$((w_preview - pw))
 
     total_lines=${#item_lines[@]}

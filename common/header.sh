@@ -83,7 +83,8 @@ function identity() {
     containers="Containers: ${#lines[@]}"
   fi
   if command -v nomad &>/dev/null; then
-    mapfile -t lines < <(nomad job status 2>/dev/null | tail -n +2)
+    mapfile -t lines < <(nomad job status 2>/dev/null)
+    lines=("${lines[@]:1}") # drop the header row
     jobs="Jobs: ${#lines[@]}"
   fi
   [ -f "$_HI_SSH_AUTHORIZED_KEYS" ] && mapfile -t lines <"$_HI_SSH_AUTHORIZED_KEYS" && authorized=${#lines[@]}

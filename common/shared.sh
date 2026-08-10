@@ -25,11 +25,6 @@ export BRBLUE='\e[1;34m'
 export BRPURPLE='\e[1;35m'
 export BRCYAN='\e[1;36m'
 
-# --apparent-size is a GNU-only flag
-_HI_LINUX_FLAGS=""
-du --version 2>/dev/null | grep -q "GNU coreutils" && _HI_LINUX_FLAGS="--apparent-size"
-export _HI_LINUX_FLAGS
-
 # _hi_cecho <text> [color] [no_newline]
 function _hi_cecho() {
   local out="${2:-}${1:-}$NC"
@@ -54,12 +49,18 @@ function _hi_now() {
 }
 
 function _hi_elapsed() {
-  echo "$1 $2" | awk '{ printf "%.3f", $2 - $1 }'
+  awk -v a="$1" -v b="$2" 'BEGIN { printf "%.3f", b - a }'
 }
 
 # du -sh on $_HI_ROOT with the size column pulled out; "$@" are any extra du
-# args (e.g. hi.sh's --exclude list, applied before the copy happens)
+# args (e.g. hi.sh's --exclude list, applied before the copy happens).
+# --apparent-size is a GNU-only flag, probed lazily (and cached) on first use
+# so plain local shell startups that never call this pay nothing for it.
 function _hi_du_size() {
+  if [ -z "${_HI_LINUX_FLAGS+x}" ]; then
+    _HI_LINUX_FLAGS=""
+    du --version 2>/dev/null | grep -q "GNU coreutils" && _HI_LINUX_FLAGS="--apparent-size"
+  fi
   # shellcheck disable=SC2086 # unquoted so an empty flag list disappears
   du -sh "$@" $_HI_LINUX_FLAGS "$_HI_ROOT" | awk '{ print $1 }'
 }
@@ -74,12 +75,12 @@ function _hi_hostname() {
 function _hi_interactive_extras() {
   [ -x /usr/bin/lesspipe ] && eval "$(SHELL=/bin/sh lesspipe)"
   # shellcheck disable=SC2034 # read by shells/bash.sh and shells/zsh.zsh's PS1
-  [ -r /etc/debian_chroot ] && debian_chroot="($(cat /etc/debian_chroot)) "
+  [ -r /etc/debian_chroot ] && debian_chroot="($(</etc/debian_chroot)) "
 }
 
 function _hi_sanitize() {
-  # shellcheck disable=SC1003
-  printf '%s' "$1" | tr -d '[:cntrl:]\\'
+  local out="${1//[[:cntrl:]]/}"
+  printf '%s' "${out//\\/}"
 }
 
 # zsh's `trap ... EXIT` doesn't fire the way bash's does; it has TRAPEXIT instead

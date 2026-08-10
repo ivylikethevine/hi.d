@@ -20,14 +20,15 @@ _HI_NO=(hide "$BRYELLOW" "$YELLOW" hide hide "$BRRED")
 # highest priority (or the first package if none are installed), then apply the
 # proper color and mark it as installed or missing (or hide it as per above)
 function check_line() {
-  local pair cmd priority color best="" best_priority=-1 best_idx=0 idx=0 found=0 symbol rendered
+  local pair cmd priority color best best_priority best_idx=0 idx=0 found=0 symbol rendered
   local -a pairs
   IFS=',' read -ra pairs <<<"$1"
+  best="${pairs[0]%:*}"
+  best_priority="${pairs[0]#*:}"
 
   for pair in "${pairs[@]}"; do
     cmd="${pair%:*}"
     priority="${pair#*:}"
-    [ -z "$best" ] && best="$cmd" && best_priority="$priority" && best_idx=$idx
     if command -v "$cmd" &>/dev/null && ((found == 0 || priority > best_priority)); then
       best="$cmd"
       best_priority="$priority"

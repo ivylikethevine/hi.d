@@ -29,7 +29,7 @@ function _hi_cleanup() {
   done
   rm -rf "$_HI_WORKDIR"
 }
-trap _hi_cleanup EXIT
+_hi_on_exit _hi_cleanup
 _hi_h1 "Testing hi's ssh path across remote login shells"
 _hi_h2 "generating throwaway ed25519 keypair at $_HI_WORKDIR/id"
 ssh-keygen -t ed25519 -N '' -q -f "$_HI_WORKDIR/id"
@@ -53,20 +53,6 @@ RUN chmod +x /entrypoint.sh
 ENTRYPOINT ["/entrypoint.sh"]
 EOF
 
-cat >"$_HI_WORKDIR/debian/entrypoint.sh" <<'EOF'
-#!/bin/bash
-set -e
-usermod -s "${LOGIN_SHELL:-/bin/bash}" hitest
-echo "hitest:*" | chpasswd -e # useradd -m locks the account; sshd refuses locked accounts outright, even for pubkey auth
-chown hitest:hitest /home/hitest
-install -d -m 700 -o hitest -g hitest /home/hitest/.ssh
-printf '%s\n' "$PUBKEY" >/home/hitest/.ssh/authorized_keys
-chown hitest:hitest /home/hitest/.ssh/authorized_keys
-chmod 600 /home/hitest/.ssh/authorized_keys
-ssh-keygen -A >/dev/null
-exec /usr/sbin/sshd -D -e -o PasswordAuthentication=no -o PermitRootLogin=no -o UsePAM=no
-EOF
-
 cat >"$_HI_WORKDIR/alpine/Dockerfile" <<'EOF'
 FROM alpine:3.20
 RUN apk add --no-cache openssh openssl \
@@ -76,10 +62,11 @@ RUN chmod +x /entrypoint.sh
 ENTRYPOINT ["/entrypoint.sh"]
 EOF
 
-cat >"$_HI_WORKDIR/alpine/entrypoint.sh" <<'EOF'
-#!/bin/sh
-set -e
-echo "hitest:*" | chpasswd -e # adduser -D locks the account; sshd refuses locked accounts outright, even for pubkey auth
+# both entrypoints do the same setup past the shebang/login-shell line -
+# useradd/adduser -D both lock the account, and sshd refuses locked accounts
+# outright even for pubkey auth, so both need the chpasswd unlock below
+_HI_ENTRYPOINT_BODY="$(cat <<'EOF'
+echo "hitest:*" | chpasswd -e
 chown hitest:hitest /home/hitest
 install -d -m 700 -o hitest -g hitest /home/hitest/.ssh
 printf '%s\n' "$PUBKEY" >/home/hitest/.ssh/authorized_keys
@@ -88,6 +75,18 @@ chmod 600 /home/hitest/.ssh/authorized_keys
 ssh-keygen -A >/dev/null
 exec /usr/sbin/sshd -D -e -o PasswordAuthentication=no -o PermitRootLogin=no -o UsePAM=no
 EOF
+)"
+
+{
+  # shellcheck disable=SC2016 # this is entrypoint.sh content, resolved on the container
+  printf '#!/bin/bash\nset -e\nusermod -s "${LOGIN_SHELL:-/bin/bash}" hitest\n'
+  printf '%s\n' "$_HI_ENTRYPOINT_BODY"
+} >"$_HI_WORKDIR/debian/entrypoint.sh"
+
+{
+  printf '#!/bin/sh\nset -e\n'
+  printf '%s\n' "$_HI_ENTRYPOINT_BODY"
+} >"$_HI_WORKDIR/alpine/entrypoint.sh"
 
 _hi_h2 "Building test images"
 _HI_DEBIAN_OK=1

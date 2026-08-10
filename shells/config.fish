@@ -16,20 +16,6 @@ function fish_greeting
   set -q fish_greeting; or bash -c "source $_HI_HEADER; hi_header Online"
 end
 
-alias hi_install="[ -f $_HI_INSTALL ] && $_HI_INSTALL"
-alias hi_uninstall="[ -f $_HI_UNINSTALL ] && $_HI_UNINSTALL"
-alias hi_configure="[ -f $_HI_INSTALL ] && $_HI_INSTALL --features-only"
-alias hi_check_configs="[ -f $_HI_INSTALL ] && $_HI_INSTALL --check-configs"
-alias hi_update="git -C $_HI_ROOT pull"
-alias hi_status="git -C $_HI_ROOT status"
-alias hi_info="echo ' | hi_home: $_HI_HOME | hi_root: $_HI_ROOT | script: $_HI_LAUNCHER'"
-alias hi_color_preview="[ -f $_HI_COLOR_PREVIEW ] && $_HI_COLOR_PREVIEW"
-alias hi_check_packages="sh -c 'source \"$_HI_CHECK\" && full_check'"
-alias hi_test_aliases="[ -f $_HI_TEST_ALIASES ] && $_HI_TEST_ALIASES"
-alias hi_test_ssh="[ -f $_HI_TEST_SSH ] && $_HI_TEST_SSH"
-alias hi_test_shellcheck="[ -f $_HI_TEST_SHELLCHECK ] && $_HI_TEST_SHELLCHECK"
-alias hi_test_all="hi_test_aliases && hi_test_ssh && hi_test_shellcheck"
-
 set -l hi_colors (bash -c "source $_HI_SHARED; _hi_user_color; _hi_host_color")
 set -gx fish_color_user $hi_colors[1]
 set -gx fish_color_host $hi_colors[2]

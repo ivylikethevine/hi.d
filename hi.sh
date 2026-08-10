@@ -59,6 +59,7 @@ EOF
 
 function _hi_fallback_rc() {
   cat <<EOF
+. \$_HI_ROOT/common/paths.sh 2>/dev/null
 . \$_HI_ROOT/shells/aliases.sh 2>/dev/null
 ${CMDARG:-}
 EOF

@@ -3,6 +3,7 @@
 # must stay to plain `export NAME=value` lines (plus simple `[ ] && export`
 # guards) - no functions, no ${var:-...}.
 # $_HI_HOME must already be set (common/bootstrap.sh does that for bash/zsh).
+# shellcheck disable=SC2139 # aliases are meant to expand $_HI_* now, not later
 
 # hi.d itself
 export _HI_ROOT="$_HI_HOME/hi.d"
@@ -38,6 +39,25 @@ export _HI_HOME_BASHRC="$HOME/.bashrc"
 export _HI_HOME_ZSHRC="$HOME/.zshrc"
 export _HI_HOME_FISH_DIR="$HOME/.config/fish" # absent unless fish is installed
 export _HI_HOME_FISH_CONFIG="$HOME/.config/fish/config.fish"
+
+export _HI_HUMAN_CENTRIC_DATE="+%a %b %-e %Y %H:%M:%S %Z"
+export _HI_HUMAN_SHORT_DATE="+%b %-e %y %H:%M %Z"
+
+# required helpers/commands
+alias hi_install="[ -f $_HI_INSTALL ] && $_HI_INSTALL"
+alias hi_uninstall="[ -f $_HI_UNINSTALL ] && $_HI_UNINSTALL"
+alias hi_configure="[ -f $_HI_INSTALL ] && $_HI_INSTALL --features-only"
+alias hi_reconfigure="hi_configure"
+alias hi_check_configs="[ -f $_HI_INSTALL ] && $_HI_INSTALL --check-configs"
+alias hi_update="git -C $_HI_ROOT pull"
+alias hi_status="git -C $_HI_ROOT status"
+alias hi_info="echo ' | hi_home: $_HI_HOME | hi_root: $_HI_ROOT | script: $_HI_LAUNCHER'"
+alias hi_color_preview="[ -f $_HI_COLOR_PREVIEW ] && $_HI_COLOR_PREVIEW"
+alias hi_packages_preview="sh -c 'source \"$_HI_CHECK\" && full_check'"
+alias hi_test_aliases="[ -f $_HI_TEST_ALIASES ] && $_HI_TEST_ALIASES"
+alias hi_test_ssh="[ -f $_HI_TEST_SSH ] && $_HI_TEST_SSH"
+alias hi_test_shellcheck="[ -f $_HI_TEST_SHELLCHECK ] && $_HI_TEST_SHELLCHECK"
+alias hi_test_all="hi_test_aliases && hi_test_ssh && hi_test_shellcheck"
 
 # android dev on linux; `|| true` since paths.sh is sourced under callers'
 # `set -e` (bootstrap.sh et al) and a false test here would otherwise abort them

@@ -11,10 +11,16 @@
 # picked when they're what's available, not just the sh tier (the plain
 # bash-less alpine image below only ever exercises sh, since it has neither
 # zsh nor fish installed).
+# The debian image itself comes from test_lib.sh's _hi_sshd_image, shared with
+# ssh_disconnect_test.sh so a full run builds it once rather than twice.
 # Everything is ephemeral and bound to 127.0.0.1 only; nothing touches the
 # user's real ~/.ssh/config or ~/.ssh/known_hosts. Skips cleanly if docker
 # isn't installed/running. Needs network access the first time it runs, to
 # build the test images (cached by docker afterwards).
+#
+# Nearly every function below is invoked indirectly - by name, through
+# _hi_case's/_hi_poll_bool's "$@", or as a trap hook - which SC2329 can't see.
+# shellcheck disable=SC2329
 set -euo pipefail
 
 # shellcheck source=../../common/bootstrap.sh
@@ -22,135 +28,63 @@ source "${_HI_HOME:-$HOME}/hi.d/common/bootstrap.sh"
 # shellcheck source=../test_lib.sh
 source "$_HI_TEST_LIB"
 
-command -v docker >/dev/null 2>&1 || { _hi_cecho "docker not installed, skipping" "$YELLOW"; exit 0; }
-docker info >/dev/null 2>&1 || { _hi_cecho "docker daemon not reachable, skipping" "$YELLOW"; exit 0; }
+_hi_require_backend docker "not installed"
 
-_HI_WORKDIR="$(mktemp -d -t hi.sshtest.XXXXXX)"
-declare -a _HI_STARTED=()
-
-# shellcheck disable=SC2329 # trap function is never invoked directly
-function _hi_cleanup() {
-  local c
-  for c in "${_HI_STARTED[@]:-}"; do
-    [ -n "$c" ] && docker stop -t 0 "$c" >/dev/null 2>&1 || true
-  done
-  rm -rf "$_HI_WORKDIR"
-}
-_hi_on_exit _hi_cleanup
+_hi_workdir sshtest
 _hi_h1 "Testing hi's ssh path across remote login shells"
-_hi_h2 "generating throwaway ed25519 keypair at $_HI_WORKDIR/id"
-ssh-keygen -t ed25519 -N '' -q -f "$_HI_WORKDIR/id"
-_HI_PUBKEY="$(cat "$_HI_WORKDIR/id.pub")"
+_hi_ssh_keypair
 
 # --- build the throwaway sshd images -----------------------------------
-# one debian image covers every shell that also has bash installed (bash's
-# presence, not the login shell, is what _say_hi branches on); the alpine
-# images exercise its no-bash fallback path - plain alpine has neither zsh nor
-# fish, so it only ever reaches the fallback's sh tier; alpine-zsh/alpine-fish
-# each add exactly one of those, to reach the tiers ahead of it in the probe.
-mkdir -p "$_HI_WORKDIR/debian" "$_HI_WORKDIR/alpine" "$_HI_WORKDIR/alpine-zsh" "$_HI_WORKDIR/alpine-fish"
-
-cat >"$_HI_WORKDIR/debian/Dockerfile" <<'EOF'
-FROM debian:bookworm-slim
-RUN apt-get update && apt-get install -y --no-install-recommends \
-      openssh-server openssl bash dash zsh fish \
-    && rm -rf /var/lib/apt/lists/* \
-    && mkdir -p /run/sshd \
-    && useradd -m -s /bin/bash hitest
-COPY entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
-ENTRYPOINT ["/entrypoint.sh"]
-EOF
-
-cat >"$_HI_WORKDIR/alpine/Dockerfile" <<'EOF'
-FROM alpine:3.20
-RUN apk add --no-cache openssh openssl \
-    && adduser -D -s /bin/ash hitest
-COPY entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
-ENTRYPOINT ["/entrypoint.sh"]
-EOF
-
-cat >"$_HI_WORKDIR/alpine-zsh/Dockerfile" <<'EOF'
-FROM alpine:3.20
-RUN apk add --no-cache openssh openssl zsh \
-    && adduser -D -s /bin/ash hitest
-COPY entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
-ENTRYPOINT ["/entrypoint.sh"]
-EOF
-
-cat >"$_HI_WORKDIR/alpine-fish/Dockerfile" <<'EOF'
-FROM alpine:3.20
-RUN apk add --no-cache openssh openssl fish \
-    && adduser -D -s /bin/ash hitest
-COPY entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
-ENTRYPOINT ["/entrypoint.sh"]
-EOF
-
-# both entrypoints do the same setup past the shebang/login-shell line -
-# useradd/adduser -D both lock the account, and sshd refuses locked accounts
-# outright even for pubkey auth, so both need the chpasswd unlock below
-_HI_ENTRYPOINT_BODY="$(cat <<'EOF'
-echo "hitest:*" | chpasswd -e
-chown hitest:hitest /home/hitest
-install -d -m 700 -o hitest -g hitest /home/hitest/.ssh
-printf '%s\n' "$PUBKEY" >/home/hitest/.ssh/authorized_keys
-chown hitest:hitest /home/hitest/.ssh/authorized_keys
-chmod 600 /home/hitest/.ssh/authorized_keys
-ssh-keygen -A >/dev/null
-exec /usr/sbin/sshd -D -e -o PasswordAuthentication=no -o PermitRootLogin=no -o UsePAM=no
-EOF
-)"
-
-{
-  # shellcheck disable=SC2016 # this is entrypoint.sh content, resolved on the container
-  printf '#!/bin/bash\nset -e\nusermod -s "${LOGIN_SHELL:-/bin/bash}" hitest\n'
-  printf '%s\n' "$_HI_ENTRYPOINT_BODY"
-} >"$_HI_WORKDIR/debian/entrypoint.sh"
-
-{
-  printf '#!/bin/sh\nset -e\n'
-  printf '%s\n' "$_HI_ENTRYPOINT_BODY"
-} >"$_HI_WORKDIR/alpine/entrypoint.sh"
-
-# identical setup to plain alpine, just with zsh/fish added to the image -
-# reuse the same entrypoint.sh content rather than rebuilding it
-cp "$_HI_WORKDIR/alpine/entrypoint.sh" "$_HI_WORKDIR/alpine-zsh/entrypoint.sh"
-cp "$_HI_WORKDIR/alpine/entrypoint.sh" "$_HI_WORKDIR/alpine-fish/entrypoint.sh"
-
+# the shared debian image covers every shell that also has bash installed
+# (bash's presence, not the login shell, is what _say_hi branches on); the
+# alpine images exercise its no-bash fallback path - plain alpine has neither
+# zsh nor fish, so it only ever reaches the fallback's sh tier; alpine-zsh/
+# alpine-fish each add exactly one of those, to reach the tiers ahead of it in
+# the probe.
 _hi_h2 "Building test images"
 _HI_DEBIAN_OK=1
-_HI_ALPINE_OK=1
-_HI_ALPINE_ZSH_OK=1
-_HI_ALPINE_FISH_OK=1
-_hi_h3 "Building hi-sshtest-debian from $_HI_WORKDIR/debian"
-docker build -q -t hi-sshtest-debian "$_HI_WORKDIR/debian" >/dev/null 2>"$_HI_WORKDIR/debian.log" || _HI_DEBIAN_OK=0
-_hi_h3 "Building hi-sshtest-alpine from $_HI_WORKDIR/alpine"
-docker build -q -t hi-sshtest-alpine "$_HI_WORKDIR/alpine" >/dev/null 2>"$_HI_WORKDIR/alpine.log" || _HI_ALPINE_OK=0
-_hi_h3 "Building hi-sshtest-alpine-zsh from $_HI_WORKDIR/alpine-zsh"
-docker build -q -t hi-sshtest-alpine-zsh "$_HI_WORKDIR/alpine-zsh" >/dev/null 2>"$_HI_WORKDIR/alpine-zsh.log" || _HI_ALPINE_ZSH_OK=0
-_hi_h3 "Building hi-sshtest-alpine-fish from $_HI_WORKDIR/alpine-fish"
-docker build -q -t hi-sshtest-alpine-fish "$_HI_WORKDIR/alpine-fish" >/dev/null 2>"$_HI_WORKDIR/alpine-fish.log" || _HI_ALPINE_FISH_OK=0
+_hi_sshd_image || _HI_DEBIAN_OK=0
+[ "$_HI_DEBIAN_OK" -eq 1 ] || _hi_cecho " | Debian image failed to build, skipping its shells (see $_HI_WORKDIR/sshd.log)" "$YELLOW"
 
-[ "$_HI_DEBIAN_OK" -eq 1 ] || _hi_cecho " | Debian image failed to build, skipping its shells (see $_HI_WORKDIR/debian.log)" "$YELLOW"
-[ "$_HI_ALPINE_OK" -eq 1 ] || _hi_cecho " | Alpine image failed to build, skipping the no-bash case (see $_HI_WORKDIR/alpine.log)" "$YELLOW"
-[ "$_HI_ALPINE_ZSH_OK" -eq 1 ] || _hi_cecho " | Alpine-zsh image failed to build, skipping the ssh zsh-fallback case (see $_HI_WORKDIR/alpine-zsh.log)" "$YELLOW"
-[ "$_HI_ALPINE_FISH_OK" -eq 1 ] || _hi_cecho " | Alpine-fish image failed to build, skipping the ssh fish-fallback case (see $_HI_WORKDIR/alpine-fish.log)" "$YELLOW"
+# label:extra apk package - one image per no-bash tier of the fallback probe,
+# all three sharing one Dockerfile/entrypoint shape rather than four
+# hand-unrolled near-copies
+declare -A _HI_ALPINE_OK=()
+for _hi_img in alpine: alpine-zsh:zsh alpine-fish:fish; do
+  _hi_label="${_hi_img%%:*}"
+  _hi_ctx="$_HI_WORKDIR/$_hi_label"
+  mkdir -p "$_hi_ctx"
+  printf 'FROM alpine:3.20\nRUN apk add --no-cache openssh openssl %s \\\n    && adduser -D -s /bin/ash hitest\nCOPY entrypoint.sh /entrypoint.sh\nRUN chmod +x /entrypoint.sh\nENTRYPOINT ["/entrypoint.sh"]\n' "${_hi_img#*:}" >"$_hi_ctx/Dockerfile"
+  # alpine has no usermod (that's shadow, not busybox), so unlike the debian
+  # entrypoint this one can't honour $LOGIN_SHELL - these images only ever run
+  # with the ash login shell adduser gave them, which is all the no-bash
+  # fallback cases need
+  {
+    printf '#!/bin/sh\nset -e\n'
+    printf '%s\n' "$_HI_SSHD_ENTRYPOINT_BODY"
+  } >"$_hi_ctx/entrypoint.sh"
 
-# a third image, layered on the debian one, with a real checkout of this repo
-# already sitting at ~/hi.d - i.e. what a host looks like after
+  _hi_h3 "Building hi-sshtest-$_hi_label from $_hi_ctx"
+  if docker build -q -t "hi-sshtest-$_hi_label" "$_hi_ctx" >/dev/null 2>"$_HI_WORKDIR/$_hi_label.log"; then
+    _HI_ALPINE_OK[$_hi_label]=1
+  else
+    _HI_ALPINE_OK[$_hi_label]=0
+    _hi_cecho " | ${_hi_label} image failed to build, skipping its fallback case (see $_HI_WORKDIR/$_hi_label.log)" "$YELLOW"
+  fi
+done
+
+# one more image, layered on the shared debian one, with a real checkout of
+# this repo already sitting at ~/hi.d - i.e. what a host looks like after
 # scripts/install.sh has run there. The build context is $_HI_ROOT itself
 # (this checkout), so it's an exact copy, uncommitted changes included.
 _HI_INSTALLED_OK=$_HI_DEBIAN_OK
 if [ "$_HI_DEBIAN_OK" -eq 1 ]; then
   mkdir -p "$_HI_WORKDIR/debian-installed"
-  cat >"$_HI_WORKDIR/debian-installed/Dockerfile" <<'EOF'
-FROM hi-sshtest-debian
+  cat >"$_HI_WORKDIR/debian-installed/Dockerfile" <<EOF
+FROM $_HI_SSHD_IMAGE
 COPY --chown=hitest:hitest . /home/hitest/hi.d
-RUN chmod +x /home/hitest/hi.d/hi.sh \
-    && touch /home/hitest/hi.d/.installed_sentinel \
+RUN chmod +x /home/hitest/hi.d/hi.sh \\
+    && touch /home/hitest/hi.d/.installed_sentinel \\
     && chown hitest:hitest /home/hitest/hi.d/.installed_sentinel
 EOF
   _hi_cecho " | Building hi-sshtest-debian-installed from $_HI_ROOT"
@@ -162,29 +96,6 @@ fi
 
 # --- the actual per-shell test -----------------------------------------
 _HI_MARKER="HI_SSH_TEST_OK"
-# with bash on the target, _say_hi's bootloader hands off straight to
-# `bash --rcfile hi.bashrc` without sourcing aliases.sh itself (that only
-# happens once an interactive `load` grafts hi's config onto the target's
-# own rc files) - so this asserts the copy landed *and* sources it directly
-# shellcheck disable=2016 # this expands later
-_HI_CMD_BASH='test -f "$_HI_ROOT/hi.sh" && source "$_HI_ALIASES" && alias hi_info >/dev/null 2>&1 && echo '"$_HI_MARKER"
-# the no-bash fallback rc already sources aliases.sh before running our
-# command, so this only needs to assert the copy landed and the alias took
-# shellcheck disable=2016 # this expands later
-_HI_CMD_FALLBACK='test -f "$_HI_ROOT/hi.sh" && alias hi_info >/dev/null 2>&1 && echo '"$_HI_MARKER"
-# fish aliases are functions, and its `alias name` (no value) is a syntax
-# error rather than an existence check (unlike zsh/sh above) - same assertion
-# as _HI_CMD_FALLBACK, in fish's own dialect. paths.sh IS sourced by the ssh
-# fallback rc (see hi.sh's _hi_fallback_rc), unlike the docker/podman
-# container fallback which only sources aliases.sh - so hi_info is in scope
-# here the same way it is for _HI_CMD_FALLBACK
-# shellcheck disable=2016 # this expands later
-_HI_CMD_FALLBACK_FISH='test -f "$_HI_ROOT/hi.sh"; and functions -q hi_info; and echo '"$_HI_MARKER"
-# the target already has a permanent hi.d - this asserts _say_hi pointed
-# straight at it ($_HI_ROOT = ~/hi.d, never a mktemp'd copy) instead of
-# shipping a fresh tree over
-# shellcheck disable=2016 # this expands later
-_HI_CMD_INSTALLED='test "$_HI_ROOT" = "$HOME/hi.d" && source "$_HI_ALIASES" && alias hi_info >/dev/null 2>&1 && echo '"$_HI_MARKER"
 
 # _say_hi's bash branch only sources hi.bashrc if bash *is* interactive,
 # which it only is if ssh actually allocated a remote pty. A lone `ssh -t`
@@ -195,19 +106,8 @@ _HI_CMD_INSTALLED='test "$_HI_ROOT" = "$HOME/hi.d" && source "$_HI_ALIASES" && a
 # an interactive terminal.
 _hi_pty_wrap 0 auto "no tty and no python3 to fake one - ssh -t may not get a real pty, results may be unreliable"
 
-_HI_FAILED=0
-_HI_TOTAL=0
+_hi_suite_begin
 
-# polls until the container's sshd actually completes a handshake, so the
-# real test isn't racing the container's boot
-# shellcheck disable=SC2329 # invoked indirectly, via _hi_poll_bool's "$@"
-function _hi_ssh_reachable() {
-  ssh -i "$2" -p "$1" -o BatchMode=yes -o StrictHostKeyChecking=no \
-    -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o ConnectTimeout=2 \
-    hitest@127.0.0.1 true
-}
-
-# shellcheck disable=SC2329 # invoked indirectly, via _hi_case's "$@"
 function _hi_run_case() {
   local label="$1" image="$2" login_shell="$3" cmd="$4" post="${5:-}" name port out exit_code=0 t0 t1 ok=1
 
@@ -220,25 +120,24 @@ function _hi_run_case() {
     _hi_cecho " | Failed to start container" "$RED"
     return 1
   fi
-  _HI_STARTED+=("$name")
+  _hi_track_container "$name"
   _hi_cecho " | Container: $name (login shell: $login_shell)"
 
   port="$(docker port "$name" 22/tcp | head -1 | sed 's/.*://')"
   _hi_cecho " | Waiting for sshd on 127.0.0.1:$port"
-  if ! _hi_poll_bool 40 0.25 _hi_ssh_reachable "$port" "$_HI_WORKDIR/id"; then
-    _hi_cecho " |  Sshd never came up" "$RED"
+  if ! _hi_poll_bool 40 0.25 _hi_ssh_reachable "$port"; then
+    _hi_cecho " | Sshd never came up" "$RED"
     return 1
   fi
 
   _hi_cecho " | Running: $_HI_LAUNCHER -p $port hitest@127.0.0.1 $cmd"
-  out="$("${_HI_PTY_WRAP[@]}" "$_HI_LAUNCHER" -p "$port" -i "$_HI_WORKDIR/id" -o StrictHostKeyChecking=no \
-    -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o IdentitiesOnly=yes \
+  out="$("${_HI_PTY_WRAP[@]}" "$_HI_LAUNCHER" -p "$port" -i "$_HI_WORKDIR/id" "${_HI_SSH_OPTS[@]}" \
     -o ConnectTimeout=5 hitest@127.0.0.1 "$cmd" 2>&1)" || exit_code=$?
   t1="$(_hi_now)"
 
   if printf '%s' "$out" | grep -q "$_HI_MARKER"; then
     if [ -n "$post" ] && ! docker exec "$name" sh -c "$post" >/dev/null 2>&1; then
-      _hi_h3 " |  [$label] -- post-check FAILED: $post ($(_hi_elapsed "$t0" "$t1")s)"
+      _hi_h3 " | [$label] -- post-check FAILED: $post ($(_hi_elapsed "$t0" "$t1")s)"
       ok=0
     else
       _hi_cecho " | [$label] -- ssh path OK ($(_hi_elapsed "$t0" "$t1")s)" "$GREEN"
@@ -249,39 +148,36 @@ function _hi_run_case() {
     ok=0
   fi
 
-  docker stop -t 0 "$name" >/dev/null 2>&1
+  docker rm -f "$name" >/dev/null 2>&1
   [ "$ok" -eq 1 ]
 }
 
-
 if [ "$_HI_DEBIAN_OK" -eq 1 ]; then
   for _hi_pair in bash:/bin/bash dash:/bin/dash zsh:/usr/bin/zsh fish:/usr/bin/fish; do
-    _hi_case _hi_run_case "${_hi_pair%%:*}" hi-sshtest-debian "${_hi_pair#*:}" "$_HI_CMD_BASH"
+    _hi_case _hi_run_case "${_hi_pair%%:*}" "$_HI_SSHD_IMAGE" "${_hi_pair#*:}" "$(_hi_probe_cmd "$_HI_MARKER" bash)"
   done
 fi
 
-if [ "$_HI_ALPINE_OK" -eq 1 ]; then
-  _hi_case _hi_run_case nobash hi-sshtest-alpine /bin/ash "$_HI_CMD_FALLBACK"
-fi
-
-if [ "$_HI_ALPINE_ZSH_OK" -eq 1 ]; then
-  _hi_case _hi_run_case nobash-zsh hi-sshtest-alpine-zsh /bin/ash "$_HI_CMD_FALLBACK"
-fi
-
-if [ "$_HI_ALPINE_FISH_OK" -eq 1 ]; then
-  _hi_case _hi_run_case nobash-fish hi-sshtest-alpine-fish /bin/ash "$_HI_CMD_FALLBACK_FISH"
-fi
+# label:image-suffix:probe shape - the plain and zsh tiers assert through the
+# same posix dialect, fish needs its own
+for _hi_case_spec in nobash:alpine:ssh_fallback nobash-zsh:alpine-zsh:ssh_fallback nobash-fish:alpine-fish:ssh_fallback_fish; do
+  _hi_label="${_hi_case_spec%%:*}"
+  _hi_rest="${_hi_case_spec#*:}"
+  _hi_image="${_hi_rest%%:*}"
+  if [ "${_HI_ALPINE_OK[$_hi_image]}" -eq 1 ]; then
+    _hi_case _hi_run_case "$_hi_label" "hi-sshtest-$_hi_image" /bin/ash "$(_hi_probe_cmd "$_HI_MARKER" "${_hi_rest#*:}")"
+  fi
+done
 
 if [ "$_HI_INSTALLED_OK" -eq 1 ]; then
-  _hi_case _hi_run_case installed hi-sshtest-debian-installed /bin/bash "$_HI_CMD_INSTALLED" \
+  _hi_case _hi_run_case installed hi-sshtest-debian-installed /bin/bash "$(_hi_probe_cmd "$_HI_MARKER" installed)" \
     'test -f /home/hitest/hi.d/.installed_sentinel'
 fi
 
-if [ "$_HI_FAILED" -eq 0 ]; then
-  _hi_h1 "hi's ssh path survived every login shell tested ($_HI_TOTAL cases)"
-else
-  _hi_h1 "hi's ssh path FAILED: $_HI_FAILED/$_HI_TOTAL cases" "$RED"
-fi
+# $_HI_SSHD_IMAGE is deliberately left behind - see test_lib.sh's comment on
+# it; only this suite's own images go
+docker image rm -f hi-sshtest-alpine hi-sshtest-alpine-zsh hi-sshtest-alpine-fish hi-sshtest-debian-installed >/dev/null 2>&1 || true
 
-docker image rm -f hi-sshtest-debian hi-sshtest-alpine hi-sshtest-alpine-zsh hi-sshtest-alpine-fish hi-sshtest-debian-installed
-exit "$_HI_FAILED"
+_hi_suite_end "" \
+  "hi's ssh path survived every login shell tested ($_HI_TOTAL cases)" \
+  "hi's ssh path FAILED: $_HI_FAILED/$_HI_TOTAL cases"

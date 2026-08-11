@@ -23,6 +23,10 @@
 # "alias nano='nano --rcfile ...'" any time nano was aliased above it, which
 # is the default). See the resolve-before-aliasing block at the top of
 # shells/aliases.sh.
+#
+# Nearly every function below is invoked indirectly - by name, through
+# _hi_case's/_hi_poll_bool's "$@", or as a trap hook - which SC2329 can't see.
+# shellcheck disable=SC2329
 set -euo pipefail
 
 # shellcheck source=../../common/bootstrap.sh
@@ -44,13 +48,20 @@ function _hi_fake_bin() {
 # binaries (possibly none); nothing else on PATH is required, since every
 # check below only depends on shell builtins (`.`/source, `[`/test, alias,
 # export, command) plus these fakes.
+#
+# The scenario loops below ask for the same dir over and over (once per
+# candidate set per var, and every set is re-requested for each of the four
+# shells), so an already-built dir is returned as-is rather than rewritten -
+# the name is derived from its contents, so a hit is always the same dir.
 function _hi_fake_path() {
   local dir="$_HI_WORKDIR/$1" bin
   shift
-  mkdir -p "$dir"
-  for bin in "$@"; do
-    _hi_fake_bin "$dir" "$bin"
-  done
+  if [ ! -d "$dir" ]; then
+    mkdir -p "$dir"
+    for bin in "$@"; do
+      _hi_fake_bin "$dir" "$bin"
+    done
+  fi
   printf '%s' "$dir"
 }
 
@@ -153,7 +164,6 @@ EOF
 # runs one scenario (a set of _HI_* env vars) against one shell in a
 # from-scratch environment: only $fakepath, $HOME (empty) and the vars this
 # function passes through survive - nothing from the host shell leaks in.
-# shellcheck disable=SC2329 # invoked indirectly, via _hi_case's "$@"
 function _hi_run_scenario() {
   local shell="$1" fakepath="$2" label="$3"
   shift 3
@@ -205,8 +215,7 @@ function run_fallthrough_tests() {
       expect="$(_hi_expect_winner "$cands" "$installed")"
       # shellcheck disable=SC2086 # $installed is an intentionally unquoted word list
       fakepath="$(_hi_fake_path "fp_${name}_$(echo "$installed" | tr -d ' ')" $installed)"
-      for shell in $_HI_SHELLS; do
-        command -v "$shell" >/dev/null 2>&1 || continue
+      for shell in $_HI_INSTALLED_SHELLS; do
         _hi_case _hi_run_scenario "$shell" "$fakepath" "$name installed=[${installed:-none}] -> want [${expect:-empty}]" \
           _HI_CHECK_VAR="$name" _HI_EXPECT="$([ -n "$expect" ] && printf '%s/%s' "$fakepath" "$expect" || printf '')"
       done
@@ -227,8 +236,7 @@ function run_flag_tests() {
     # shellcheck disable=SC2086 # fixed 5-field combo, splitting is intended
     set -- $combo
     local de="$1" da="$2" want_nano="$3" want_sudo="$4" want_editor="$5"
-    for shell in $_HI_SHELLS; do
-      command -v "$shell" >/dev/null 2>&1 || continue
+    for shell in $_HI_INSTALLED_SHELLS; do
       _HI_DISABLE_EDITORS="$de" _HI_DISABLE_ALIASES="$da" \
         _hi_case _hi_run_scenario "$shell" "$fakepath" \
         "_HI_DISABLE_EDITORS=$de _HI_DISABLE_ALIASES=$da" \
@@ -240,31 +248,32 @@ function run_flag_tests() {
 function run_alias_fallthrough_test() {
   _hi_h1 "Testing aliases.sh fallthrough + flag logic across shells"
 
-  _HI_WORKDIR="$(mktemp -d -t hi.aliasfallthrough.XXXXXX)"
+  _hi_workdir aliasfallthrough
   _HI_FAKEHOME="$_HI_WORKDIR/home"
   mkdir -p "$_HI_FAKEHOME"
-  # shellcheck disable=SC2016 # $_HI_WORKDIR is resolved when the trap fires
-  _hi_on_exit 'rm -rf "$_HI_WORKDIR"'
 
   _hi_write_check_scripts
 
+  # resolved once here rather than re-probed inside the scenario loops, which
+  # ask the same question 64 times over
   local missing=""
+  _HI_INSTALLED_SHELLS=""
   for shell in $_HI_SHELLS; do
-    command -v "$shell" >/dev/null 2>&1 || missing="$missing $shell"
+    if command -v "$shell" >/dev/null 2>&1; then
+      _HI_INSTALLED_SHELLS="$_HI_INSTALLED_SHELLS $shell"
+    else
+      missing="$missing $shell"
+    fi
   done
   [ -n "$missing" ] && _hi_cecho " | not installed, skipped:$missing" "$YELLOW"
 
-  _HI_FAILED=0
-  _HI_TOTAL=0
+  _hi_suite_begin
   run_fallthrough_tests
   run_flag_tests
 
-  if [ "$_HI_FAILED" -eq 0 ]; then
-    _hi_h1 "All fallthrough + flag scenarios passed on every installed shell ($_HI_TOTAL scenarios)"
-  else
-    _hi_h1 "$_HI_FAILED/$_HI_TOTAL fallthrough + flag scenarios FAILED" "$RED"
-  fi
-  exit "$_HI_FAILED"
+  _hi_suite_end "" \
+    "All fallthrough + flag scenarios passed on every installed shell ($_HI_TOTAL scenarios)" \
+    "$_HI_FAILED/$_HI_TOTAL fallthrough + flag scenarios FAILED"
 }
 
 run_alias_fallthrough_test

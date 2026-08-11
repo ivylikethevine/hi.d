@@ -17,24 +17,13 @@ export _HI_INSTALL="$_HI_ROOT/scripts/install.sh"
 export _HI_UNINSTALL="$_HI_ROOT/scripts/uninstall.sh"
 export _HI_COLOR_PREVIEW="$_HI_ROOT/scripts/color_preview.sh"
 
-# tests
+# tests - only the two entry points every session needs: the lib each suite
+# sources, and the runner behind the hi_test alias below. The per-suite paths
+# live in the runner's own ordered table (tests/test_runner.sh), which is
+# their only consumer - no reason to export fifteen more names into every
+# shell hi ever touches.
 export _HI_TEST_LIB="$_HI_ROOT/tests/test_lib.sh"
 export _HI_TEST_RUN="$_HI_ROOT/tests/test_runner.sh"
-export _HI_TEST_ALIASES="$_HI_ROOT/tests/compat/alias_test.sh"
-export _HI_TEST_ALIAS_FALLTHROUGH="$_HI_ROOT/tests/compat/alias_fallthrough_test.sh"
-export _HI_TEST_SSH="$_HI_ROOT/tests/targets/ssh_test.sh"
-export _HI_TEST_SSH_DISCONNECT="$_HI_ROOT/tests/targets/ssh_disconnect_test.sh"
-export _HI_TEST_DOCKER="$_HI_ROOT/tests/targets/docker_test.sh"
-export _HI_TEST_PODMAN="$_HI_ROOT/tests/targets/podman_test.sh"
-export _HI_TEST_NOMAD="$_HI_ROOT/tests/targets/nomad_test.sh"
-export _HI_TEST_KUBE="$_HI_ROOT/tests/targets/kube_test.sh"
-export _HI_TEST_SHELLCHECK="$_HI_ROOT/tests/compat/shellcheck_test.sh"
-export _HI_TEST_INSTALL="$_HI_ROOT/tests/scripts/install_test.sh"
-export _HI_TEST_UNINSTALL="$_HI_ROOT/tests/scripts/uninstall_test.sh"
-export _HI_TEST_CHECK="$_HI_ROOT/tests/compat/check_test.sh"
-export _HI_TEST_HEADER="$_HI_ROOT/tests/compat/header_test.sh"
-export _HI_TEST_SHARED="$_HI_ROOT/tests/compat/shared_test.sh"
-export _HI_TEST_GIT_PROMPT="$_HI_ROOT/tests/compat/git_prompt_test.sh"
 
 # user configurable
 export _HI_COLORS="$_HI_ROOT/misc/colors"

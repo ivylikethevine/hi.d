@@ -12,6 +12,10 @@
 #
 # uninstall.sh's own BASH_SOURCE guard (see its comment right above its main
 # flow) is what makes sourcing it here safe.
+#
+# Nearly every function below is invoked indirectly - by name, through
+# _hi_case's/_hi_poll_bool's "$@", or as a trap hook - which SC2329 can't see.
+# shellcheck disable=SC2329
 set -euo pipefail
 
 # shellcheck source=../../common/bootstrap.sh
@@ -25,25 +29,10 @@ source "$_HI_INSTALL" # for config_shell, used to build the round-trip fixture b
 # shellcheck source=../../scripts/uninstall.sh
 source "$_HI_UNINSTALL"
 
-_HI_WORKDIR="$(mktemp -d -t hi.uninstalltest.XXXXXX)"
-# shellcheck disable=SC2016 # $_HI_WORKDIR is resolved when the trap fires
-_hi_on_exit 'rm -rf "$_HI_WORKDIR"'
-
-# shellcheck disable=SC2329 # invoked indirectly, via _hi_case's "$@"
-function _hi_assert() {
-  local label="$1"
-  shift
-  if "$@"; then
-    _hi_cecho " | $label: OK" "$GREEN"
-  else
-    _hi_cecho " | $label: FAILED" "$RED"
-    return 1
-  fi
-}
+_hi_workdir uninstalltest
 
 # ---- strip_marker -----------------------------------------------------
 
-# shellcheck disable=SC2329 # invoked indirectly, via _hi_case's "$@"
 function test_strip_marker_removes_tagged_lines_only() {
   local target="$_HI_WORKDIR/tagged"
   printf '%s\n' "# a user comment" "alias ll='ls -la'" >"$target"
@@ -55,7 +44,6 @@ function test_strip_marker_removes_tagged_lines_only() {
     ! grep -qF "hi line one" "$target"
 }
 
-# shellcheck disable=SC2329 # invoked indirectly, via _hi_case's "$@"
 function test_strip_marker_noop_when_marker_absent() {
   local target="$_HI_WORKDIR/untagged" before after
   printf '%s\n' "just a normal file" >"$target"
@@ -65,12 +53,10 @@ function test_strip_marker_noop_when_marker_absent() {
   [ "$before" = "$after" ]
 }
 
-# shellcheck disable=SC2329 # invoked indirectly, via _hi_case's "$@"
 function test_strip_marker_safe_on_missing_file() {
   strip_marker test "$_HI_WORKDIR/does-not-exist"
 }
 
-# shellcheck disable=SC2329 # invoked indirectly, via _hi_case's "$@"
 function test_install_uninstall_round_trip() {
   local target="$_HI_WORKDIR/roundtrip" before after
   printf '%s\n' "# pre-existing line" >"$target"
@@ -84,7 +70,6 @@ function test_install_uninstall_round_trip() {
 
 # ---- unlink_hi (skip paths only - the sudo-affecting match is out of scope) --
 
-# shellcheck disable=SC2329 # invoked indirectly, via _hi_case's "$@"
 function test_unlink_hi_skips_when_link_missing() {
   local link="$_HI_WORKDIR/no-such-link"
   (
@@ -93,7 +78,6 @@ function test_unlink_hi_skips_when_link_missing() {
   ) | grep -q "leaving it alone"
 }
 
-# shellcheck disable=SC2329 # invoked indirectly, via _hi_case's "$@"
 function test_unlink_hi_skips_when_link_points_elsewhere() {
   local link="$_HI_WORKDIR/elsewhere-link"
   ln -sfn /bin/true "$link"
@@ -106,25 +90,19 @@ function test_unlink_hi_skips_when_link_points_elsewhere() {
 function run_uninstall_tests() {
   _hi_h1 "Testing scripts/uninstall.sh's reusable logic"
 
-  _HI_FAILED=0
-  _HI_TOTAL=0
+  _hi_suite_begin
 
   _hi_h2 "Testing: strip_marker"
-  _hi_case _hi_assert "Removes only tagged lines" test_strip_marker_removes_tagged_lines_only
-  _hi_case _hi_assert "No-op when marker absent" test_strip_marker_noop_when_marker_absent
-  _hi_case _hi_assert "Safe on a missing file" test_strip_marker_safe_on_missing_file
-  _hi_case _hi_assert "Install+uninstall round-trips" test_install_uninstall_round_trip
+  _hi_check "Removes only tagged lines" test_strip_marker_removes_tagged_lines_only
+  _hi_check "No-op when marker absent" test_strip_marker_noop_when_marker_absent
+  _hi_check "Safe on a missing file" test_strip_marker_safe_on_missing_file
+  _hi_check "Install+uninstall round-trips" test_install_uninstall_round_trip
 
   _hi_h2 "Testing: unlink_hi (skip paths only)"
-  _hi_case _hi_assert "Skips a missing link" test_unlink_hi_skips_when_link_missing
-  _hi_case _hi_assert "Skips a foreign link" test_unlink_hi_skips_when_link_points_elsewhere
+  _hi_check "Skips a missing link" test_unlink_hi_skips_when_link_missing
+  _hi_check "Skips a foreign link" test_unlink_hi_skips_when_link_points_elsewhere
 
-  if [ "$_HI_FAILED" -eq 0 ]; then
-    _hi_h1 "All uninstall.sh logic checks passed ($_HI_TOTAL cases)"
-  else
-    _hi_h1 "$_HI_FAILED/$_HI_TOTAL uninstall.sh logic checks FAILED" "$RED"
-  fi
-  exit "$_HI_FAILED"
+  _hi_suite_end "uninstall.sh logic"
 }
 
 run_uninstall_tests

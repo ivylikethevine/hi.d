@@ -17,25 +17,40 @@ set -euo pipefail
 # shellcheck source=../common/bootstrap.sh
 source "${_HI_HOME:-$HOME}/hi.d/common/bootstrap.sh"
 
-# name:path, in the order they run - fast local checks first, the
-# docker/kind/nomad-backed end-to-end tests after
-_HI_TESTS=(
-  "aliases:$_HI_TEST_ALIASES"
-  "alias_fallthrough:$_HI_TEST_ALIAS_FALLTHROUGH"
-  "shellcheck:$_HI_TEST_SHELLCHECK"
-  "install:$_HI_TEST_INSTALL"
-  "uninstall:$_HI_TEST_UNINSTALL"
-  "check:$_HI_TEST_CHECK"
-  "header:$_HI_TEST_HEADER"
-  "shared:$_HI_TEST_SHARED"
-  "git_prompt:$_HI_TEST_GIT_PROMPT"
-  "ssh:$_HI_TEST_SSH"
-  "ssh_disconnect:$_HI_TEST_SSH_DISCONNECT"
-  "docker:$_HI_TEST_DOCKER"
-  "podman:$_HI_TEST_PODMAN"
-  "nomad:$_HI_TEST_NOMAD"
-  "kube:$_HI_TEST_KUBE"
-)
+# name:path (relative to this directory), in the order they run - fast local
+# checks first, the docker/kind/nomad-backed end-to-end tests after. The names
+# are a public contract: .github/workflows/ci.yml and CLAUDE.md both list the
+# fast ones explicitly.
+#
+# Left alone if the caller already declared it - harness/runner_test.sh drives
+# this script against a table of fixture suites that way, which is the only
+# way to exercise the failure/missing branches below without a real suite
+# having to fail.
+if ! declare -p _HI_TESTS >/dev/null 2>&1; then
+  _HI_TESTS=(
+    "aliases:compat/alias_test.sh"
+    "alias_fallthrough:compat/alias_fallthrough_test.sh"
+    "shellcheck:compat/shellcheck_test.sh"
+    "install:scripts/install_test.sh"
+    "uninstall:scripts/uninstall_test.sh"
+    "check:compat/check_test.sh"
+    "header:compat/header_test.sh"
+    "shared:compat/shared_test.sh"
+    "git_prompt:compat/git_prompt_test.sh"
+    "test_lib:harness/test_lib_test.sh"
+    "test_runner:harness/runner_test.sh"
+    "ssh:targets/ssh_test.sh"
+    "ssh_disconnect:targets/ssh_disconnect_test.sh"
+    "docker:targets/docker_test.sh"
+    "podman:targets/podman_test.sh"
+    "nomad:targets/nomad_test.sh"
+    "kube:targets/kube_test.sh"
+  )
+fi
+
+# where those relative paths resolve from; overridable so runner_test.sh can
+# point a run at a directory of fixture suites instead of the real ones
+_HI_TESTS_DIR="${_HI_TESTS_DIR:-$_HI_ROOT/tests}"
 
 declare -a _HI_SELECTED=()
 if [ "$#" -eq 0 ]; then
@@ -76,7 +91,7 @@ _HI_RUN_T0="$(_hi_now)"
 
 for _hi_t in "${_HI_SELECTED[@]}"; do
   _hi_name="${_hi_t%%:*}"
-  _hi_path="${_hi_t#*:}"
+  _hi_path="$_HI_TESTS_DIR/${_hi_t#*:}"
 
   if [ ! -f "$_hi_path" ]; then
     _hi_cecho " | $_hi_name: script missing ($_hi_path), skipping" "$YELLOW"

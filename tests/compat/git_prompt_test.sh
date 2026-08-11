@@ -11,6 +11,10 @@
 # conflicts regardless of git's merge heuristics (a content append often
 # doesn't). Runs against real throwaway git repos under a scratch dir -
 # nothing outside that dir is ever touched.
+#
+# Nearly every function below is invoked indirectly - by name, through
+# _hi_case's/_hi_poll_bool's "$@", or as a trap hook - which SC2329 can't see.
+# shellcheck disable=SC2329
 set -euo pipefail
 
 # shellcheck source=../../common/bootstrap.sh
@@ -20,44 +24,38 @@ source "$_HI_TEST_LIB"
 # shellcheck source=../../common/git_prompt.sh
 source "$_HI_GIT_PROMPT"
 
-command -v git >/dev/null 2>&1 || { _hi_cecho "git not installed, skipping" "$YELLOW"; exit 0; }
+_hi_require git
 
-_HI_WORKDIR="$(mktemp -d -t hi.gitprompttest.XXXXXX)"
-# shellcheck disable=SC2016 # $_HI_WORKDIR is resolved when the trap fires
-_hi_on_exit 'rm -rf "$_HI_WORKDIR"'
-
-# shellcheck disable=SC2329 # invoked indirectly, via _hi_case's "$@"
-function _hi_assert() {
-  local label="$1"
-  shift
-  if "$@"; then
-    _hi_cecho " | $label: OK" "$GREEN"
-  else
-    _hi_cecho " | $label: FAILED" "$RED"
-    return 1
-  fi
-}
+_hi_workdir gitprompttest
 
 # fresh repo, one commit, always on a branch literally named "main" -
 # forced via symbolic-ref before the first commit, so this doesn't depend on
-# git version/config defaults for the initial branch name
-# shellcheck disable=SC2329 # invoked from the test_* functions below
+# git version/config defaults for the initial branch name.
+#
+# Built exactly once, then copied per case: every case wants the identical
+# starting point, and a plain `cp -r` of the whole tree (.git included) is one
+# process instead of the six git invocations building it from scratch takes.
+# Each case still gets its own private directory, so nothing leaks between
+# them - only the setup cost is shared.
 function _hi_git_new_repo() {
-  local dir
+  local dir template="$_HI_WORKDIR/template"
+  if [ ! -d "$template" ]; then
+    mkdir -p "$template"
+    git -C "$template" init -q
+    git -C "$template" symbolic-ref HEAD refs/heads/main
+    git -C "$template" config user.email test@example.com
+    git -C "$template" config user.name "Test"
+    printf 'one\n' >"$template/file.txt"
+    git -C "$template" add file.txt
+    git -C "$template" commit -q -m initial
+  fi
   dir="$(mktemp -d "$_HI_WORKDIR/repo.XXXXXX")"
-  git -C "$dir" init -q
-  git -C "$dir" symbolic-ref HEAD refs/heads/main
-  git -C "$dir" config user.email test@example.com
-  git -C "$dir" config user.name "Test"
-  printf 'one\n' >"$dir/file.txt"
-  git -C "$dir" add file.txt
-  git -C "$dir" commit -q -m initial
+  cp -r "$template/." "$dir/"
   printf '%s' "$dir"
 }
 
 # ---- no repo / disabled -----------------------------------------------
 
-# shellcheck disable=SC2329 # invoked indirectly, via _hi_case's "$@"
 function test_outside_a_repo_produces_no_output() {
   local dir out
   dir="$(mktemp -d "$_HI_WORKDIR/plain.XXXXXX")"
@@ -65,7 +63,6 @@ function test_outside_a_repo_produces_no_output() {
   [ -z "$out" ]
 }
 
-# shellcheck disable=SC2329 # invoked indirectly, via _hi_case's "$@"
 function test_disabled_flag_produces_no_output() {
   local dir out
   dir="$(_hi_git_new_repo)"
@@ -75,7 +72,6 @@ function test_disabled_flag_produces_no_output() {
 
 # ---- clean status -------------------------------------------------------
 
-# shellcheck disable=SC2329 # invoked indirectly, via _hi_case's "$@"
 function test_clean_repo_shows_branch_and_checkmark() {
   local dir out expected
   dir="$(_hi_git_new_repo)"
@@ -86,7 +82,6 @@ function test_clean_repo_shows_branch_and_checkmark() {
 
 # ---- working tree flags -------------------------------------------------
 
-# shellcheck disable=SC2329 # invoked indirectly, via _hi_case's "$@"
 function test_staged_change_shows_bullet_count() {
   local dir out expected
   dir="$(_hi_git_new_repo)"
@@ -97,7 +92,6 @@ function test_staged_change_shows_bullet_count() {
   [[ "$out" == *"$expected"* ]]
 }
 
-# shellcheck disable=SC2329 # invoked indirectly, via _hi_case's "$@"
 function test_dirty_change_shows_plus_count() {
   local dir out expected
   dir="$(_hi_git_new_repo)"
@@ -107,7 +101,6 @@ function test_dirty_change_shows_plus_count() {
   [[ "$out" == *"$expected"* ]]
 }
 
-# shellcheck disable=SC2329 # invoked indirectly, via _hi_case's "$@"
 function test_untracked_file_shows_ellipsis_count() {
   local dir out expected
   dir="$(_hi_git_new_repo)"
@@ -117,7 +110,6 @@ function test_untracked_file_shows_ellipsis_count() {
   [[ "$out" == *"$expected"* ]]
 }
 
-# shellcheck disable=SC2329 # invoked indirectly, via _hi_case's "$@"
 function test_merge_conflict_shows_invalid_and_merging() {
   local dir out expected
   dir="$(_hi_git_new_repo)"
@@ -135,7 +127,6 @@ function test_merge_conflict_shows_invalid_and_merging() {
 
 # ---- ahead/behind ---------------------------------------------------------
 
-# shellcheck disable=SC2329 # invoked indirectly, via _hi_case's "$@"
 function test_ahead_and_behind_show_arrows() {
   local dir out
   dir="$(_hi_git_new_repo)"
@@ -155,7 +146,6 @@ function test_ahead_and_behind_show_arrows() {
 
 # ---- detached HEAD ------------------------------------------------------
 
-# shellcheck disable=SC2329 # invoked indirectly, via _hi_case's "$@"
 function test_detached_head_shows_short_sha_and_red() {
   local dir sha out expected_red
   dir="$(_hi_git_new_repo)"
@@ -168,7 +158,6 @@ function test_detached_head_shows_short_sha_and_red() {
 
 # ---- long branch names ----------------------------------------------------
 
-# shellcheck disable=SC2329 # invoked indirectly, via _hi_case's "$@"
 function test_long_branch_name_is_truncated() {
   local dir long_name out
   dir="$(_hi_git_new_repo)"
@@ -180,7 +169,6 @@ function test_long_branch_name_is_truncated() {
 
 # ---- in-progress operations -----------------------------------------------
 
-# shellcheck disable=SC2329 # invoked indirectly, via _hi_case's "$@"
 function test_rebase_apply_backend_shows_state_and_source_branch() {
   local dir out
   dir="$(_hi_git_new_repo)"
@@ -196,7 +184,6 @@ function test_rebase_apply_backend_shows_state_and_source_branch() {
   [[ "$out" == *"REBASE 1/1"* && "$out" == *"rebase-branch"* ]]
 }
 
-# shellcheck disable=SC2329 # invoked indirectly, via _hi_case's "$@"
 function test_rebase_interactive_shows_state() {
   local dir out
   dir="$(_hi_git_new_repo)"
@@ -212,7 +199,6 @@ function test_rebase_interactive_shows_state() {
   [[ "$out" == *"REBASE-i 1/1"* && "$out" == *"interactive-branch"* ]]
 }
 
-# shellcheck disable=SC2329 # invoked indirectly, via _hi_case's "$@"
 function test_cherry_pick_conflict_shows_state() {
   local dir out target_sha
   dir="$(_hi_git_new_repo)"
@@ -228,7 +214,6 @@ function test_cherry_pick_conflict_shows_state() {
   [[ "$out" == *"|CHERRY-PICKING"* ]]
 }
 
-# shellcheck disable=SC2329 # invoked indirectly, via _hi_case's "$@"
 function test_revert_conflict_shows_state() {
   local dir out commit_a
   dir="$(_hi_git_new_repo)"
@@ -242,7 +227,6 @@ function test_revert_conflict_shows_state() {
   [[ "$out" == *"|REVERTING"* ]]
 }
 
-# shellcheck disable=SC2329 # invoked indirectly, via _hi_case's "$@"
 function test_bisect_shows_state() {
   local dir old_sha out
   dir="$(_hi_git_new_repo)"
@@ -259,7 +243,6 @@ function test_bisect_shows_state() {
 
 # ---- stash ----------------------------------------------------------------
 
-# shellcheck disable=SC2329 # invoked indirectly, via _hi_case's "$@"
 function test_stash_shows_flag_count() {
   local dir out expected
   dir="$(_hi_git_new_repo)"
@@ -273,47 +256,41 @@ function test_stash_shows_flag_count() {
 function run_git_prompt_tests() {
   _hi_h1 "Testing common/git_prompt.sh"
 
-  _HI_FAILED=0
-  _HI_TOTAL=0
+  _hi_suite_begin
 
   _hi_h2 "Use-Case: no repo / disabled"
-  _hi_case _hi_assert "Outside a repo -> no output" test_outside_a_repo_produces_no_output
-  _hi_case _hi_assert "_HI_DISABLE_GIT_STATUS=1 -> no output" test_disabled_flag_produces_no_output
+  _hi_check "Outside a repo -> no output" test_outside_a_repo_produces_no_output
+  _hi_check "_HI_DISABLE_GIT_STATUS=1 -> no output" test_disabled_flag_produces_no_output
 
   _hi_h2 "Use-Case: clean status"
-  _hi_case _hi_assert "Shows branch and checkmark" test_clean_repo_shows_branch_and_checkmark
+  _hi_check "Shows branch and checkmark" test_clean_repo_shows_branch_and_checkmark
 
   _hi_h2 "Use-Case: working tree flags"
-  _hi_case _hi_assert "Staged change -> bullet count" test_staged_change_shows_bullet_count
-  _hi_case _hi_assert "Dirty change -> plus count" test_dirty_change_shows_plus_count
-  _hi_case _hi_assert "Untracked file -> ellipsis count" test_untracked_file_shows_ellipsis_count
-  _hi_case _hi_assert "Merge conflict -> invalid count + MERGING" test_merge_conflict_shows_invalid_and_merging
+  _hi_check "Staged change -> bullet count" test_staged_change_shows_bullet_count
+  _hi_check "Dirty change -> plus count" test_dirty_change_shows_plus_count
+  _hi_check "Untracked file -> ellipsis count" test_untracked_file_shows_ellipsis_count
+  _hi_check "Merge conflict -> invalid count + MERGING" test_merge_conflict_shows_invalid_and_merging
 
   _hi_h2 "Use-Case: ahead/behind"
-  _hi_case _hi_assert "Ahead and behind arrows" test_ahead_and_behind_show_arrows
+  _hi_check "Ahead and behind arrows" test_ahead_and_behind_show_arrows
 
   _hi_h2 "Use-Case: detached HEAD"
-  _hi_case _hi_assert "Short sha + red branch color" test_detached_head_shows_short_sha_and_red
+  _hi_check "Short sha + red branch color" test_detached_head_shows_short_sha_and_red
 
   _hi_h2 "Use-Case: long branch names"
-  _hi_case _hi_assert "Truncated at 31 chars + ellipsis" test_long_branch_name_is_truncated
+  _hi_check "Truncated at 31 chars + ellipsis" test_long_branch_name_is_truncated
 
   _hi_h2 "Use-Case: in-progress operations"
-  _hi_case _hi_assert "Rebase (apply backend) + source branch" test_rebase_apply_backend_shows_state_and_source_branch
-  _hi_case _hi_assert "Rebase (interactive)" test_rebase_interactive_shows_state
-  _hi_case _hi_assert "Cherry-pick conflict" test_cherry_pick_conflict_shows_state
-  _hi_case _hi_assert "Revert conflict" test_revert_conflict_shows_state
-  _hi_case _hi_assert "Bisect" test_bisect_shows_state
+  _hi_check "Rebase (apply backend) + source branch" test_rebase_apply_backend_shows_state_and_source_branch
+  _hi_check "Rebase (interactive)" test_rebase_interactive_shows_state
+  _hi_check "Cherry-pick conflict" test_cherry_pick_conflict_shows_state
+  _hi_check "Revert conflict" test_revert_conflict_shows_state
+  _hi_check "Bisect" test_bisect_shows_state
 
   _hi_h2 "Use-Case: stash"
-  _hi_case _hi_assert "Stash -> flag count" test_stash_shows_flag_count
+  _hi_check "Stash -> flag count" test_stash_shows_flag_count
 
-  if [ "$_HI_FAILED" -eq 0 ]; then
-    _hi_h1 "All git_prompt.sh checks passed ($_HI_TOTAL cases)"
-  else
-    _hi_h1 "$_HI_FAILED/$_HI_TOTAL git_prompt.sh checks FAILED" "$RED"
-  fi
-  exit "$_HI_FAILED"
+  _hi_suite_end "git_prompt.sh"
 }
 
 run_git_prompt_tests

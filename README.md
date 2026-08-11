@@ -79,11 +79,13 @@ tests/test_runner.sh aliases shellcheck # just the named suite(s)
 ```
 
 Suite names: `aliases`, `alias_fallthrough`, `shellcheck`, `install`, `uninstall`, `check`, `header`, `shared`,
-`git_prompt` are fast and dependency-free - they're what CI runs on every push/PR. `ssh`, `ssh_disconnect`, `docker`,
-`podman`, `nomad`, `kube` are end-to-end:
+`git_prompt`, `test_lib`, `test_runner` are fast and dependency-free - they're what CI runs on every push/PR (the
+last two are the harness testing itself). `ssh`, `ssh_disconnect`, `docker`, `podman`, `nomad`, `kube` are
+end-to-end:
 they spin up real throwaway containers/clusters/agents and drive `hi.sh`'s actual connection paths against them, so
 they're slower and need the relevant backend installed - each skips cleanly with a warning instead of failing if its
-backend isn't available. Every test script is also directly executable on its own, e.g. `tests/shellcheck_test.sh`.
+backend isn't available. Every test script is also directly executable on its own, e.g.
+`tests/compat/shellcheck_test.sh`.
 
 Any script here needs `_HI_HOME` set before it'll source correctly - point it at the _parent_ of your `hi.d`
 checkout:
@@ -116,22 +118,24 @@ tests/test_runner.sh
 | `scripts/install.sh`                            | configure the local shells, install and update                                                             |
 | `scripts/color_preview.sh`                      | preview what every ssh host/user resolves to (`hi_color_preview`)                                          |
 | `tests/test_runner.sh`                          | unified runner - times and summarizes every test below (or a chosen subset) (`hi_test`)                    |
-| `tests/test_lib.sh`                             | shared pty-fake/poll/wait helpers, plus the docker+podman backend test both of those wrap                  |
-| `tests/alias_test.sh`                           | check `aliases.sh` still loads in dash/bash/zsh/fish                                                       |
-| `tests/alias_fallthrough_test.sh`               | unit tests for `aliases.sh`'s `command -v a \| b \| ...` fallthrough and `_HI_DISABLE_*` flag logic        |
-| `tests/install_test.sh`                         | unit tests for `install.sh`'s marker-based rc rewriting, setting defaults, and config validation           |
-| `tests/uninstall_test.sh`                       | unit tests for `uninstall.sh`'s marker stripping, incl. an install+uninstall round-trip                    |
-| `tests/check_test.sh`                           | unit tests for `check.sh`'s per-priority found/missing/hide logic and packages-file parsing                |
-| `tests/header_test.sh`                          | unit tests for `header.sh`'s row-joining, banner padding/floor math, and the `_HI_DISABLE_HEADER` gate     |
-| `tests/shared_test.sh`                          | unit tests for `shared.sh`'s color-resolution chain (hash/override/hosttag/usertag) and `_hi_sanitize`     |
-| `tests/git_prompt_test.sh`                      | unit tests for `git_prompt.sh`'s status flags, ahead/behind, detached HEAD, and every in-progress state    |
-| `tests/ssh_test.sh`                             | end-to-end test of hi's ssh path across remote login shells                                                |
-| `tests/ssh_disconnect_test.sh`                  | end-to-end test that the target-side cleanup trap fires on an abrupt disconnect, not just a clean exit     |
-| `tests/docker_test.sh`                          | end-to-end test of hi's docker path across container shell environments (thin wrapper, see `test_lib.sh`)  |
-| `tests/podman_test.sh`                          | end-to-end test of hi's podman path across container shell environments (thin wrapper, see `test_lib.sh`)  |
-| `tests/nomad_test.sh`                           | end-to-end test of hi's nomad path against a throwaway `nomad agent -dev`                                  |
-| `tests/kube_test.sh`                            | end-to-end test of hi's kube path against a throwaway `kind` cluster                                       |
-| `tests/shellcheck_test.sh`                      | runs shellcheck over every `*.sh` file in the repo                                                         |
+| `tests/test_lib.sh`                             | the whole suite skeleton: asserts/counters, scratch dir, skip preamble, probe commands, poll/pty helpers   |
+| `tests/compat/alias_test.sh`                    | check `aliases.sh` still loads in dash/bash/zsh/fish                                                       |
+| `tests/compat/alias_fallthrough_test.sh`        | unit tests for `aliases.sh`'s `command -v a \| b \| ...` fallthrough and `_HI_DISABLE_*` flag logic        |
+| `tests/compat/check_test.sh`                    | unit tests for `check.sh`'s per-priority found/missing/hide logic and packages-file parsing                |
+| `tests/compat/header_test.sh`                   | unit tests for `header.sh`'s row-joining, banner padding/floor math, and the `_HI_DISABLE_HEADER` gate     |
+| `tests/compat/shared_test.sh`                   | unit tests for `shared.sh`'s color-resolution chain (hash/override/hosttag/usertag) and `_hi_sanitize`     |
+| `tests/compat/git_prompt_test.sh`               | unit tests for `git_prompt.sh`'s status flags, ahead/behind, detached HEAD, and every in-progress state    |
+| `tests/compat/shellcheck_test.sh`               | runs shellcheck over every `*.sh` file in the repo                                                         |
+| `tests/scripts/install_test.sh`                 | unit tests for `install.sh`'s marker-based rc rewriting, setting defaults, and config validation           |
+| `tests/scripts/uninstall_test.sh`               | unit tests for `uninstall.sh`'s marker stripping, incl. an install+uninstall round-trip                    |
+| `tests/harness/test_lib_test.sh`                | unit tests for `test_lib.sh` itself - the scaffolding every other suite is built on                        |
+| `tests/harness/runner_test.sh`                  | drives the real `test_runner.sh` over fixture suites that pass/fail/are missing                            |
+| `tests/targets/ssh_test.sh`                     | end-to-end test of hi's ssh path across remote login shells                                                |
+| `tests/targets/ssh_disconnect_test.sh`          | end-to-end test that the target-side cleanup trap fires on an abrupt disconnect, not just a clean exit     |
+| `tests/targets/docker_test.sh`                  | end-to-end test of hi's docker path across container shell environments (thin wrapper, see `test_lib.sh`)  |
+| `tests/targets/podman_test.sh`                  | end-to-end test of hi's podman path across container shell environments (thin wrapper, see `test_lib.sh`)  |
+| `tests/targets/nomad_test.sh`                   | end-to-end test of hi's nomad path against a throwaway `nomad agent -dev`                                  |
+| `tests/targets/kube_test.sh`                    | end-to-end test of hi's kube path against a throwaway `kind` cluster                                       |
 
 ##### Hostname, username, and group/tag colors
 

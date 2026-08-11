@@ -20,6 +20,10 @@
 # `ctr images import --all-platforms` then fails looking for blobs of
 # platforms that were never actually pulled).
 # Skips cleanly if kind/kubectl/docker aren't installed/reachable.
+#
+# Nearly every function below is invoked indirectly - by name, through
+# _hi_case's/_hi_poll_bool's "$@", or as a trap hook - which SC2329 can't see.
+# shellcheck disable=SC2329
 set -euo pipefail
 
 # shellcheck source=../../common/bootstrap.sh
@@ -27,22 +31,19 @@ source "${_HI_HOME:-$HOME}/hi.d/common/bootstrap.sh"
 # shellcheck source=../test_lib.sh
 source "$_HI_TEST_LIB"
 
-command -v kind >/dev/null 2>&1 || { _hi_cecho "kind not installed, skipping" "$YELLOW"; exit 0; }
-command -v kubectl >/dev/null 2>&1 || { _hi_cecho "kubectl not installed, skipping" "$YELLOW"; exit 0; }
-command -v docker >/dev/null 2>&1 || { _hi_cecho "docker not installed, skipping (kind needs it to run cluster nodes)" "$YELLOW"; exit 0; }
-docker info >/dev/null 2>&1 || { _hi_cecho "docker daemon not reachable, skipping" "$YELLOW"; exit 0; }
+_hi_require kind
+_hi_require kubectl
+_hi_require_backend docker "not installed (kind needs it to run cluster nodes)"
 
-_HI_WORKDIR="$(mktemp -d -t hi.kubetest.XXXXXX)"
 _HI_CLUSTER="hi-kubetest-$$"
-export KUBECONFIG="$_HI_WORKDIR/kubeconfig"
 _HI_CLUSTER_UP=0
 
-# shellcheck disable=SC2329 # trap function is never invoked directly
-function _hi_cleanup() {
+function _hi_kube_cleanup() {
   [ "$_HI_CLUSTER_UP" -eq 1 ] && kind delete cluster --name "$_HI_CLUSTER" >/dev/null 2>&1
-  rm -rf "$_HI_WORKDIR"
+  return 0
 }
-_hi_on_exit _hi_cleanup
+_hi_workdir kubetest _hi_kube_cleanup
+export KUBECONFIG="$_HI_WORKDIR/kubeconfig"
 _hi_h1 "Testing hi's kube path against a throwaway kind cluster"
 
 _hi_h2 "Creating kind cluster $_HI_CLUSTER"
@@ -66,10 +67,6 @@ fi
 
 # --- the actual per-shape test -------------------------------------------
 _HI_MARKER="HI_KUBE_TEST_OK"
-# shellcheck disable=2016 # this expands later
-_HI_CMD_BASH='test -f "$_HI_ROOT/hi.sh" && source "$_HI_ALIASES" && alias hi_info >/dev/null 2>&1 && echo '"$_HI_MARKER"
-# shellcheck disable=2016 # this expands later
-_HI_CMD_FALLBACK='alias sudo >/dev/null 2>&1 && echo '"$_HI_MARKER"
 
 # same reasoning as docker_test.sh/podman_test.sh: kubectl exec -it refuses a
 # tty unless our own stdin already looks like one, which isn't true once this
@@ -78,15 +75,12 @@ _HI_CMD_FALLBACK='alias sudo >/dev/null 2>&1 && echo '"$_HI_MARKER"
 exec 3<&0
 _hi_pty_wrap 3 auto "no tty and no python3 to fake one - kubectl exec -it will fail outright, results may be unreliable"
 
-_HI_FAILED=0
-_HI_TOTAL=0
+_hi_suite_begin
 
 # polls until the pod itself reports Running, so the real test isn't racing
 # the scheduler/kubelet
-# shellcheck disable=SC2329 # invoked indirectly, via _hi_poll_bool's "$@"
 function _hi_pod_running() { [ "$(kubectl get pod "$1" -o jsonpath='{.status.phase}' 2>/dev/null)" = Running ]; }
 
-# shellcheck disable=SC2329 # invoked indirectly, via _hi_case's "$@"
 function _hi_run_case() {
   local label="$1" image="$2" cmd="$3" timeout_s="${4:-30}"
   local name out_file out exit_code=0 t0 t1 ok=1
@@ -112,8 +106,7 @@ function _hi_run_case() {
   _hi_cecho " | Running: $_HI_LAUNCHER $name $cmd"
   # backgrounded so a hung fallback can't wedge the whole test suite
   "${_HI_PTY_WRAP[@]}" "$_HI_LAUNCHER" "$name" "$cmd" <&3 >"$out_file" 2>&1 &
-  # shellcheck disable=SC2329 # invoked indirectly, as _hi_wait_pid's on-timeout hook
-  function _hi_on_timeout() { _hi_h3 " | $label -- TIMED OUT after ${timeout_s}s, killing"; }
+  function _hi_on_timeout() { _hi_h3 " | [$label] -- TIMED OUT after ${timeout_s}s, killing"; }
   _hi_wait_pid "$!" "$timeout_s" _hi_on_timeout
   exit_code="$_HI_WAIT_EXIT"
   t1="$(_hi_now)"
@@ -122,7 +115,7 @@ function _hi_run_case() {
   if printf '%s' "$out" | grep -q "$_HI_MARKER"; then
     _hi_cecho " | [$label] -- Kube path OK ($(_hi_elapsed "$t0" "$t1")s)" "$GREEN"
   else
-    _hi_h3 "  [$label] -- FAILED (exit $exit_code, $(_hi_elapsed "$t0" "$t1")s)"
+    _hi_h3 " | [$label] -- FAILED (exit $exit_code, $(_hi_elapsed "$t0" "$t1")s)"
     printf '%s\n' "$out" | sed 's/^/      /'
     ok=0
   fi
@@ -131,13 +124,9 @@ function _hi_run_case() {
   [ "$ok" -eq 1 ]
 }
 
-_hi_case _hi_run_case bash debian:bookworm-slim "$_HI_CMD_BASH"
-_hi_case _hi_run_case sh alpine:3.20 "$_HI_CMD_FALLBACK"
+_hi_case _hi_run_case bash debian:bookworm-slim "$(_hi_probe_cmd "$_HI_MARKER" bash)"
+_hi_case _hi_run_case sh alpine:3.20 "$(_hi_probe_cmd "$_HI_MARKER" fallback)"
 
-if [ "$_HI_FAILED" -eq 0 ]; then
-  _hi_h1 "hi's kube path survived every shape tested ($_HI_TOTAL cases)"
-else
-  _hi_h1 "hi's kube path FAILED: $_HI_FAILED/$_HI_TOTAL cases" "$RED"
-fi
-
-exit "$_HI_FAILED"
+_hi_suite_end "" \
+  "hi's kube path survived every shape tested ($_HI_TOTAL cases)" \
+  "hi's kube path FAILED: $_HI_FAILED/$_HI_TOTAL cases"

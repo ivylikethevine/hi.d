@@ -5,12 +5,16 @@ set -euo pipefail
 
 # shellcheck source=../../common/bootstrap.sh
 source "${_HI_HOME:-$HOME}/hi.d/common/bootstrap.sh"
+# shellcheck source=../test_lib.sh
+source "$_HI_TEST_LIB"
 
+# deliberately *not* _hi_require: every other suite skips cleanly when its
+# backend is missing, but this one is the lint gate - a missing shellcheck
+# means the check didn't run, which must not read as a pass.
 if ! command -v shellcheck >/dev/null 2>&1; then
   _hi_cecho "shellcheck is not installed" "$RED"
   exit 1
 fi
-
 
 mapfile -t _HI_SH_FILES < <(find "$_HI_ROOT" -name '*.sh' -not -path '*/.git/*' | sort)
 
@@ -19,9 +23,8 @@ _hi_h2 "Version: $(shellcheck --version | awk '/^version:/ {print $2}')"
 
 _hi_cecho "$(printf ' | %s\n' "${_HI_SH_FILES[@]}")" "$BLUE"
 
-_HI_SC_LOG="$(mktemp -t hi.shellcheck.XXXXXX)"
-# shellcheck disable=SC2064 # $_HI_SC_LOG is resolved now, not when the trap fires
-_hi_on_exit "rm -f '$_HI_SC_LOG'"
+_hi_workdir shellchecktest
+_HI_SC_LOG="$_HI_WORKDIR/shellcheck.log"
 
 _HI_T0="$(_hi_now)"
 # common/shared.sh (sourced via bootstrap.sh above) turns pipefail back off

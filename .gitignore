@@ -48,4 +48,4 @@
 !theme.yml
 
 *docker*
-!scripts/docker_test.sh
+!tests/docker_test.sh

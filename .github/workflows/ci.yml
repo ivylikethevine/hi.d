@@ -42,4 +42,4 @@ jobs:
       - name: Run fast test suites
         env:
           _HI_HOME: ${{ github.workspace }}/..
-        run: "${{ github.workspace }}/tests/test_runner.sh aliases alias_fallthrough shellcheck install uninstall"
+        run: "${{ github.workspace }}/tests/test_runner.sh aliases alias_fallthrough shellcheck install uninstall check header shared git_prompt"

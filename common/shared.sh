@@ -31,8 +31,15 @@ function _hi_cecho() {
   [ $# -ge 3 ] && printf '%b' "$out" || printf '%b\n' "$out"
 }
 
+# "= label =", filled with "=" out to _HI_MAX_WIDTH and centered, matching
+# banner()'s full-width tilde style in common/header.sh
 function _hi_h1() {
-  _hi_cecho " ============== $1 ==============" "$BRGREEN"
+  local label=" $1 " width=$((${_HI_MAX_WIDTH:-80} - 1)) total left right
+  total=$((width - ${#label}))
+  ((total < 0)) && total=0
+  left=$((total / 2))
+  right=$((total - left))
+  _hi_cecho " $(printf '%*s' "$left" '' | tr ' ' '=')$label$(printf '%*s' "$right" '' | tr ' ' '=')" "$BRGREEN"
 }
 
 function _hi_h2() {

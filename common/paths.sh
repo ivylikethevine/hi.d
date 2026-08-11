@@ -84,7 +84,7 @@ alias hi_test_all="hi_test_aliases && hi_test_ssh && hi_test_docker && hi_test_s
 # install's own shells never do, so it's what tells the two apart.
 export _HI_DISABLE_LOCAL
 
-[ -z "$_HI_DISABLE_LOCAL" ] && [ "$_HI_DISABLE_LOCAL" = 1 ] && [ "$_HI_REMOTE_SESSION" != 1 ] && {
+[ "$_HI_DISABLE_LOCAL" = 1 ] && [ "$_HI_REMOTE_SESSION" != 1 ] && {
   export _HI_DISABLE_HEADER=1
   export _HI_DISABLE_PROMPT=1
   export _HI_DISABLE_PERSONAL=1

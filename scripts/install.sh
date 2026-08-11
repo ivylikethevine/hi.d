@@ -56,6 +56,10 @@ export _HI_HOME
 
 # shellcheck source=../common/bootstrap.sh
 source "$_HI_HOME/hi.d/common/bootstrap.sh"
+# shellcheck source=../common/header.sh
+source "$_HI_HEADER"
+# shellcheck source=../common/git_prompt.sh
+source "$_HI_GIT_PROMPT"
 
 _HI_MARKER="# added by hi during install"
 _HI_LINK="/usr/bin/hi"
@@ -111,12 +115,16 @@ function setting_enabled() {
 }
 
 # Ask a yes/no question about one setting, defaulting to its current state in
-# $3 (target file, checked via setting_enabled with off-value $4). Non-
-# interactive runs (no tty - piped into bash, run from a script, etc.)
+# $3 (target file, checked via setting_enabled with off-value $4). $5, if
+# given, is a zero-arg function whose output is boxed as a live preview,
+# printed after the question text (see show_preview) - so the question reads
+# first and the preview illustrates the answer, not the other way round.
+# Non-interactive runs (no tty - piped into bash, run from a script, etc.)
 # silently keep whatever is already configured instead of hanging on a
-# prompt nobody can answer.
+# prompt nobody can answer, and skip the preview entirely since nothing will
+# be shown before the question is auto-answered anyway.
 function ask_setting() {
-  local var="$1" question="$2" target="$3" off="${4:-1}" default hint reply=""
+  local var="$1" question="$2" target="$3" off="${4:-1}" preview="${5:-}" default hint reply=""
   setting_enabled "$var" "$target" "$off" && default=y || default=n
   if [ ! -t 0 ]; then
     [ "$default" = y ]
@@ -124,9 +132,88 @@ function ask_setting() {
   fi
   hint="Y/n"
   [ "$default" = n ] && hint="y/N"
-  read -r -p "$question [$hint] " reply || reply=""
+  printf '%s\n' "$question"
+  [ -n "$preview" ] && show_preview "$preview"
+  read -r -p " [$hint] " reply || reply=""
   [ -z "$reply" ] && reply="$default"
   [[ "$reply" =~ ^[Yy] ]]
+}
+
+# visible width of $1 - the printable character count once ANSI SGR color
+# codes are stripped out, needed to size/pad show_preview's box since the
+# raw string length color escapes inflate is meaningless for alignment.
+# extglob is needed for the +(...) pattern below; toggled on just for this
+# substitution and restored to whatever it was before, rather than left on
+# for the rest of the script.
+function _hi_visible_len() {
+  local stripped restore=0
+  shopt -q extglob || { shopt -s extglob; restore=1; }
+  stripped="${1//$'\e'\[+([0-9;])m/}"
+  ((restore)) && shopt -u extglob
+  printf '%s' "${#stripped}"
+}
+
+# Run $@ and box whatever it writes to stdout, labeled "preview" - a live
+# render using hi's own real functions (not a hypothetical example), sized to
+# its own longest line rather than the terminal width, since previews range
+# from one short colored line to full_check's wrapped multi-line block.
+function show_preview() {
+  [ -t 0 ] || return 0
+  local out label="─ preview " content_w=0 len line pad top bottom fill_top fill_bottom
+  local -a lines
+  out="$("$@" 2>/dev/null)" || true
+  [ -n "$out" ] || return 0
+  mapfile -t lines <<<"$out"
+  for line in "${lines[@]}"; do
+    len="$(_hi_visible_len "$line")"
+    ((len > content_w)) && content_w=$len
+  done
+  printf -v fill_top '%*s' $((content_w + 2 - ${#label})) ''
+  printf -v fill_bottom '%*s' $((content_w + 2)) ''
+  top="┌${label}${fill_top// /─}┐"
+  bottom="└${fill_bottom// /─}┘"
+  _hi_cecho "   $top" "$NC"
+  for line in "${lines[@]}"; do
+    len="$(_hi_visible_len "$line")"
+    pad=$((content_w - len))
+    printf '   │ %s%*s │\n' "$line" "$pad" ""
+  done
+  _hi_cecho "   $bottom" "$NC"
+}
+
+# banner() needs an arg, so wrap it to match every other preview function's
+# zero-arg signature that ask_setting's $5 expects
+function _hi_banner_preview() { banner Connected; }
+
+# sample "user@host cwd" line, colored exactly like shells/bash.sh's real
+# HI_PS1 (see _hi_user_escape/_hi_host_escape/_hi_at_color), just with the
+# literal current user/host/cwd instead of \u/\h/\w
+function _hi_prompt_preview() {
+  local cwd="${PWD/#$HOME/\~}"
+  printf '%b\n' " $(_hi_user_escape)$(whoami)$(_hi_at_color)@$(_hi_host_escape)$(_hi_hostname)$NC $BRBLUE$cwd$NC"
+}
+
+# the real git prompt segment, rendered against hi.d's own checkout (always a
+# git repo) so the preview reflects this machine's actual git status instead
+# of a made-up example; _HI_DISABLE_GIT_STATUS is unset for the call since a
+# previously-disabled toggle would otherwise make _hi_git_prompt return empty
+function _hi_git_status_preview() {
+  (cd "$_HI_ROOT" 2>/dev/null && unset _HI_DISABLE_GIT_STATUS && _hi_git_prompt)
+}
+
+# what `nano`/`vim` actually resolve to with the override on
+function _hi_editors_preview() {
+  printf 'nano -> nano --rcfile %s\n' "$_HI_NANORC"
+  printf 'vim  -> %s -u %s\n' "$(command -v nvim || command -v vim)" "$_HI_VIMRC"
+}
+
+# alias count plus a handful of names, read straight from shells/aliases.sh
+# rather than duplicating its fallthrough logic here
+function _hi_aliases_preview() {
+  local names count
+  names="$(grep -oE '^alias [A-Za-z0-9_]+=' "$_HI_ALIASES" | sed -E 's/^alias //; s/=$//')"
+  count="$(printf '%s\n' "$names" | wc -l)"
+  printf '%s personal aliases, e.g.: %s, ...\n' "$count" "$(printf '%s\n' "$names" | head -6 | paste -sd, -)"
 }
 
 # Prompt for the optional pieces of hi's shell config and write _HI_DISABLE_*
@@ -138,25 +225,28 @@ function config_features() {
   local dis_header="" dis_prompt="" dis_personal="" dis_git="" dis_editors="" dis_aliases="" dis_local=""
   _hi_h2 "Choosing features"
   ask_setting _HI_DISABLE_HEADER \
-    " Enable the connect/disconnect header (system info, git identity, package check)?" "$target" ||
+    " Enable the connect/disconnect header (system info, git identity, package check)?" \
+    "$target" 1 _hi_banner_preview ||
     dis_header="export _HI_DISABLE_HEADER=1"
   ask_setting _HI_DISABLE_PROMPT \
-    " Enable the colored user@host prompt?" "$target" ||
+    " Enable the colored user@host prompt?" "$target" 1 _hi_prompt_preview ||
     dis_prompt="export _HI_DISABLE_PROMPT=1"
   ask_setting _HI_DISABLE_PERSONAL \
-    " Enable personal shell settings (history size, keybindings, completion tweaks)?" "$target" ||
+    " Enable personal shell settings (history size, keybindings, completion tweaks)?" "$target" 1 "" ||
     dis_personal="export _HI_DISABLE_PERSONAL=1"
   ask_setting _HI_DISABLE_GIT_STATUS \
-    " Enable git status in the prompt?" "$target" ||
+    " Enable git status in the prompt?" "$target" 1 _hi_git_status_preview ||
     dis_git="export _HI_DISABLE_GIT_STATUS=1"
   ask_setting _HI_DISABLE_EDITORS \
-    " Enable the vim/nano config overrides?" "$target" ||
+    " Enable the vim/nano config overrides?" "$target" 1 _hi_editors_preview ||
     dis_editors="export _HI_DISABLE_EDITORS=1"
   ask_setting _HI_DISABLE_ALIASES \
-    " Enable the personal aliases in shells/aliases.sh (sudo, cat/eza, git, docker, pacman/apt, etc)?" "$target" ||
+    " Enable the personal aliases in shells/aliases.sh (sudo, cat/eza, git, docker, pacman/apt, etc)?" \
+    "$target" 1 _hi_aliases_preview ||
     dis_aliases="export _HI_DISABLE_ALIASES=1"
   ask_setting _HI_DISABLE_LOCAL \
-    " Enable all of the above on this machine (the one hi.d is installed on), not just when you hi elsewhere?" "$target" ||
+    " Enable all of the above on this machine (the one hi.d is installed on), not just when you hi elsewhere?" \
+    "$target" 1 "" ||
     dis_local="export _HI_DISABLE_LOCAL=1"
   config_shell "feature toggles" "$target" \
     "$dis_header" "$dis_prompt" "$dis_personal" "$dis_git" "$dis_editors" "$dis_aliases" "$dis_local"
@@ -173,13 +263,13 @@ function config_header_details() {
     return 0
   fi
   _hi_h2 "Choosing header details"
-  ask_setting _HI_HEADER_TIMESTAMP " Show the timestamp line?" "$target" 0 ||
+  ask_setting _HI_HEADER_TIMESTAMP " Show the timestamp line?" "$target" 0 timestamp ||
     dis_ts="export _HI_HEADER_TIMESTAMP=0"
-  ask_setting _HI_HEADER_SYSINFO " Show the system info line (OS, CPU, RAM)?" "$target" 0 ||
+  ask_setting _HI_HEADER_SYSINFO " Show the system info line (OS, CPU, RAM)?" "$target" 0 system_info ||
     dis_sys="export _HI_HEADER_SYSINFO=0"
-  ask_setting _HI_HEADER_IDENTITY " Show the git identity/docker/ssh key line?" "$target" 0 ||
+  ask_setting _HI_HEADER_IDENTITY " Show the git identity/docker/ssh key line?" "$target" 0 identity ||
     dis_id="export _HI_HEADER_IDENTITY=0"
-  ask_setting _HI_HEADER_CHECK " Show the installed-packages check?" "$target" 0 ||
+  ask_setting _HI_HEADER_CHECK " Show the installed-packages check?" "$target" 0 full_check ||
     dis_chk="export _HI_HEADER_CHECK=0"
   config_shell "header details" "$target" "$dis_ts" "$dis_sys" "$dis_id" "$dis_chk"
 }

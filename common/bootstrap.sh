@@ -1,5 +1,6 @@
 #!/bin/bash
 # shared entry point for scripts
+# this syntax is odd but required for the layered sourcing
 : "${_HI_HOME:=$HOME}"
 export _HI_HOME
 : "${_HI_DISABLE_LOCAL:=0}"

@@ -69,25 +69,7 @@ alias hi_test_kube="[ -f $_HI_TEST_KUBE ] && $_HI_TEST_KUBE"
 alias hi_test_shellcheck="[ -f $_HI_TEST_SHELLCHECK ] && $_HI_TEST_SHELLCHECK"
 alias hi_test_all="hi_test_aliases && hi_test_ssh && hi_test_docker && hi_test_podman && hi_test_nomad && hi_test_kube && hi_test_shellcheck"
 
-# android dev on linux; `|| true` since paths.sh is sourced under callers'
-# `set -e` (bootstrap.sh et al) and a false test here would otherwise abort them
-[ -d "$HOME/Android/Sdk" ] && export ANDROID_HOME="$HOME/Android/Sdk" || true
-
-# feature toggles - set any of these to 1 to turn that piece of hi's shell
-# config off everywhere (locally and on every host you `hi` to, since hi.d is
-# copied as-is). scripts/install.sh asks about these and writes the lines
-# below the marker for you; uncomment by hand instead if you'd rather skip
-# the prompts.
-# export _HI_DISABLE_HEADER=1   # common/header.sh's connect/disconnect banner
-# export _HI_DISABLE_PROMPT=1   # the colored user@host:cwd prompt
-# export _HI_DISABLE_PERSONAL=1 # history size, keybindings, completion tweaks
-# export _HI_DISABLE_GIT_STATUS=1 # git status in the prompt
-# export _HI_DISABLE_EDITORS=1  # the vim/nano aliases pointing at misc/vim.rc, misc/nano.rc
-# export _HI_DISABLE_ALIASES=1  # the personal aliases in shells/aliases.sh (sudo, cat/eza, git, docker, pacman/apt, etc) - hi's own essentials in common/bootstrap.sh always load regardless
-
-# local-only disable - set to 1 to turn off every toggle above on the machine
-# hi.d is installed on, while still applying them when hi is used to reach a
-# remote host/container/alloc. _HI_REMOTE_SESSION is exported by load.sh, the
+# local-only disable logic. _HI_REMOTE_SESSION is exported by load.sh, the
 # chainload entry point every remote path goes through and the local
 # install's own shells never do, so it's what tells the two apart.
 export _HI_DISABLE_LOCAL

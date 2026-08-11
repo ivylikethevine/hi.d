@@ -9,8 +9,6 @@ source "${_HI_HOME:-$HOME}/hi.d/common/paths.sh"
 # color names match fish's set_color vocabulary; greys are skipped, since fish has none.
 _HI_COLOR_NAMES=(red green yellow blue magenta cyan brred brgreen bryellow brblue brmagenta brcyan)
 
-# export _HI_MAX_WIDTH=120
-
 export NC='\e[0m'
 export RED='\e[0;31m'
 export GREEN='\e[0;32m'
@@ -31,23 +29,21 @@ function _hi_cecho() {
   [ $# -ge 3 ] && printf '%b' "$out" || printf '%b\n' "$out"
 }
 
-# "= label =", filled with "=" out to _HI_MAX_WIDTH and centered, matching
-# banner()'s full-width tilde style in common/header.sh
 function _hi_h1() {
   local label=" $1 " width=$((${_HI_MAX_WIDTH:-80} - 1)) total left right
   total=$((width - ${#label}))
   ((total < 0)) && total=0
   left=$((total / 2))
   right=$((total - left))
-  _hi_cecho " $(printf '%*s' "$left" '' | tr ' ' '=')$label$(printf '%*s' "$right" '' | tr ' ' '=')" "$BRGREEN"
+  _hi_cecho " $(printf '%*s' "$left" '' | tr ' ' '=')$label$(printf '%*s' "$right" '' | tr ' ' '=')" "${BRGREEN:-$2}"
 }
 
 function _hi_h2() {
-  _hi_cecho " ======= $1 ========" "$BRBLUE"
+  _hi_cecho " -------- $1 -------- " "${BRBLUE:-$2}"
 }
 
 function _hi_h3() {
-  _hi_cecho " ===== $1 =====" "$BRCYAN"
+  _hi_cecho " ~~~~ $1 ~~~~ " "${BRCYAN:-$2}"
 }
 
 # high-res-ish timestamp that falls back to whole seconds on bash <5
@@ -100,7 +96,6 @@ function _hi_on_exit() {
   fi
 }
 
-# the "@" between user and host is yellow when the session came in over ssh
 function _hi_at_color() {
   [ -n "${SSH_TTY:-}" ] && printf '%b' "$YELLOW" || printf '%b' "$NC"
 }
@@ -118,8 +113,7 @@ function _hi_color_escape() {
   printf '%b' "$NC"
 }
 
-# deterministic name -> palette bucket, so the same host/username always gets
-# the same color without any generated/cached state to go stale or go missing
+# deterministic name -> palette bucket, so the same item -> same color
 function _hi_hash_color() {
   local name="$1" sum=0 i ord
   for ((i = 0; i < ${#name}; i++)); do
@@ -129,22 +123,14 @@ function _hi_hash_color() {
   printf '%s\n' "${_HI_COLOR_NAMES[sum % ${#_HI_COLOR_NAMES[@]}]}"
 }
 
-# the user/host of the machine hi.d is installed on - i.e. where you started
-# from, not whatever you've since ssh'd into. hi.sh ships these ahead as
-# _HI_LOCAL_USER/_HI_LOCAL_HOSTNAME (see hi.sh's _hi_remote_preamble) so a
-# freshly-shipped remote copy of hi.d still knows the origin's identity
-# instead of just seeing its own; a plain local shell has neither set, so
-# these fall back to the current user/host, i.e. themselves.
+# the user/host of the machine hi.d is permanently installed on.
+# hi.sh ships these ahead as
+# _HI_LOCAL_USER/_HI_LOCAL_HOSTNAME (see hi.sh's _hi_remote_preamble)
 function _hi_local_username() { printf '%s\n' "${_HI_LOCAL_USER:-$(whoami)}"; }
 function _hi_local_hostname() { printf '%s\n' "${_HI_LOCAL_HOSTNAME:-$(_hi_hostname)}"; }
 
 # look up an exact "<type>,<name>,<color>" override
-# most names won't have an override and will return 1.
-# exact matches always win; only once none exist does a "username,LOCALUSER,…"
-# or "hostname,LOCALHOSTNAME,…" line get a shot, and only when $2 is the local
-# machine's own user/host (see _hi_local_username/_hi_local_hostname above) -
-# e.g. LOCALUSER lets "the same username as home" get colored consistently
-# across every machine you ssh into, without hardcoding that username.
+# most names won't have an override and will return 1. exact matches always win.
 function _hi_override_color() {
   local cur_type cur_name color special=""
   [[ -f "$_HI_COLORS" ]] || return 1
@@ -213,17 +199,8 @@ function _hi_resolve_color() {
   _hi_hash_color "$name"
 }
 
-# *_color -> a palette name (fish set_color / zsh %F{} vocabulary)
-# *_escape -> the same color as a raw ANSI escape, for bash prompts & printf
-# hi.sh pre-resolves this over ssh (using the alias connected with, plus the
-# *local* misc/colors and ~/.ssh/config Tags - the only place both are
-# available) and ships the result as _HI_TARGET_COLOR, so this matches what
-# hi_colors previews instead of re-deriving from the target's own `hostname`
-# output against its own (usually unrelated) ssh config
+# locally calculated to properly apply colors
 function _hi_host_color() { printf '%s\n' "${_HI_TARGET_COLOR:-$(_hi_resolve_color hostname "$(_hi_hostname)")}"; }
-# _HI_TARGET_TAG is the connected-to host's tag, pre-resolved locally the same
-# way as _HI_TARGET_COLOR; unset on a plain local shell, since there's no
-# ssh alias/Tags comment for the machine you're already sitting at
 function _hi_user_color() { _hi_resolve_color username "$(whoami)" "${_HI_TARGET_TAG:-}"; }
 function _hi_host_escape() { _hi_color_escape "$(_hi_host_color)"; }
 function _hi_user_escape() { _hi_color_escape "$(_hi_user_color)"; }

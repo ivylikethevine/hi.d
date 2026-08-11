@@ -7,9 +7,6 @@ set -euo pipefail
 # shellcheck source=../common/bootstrap.sh
 source "${_HI_HOME:-$HOME}/hi.d/common/bootstrap.sh"
 
-# human-readable reason a name got the color it did: an exact override (tagged
-# with which type it was, since username and hostname overrides both just say
-# "override" otherwise), the hosttag it inherited, or the deterministic default
 function _hi_color_source() {
   local type="$1" name="$2" tag
   if _hi_override_color "$type" "$name" >/dev/null 2>&1; then
@@ -51,10 +48,7 @@ function _hi_known_usertags() {
 # every username the hosts table's PREVIEW column renders: every known real
 # user, plus the "example" identities from the users table - the current
 # username (standing in for LOCALUSER, since that's never a real login name)
-# and each usertag name - so a usertag override that none of your real known
-# users happens to trigger is still visible somewhere. whoami is already the
-# first entry from _hi_known_users, so the LOCALUSER stand-in only survives
-# the dedup below when it's actually a different name
+# and each usertag name
 function _hi_preview_users() {
   local tag
   {
@@ -74,7 +68,6 @@ function _hi_group_preview_width() {
   printf '%s' $((pw + 2 * (n - 1)))
 }
 
-# a "+----+----+" style divider sized to the given column widths
 function _hi_hbar() {
   local seg="+" w
   for w in "$@"; do
@@ -84,8 +77,7 @@ function _hi_hbar() {
 }
 
 # users table: every known real user with a non-default color, plus LOCALUSER
-# and every usertag override as its own "example" row - these three are what
-# _hi_preview_users later feeds into the hosts table's PREVIEW column
+# and every usertag override as its own "example" row
 function _hi_print_users_table() {
   local user tag source color_name name_escape
   local users=() usertags=()
@@ -163,16 +155,14 @@ function _hi_print_hosts_table() {
   done
 
   # group hosts that share a type+source AND the actual resolved color, so
-  # only hosts that would render identically collapse into one row - e.g.
-  # two "default" hosts whose names hash to different colors stay separate
+  # only hosts that would render identically collapse into one row
   if [[ -f "$_HI_SSH_CONFIG" ]]; then
     while IFS=$'\t' read -r name _; do
       source=$(_hi_color_source hostname "$name")
       tag=$(_hi_ssh_host_tag "$name" 2>/dev/null) || tag=""
       has_usertag=false
       [[ -n "$tag" ]] && _hi_override_color usertag "$tag" >/dev/null 2>&1 && has_usertag=true
-      # skip hosts that wouldn't render any differently from a bare `hi`: no
-      # hostname override/hosttag color of their own, and no usertag either
+      # skip hosts that wouldn't render any differently from a bare `hi`
       [[ "$source" = default && "$has_usertag" = false ]] && continue
       color_name=$(_hi_resolve_color hostname "$name")
       # tag is part of the key (not just source/color) since it changes which
@@ -188,9 +178,6 @@ function _hi_print_hosts_table() {
     done < <(sh "$_HI_TARGETS" ssh)
   fi
 
-  # column widths: ITEM/COLOR are fixed to a size that comfortably fits any
-  # name/palette entry, SOURCE and PREVIEW stretch to fit whatever content
-  # this run actually produced, so the right-hand border never gets blown out
   local w_item=24 w_color=5 w_source=6 w_preview=7
   for name in "${_HI_COLOR_NAMES[@]}"; do
     ((${#name} > w_color)) && w_color=${#name}

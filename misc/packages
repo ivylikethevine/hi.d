@@ -13,6 +13,7 @@ nomad:4
 # 4: bright green if installed and hidden if not
 python3:4,python2:4,python:4
 tldr:4,man:3
+act:4
 # 3: green if installed and hidden if not
 appimage:3
 flatpak:3

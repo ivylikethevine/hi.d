@@ -61,8 +61,9 @@ function system_info() {
 
 # git identity (domain masked), running containers, nomad jobs, and ssh key counts
 function identity() {
-  local email="" domain user_part bullets containers="No docker :(" jobs="" authorized=0 public=0
+  local email="" domain user_part bullets containers="No docker/podman :(" jobs="" authorized=0 public=0
   local -a lines cells
+  local container_bin
   command -v git &>/dev/null && email=$(git config --get user.email 2>/dev/null || true)
   email=$(_hi_sanitize "$email")
   if [ -n "$email" ]; then
@@ -72,8 +73,9 @@ function identity() {
   else
     user_part="${YELLOW}No Git ID Found..."
   fi
-  if command -v docker &>/dev/null; then
-    mapfile -t lines < <(docker container ls -q)
+  container_bin="$(command -v docker || command -v podman || true)"
+  if [ -n "$container_bin" ]; then
+    mapfile -t lines < <("$container_bin" container ls -q)
     containers="Containers: ${#lines[@]}"
   fi
   if command -v nomad &>/dev/null; then

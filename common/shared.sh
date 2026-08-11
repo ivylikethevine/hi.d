@@ -35,15 +35,15 @@ function _hi_h1() {
   ((total < 0)) && total=0
   left=$((total / 2))
   right=$((total - left))
-  _hi_cecho " $(printf '%*s' "$left" '' | tr ' ' '=')$label$(printf '%*s' "$right" '' | tr ' ' '=')" "${BRGREEN:-$2}"
+  _hi_cecho " $(printf '%*s' "$left" '' | tr ' ' '=')$label$(printf '%*s' "$right" '' | tr ' ' '=')" "${2:-$BRGREEN}"
 }
 
 function _hi_h2() {
-  _hi_cecho " -------- $1 -------- " "${BRBLUE:-$2}"
+  _hi_cecho " -------- $1 -------- " "${2:-$BRBLUE}"
 }
 
 function _hi_h3() {
-  _hi_cecho " ~~~~ $1 ~~~~ " "${BRCYAN:-$2}"
+  _hi_cecho " ~~~~ $1 ~~~~ " "${2:-$BRCYAN}"
 }
 
 # high-res-ish timestamp that falls back to whole seconds on bash <5

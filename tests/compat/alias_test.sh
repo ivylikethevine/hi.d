@@ -2,10 +2,16 @@
 # Sources shells/aliases.sh in a real instance of each target shell and checks
 # that every alias/var it unconditionally defines actually landed - not just
 # that the file was found. Skips any shell that isn't installed.
+#
+# Nearly every function below is invoked indirectly - by name, through
+# _hi_case's/_hi_poll_bool's "$@", or as a trap hook - which SC2329 can't see.
+# shellcheck disable=SC2329
 set -euo pipefail
 
-# shellcheck source=../common/bootstrap.sh
+# shellcheck source=../../common/bootstrap.sh
 source "${_HI_HOME:-$HOME}/hi.d/common/bootstrap.sh"
+# shellcheck source=../test_lib.sh
+source "$_HI_TEST_LIB"
 
 # derived straight from aliases.sh so this test can't drift out of sync with
 # it; only unconditional top-of-line `alias name=`/`export name=` are picked
@@ -31,23 +37,20 @@ function _hi_test_script() {
 }
 
 function _hi_test_shell() {
-  local shell="$1" script="$2/$1.test" output exit_code=0
-  _hi_h2 "$shell -- starting"
+  local shell="$1" script="$2/$1.test" output exit_code=0 t0 t1
+  _hi_h2 "Starting: [$shell]"
+  t0="$(_hi_now)"
 
-  if ! command -v "$shell" >/dev/null 2>&1; then
-    _hi_h3 "$shell -- not installed, skipped"
-    return 0
-  fi
-
-  _hi_cecho " | $shell -- writing test script to $script"
+  _hi_cecho "  [$shell] -- Writing test script..."
   _hi_test_script "$shell" >"$script"
-  _hi_cecho " | $shell -- running: $shell $script"
+  _hi_cecho "  [$shell] -- Running: $script"
   output=$("$shell" "$script" 2>&1) || exit_code=$?
+  t1="$(_hi_now)"
 
   if [ "$exit_code" -eq 0 ]; then
-    _hi_h3 "$shell -- aliases.sh loaded OK"
+    _hi_h3 "[$shell] -- Loaded aliases.sh OK ($(_hi_elapsed "$t0" "$t1")s)" "$GREEN"
   else
-    _hi_h3 "$shell -- FAILED"
+    _hi_h3 "[$shell] -- FAILED ($(_hi_elapsed "$t0" "$t1")s)" "$RED"
     [ -n "$output" ] && printf '%s\n' "$output" | sed 's/^/      /'
   fi
   return "$exit_code"
@@ -57,21 +60,20 @@ function run_alias_test() {
   _hi_h1 "Testing aliases.sh across shells"
   _hi_h2 "Sampled $(wc -w <<<"$_HI_SAMPLE_ALIASES") aliases and $(wc -w <<<"$_HI_SAMPLE_VARS") variables"
 
-  _HI_WORKDIR=$(mktemp -d -t hi.aliases.XXXXXX)
-  # shellcheck disable=SC2016 # $_HI_WORKDIR is resolved when the trap fires
-  _hi_on_exit 'rm -rf "$_HI_WORKDIR"'
+  _hi_workdir aliases
 
-  _HI_FAILED=0
+  _hi_suite_begin
   for _hi_shell in dash bash zsh fish; do
-    _hi_test_shell "$_hi_shell" "$_HI_WORKDIR" || _HI_FAILED=1
+    if ! command -v "$_hi_shell" >/dev/null 2>&1; then
+      _hi_h2 "$_hi_shell -- not installed, skipped"
+      continue
+    fi
+    _hi_case _hi_test_shell "$_hi_shell" "$_HI_WORKDIR"
   done
 
-  if [ "$_HI_FAILED" -eq 0 ]; then
-    _hi_h1 "All installed shells loaded aliases.sh cleanly"
-  else
-    _hi_h1 "One or more shells FAILED to load aliases.sh"
-  fi
-  exit "$_HI_FAILED"
+  _hi_suite_end "" \
+    "All installed shells loaded aliases.sh cleanly ($_HI_TOTAL shells)" \
+    "One or more shells FAILED to load aliases.sh: $_HI_FAILED/$_HI_TOTAL"
 }
 
 run_alias_test

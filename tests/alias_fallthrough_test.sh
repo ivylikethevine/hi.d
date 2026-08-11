@@ -27,6 +27,8 @@ set -euo pipefail
 
 # shellcheck source=../common/bootstrap.sh
 source "${_HI_HOME:-$HOME}/hi.d/common/bootstrap.sh"
+# shellcheck source=./test_lib.sh
+source "$_HI_TEST_LIB"
 
 _HI_SHELLS="zsh sh bash fish"
 
@@ -151,10 +153,11 @@ EOF
 # runs one scenario (a set of _HI_* env vars) against one shell in a
 # from-scratch environment: only $fakepath, $HOME (empty) and the vars this
 # function passes through survive - nothing from the host shell leaks in.
+# shellcheck disable=SC2329 # invoked indirectly, via _hi_case's "$@"
 function _hi_run_scenario() {
   local shell="$1" fakepath="$2" label="$3"
   shift 3
-  local script shell_bin
+  local script shell_bin t0 t1
 
   # resolved with the real (unrestricted) PATH, since $fakepath below is
   # deliberately too narrow to contain the shell binary itself
@@ -166,13 +169,16 @@ function _hi_run_scenario() {
     script="$_HI_POSIX_CHECK"
   fi
 
+  t0="$(_hi_now)"
   if env -i HOME="$_HI_FAKEHOME" PATH="$fakepath" _HI_ALIASES="$_HI_ALIASES" \
     _HI_NANORC="$_HI_WORKDIR/nanorc" _HI_VIMRC="$_HI_WORKDIR/vimrc" \
     _HI_DISABLE_EDITORS="${_HI_DISABLE_EDITORS:-0}" _HI_DISABLE_ALIASES="${_HI_DISABLE_ALIASES:-0}" \
     "$@" "$shell_bin" "$script" 2>"$_HI_WORKDIR/err"; then
-    _hi_cecho " | $shell -- $label: OK" "$GREEN"
+    t1="$(_hi_now)"
+    _hi_cecho " | $shell -- $label: OK ($(_hi_elapsed "$t0" "$t1")s)" "$GREEN"
   else
-    _hi_h3 "$shell -- $label: FAILED"
+    t1="$(_hi_now)"
+    _hi_h3 "$shell -- $label: FAILED ($(_hi_elapsed "$t0" "$t1")s)"
     sed 's/^/      /' "$_HI_WORKDIR/err"
     return 1
   fi
@@ -186,7 +192,7 @@ function _hi_run_scenario() {
 # with nothing installed at all (should degrade to empty, not error)
 function run_fallthrough_tests() {
   _hi_h1 "Fallthrough (command -v a || b || ...) resolution"
-  local failed=0 var last mid installed expect fakepath shell
+  local var last mid installed expect fakepath shell
 
   for var in EDITOR_BIN:"nano micro pico vim vi" EXA_BIN:"exa eza ls" EZA_BIN:"eza exa ls"; do
     local name="${var%%:*}" cands="${var#*:}"
@@ -200,14 +206,12 @@ function run_fallthrough_tests() {
       # shellcheck disable=SC2086 # $installed is an intentionally unquoted word list
       fakepath="$(_hi_fake_path "fp_${name}_$(echo "$installed" | tr -d ' ')" $installed)"
       for shell in $_HI_SHELLS; do
-        _hi_run_scenario "$shell" "$fakepath" "$name installed=[${installed:-none}] -> want [${expect:-empty}]" \
-          _HI_CHECK_VAR="$name" _HI_EXPECT="$([ -n "$expect" ] && printf '%s/%s' "$fakepath" "$expect" || printf '')" \
-          || failed=1
+        command -v "$shell" >/dev/null 2>&1 || continue
+        _hi_case _hi_run_scenario "$shell" "$fakepath" "$name installed=[${installed:-none}] -> want [${expect:-empty}]" \
+          _HI_CHECK_VAR="$name" _HI_EXPECT="$([ -n "$expect" ] && printf '%s/%s' "$fakepath" "$expect" || printf '')"
       done
     done
   done
-
-  return "$failed"
 }
 
 # ---- flag-guard scenarios ---------------------------------------------------
@@ -216,7 +220,7 @@ function run_fallthrough_tests() {
 # editors block, since that sits above the guard on purpose
 function run_flag_tests() {
   _hi_h1 "_HI_DISABLE_EDITORS / _HI_DISABLE_ALIASES guards"
-  local failed=0 shell fakepath
+  local shell fakepath
   fakepath="$(_hi_fake_path fp_flags vi)"
 
   for combo in "0 0 1 1 1" "1 0 0 1 1" "0 1 1 0 0" "1 1 0 0 0"; do
@@ -224,15 +228,13 @@ function run_flag_tests() {
     set -- $combo
     local de="$1" da="$2" want_nano="$3" want_sudo="$4" want_editor="$5"
     for shell in $_HI_SHELLS; do
+      command -v "$shell" >/dev/null 2>&1 || continue
       _HI_DISABLE_EDITORS="$de" _HI_DISABLE_ALIASES="$da" \
-        _hi_run_scenario "$shell" "$fakepath" \
+        _hi_case _hi_run_scenario "$shell" "$fakepath" \
         "_HI_DISABLE_EDITORS=$de _HI_DISABLE_ALIASES=$da" \
-        _HI_CHECK_FLAGS=1 _HI_EXPECT_NANO="$want_nano" _HI_EXPECT_SUDO="$want_sudo" _HI_EXPECT_EDITOR_SET="$want_editor" \
-        || failed=1
+        _HI_CHECK_FLAGS=1 _HI_EXPECT_NANO="$want_nano" _HI_EXPECT_SUDO="$want_sudo" _HI_EXPECT_EDITOR_SET="$want_editor"
     done
   done
-
-  return "$failed"
 }
 
 function run_alias_fallthrough_test() {
@@ -252,16 +254,17 @@ function run_alias_fallthrough_test() {
   done
   [ -n "$missing" ] && _hi_cecho " | not installed, skipped:$missing" "$YELLOW"
 
-  local failed=0
-  run_fallthrough_tests || failed=1
-  run_flag_tests || failed=1
+  _HI_FAILED=0
+  _HI_TOTAL=0
+  run_fallthrough_tests
+  run_flag_tests
 
-  if [ "$failed" -eq 0 ]; then
-    _hi_h1 "All fallthrough + flag scenarios passed on every installed shell"
+  if [ "$_HI_FAILED" -eq 0 ]; then
+    _hi_h1 "All fallthrough + flag scenarios passed on every installed shell ($_HI_TOTAL scenarios)"
   else
-    _hi_h1 "One or more fallthrough + flag scenarios FAILED"
+    _hi_h1 "$_HI_FAILED/$_HI_TOTAL fallthrough + flag scenarios FAILED" "$RED"
   fi
-  exit "$failed"
+  exit "$_HI_FAILED"
 }
 
 run_alias_fallthrough_test

@@ -6,6 +6,8 @@ set -euo pipefail
 
 # shellcheck source=../common/bootstrap.sh
 source "${_HI_HOME:-$HOME}/hi.d/common/bootstrap.sh"
+# shellcheck source=./test_lib.sh
+source "$_HI_TEST_LIB"
 
 # derived straight from aliases.sh so this test can't drift out of sync with
 # it; only unconditional top-of-line `alias name=`/`export name=` are picked
@@ -16,6 +18,7 @@ _HI_SAMPLE_VARS=$(grep -oE '^export +[A-Za-z_][A-Za-z0-9_]*=' "$_HI_ALIASES" | s
 # posix `alias name` / `test -n "${v+x}"` work unmodified in dash, bash and zsh;
 # fish has neither - aliases are functions there, and `set -q` is its "is set"
 # shellcheck disable=SC2016 # these are the scripts we write out, not code to run here
+# shellcheck disable=SC2329 # only called from _hi_test_shell, itself only invoked indirectly via _hi_case's "$@"
 function _hi_test_script() {
   if [ "$1" = fish ]; then
     printf '%s\n' 'source "$_HI_ALIASES"; or exit 1' 'set fail 0' \
@@ -30,24 +33,22 @@ function _hi_test_script() {
   fi
 }
 
+# shellcheck disable=SC2329 # invoked indirectly, via _hi_case's "$@"
 function _hi_test_shell() {
-  local shell="$1" script="$2/$1.test" output exit_code=0
+  local shell="$1" script="$2/$1.test" output exit_code=0 t0 t1
   _hi_h2 "$shell -- starting"
-
-  if ! command -v "$shell" >/dev/null 2>&1; then
-    _hi_h3 "$shell -- not installed, skipped"
-    return 0
-  fi
+  t0="$(_hi_now)"
 
   _hi_cecho " | $shell -- writing test script to $script"
   _hi_test_script "$shell" >"$script"
   _hi_cecho " | $shell -- running: $shell $script"
   output=$("$shell" "$script" 2>&1) || exit_code=$?
+  t1="$(_hi_now)"
 
   if [ "$exit_code" -eq 0 ]; then
-    _hi_h3 "$shell -- aliases.sh loaded OK"
+    _hi_h3 "$shell -- aliases.sh loaded OK ($(_hi_elapsed "$t0" "$t1")s)"
   else
-    _hi_h3 "$shell -- FAILED"
+    _hi_h3 "$shell -- FAILED ($(_hi_elapsed "$t0" "$t1")s)"
     [ -n "$output" ] && printf '%s\n' "$output" | sed 's/^/      /'
   fi
   return "$exit_code"
@@ -62,14 +63,19 @@ function run_alias_test() {
   _hi_on_exit 'rm -rf "$_HI_WORKDIR"'
 
   _HI_FAILED=0
+  _HI_TOTAL=0
   for _hi_shell in dash bash zsh fish; do
-    _hi_test_shell "$_hi_shell" "$_HI_WORKDIR" || _HI_FAILED=1
+    if ! command -v "$_hi_shell" >/dev/null 2>&1; then
+      _hi_h2 "$_hi_shell -- not installed, skipped"
+      continue
+    fi
+    _hi_case _hi_test_shell "$_hi_shell" "$_HI_WORKDIR"
   done
 
   if [ "$_HI_FAILED" -eq 0 ]; then
-    _hi_h1 "All installed shells loaded aliases.sh cleanly"
+    _hi_h1 "All installed shells loaded aliases.sh cleanly ($_HI_TOTAL shells)"
   else
-    _hi_h1 "One or more shells FAILED to load aliases.sh"
+    _hi_h1 "One or more shells FAILED to load aliases.sh: $_HI_FAILED/$_HI_TOTAL" "$RED"
   fi
   exit "$_HI_FAILED"
 }

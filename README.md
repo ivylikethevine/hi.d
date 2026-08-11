@@ -81,15 +81,17 @@ Reminder - place local only changes after the "`# hi-config-end`" comment in the
 | `misc/packages`                                 | what `check.sh` looks for, as `cmd:priority[,alternative:priority]`                                        |
 | `misc/colors`                                   | optional color pins for hostnames/usernames/hosttags                                                       |
 | `scripts/install.sh`                            | configure the local shells, install and update                                                             |
-| `scripts/alias_test.sh`                         | check `aliases.sh` still loads in dash/bash/zsh/fish                                                       |
-| `tests/alias_fallthrough_test.sh`               | unit tests for `aliases.sh`'s `command -v a \|\| b \|\| ...` fallthrough and `_HI_DISABLE_*` flag logic    |
 | `scripts/color_preview.sh`                      | preview what every ssh host/user resolves to (`hi_color_preview`)                                          |
-| `scripts/ssh_test.sh`                           | end-to-end test of hi's ssh path across remote login shells                                                |
-| `scripts/docker_test.sh`                        | end-to-end test of hi's docker path across container shell environments                                    |
-| `scripts/podman_test.sh`                        | end-to-end test of hi's podman path across container shell environments                                    |
-| `scripts/nomad_test.sh`                         | end-to-end test of hi's nomad path against a throwaway `nomad agent -dev`                                  |
-| `scripts/kube_test.sh`                          | end-to-end test of hi's kube path against a throwaway `kind` cluster                                       |
-| `scripts/shellcheck_test.sh`                    | runs shellcheck over every `*.sh` file in the repo                                                         |
+| `tests/test_runner.sh`                          | unified runner - times and summarizes every test below (or a chosen subset) (`hi_test`)                    |
+| `tests/test_lib.sh`                             | shared pty-fake/poll helpers used by the docker/podman/kube/nomad/ssh tests                                |
+| `tests/alias_test.sh`                           | check `aliases.sh` still loads in dash/bash/zsh/fish                                                       |
+| `tests/alias_fallthrough_test.sh`               | unit tests for `aliases.sh`'s `command -v a \|\| b \|\| ...` fallthrough and `_HI_DISABLE_*` flag logic    |
+| `tests/ssh_test.sh`                             | end-to-end test of hi's ssh path across remote login shells                                                |
+| `tests/docker_test.sh`                          | end-to-end test of hi's docker path across container shell environments                                    |
+| `tests/podman_test.sh`                          | end-to-end test of hi's podman path across container shell environments                                    |
+| `tests/nomad_test.sh`                           | end-to-end test of hi's nomad path against a throwaway `nomad agent -dev`                                  |
+| `tests/kube_test.sh`                            | end-to-end test of hi's kube path against a throwaway `kind` cluster                                       |
+| `tests/shellcheck_test.sh`                      | runs shellcheck over every `*.sh` file in the repo                                                         |
 
 ##### Hostname, username, and group/tag colors
 

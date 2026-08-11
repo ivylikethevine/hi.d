@@ -19,6 +19,8 @@ set -euo pipefail
 
 # shellcheck source=../common/bootstrap.sh
 source "${_HI_HOME:-$HOME}/hi.d/common/bootstrap.sh"
+# shellcheck source=./test_lib.sh
+source "$_HI_TEST_LIB"
 
 command -v docker >/dev/null 2>&1 || { _hi_cecho "docker not installed, skipping" "$YELLOW"; exit 0; }
 docker info >/dev/null 2>&1 || { _hi_cecho "docker daemon not reachable, skipping" "$YELLOW"; exit 0; }
@@ -30,7 +32,7 @@ declare -a _HI_STARTED=()
 function _hi_cleanup() {
   local c
   for c in "${_HI_STARTED[@]:-}"; do
-    [ -n "$c" ] && docker stop -t 0 "$c" >/dev/null 2>&1
+    [ -n "$c" ] && docker stop -t 0 "$c" >/dev/null 2>&1 || true
   done
   rm -rf "$_HI_WORKDIR"
 }
@@ -191,35 +193,27 @@ _HI_CMD_INSTALLED='test "$_HI_ROOT" = "$HOME/hi.d" && source "$_HI_ALIASES" && a
 # leaves stdin as-is. Route through a locally-faked pty in that case so the
 # test is reliable everywhere, not just when someone happens to run it from
 # an interactive terminal.
-declare -a _HI_PTY_WRAP=()
-if [ ! -t 0 ]; then
-  if command -v python3 >/dev/null 2>&1; then
-    _HI_PTY_WRAP=(python3 -c 'import pty, sys; sys.exit(pty.spawn(sys.argv[1:]))')
-  else
-    _hi_cecho " | no tty and no python3 to fake one - ssh -t may not get a real pty, results may be unreliable" "$YELLOW"
-  fi
-fi
+_hi_pty_wrap 0 auto "no tty and no python3 to fake one - ssh -t may not get a real pty, results may be unreliable"
 
 _HI_FAILED=0
+_HI_TOTAL=0
 
 # polls until the container's sshd actually completes a handshake, so the
 # real test isn't racing the container's boot
-function _hi_wait_for_ssh() {
-  local port="$1" key="$2" i
-  for ((i = 0; i < 40; i++)); do
-    ssh -i "$key" -p "$port" -o BatchMode=yes -o StrictHostKeyChecking=no \
-      -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o ConnectTimeout=2 \
-      hitest@127.0.0.1 true 2>/dev/null && return 0
-    sleep 0.25
-  done
-  return 1
+# shellcheck disable=SC2329 # invoked indirectly, via _hi_poll_bool's "$@"
+function _hi_ssh_reachable() {
+  ssh -i "$2" -p "$1" -o BatchMode=yes -o StrictHostKeyChecking=no \
+    -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o ConnectTimeout=2 \
+    hitest@127.0.0.1 true
 }
 
+# shellcheck disable=SC2329 # invoked indirectly, via _hi_case's "$@"
 function _hi_run_case() {
-  local label="$1" image="$2" login_shell="$3" cmd="$4" post="${5:-}" name port out exit_code=0
+  local label="$1" image="$2" login_shell="$3" cmd="$4" post="${5:-}" name port out exit_code=0 t0 t1 ok=1
 
   name="hi-sshtest-$label-$$"
   _hi_h3 "Testing login shell: $label"
+  t0="$(_hi_now)"
 
   if ! docker run -d --rm --name "$name" -p 127.0.0.1::22 \
     -e "PUBKEY=$_HI_PUBKEY" -e "LOGIN_SHELL=$login_shell" "$image" >/dev/null 2>"$_HI_WORKDIR/$label.log"; then
@@ -231,7 +225,7 @@ function _hi_run_case() {
 
   port="$(docker port "$name" 22/tcp | head -1 | sed 's/.*://')"
   _hi_cecho " | waiting for sshd on 127.0.0.1:$port"
-  if ! _hi_wait_for_ssh "$port" "$_HI_WORKDIR/id"; then
+  if ! _hi_poll_bool 40 0.25 _hi_ssh_reachable "$port" "$_HI_WORKDIR/id"; then
     _hi_cecho " |  sshd never came up" "$RED"
     return 1
   fi
@@ -240,50 +234,53 @@ function _hi_run_case() {
   out="$("${_HI_PTY_WRAP[@]}" "$_HI_LAUNCHER" -p "$port" -i "$_HI_WORKDIR/id" -o StrictHostKeyChecking=no \
     -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o IdentitiesOnly=yes \
     -o ConnectTimeout=5 hitest@127.0.0.1 "$cmd" 2>&1)" || exit_code=$?
+  t1="$(_hi_now)"
 
   if printf '%s' "$out" | grep -q "$_HI_MARKER"; then
-    _hi_cecho " | $label -- ssh path OK" "$GREEN"
     if [ -n "$post" ] && ! docker exec "$name" sh -c "$post" >/dev/null 2>&1; then
-      _hi_h3 " |  $label -- post-check FAILED: $post"
-      _HI_FAILED=1
+      _hi_h3 " |  $label -- post-check FAILED: $post ($(_hi_elapsed "$t0" "$t1")s)"
+      ok=0
+    else
+      _hi_cecho " | $label -- ssh path OK ($(_hi_elapsed "$t0" "$t1")s)" "$GREEN"
     fi
   else
-    _hi_h3 " | $label -- FAILED (exit $exit_code)"
+    _hi_h3 " | $label -- FAILED (exit $exit_code, $(_hi_elapsed "$t0" "$t1")s)"
     printf '%s\n' "$out" | sed 's/^/      /'
-    _HI_FAILED=1
+    ok=0
   fi
 
   docker stop -t 0 "$name" >/dev/null 2>&1
+  [ "$ok" -eq 1 ]
 }
 
 
 if [ "$_HI_DEBIAN_OK" -eq 1 ]; then
   for _hi_pair in bash:/bin/bash dash:/bin/dash zsh:/usr/bin/zsh fish:/usr/bin/fish; do
-    _hi_run_case "${_hi_pair%%:*}" hi-sshtest-debian "${_hi_pair#*:}" "$_HI_CMD_BASH" || _HI_FAILED=1
+    _hi_case _hi_run_case "${_hi_pair%%:*}" hi-sshtest-debian "${_hi_pair#*:}" "$_HI_CMD_BASH"
   done
 fi
 
 if [ "$_HI_ALPINE_OK" -eq 1 ]; then
-  _hi_run_case nobash hi-sshtest-alpine /bin/ash "$_HI_CMD_FALLBACK" || _HI_FAILED=1
+  _hi_case _hi_run_case nobash hi-sshtest-alpine /bin/ash "$_HI_CMD_FALLBACK"
 fi
 
 if [ "$_HI_ALPINE_ZSH_OK" -eq 1 ]; then
-  _hi_run_case nobash-zsh hi-sshtest-alpine-zsh /bin/ash "$_HI_CMD_FALLBACK" || _HI_FAILED=1
+  _hi_case _hi_run_case nobash-zsh hi-sshtest-alpine-zsh /bin/ash "$_HI_CMD_FALLBACK"
 fi
 
 if [ "$_HI_ALPINE_FISH_OK" -eq 1 ]; then
-  _hi_run_case nobash-fish hi-sshtest-alpine-fish /bin/ash "$_HI_CMD_FALLBACK_FISH" || _HI_FAILED=1
+  _hi_case _hi_run_case nobash-fish hi-sshtest-alpine-fish /bin/ash "$_HI_CMD_FALLBACK_FISH"
 fi
 
 if [ "$_HI_INSTALLED_OK" -eq 1 ]; then
-  _hi_run_case installed hi-sshtest-debian-installed /bin/bash "$_HI_CMD_INSTALLED" \
-    'test -f /home/hitest/hi.d/.installed_sentinel' || _HI_FAILED=1
+  _hi_case _hi_run_case installed hi-sshtest-debian-installed /bin/bash "$_HI_CMD_INSTALLED" \
+    'test -f /home/hitest/hi.d/.installed_sentinel'
 fi
 
 if [ "$_HI_FAILED" -eq 0 ]; then
-  _hi_h1 "hi's ssh path survived every login shell tested"
+  _hi_h1 "hi's ssh path survived every login shell tested ($_HI_TOTAL cases)"
 else
-  _hi_h1 "hi's ssh path FAILED for one or more login shells"
+  _hi_h1 "hi's ssh path FAILED: $_HI_FAILED/$_HI_TOTAL cases" "$RED"
 fi
 
 docker image rm -f hi-sshtest-debian hi-sshtest-alpine hi-sshtest-alpine-zsh hi-sshtest-alpine-fish hi-sshtest-debian-installed

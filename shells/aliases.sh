@@ -96,7 +96,7 @@ alias utar="tar -zxvf"
 alias mindiff="diff -Bdw"
 
 # fallthrough aliases for improved basics
-alias du="$(command -v dua || command -v du)"
+# alias du="$(command -v dua || command -v du)" # this breaks du -sh :/
 alias df="$(command -v duf || command -v df)"
 alias dig="$(command -v dog || command -v dig)"
 

@@ -24,6 +24,8 @@ set -euo pipefail
 
 # shellcheck source=../common/bootstrap.sh
 source "${_HI_HOME:-$HOME}/hi.d/common/bootstrap.sh"
+# shellcheck source=./test_lib.sh
+source "$_HI_TEST_LIB"
 
 command -v kind >/dev/null 2>&1 || { _hi_cecho "kind not installed, skipping" "$YELLOW"; exit 0; }
 command -v kubectl >/dev/null 2>&1 || { _hi_cecho "kubectl not installed, skipping" "$YELLOW"; exit 0; }
@@ -57,12 +59,7 @@ _hi_cecho " | cluster up" "$GREEN"
 # `default` ServiceAccount yet - a pod submitted before it exists is rejected
 # outright ("error looking up service account default/default: ... not
 # found"), so wait for it rather than race the pod creation below against it
-_HI_SA_UP=0
-for ((i = 0; i < 40; i++)); do
-  kubectl get serviceaccount default >/dev/null 2>&1 && { _HI_SA_UP=1; break; }
-  sleep 0.5
-done
-if [ "$_HI_SA_UP" -ne 1 ]; then
+if ! _hi_poll_bool 40 0.5 kubectl get serviceaccount default; then
   _hi_cecho "default ServiceAccount never showed up, skipping" "$YELLOW"
   exit 0
 fi
@@ -79,34 +76,24 @@ _HI_CMD_FALLBACK='alias sudo >/dev/null 2>&1 && echo '"$_HI_MARKER"
 # runs headless/backgrounded - fake one via fd 3 the same way (see
 # docker_test.sh for the long version of why fd 3 specifically, not fd 0)
 exec 3<&0
-declare -a _HI_PTY_WRAP=()
-if [ ! -t 3 ]; then
-  if command -v python3 >/dev/null 2>&1; then
-    _HI_PTY_WRAP=(python3 -c 'import pty, sys; sys.exit(pty.spawn(sys.argv[1:]))')
-  else
-    _hi_cecho " | no tty and no python3 to fake one - kubectl exec -it will fail outright, results may be unreliable" "$YELLOW"
-  fi
-fi
+_hi_pty_wrap 3 auto "no tty and no python3 to fake one - kubectl exec -it will fail outright, results may be unreliable"
 
 _HI_FAILED=0
+_HI_TOTAL=0
 
 # polls until the pod itself reports Running, so the real test isn't racing
 # the scheduler/kubelet
-function _hi_wait_for_pod() {
-  local name="$1" i
-  for ((i = 0; i < 80; i++)); do
-    [ "$(kubectl get pod "$name" -o jsonpath='{.status.phase}' 2>/dev/null)" = Running ] && return 0
-    sleep 0.25
-  done
-  return 1
-}
+# shellcheck disable=SC2329 # invoked indirectly, via _hi_poll_bool's "$@"
+function _hi_pod_running() { [ "$(kubectl get pod "$1" -o jsonpath='{.status.phase}' 2>/dev/null)" = Running ]; }
 
+# shellcheck disable=SC2329 # invoked indirectly, via _hi_case's "$@"
 function _hi_run_case() {
   local label="$1" image="$2" cmd="$3" timeout_s="${4:-30}"
-  local name out_file out exit_code=0 i pid
+  local name out_file out exit_code=0 i pid t0 t1 ok=1
 
   name="hi-kubetest-$label"
   _hi_h3 "Testing shape: $label"
+  t0="$(_hi_now)"
 
   if ! kubectl run "$name" --image="$image" --image-pull-policy=IfNotPresent \
     --restart=Never --command -- sleep infinity >"$_HI_WORKDIR/$label.run.log" 2>&1; then
@@ -115,7 +102,7 @@ function _hi_run_case() {
   fi
   _hi_cecho " | pod: $name (image: $image)"
 
-  if ! _hi_wait_for_pod "$name"; then
+  if ! _hi_poll_bool 80 0.25 _hi_pod_running "$name"; then
     _hi_cecho " | pod never reported Running" "$RED"
     kubectl delete pod "$name" --now >/dev/null 2>&1
     return 1
@@ -138,26 +125,28 @@ function _hi_run_case() {
   else
     wait "$pid" 2>/dev/null || exit_code=$?
   fi
+  t1="$(_hi_now)"
 
   out="$(cat "$out_file" 2>/dev/null)"
   if printf '%s' "$out" | grep -q "$_HI_MARKER"; then
-    _hi_cecho " | $label -- kube path OK" "$GREEN"
+    _hi_cecho " | $label -- kube path OK ($(_hi_elapsed "$t0" "$t1")s)" "$GREEN"
   else
-    _hi_h3 " | $label -- FAILED (exit $exit_code)"
+    _hi_h3 " | $label -- FAILED (exit $exit_code, $(_hi_elapsed "$t0" "$t1")s)"
     printf '%s\n' "$out" | sed 's/^/      /'
-    _HI_FAILED=1
+    ok=0
   fi
 
   kubectl delete pod "$name" --now >/dev/null 2>&1
+  [ "$ok" -eq 1 ]
 }
 
-_hi_run_case bash debian:bookworm-slim "$_HI_CMD_BASH" || _HI_FAILED=1
-_hi_run_case sh alpine:3.20 "$_HI_CMD_FALLBACK" || _HI_FAILED=1
+_hi_case _hi_run_case bash debian:bookworm-slim "$_HI_CMD_BASH"
+_hi_case _hi_run_case sh alpine:3.20 "$_HI_CMD_FALLBACK"
 
 if [ "$_HI_FAILED" -eq 0 ]; then
-  _hi_h1 "hi's kube path survived every shape tested"
+  _hi_h1 "hi's kube path survived every shape tested ($_HI_TOTAL cases)"
 else
-  _hi_h1 "hi's kube path FAILED for one or more cases"
+  _hi_h1 "hi's kube path FAILED: $_HI_FAILED/$_HI_TOTAL cases" "$RED"
 fi
 
 exit "$_HI_FAILED"

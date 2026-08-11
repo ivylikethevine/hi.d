@@ -14,6 +14,8 @@ set -euo pipefail
 
 # shellcheck source=../common/bootstrap.sh
 source "${_HI_HOME:-$HOME}/hi.d/common/bootstrap.sh"
+# shellcheck source=./test_lib.sh
+source "$_HI_TEST_LIB"
 
 command -v podman >/dev/null 2>&1 || { _hi_cecho "podman not installed, skipping" "$YELLOW"; exit 0; }
 podman info >/dev/null 2>&1 || { _hi_cecho "podman not reachable, skipping" "$YELLOW"; exit 0; }
@@ -95,34 +97,24 @@ _HI_CMD_FALLBACK_FISH='functions -q sudo; and echo '"$_HI_MARKER"
 # Duplicating to fd 3 up front and threading `<&3` through to the background
 # command (see _hi_run_case) keeps the original tty-ness intact either way.
 exec 3<&0
-declare -a _HI_PTY_WRAP=()
-if [ ! -t 3 ]; then
-  if command -v python3 >/dev/null 2>&1; then
-    _HI_PTY_WRAP=(python3 -c 'import pty, sys; sys.exit(pty.spawn(sys.argv[1:]))')
-  else
-    _hi_cecho " | no tty and no python3 to fake one - podman exec -it will fail outright, results may be unreliable" "$YELLOW"
-  fi
-fi
+_hi_pty_wrap 3 auto "no tty and no python3 to fake one - podman exec -it will fail outright, results may be unreliable"
 
 _HI_FAILED=0
+_HI_TOTAL=0
 
 # polls until the container is actually running, so the real test isn't
 # racing the container's start
-function _hi_wait_for_container() {
-  local name="$1" i
-  for ((i = 0; i < 40; i++)); do
-    [ "$(podman container inspect -f '{{.State.Running}}' "$name" 2>/dev/null)" = true ] && return 0
-    sleep 0.25
-  done
-  return 1
-}
+# shellcheck disable=SC2329 # invoked indirectly, via _hi_poll_bool's "$@"
+function _hi_container_running() { [ "$(podman container inspect -f '{{.State.Running}}' "$1" 2>/dev/null)" = true ]; }
 
+# shellcheck disable=SC2329 # invoked indirectly, via _hi_case's "$@"
 function _hi_run_case() {
   local label="$1" image="$2" cmd="$3" timeout_s="${4:-20}"
-  local name out_file out exit_code=0 i pid
+  local name out_file out exit_code=0 i pid t0 t1 ok=1
 
   name="hi-podmantest-$label-$$"
   _hi_h3 "Testing shell: $label"
+  t0="$(_hi_now)"
 
   if ! podman run -d --name "$name" "$image" tail -f /dev/null >/dev/null 2>"$_HI_WORKDIR/$label.run.log"; then
     _hi_cecho " | failed to start container (image: $image)" "$RED"
@@ -131,7 +123,7 @@ function _hi_run_case() {
   _HI_STARTED+=("$name")
   _hi_cecho " | container: $name (image: $image)"
 
-  if ! _hi_wait_for_container "$name"; then
+  if ! _hi_poll_bool 40 0.25 _hi_container_running "$name"; then
     _hi_cecho " | container never reported running" "$RED"
     return 1
   fi
@@ -154,28 +146,30 @@ function _hi_run_case() {
   else
     wait "$pid" 2>/dev/null || exit_code=$?
   fi
+  t1="$(_hi_now)"
 
   out="$(cat "$out_file" 2>/dev/null)"
   if printf '%s' "$out" | grep -q "$_HI_MARKER"; then
-    _hi_cecho " | $label -- podman path OK" "$GREEN"
+    _hi_cecho " | $label -- podman path OK ($(_hi_elapsed "$t0" "$t1")s)" "$GREEN"
   else
-    _hi_h3 " | $label -- FAILED (exit $exit_code)"
+    _hi_h3 " | $label -- FAILED (exit $exit_code, $(_hi_elapsed "$t0" "$t1")s)"
     printf '%s\n' "$out" | sed 's/^/      /'
-    _HI_FAILED=1
+    ok=0
   fi
 
   podman rm -f "$name" >/dev/null 2>&1
+  [ "$ok" -eq 1 ]
 }
 
-_hi_run_case bash debian:bookworm-slim "$_HI_CMD_BASH" || _HI_FAILED=1
-[ "$_HI_ZSH_OK" -eq 1 ] && { _hi_run_case zsh hi-podmantest-zsh "$_HI_CMD_FALLBACK" || _HI_FAILED=1; }
-[ "$_HI_FISH_OK" -eq 1 ] && { _hi_run_case fish hi-podmantest-fish "$_HI_CMD_FALLBACK_FISH" || _HI_FAILED=1; }
-_hi_run_case sh alpine:3.20 "$_HI_CMD_FALLBACK" || _HI_FAILED=1
+_hi_case _hi_run_case bash debian:bookworm-slim "$_HI_CMD_BASH"
+[ "$_HI_ZSH_OK" -eq 1 ] && _hi_case _hi_run_case zsh hi-podmantest-zsh "$_HI_CMD_FALLBACK"
+[ "$_HI_FISH_OK" -eq 1 ] && _hi_case _hi_run_case fish hi-podmantest-fish "$_HI_CMD_FALLBACK_FISH"
+_hi_case _hi_run_case sh alpine:3.20 "$_HI_CMD_FALLBACK"
 
 if [ "$_HI_FAILED" -eq 0 ]; then
-  _hi_h1 "hi's podman path survived every shell environment tested"
+  _hi_h1 "hi's podman path survived every shell environment tested ($_HI_TOTAL cases)"
 else
-  _hi_h1 "hi's podman path FAILED for one or more shell environments"
+  _hi_h1 "hi's podman path FAILED: $_HI_FAILED/$_HI_TOTAL cases" "$RED"
 fi
 
 podman image rm -f hi-podmantest-zsh hi-podmantest-fish >/dev/null 2>&1 || true

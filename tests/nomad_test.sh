@@ -19,6 +19,8 @@ set -euo pipefail
 
 # shellcheck source=../common/bootstrap.sh
 source "${_HI_HOME:-$HOME}/hi.d/common/bootstrap.sh"
+# shellcheck source=./test_lib.sh
+source "$_HI_TEST_LIB"
 
 command -v nomad >/dev/null 2>&1 || { _hi_cecho "nomad not installed, skipping" "$YELLOW"; exit 0; }
 command -v docker >/dev/null 2>&1 || { _hi_cecho "docker not installed, skipping (nomad's dev agent needs it for the docker task driver)" "$YELLOW"; exit 0; }
@@ -33,7 +35,7 @@ function _hi_cleanup() {
   local j
   export NOMAD_ADDR="http://127.0.0.1:4646"
   for j in "${_HI_JOBS[@]:-}"; do
-    [ -n "$j" ] && nomad job stop -purge "$j" >/dev/null 2>&1
+    [ -n "$j" ] && nomad job stop -purge "$j" >/dev/null 2>&1 || true
   done
   if [ -n "$_HI_NOMAD_PID" ] && kill -0 "$_HI_NOMAD_PID" 2>/dev/null; then
     kill "$_HI_NOMAD_PID" 2>/dev/null
@@ -86,35 +88,28 @@ _HI_CMD_FALLBACK='alias sudo >/dev/null 2>&1 && echo '"$_HI_MARKER"
 # shared with this script's polling loop - sidesteps the whole class of
 # problem regardless of what our own stdin happens to be.
 exec 3<&0
-declare -a _HI_PTY_WRAP=()
-if command -v python3 >/dev/null 2>&1; then
-  _HI_PTY_WRAP=(python3 -c 'import pty, sys; sys.exit(pty.spawn(sys.argv[1:]))')
-else
-  _hi_cecho " | no python3 to give the launcher its own pty - nomad alloc exec's attach may not get a real pty, results may be unreliable" "$YELLOW"
-fi
+_hi_pty_wrap 3 force "no python3 to give the launcher its own pty - nomad alloc exec's attach may not get a real pty, results may be unreliable"
 
 _HI_FAILED=0
+_HI_TOTAL=0
 
-# polls until the job has a running allocation, printing its ID once found
-function _hi_wait_for_alloc() {
-  local job="$1" i alloc
-  for ((i = 0; i < 80; i++)); do
-    alloc="$(nomad job allocs -t \
-      '{{range .}}{{if eq .ClientStatus "running"}}{{.ID}}{{"\n"}}{{end}}{{end}}' \
-      "$job" 2>/dev/null | head -1)"
-    [ -n "$alloc" ] && { printf '%s' "$alloc"; return 0; }
-    sleep 0.25
-  done
-  return 1
+# first running allocation ID for a job, once it has one
+# shellcheck disable=SC2329 # invoked indirectly, via _hi_poll_value's "$@"
+function _hi_first_running_alloc() {
+  nomad job allocs -t \
+    '{{range .}}{{if eq .ClientStatus "running"}}{{.ID}}{{"\n"}}{{end}}{{end}}' \
+    "$1" 2>/dev/null | head -1
 }
 
+# shellcheck disable=SC2329 # invoked indirectly, via _hi_case's "$@"
 function _hi_run_case() {
   local label="$1" image="$2" cmd="$3" timeout_s="${4:-30}"
-  local job jobfile alloc out_file out exit_code=0 i pid
+  local job jobfile alloc out_file out exit_code=0 i pid t0 t1 ok=1
 
   job="hi-nomadtest-$label-$$"
   jobfile="$_HI_WORKDIR/$label.nomad.hcl"
   _hi_h3 "Testing driver shape: $label"
+  t0="$(_hi_now)"
 
   cat >"$jobfile" <<EOF
 job "$job" {
@@ -146,7 +141,7 @@ EOF
   _HI_JOBS+=("$job")
   _hi_cecho " | job: $job (image: $image)"
 
-  if ! alloc="$(_hi_wait_for_alloc "$job")"; then
+  if ! alloc="$(_hi_poll_value 80 0.25 _hi_first_running_alloc "$job")"; then
     _hi_cecho " | allocation never reported running" "$RED"
     return 1
   fi
@@ -175,26 +170,28 @@ EOF
   else
     wait "$pid" 2>/dev/null || exit_code=$?
   fi
+  t1="$(_hi_now)"
 
   out="$(cat "$out_file" 2>/dev/null)"
   if printf '%s' "$out" | grep -q "$_HI_MARKER"; then
-    _hi_cecho " | $label -- nomad path OK" "$GREEN"
+    _hi_cecho " | $label -- nomad path OK ($(_hi_elapsed "$t0" "$t1")s)" "$GREEN"
   else
-    _hi_h3 " | $label -- FAILED (exit $exit_code)"
+    _hi_h3 " | $label -- FAILED (exit $exit_code, $(_hi_elapsed "$t0" "$t1")s)"
     printf '%s\n' "$out" | sed 's/^/      /'
-    _HI_FAILED=1
+    ok=0
   fi
 
   nomad job stop -purge "$job" >/dev/null 2>&1
+  [ "$ok" -eq 1 ]
 }
 
-_hi_run_case bash debian:bookworm-slim "$_HI_CMD_BASH" || _HI_FAILED=1
-_hi_run_case sh alpine:3.20 "$_HI_CMD_FALLBACK" || _HI_FAILED=1
+_hi_case _hi_run_case bash debian:bookworm-slim "$_HI_CMD_BASH"
+_hi_case _hi_run_case sh alpine:3.20 "$_HI_CMD_FALLBACK"
 
 if [ "$_HI_FAILED" -eq 0 ]; then
-  _hi_h1 "hi's nomad path survived every driver shape tested"
+  _hi_h1 "hi's nomad path survived every driver shape tested ($_HI_TOTAL cases)"
 else
-  _hi_h1 "hi's nomad path FAILED for one or more cases"
+  _hi_h1 "hi's nomad path FAILED: $_HI_FAILED/$_HI_TOTAL cases" "$RED"
 fi
 
 exit "$_HI_FAILED"

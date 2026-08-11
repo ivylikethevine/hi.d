@@ -276,37 +276,37 @@ function run_git_prompt_tests() {
   _HI_FAILED=0
   _HI_TOTAL=0
 
-  _hi_h2 "no repo / disabled"
-  _hi_case _hi_assert "outside a repo -> no output" test_outside_a_repo_produces_no_output
+  _hi_h2 "Use-Case: no repo / disabled"
+  _hi_case _hi_assert "Outside a repo -> no output" test_outside_a_repo_produces_no_output
   _hi_case _hi_assert "_HI_DISABLE_GIT_STATUS=1 -> no output" test_disabled_flag_produces_no_output
 
-  _hi_h2 "clean status"
-  _hi_case _hi_assert "shows branch and checkmark" test_clean_repo_shows_branch_and_checkmark
+  _hi_h2 "Use-Case: clean status"
+  _hi_case _hi_assert "Shows branch and checkmark" test_clean_repo_shows_branch_and_checkmark
 
-  _hi_h2 "working tree flags"
-  _hi_case _hi_assert "staged change -> bullet count" test_staged_change_shows_bullet_count
-  _hi_case _hi_assert "dirty change -> plus count" test_dirty_change_shows_plus_count
-  _hi_case _hi_assert "untracked file -> ellipsis count" test_untracked_file_shows_ellipsis_count
-  _hi_case _hi_assert "merge conflict -> invalid count + MERGING" test_merge_conflict_shows_invalid_and_merging
+  _hi_h2 "Use-Case: working tree flags"
+  _hi_case _hi_assert "Staged change -> bullet count" test_staged_change_shows_bullet_count
+  _hi_case _hi_assert "Dirty change -> plus count" test_dirty_change_shows_plus_count
+  _hi_case _hi_assert "Untracked file -> ellipsis count" test_untracked_file_shows_ellipsis_count
+  _hi_case _hi_assert "Merge conflict -> invalid count + MERGING" test_merge_conflict_shows_invalid_and_merging
 
-  _hi_h2 "ahead/behind"
-  _hi_case _hi_assert "ahead and behind arrows" test_ahead_and_behind_show_arrows
+  _hi_h2 "Use-Case: ahead/behind"
+  _hi_case _hi_assert "Ahead and behind arrows" test_ahead_and_behind_show_arrows
 
-  _hi_h2 "detached HEAD"
-  _hi_case _hi_assert "short sha + red branch color" test_detached_head_shows_short_sha_and_red
+  _hi_h2 "Use-Case: detached HEAD"
+  _hi_case _hi_assert "Short sha + red branch color" test_detached_head_shows_short_sha_and_red
 
-  _hi_h2 "long branch names"
-  _hi_case _hi_assert "truncated at 31 chars + ellipsis" test_long_branch_name_is_truncated
+  _hi_h2 "Use-Case: long branch names"
+  _hi_case _hi_assert "Truncated at 31 chars + ellipsis" test_long_branch_name_is_truncated
 
-  _hi_h2 "in-progress operations"
-  _hi_case _hi_assert "rebase (apply backend) + source branch" test_rebase_apply_backend_shows_state_and_source_branch
-  _hi_case _hi_assert "rebase (interactive)" test_rebase_interactive_shows_state
-  _hi_case _hi_assert "cherry-pick conflict" test_cherry_pick_conflict_shows_state
-  _hi_case _hi_assert "revert conflict" test_revert_conflict_shows_state
-  _hi_case _hi_assert "bisect" test_bisect_shows_state
+  _hi_h2 "Use-Case: in-progress operations"
+  _hi_case _hi_assert "Rebase (apply backend) + source branch" test_rebase_apply_backend_shows_state_and_source_branch
+  _hi_case _hi_assert "Rebase (interactive)" test_rebase_interactive_shows_state
+  _hi_case _hi_assert "Cherry-pick conflict" test_cherry_pick_conflict_shows_state
+  _hi_case _hi_assert "Revert conflict" test_revert_conflict_shows_state
+  _hi_case _hi_assert "Bisect" test_bisect_shows_state
 
-  _hi_h2 "stash"
-  _hi_case _hi_assert "stash -> flag count" test_stash_shows_flag_count
+  _hi_h2 "Use-Case: stash"
+  _hi_case _hi_assert "Stash -> flag count" test_stash_shows_flag_count
 
   if [ "$_HI_FAILED" -eq 0 ]; then
     _hi_h1 "All git_prompt.sh checks passed ($_HI_TOTAL cases)"

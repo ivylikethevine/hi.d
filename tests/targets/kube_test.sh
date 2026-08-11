@@ -45,14 +45,14 @@ function _hi_cleanup() {
 _hi_on_exit _hi_cleanup
 _hi_h1 "Testing hi's kube path against a throwaway kind cluster"
 
-_hi_h2 "creating kind cluster $_HI_CLUSTER (kubeconfig: $KUBECONFIG, log: $_HI_WORKDIR/kind.log)"
+_hi_h2 "Creating kind cluster $_HI_CLUSTER"
 if ! kind create cluster --name "$_HI_CLUSTER" --kubeconfig "$KUBECONFIG" \
   >"$_HI_WORKDIR/kind.log" 2>&1; then
-  _hi_cecho "kind cluster never came up (see $_HI_WORKDIR/kind.log), skipping" "$YELLOW"
+  _hi_cecho "Kind cluster never came up (see $_HI_WORKDIR/kind.log), skipping" "$YELLOW"
   exit 0
 fi
 _HI_CLUSTER_UP=1
-_hi_cecho " | cluster up" "$GREEN"
+_hi_cecho " | Cluster up" "$GREEN"
 
 # kind reports the cluster ready as soon as the API server answers, but the
 # controller-manager hasn't necessarily created the default namespace's
@@ -92,24 +92,24 @@ function _hi_run_case() {
   local name out_file out exit_code=0 t0 t1 ok=1
 
   name="hi-kubetest-$label"
-  _hi_h3 "Testing shape: $label"
+  _hi_h3 "Testing shape: [$label]"
   t0="$(_hi_now)"
 
   if ! kubectl run "$name" --image="$image" --image-pull-policy=IfNotPresent \
     --restart=Never --command -- sleep infinity >"$_HI_WORKDIR/$label.run.log" 2>&1; then
-    _hi_cecho " | failed to create pod (see $_HI_WORKDIR/$label.run.log)" "$RED"
+    _hi_cecho " | Failed to create pod (see $_HI_WORKDIR/$label.run.log)" "$RED"
     return 1
   fi
-  _hi_cecho " | pod: $name (image: $image)"
+  _hi_cecho " | Pod: $name (image: $image)"
 
   if ! _hi_poll_bool 80 0.25 _hi_pod_running "$name"; then
-    _hi_cecho " | pod never reported Running" "$RED"
+    _hi_cecho " | Pod never reported Running" "$RED"
     kubectl delete pod "$name" --now >/dev/null 2>&1
     return 1
   fi
 
   out_file="$_HI_WORKDIR/$label.out"
-  _hi_cecho " | running: $_HI_LAUNCHER $name $cmd"
+  _hi_cecho " | Running: $_HI_LAUNCHER $name $cmd"
   # backgrounded so a hung fallback can't wedge the whole test suite
   "${_HI_PTY_WRAP[@]}" "$_HI_LAUNCHER" "$name" "$cmd" <&3 >"$out_file" 2>&1 &
   # shellcheck disable=SC2329 # invoked indirectly, as _hi_wait_pid's on-timeout hook
@@ -120,9 +120,9 @@ function _hi_run_case() {
 
   out="$(cat "$out_file" 2>/dev/null)"
   if printf '%s' "$out" | grep -q "$_HI_MARKER"; then
-    _hi_cecho " | $label -- kube path OK ($(_hi_elapsed "$t0" "$t1")s)" "$GREEN"
+    _hi_cecho " | [$label] -- Kube path OK ($(_hi_elapsed "$t0" "$t1")s)" "$GREEN"
   else
-    _hi_h3 " | $label -- FAILED (exit $exit_code, $(_hi_elapsed "$t0" "$t1")s)"
+    _hi_h3 "  [$label] -- FAILED (exit $exit_code, $(_hi_elapsed "$t0" "$t1")s)"
     printf '%s\n' "$out" | sed 's/^/      /'
     ok=0
   fi

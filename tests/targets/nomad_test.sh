@@ -49,7 +49,7 @@ _hi_h1 "Testing hi's nomad path against a throwaway dev agent"
 # -dev binds every listener to 127.0.0.1 and turns on every built-in task
 # driver (docker included, auto-detected since the daemon is reachable) -
 # nothing here touches a real cluster
-_hi_h2 "starting nomad agent -dev (data dir: $_HI_WORKDIR/data, log: $_HI_WORKDIR/agent.log)"
+_hi_h2 "Starting nomad agent -dev"
 nomad agent -dev -data-dir="$_HI_WORKDIR/data" -log-level=WARN \
   >"$_HI_WORKDIR/agent.log" 2>&1 &
 _HI_NOMAD_PID=$!
@@ -62,10 +62,10 @@ for ((i = 0; i < 60; i++)); do
   sleep 0.5
 done
 if [ "$_HI_AGENT_UP" -ne 1 ]; then
-  _hi_cecho "nomad dev agent never came up (see $_HI_WORKDIR/agent.log), skipping" "$YELLOW"
+  _hi_cecho "Nomad dev agent never came up (see $_HI_WORKDIR/agent.log), skipping" "$YELLOW"
   exit 0
 fi
-_hi_cecho " | dev agent up: $NOMAD_ADDR" "$GREEN"
+_hi_cecho " | Dev agent up: $NOMAD_ADDR" "$GREEN"
 
 # --- the actual per-driver-shape test ------------------------------------
 _HI_MARKER="HI_NOMAD_TEST_OK"
@@ -139,21 +139,21 @@ EOF
     return 1
   fi
   _HI_JOBS+=("$job")
-  _hi_cecho " | job: $job (image: $image)"
+  _hi_cecho " | Job: $job (image: $image)"
 
   if ! alloc="$(_hi_poll_value 80 0.25 _hi_first_running_alloc "$job")"; then
-    _hi_cecho " | allocation never reported running" "$RED"
+    _hi_cecho " | Allocation never reported running" "$RED"
     return 1
   fi
-  _hi_cecho " | allocation: $alloc"
+  _hi_cecho " | Allocation: $alloc"
 
   out_file="$_HI_WORKDIR/$label.out"
-  _hi_cecho " | running: $_HI_LAUNCHER $alloc $cmd"
+  _hi_cecho " | Running: $_HI_LAUNCHER $alloc $cmd"
   # backgrounded so a hung fallback can't wedge the whole test suite
   "${_HI_PTY_WRAP[@]}" "$_HI_LAUNCHER" "$alloc" "$cmd" <&3 >"$out_file" 2>&1 &
   # shellcheck disable=SC2329 # invoked indirectly, as _hi_wait_pid's on-timeout hook
   function _hi_on_timeout() {
-    _hi_h3 " | $label -- TIMED OUT after ${timeout_s}s, killing"
+    _hi_h3 " | [$label] -- TIMED OUT after ${timeout_s}s, killing"
     # a bare "TIMED OUT" says nothing about whether the alloc itself was
     # still healthy at the time - dump nomad's own view (task events, restart
     # count, driver failures) so a hang here is diagnosable after the fact
@@ -167,9 +167,9 @@ EOF
 
   out="$(cat "$out_file" 2>/dev/null)"
   if printf '%s' "$out" | grep -q "$_HI_MARKER"; then
-    _hi_cecho " | $label -- nomad path OK ($(_hi_elapsed "$t0" "$t1")s)" "$GREEN"
+    _hi_cecho " | [$label] -- nomad path OK ($(_hi_elapsed "$t0" "$t1")s)" "$GREEN"
   else
-    _hi_h3 " | $label -- FAILED (exit $exit_code, $(_hi_elapsed "$t0" "$t1")s)"
+    _hi_h3 " | [$label] -- FAILED (exit $exit_code, $(_hi_elapsed "$t0" "$t1")s)"
     printf '%s\n' "$out" | sed 's/^/      /'
     ok=0
   fi

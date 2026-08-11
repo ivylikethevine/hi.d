@@ -131,19 +131,19 @@ function run_check_tests() {
   _HI_FAILED=0
   _HI_TOTAL=0
 
-  _hi_h2 "check_line"
-  _hi_case _hi_assert "found primary -> visible, checked" test_check_line_found_primary_is_visible_checked
-  _hi_case _hi_assert "found priority 2 -> hidden" test_check_line_found_priority2_is_hidden
-  _hi_case _hi_assert "missing priority 0 -> hidden" test_check_line_missing_priority0_is_hidden
-  _hi_case _hi_assert "missing priority 5 -> visible, crossed" test_check_line_missing_priority5_is_visible_crossed
-  _hi_case _hi_assert "fallback alternative used" test_check_line_fallback_uses_second_alternative
-  _hi_case _hi_assert "picks the highest-priority installed alternative" test_check_line_picks_highest_priority_installed
+  _hi_h2 "Testing: check_line"
+  _hi_case _hi_assert "Found primary -> visible, checked" test_check_line_found_primary_is_visible_checked
+  _hi_case _hi_assert "Found priority 2 -> hidden" test_check_line_found_priority2_is_hidden
+  _hi_case _hi_assert "Missing priority 0 -> hidden" test_check_line_missing_priority0_is_hidden
+  _hi_case _hi_assert "Missing priority 5 -> visible, crossed" test_check_line_missing_priority5_is_visible_crossed
+  _hi_case _hi_assert "Fallback alternative used" test_check_line_fallback_uses_second_alternative
+  _hi_case _hi_assert "Picks the highest-priority installed alternative" test_check_line_picks_highest_priority_installed
 
-  _hi_h2 "full_check"
-  _hi_case _hi_assert "skips comment/blank lines" test_full_check_skips_comments_and_blanks
-  _hi_case _hi_assert "empty output when everything is hidden" test_full_check_empty_when_everything_hidden
-  _hi_case _hi_assert "wraps rows at _HI_MAX_WIDTH" test_full_check_wraps_at_max_width
-  _hi_case _hi_assert "real misc/packages file parses cleanly" test_full_check_reads_real_packages_file_without_erroring
+  _hi_h2 "Testing: full_check"
+  _hi_case _hi_assert "Skips comment/blank lines" test_full_check_skips_comments_and_blanks
+  _hi_case _hi_assert "Empty output when everything is hidden" test_full_check_empty_when_everything_hidden
+  _hi_case _hi_assert "Wraps rows at _HI_MAX_WIDTH" test_full_check_wraps_at_max_width
+  _hi_case _hi_assert "Real misc/packages file parses cleanly" test_full_check_reads_real_packages_file_without_erroring
 
   if [ "$_HI_FAILED" -eq 0 ]; then
     _hi_h1 "All check.sh checks passed ($_HI_TOTAL cases)"

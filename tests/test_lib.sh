@@ -150,9 +150,9 @@ EOF
 
   _hi_h2 "Building test images"
   local zsh_ok=1 fish_ok=1
-  _hi_h3 "building hi-${backend}test-zsh from $workdir/zsh (log: $workdir/zsh.log)"
+  _hi_h3 "Building hi-${backend}test-zsh" "$BLUE"
   "$backend" build -q -t "hi-${backend}test-zsh" "$workdir/zsh" >/dev/null 2>"$workdir/zsh.log" || zsh_ok=0
-  _hi_h3 "building hi-${backend}test-fish from $workdir/fish (log: $workdir/fish.log)"
+  _hi_h3 "Building hi-${backend}test-fish" "$BLUE"
   "$backend" build -q -t "hi-${backend}test-fish" "$workdir/fish" >/dev/null 2>"$workdir/fish.log" || fish_ok=0
 
   [ "$zsh_ok" -eq 1 ] || _hi_cecho " | zsh image failed to build, skipping the zsh fallback (see $workdir/zsh.log)" "$YELLOW"
@@ -212,19 +212,19 @@ EOF
     t0="$(_hi_now)"
 
     if ! "$backend" run -d --name "$name" "$image" tail -f /dev/null >/dev/null 2>"$workdir/$label.run.log"; then
-      _hi_cecho " | failed to start container (image: $image)" "$RED"
+      _hi_cecho " | Failed to start container (image: $image)" "$RED"
       return 1
     fi
     started+=("$name")
-    _hi_cecho " | container: $name (image: $image)"
+    _hi_cecho " | Container: $name (image: $image)"
 
     if ! _hi_poll_bool 40 0.25 _hi_container_running "$name"; then
-      _hi_cecho " | container never reported running" "$RED"
+      _hi_cecho " | Container never reported running" "$RED"
       return 1
     fi
 
     out_file="$workdir/$label.out"
-    _hi_cecho " | running: $_HI_LAUNCHER $name $cmd"
+    _hi_cecho " | Running: $_HI_LAUNCHER $name $cmd"
     # backgrounded so a hung fallback (e.g. a shell that never honors the
     # trailing `exit`) can't wedge the whole test suite
     "${_HI_PTY_WRAP[@]}" "$_HI_LAUNCHER" "$name" "$cmd" <&3 >"$out_file" 2>&1 &
@@ -236,9 +236,9 @@ EOF
 
     out="$(cat "$out_file" 2>/dev/null)"
     if printf '%s' "$out" | grep -q "$marker"; then
-      _hi_cecho " | $label -- $backend path OK ($(_hi_elapsed "$t0" "$t1")s)" "$GREEN"
+      _hi_cecho " | [$label] -- $backend path OK ($(_hi_elapsed "$t0" "$t1")s)" "$GREEN"
     else
-      _hi_h3 " | $label -- FAILED (exit $exit_code, $(_hi_elapsed "$t0" "$t1")s)"
+      _hi_h3 " [$label] -- FAILED (exit $exit_code, $(_hi_elapsed "$t0" "$t1")s)"
       printf '%s\n' "$out" | sed 's/^/      /'
       ok=0
     fi

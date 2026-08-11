@@ -55,7 +55,7 @@ function _hi_cleanup() {
 }
 _hi_on_exit _hi_cleanup
 _hi_h1 "Testing hi's ssh cleanup trap survives an abrupt disconnect"
-_hi_h2 "generating throwaway ed25519 keypair at $_HI_WORKDIR/id"
+_hi_h2 "Generating throwaway ed25519 keypair at $_HI_WORKDIR/id"
 ssh-keygen -t ed25519 -N '' -q -f "$_HI_WORKDIR/id"
 _HI_PUBKEY="$(cat "$_HI_WORKDIR/id.pub")"
 
@@ -90,9 +90,9 @@ exec /usr/sbin/sshd -D -e -o PasswordAuthentication=no -o PermitRootLogin=no -o 
 EOF
 
 _hi_h2 "Building test image"
-_hi_h3 "building hi-sshdisconnecttest from $_HI_WORKDIR/image (log: $_HI_WORKDIR/image.log)"
+_hi_h3 "Building hi-sshdisconnecttest from $_HI_WORKDIR/image"
 if ! docker build -q -t hi-sshdisconnecttest "$_HI_WORKDIR/image" >/dev/null 2>"$_HI_WORKDIR/image.log"; then
-  _hi_cecho " | image failed to build, skipping (see $_HI_WORKDIR/image.log)" "$YELLOW"
+  _hi_cecho " | Image failed to build, skipping (see $_HI_WORKDIR/image.log)" "$YELLOW"
   exit 0
 fi
 
@@ -100,13 +100,13 @@ fi
 _HI_CONTAINER="hi-sshdisconnecttest-$$"
 if ! docker run -d --rm --name "$_HI_CONTAINER" -p 127.0.0.1::22 \
   -e "PUBKEY=$_HI_PUBKEY" "hi-sshdisconnecttest" >/dev/null 2>"$_HI_WORKDIR/container.log"; then
-  _hi_cecho " | failed to start container" "$RED"
+  _hi_cecho " | Failed to start container" "$RED"
   exit 1
 fi
 _HI_STARTED+=("$_HI_CONTAINER")
 
 _HI_PORT="$(docker port "$_HI_CONTAINER" 22/tcp | head -1 | sed 's/.*://')"
-_hi_cecho " | container: $_HI_CONTAINER (port: $_HI_PORT)"
+_hi_cecho " | Container: $_HI_CONTAINER (port: $_HI_PORT)"
 
 # shellcheck disable=SC2329 # invoked indirectly, via _hi_poll_bool's "$@"
 function _hi_ssh_disconnect_reachable() {
@@ -115,9 +115,9 @@ function _hi_ssh_disconnect_reachable() {
     hitest@127.0.0.1 true
 }
 
-_hi_cecho " | waiting for sshd on 127.0.0.1:$_HI_PORT"
+_hi_cecho " | Waiting for sshd on 127.0.0.1:$_HI_PORT"
 if ! _hi_poll_bool 40 0.25 _hi_ssh_disconnect_reachable; then
-  _hi_cecho " | sshd never came up" "$RED"
+  _hi_cecho " | Sshd never came up" "$RED"
   exit 1
 fi
 
@@ -163,13 +163,22 @@ function test_sudden_disconnect_removes_cleanup_dir() {
   local -a pids=()
   : >"$out_file"
 
-  exec 3<&0
-  _hi_pty_wrap 3 auto "no tty and no python3 to fake one - results may be unreliable"
+  # `ssh -t` puts whatever terminal it's handed into raw mode and only undoes
+  # that on its way out - and the whole point of this case is that it never
+  # gets one, since it's SIGSTOPped below and then SIGKILLed. Handed our own
+  # terminal it would leave it raw forever, staircasing everything printed
+  # after this suite. So always give the launcher a throwaway pty of its own
+  # (force, not auto - our stdin being a tty says nothing about whether it
+  # should be *the* tty here), and keep the real one out of reach entirely:
+  # pty.spawn allocates the child's pty regardless of its own stdin, so
+  # /dev/null below costs nothing and means even a SIGKILLed python3 can't
+  # strand our terminal.
+  _hi_pty_wrap 0 force "no python3 to give the launcher its own pty - ssh will raw-mode this terminal and the test kills it before it can restore, expect garbled output afterwards"
   # shellcheck disable=SC2016 # $_HI_CLEANUP expands on the target, not here
   "${_HI_PTY_WRAP[@]}" "$_HI_LAUNCHER" -p "$_HI_PORT" -i "$_HI_WORKDIR/id" \
     -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
     -o IdentitiesOnly=yes -o ConnectTimeout=5 hitest@127.0.0.1 \
-    'echo READY:$_HI_CLEANUP; sleep 30' <&3 >"$out_file" 2>&1 &
+    'echo READY:$_HI_CLEANUP; sleep 30' </dev/null >"$out_file" 2>&1 &
   launcher_pid=$!
 
   # confirm the session is actually up before freezing anything - racing the
@@ -208,8 +217,8 @@ _HI_FAILED=0
 _HI_TOTAL=0
 
 _hi_h2 "Cleanup on disconnect"
-_hi_case _hi_assert "clean exit removes the cleanup dir" test_clean_exit_removes_cleanup_dir
-_hi_case _hi_assert "sudden (frozen-connection) disconnect still removes it" test_sudden_disconnect_removes_cleanup_dir
+_hi_case _hi_assert "Clean exit removes the cleanup dir" test_clean_exit_removes_cleanup_dir
+_hi_case _hi_assert "Sudden (frozen-connection) disconnect still removes it" test_sudden_disconnect_removes_cleanup_dir
 
 if [ "$_HI_FAILED" -eq 0 ]; then
   _hi_h1 "hi's ssh cleanup trap survived every case ($_HI_TOTAL cases)"

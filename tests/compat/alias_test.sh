@@ -36,19 +36,19 @@ function _hi_test_script() {
 # shellcheck disable=SC2329 # invoked indirectly, via _hi_case's "$@"
 function _hi_test_shell() {
   local shell="$1" script="$2/$1.test" output exit_code=0 t0 t1
-  _hi_h2 "$shell -- starting"
+  _hi_h2 "Starting: [$shell]"
   t0="$(_hi_now)"
 
-  _hi_cecho " | $shell -- writing test script to $script"
+  _hi_cecho "  [$shell] -- Writing test script..."
   _hi_test_script "$shell" >"$script"
-  _hi_cecho " | $shell -- running: $shell $script"
+  _hi_cecho "  [$shell] -- Running: $script"
   output=$("$shell" "$script" 2>&1) || exit_code=$?
   t1="$(_hi_now)"
 
   if [ "$exit_code" -eq 0 ]; then
-    _hi_h3 "$shell -- aliases.sh loaded OK ($(_hi_elapsed "$t0" "$t1")s)"
+    _hi_h3 "[$shell] -- Loaded aliases.sh OK ($(_hi_elapsed "$t0" "$t1")s)" "$BRGREEN"
   else
-    _hi_h3 "$shell -- FAILED ($(_hi_elapsed "$t0" "$t1")s)"
+    _hi_h3 "[$shell] -- FAILED ($(_hi_elapsed "$t0" "$t1")s)" "$BRRED"
     [ -n "$output" ] && printf '%s\n' "$output" | sed 's/^/      /'
   fi
   return "$exit_code"

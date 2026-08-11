@@ -54,6 +54,22 @@ fi
 
 _hi_h1 "Running ${#_HI_SELECTED[@]} test suite(s)"
 
+# An e2e suite that drives a pty (ssh_disconnect, ssh, ...) can hand a real
+# `ssh -t` our terminal and then kill it before it restores the terminal modes
+# it changed, leaving every later suite's output staircased. The suites are
+# responsible for not doing that, but one slip shouldn't corrupt the rest of
+# the run - so snapshot the terminal here and put it back after every suite.
+_HI_TTY_STATE=""
+if [ -t 0 ] && command -v stty >/dev/null 2>&1; then
+  _HI_TTY_STATE="$(stty -g </dev/tty 2>/dev/null || true)"
+fi
+
+function _hi_restore_tty() {
+  [ -n "$_HI_TTY_STATE" ] || return 0
+  stty "$_HI_TTY_STATE" </dev/tty 2>/dev/null || true
+}
+trap _hi_restore_tty EXIT
+
 declare -a _HI_NAMES=() _HI_STATUSES=() _HI_DURATIONS=()
 _HI_SUITE_FAILED=0
 _HI_RUN_T0="$(_hi_now)"
@@ -79,6 +95,7 @@ for _hi_t in "${_HI_SELECTED[@]}"; do
     _hi_code=$?
   fi
   _hi_dur="$(_hi_elapsed "$_hi_t0" "$(_hi_now)")s"
+  _hi_restore_tty
 
   _HI_NAMES+=("$_hi_name")
   _HI_DURATIONS+=("$_hi_dur")

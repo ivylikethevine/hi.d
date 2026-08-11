@@ -125,19 +125,19 @@ _HI_DEBIAN_OK=1
 _HI_ALPINE_OK=1
 _HI_ALPINE_ZSH_OK=1
 _HI_ALPINE_FISH_OK=1
-_hi_h3 "building hi-sshtest-debian from $_HI_WORKDIR/debian (log: $_HI_WORKDIR/debian.log)"
+_hi_h3 "Building hi-sshtest-debian from $_HI_WORKDIR/debian"
 docker build -q -t hi-sshtest-debian "$_HI_WORKDIR/debian" >/dev/null 2>"$_HI_WORKDIR/debian.log" || _HI_DEBIAN_OK=0
-_hi_h3 "building hi-sshtest-alpine from $_HI_WORKDIR/alpine (log: $_HI_WORKDIR/alpine.log)"
+_hi_h3 "Building hi-sshtest-alpine from $_HI_WORKDIR/alpine"
 docker build -q -t hi-sshtest-alpine "$_HI_WORKDIR/alpine" >/dev/null 2>"$_HI_WORKDIR/alpine.log" || _HI_ALPINE_OK=0
-_hi_h3 "building hi-sshtest-alpine-zsh from $_HI_WORKDIR/alpine-zsh (log: $_HI_WORKDIR/alpine-zsh.log)"
+_hi_h3 "Building hi-sshtest-alpine-zsh from $_HI_WORKDIR/alpine-zsh"
 docker build -q -t hi-sshtest-alpine-zsh "$_HI_WORKDIR/alpine-zsh" >/dev/null 2>"$_HI_WORKDIR/alpine-zsh.log" || _HI_ALPINE_ZSH_OK=0
-_hi_h3 "building hi-sshtest-alpine-fish from $_HI_WORKDIR/alpine-fish (log: $_HI_WORKDIR/alpine-fish.log)"
+_hi_h3 "Building hi-sshtest-alpine-fish from $_HI_WORKDIR/alpine-fish"
 docker build -q -t hi-sshtest-alpine-fish "$_HI_WORKDIR/alpine-fish" >/dev/null 2>"$_HI_WORKDIR/alpine-fish.log" || _HI_ALPINE_FISH_OK=0
 
-[ "$_HI_DEBIAN_OK" -eq 1 ] || _hi_cecho " | debian image failed to build, skipping its shells (see $_HI_WORKDIR/debian.log)" "$YELLOW"
-[ "$_HI_ALPINE_OK" -eq 1 ] || _hi_cecho " | alpine image failed to build, skipping the no-bash case (see $_HI_WORKDIR/alpine.log)" "$YELLOW"
-[ "$_HI_ALPINE_ZSH_OK" -eq 1 ] || _hi_cecho " | alpine-zsh image failed to build, skipping the ssh zsh-fallback case (see $_HI_WORKDIR/alpine-zsh.log)" "$YELLOW"
-[ "$_HI_ALPINE_FISH_OK" -eq 1 ] || _hi_cecho " | alpine-fish image failed to build, skipping the ssh fish-fallback case (see $_HI_WORKDIR/alpine-fish.log)" "$YELLOW"
+[ "$_HI_DEBIAN_OK" -eq 1 ] || _hi_cecho " | Debian image failed to build, skipping its shells (see $_HI_WORKDIR/debian.log)" "$YELLOW"
+[ "$_HI_ALPINE_OK" -eq 1 ] || _hi_cecho " | Alpine image failed to build, skipping the no-bash case (see $_HI_WORKDIR/alpine.log)" "$YELLOW"
+[ "$_HI_ALPINE_ZSH_OK" -eq 1 ] || _hi_cecho " | Alpine-zsh image failed to build, skipping the ssh zsh-fallback case (see $_HI_WORKDIR/alpine-zsh.log)" "$YELLOW"
+[ "$_HI_ALPINE_FISH_OK" -eq 1 ] || _hi_cecho " | Alpine-fish image failed to build, skipping the ssh fish-fallback case (see $_HI_WORKDIR/alpine-fish.log)" "$YELLOW"
 
 # a third image, layered on the debian one, with a real checkout of this repo
 # already sitting at ~/hi.d - i.e. what a host looks like after
@@ -153,12 +153,12 @@ RUN chmod +x /home/hitest/hi.d/hi.sh \
     && touch /home/hitest/hi.d/.installed_sentinel \
     && chown hitest:hitest /home/hitest/hi.d/.installed_sentinel
 EOF
-  _hi_cecho " | building hi-sshtest-debian-installed from $_HI_ROOT (log: $_HI_WORKDIR/debian-installed.log)"
+  _hi_cecho " | Building hi-sshtest-debian-installed from $_HI_ROOT"
   docker build -q -t hi-sshtest-debian-installed \
     -f "$_HI_WORKDIR/debian-installed/Dockerfile" "$_HI_ROOT" \
     >/dev/null 2>"$_HI_WORKDIR/debian-installed.log" || _HI_INSTALLED_OK=0
 fi
-[ "$_HI_INSTALLED_OK" -eq 1 ] || _hi_cecho " | debian-installed image failed to build, skipping the pre-installed case (see $_HI_WORKDIR/debian-installed.log)" "$YELLOW"
+[ "$_HI_INSTALLED_OK" -eq 1 ] || _hi_cecho " | Debian-installed image failed to build, skipping the pre-installed case (see $_HI_WORKDIR/debian-installed.log)" "$YELLOW"
 
 # --- the actual per-shell test -----------------------------------------
 _HI_MARKER="HI_SSH_TEST_OK"
@@ -217,20 +217,20 @@ function _hi_run_case() {
 
   if ! docker run -d --rm --name "$name" -p 127.0.0.1::22 \
     -e "PUBKEY=$_HI_PUBKEY" -e "LOGIN_SHELL=$login_shell" "$image" >/dev/null 2>"$_HI_WORKDIR/$label.log"; then
-    _hi_cecho " | failed to start container" "$RED"
+    _hi_cecho " | Failed to start container" "$RED"
     return 1
   fi
   _HI_STARTED+=("$name")
-  _hi_cecho " | container: $name (login shell: $login_shell)"
+  _hi_cecho " | Container: $name (login shell: $login_shell)"
 
   port="$(docker port "$name" 22/tcp | head -1 | sed 's/.*://')"
-  _hi_cecho " | waiting for sshd on 127.0.0.1:$port"
+  _hi_cecho " | Waiting for sshd on 127.0.0.1:$port"
   if ! _hi_poll_bool 40 0.25 _hi_ssh_reachable "$port" "$_HI_WORKDIR/id"; then
-    _hi_cecho " |  sshd never came up" "$RED"
+    _hi_cecho " |  Sshd never came up" "$RED"
     return 1
   fi
 
-  _hi_cecho " | running: $_HI_LAUNCHER -p $port hitest@127.0.0.1 $cmd"
+  _hi_cecho " | Running: $_HI_LAUNCHER -p $port hitest@127.0.0.1 $cmd"
   out="$("${_HI_PTY_WRAP[@]}" "$_HI_LAUNCHER" -p "$port" -i "$_HI_WORKDIR/id" -o StrictHostKeyChecking=no \
     -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o IdentitiesOnly=yes \
     -o ConnectTimeout=5 hitest@127.0.0.1 "$cmd" 2>&1)" || exit_code=$?
@@ -238,13 +238,13 @@ function _hi_run_case() {
 
   if printf '%s' "$out" | grep -q "$_HI_MARKER"; then
     if [ -n "$post" ] && ! docker exec "$name" sh -c "$post" >/dev/null 2>&1; then
-      _hi_h3 " |  $label -- post-check FAILED: $post ($(_hi_elapsed "$t0" "$t1")s)"
+      _hi_h3 " |  [$label] -- post-check FAILED: $post ($(_hi_elapsed "$t0" "$t1")s)"
       ok=0
     else
-      _hi_cecho " | $label -- ssh path OK ($(_hi_elapsed "$t0" "$t1")s)" "$GREEN"
+      _hi_cecho " | [$label] -- ssh path OK ($(_hi_elapsed "$t0" "$t1")s)" "$GREEN"
     fi
   else
-    _hi_h3 " | $label -- FAILED (exit $exit_code, $(_hi_elapsed "$t0" "$t1")s)"
+    _hi_h3 " | [$label] -- FAILED (exit $exit_code, $(_hi_elapsed "$t0" "$t1")s)"
     printf '%s\n' "$out" | sed 's/^/      /'
     ok=0
   fi

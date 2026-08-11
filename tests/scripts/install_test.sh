@@ -214,39 +214,39 @@ function run_install_tests() {
   _HI_FAILED=0
   _HI_TOTAL=0
 
-  _hi_h2 "config_shell"
-  _hi_case _hi_assert "fresh insert" test_config_shell_fresh_insert
-  _hi_case _hi_assert "idempotent re-run" test_config_shell_idempotent
-  _hi_case _hi_assert "repairs a stale line" test_config_shell_repairs_stale_line
-  _hi_case _hi_assert "preserves unrelated content" test_config_shell_preserves_unrelated_content
-  _hi_case _hi_assert "skips empty args" test_config_shell_skips_empty_args
+  _hi_h2 "Testing: config_shell"
+  _hi_case _hi_assert "Fresh insert" test_config_shell_fresh_insert
+  _hi_case _hi_assert "Idempotent re-run" test_config_shell_idempotent
+  _hi_case _hi_assert "Repairs a stale line" test_config_shell_repairs_stale_line
+  _hi_case _hi_assert "Preserves unrelated content" test_config_shell_preserves_unrelated_content
+  _hi_case _hi_assert "Skips empty args" test_config_shell_skips_empty_args
 
-  _hi_h2 "setting_enabled"
-  _hi_case _hi_assert "defaults to enabled when absent" test_setting_enabled_default_true_when_absent
-  _hi_case _hi_assert "disabled when off-value present" test_setting_enabled_false_when_off_present
-  _hi_case _hi_assert "respects a custom off value" test_setting_enabled_respects_custom_off_value
+  _hi_h2 "Testing: setting_enabled"
+  _hi_case _hi_assert "Defaults to enabled when absent" test_setting_enabled_default_true_when_absent
+  _hi_case _hi_assert "Disabled when off-value present" test_setting_enabled_false_when_off_present
+  _hi_case _hi_assert "Respects a custom off value" test_setting_enabled_respects_custom_off_value
 
-  _hi_h2 "tmpdir_line"
-  _hi_case _hi_assert "empty when _HI_HOME == HOME" test_tmpdir_line_empty_when_home_matches
-  _hi_case _hi_assert "posix export line" test_tmpdir_line_posix_variant
-  _hi_case _hi_assert "fish set -gx line" test_tmpdir_line_fish_variant
+  _hi_h2 "Testing: tmpdir_line"
+  _hi_case _hi_assert "Empty when _HI_HOME == HOME" test_tmpdir_line_empty_when_home_matches
+  _hi_case _hi_assert "Posix export line" test_tmpdir_line_posix_variant
+  _hi_case _hi_assert "Fish set -gx line" test_tmpdir_line_fish_variant
 
-  _hi_h2 "ask_setting (non-interactive)"
-  _hi_case _hi_assert "keeps enabled default" test_ask_setting_default_keeps_enabled
-  _hi_case _hi_assert "keeps disabled default" test_ask_setting_default_keeps_disabled
+  _hi_h2 "Testing: ask_setting (non-interactive)"
+  _hi_case _hi_assert "Keeps enabled default" test_ask_setting_default_keeps_enabled
+  _hi_case _hi_assert "Keeps disabled default" test_ask_setting_default_keeps_disabled
 
-  _hi_h2 "_hi_visible_len"
-  _hi_case _hi_assert "plain text" test_visible_len_plain_text
-  _hi_case _hi_assert "strips color codes" test_visible_len_strips_color_codes
+  _hi_h2 "Testing: _hi_visible_len"
+  _hi_case _hi_assert "Plain text" test_visible_len_plain_text
+  _hi_case _hi_assert "Strips color codes" test_visible_len_strips_color_codes
 
-  _hi_h2 "check_one_config"
-  _hi_case _hi_assert "valid bash syntax" test_check_one_config_valid_bash
-  _hi_case _hi_assert "invalid bash syntax" test_check_one_config_invalid_bash
-  _hi_case _hi_assert "skips a missing shell" test_check_one_config_skips_missing_shell
-  _hi_case _hi_assert "skips an empty file" test_check_one_config_skips_empty_file
+  _hi_h2 "Testing: check_one_config"
+  _hi_case _hi_assert "Valid bash syntax" test_check_one_config_valid_bash
+  _hi_case _hi_assert "Invalid bash syntax" test_check_one_config_invalid_bash
+  _hi_case _hi_assert "Skips a missing shell" test_check_one_config_skips_missing_shell
+  _hi_case _hi_assert "Skips an empty file" test_check_one_config_skips_empty_file
 
-  _hi_h2 "config_hi (skip path only)"
-  _hi_case _hi_assert "skips when already linked" test_config_hi_skips_when_already_linked
+  _hi_h2 "Testing: config_hi (skip path only)"
+  _hi_case _hi_assert "Skips when already linked" test_config_hi_skips_when_already_linked
 
   if [ "$_HI_FAILED" -eq 0 ]; then
     _hi_h1 "All install.sh logic checks passed ($_HI_TOTAL cases)"

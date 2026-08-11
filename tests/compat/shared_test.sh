@@ -204,36 +204,36 @@ function run_shared_tests() {
   _HI_FAILED=0
   _HI_TOTAL=0
 
-  _hi_h2 "_hi_sanitize"
-  _hi_case _hi_assert "leaves plain text alone" test_sanitize_leaves_plain_text_alone
-  _hi_case _hi_assert "strips control chars and backslashes" test_sanitize_strips_control_chars_and_backslashes
+  _hi_h2 "Testing: _hi_sanitize"
+  _hi_case _hi_assert "Leaves plain text alone" test_sanitize_leaves_plain_text_alone
+  _hi_case _hi_assert "Strips control chars and backslashes" test_sanitize_strips_control_chars_and_backslashes
 
-  _hi_h2 "_hi_color_escape"
-  _hi_case _hi_assert "red matches \$RED" test_color_escape_matches_red_constant
-  _hi_case _hi_assert "brcyan matches \$BRCYAN" test_color_escape_matches_brcyan_constant
-  _hi_case _hi_assert "unknown name resets" test_color_escape_unknown_name_resets
+  _hi_h2 "Testing: _hi_color_escape"
+  _hi_case _hi_assert "Red matches \$RED" test_color_escape_matches_red_constant
+  _hi_case _hi_assert "Brcyan matches \$BRCYAN" test_color_escape_matches_brcyan_constant
+  _hi_case _hi_assert "Unknown name resets" test_color_escape_unknown_name_resets
 
-  _hi_h2 "_hi_hash_color"
-  _hi_case _hi_assert "deterministic across calls" test_hash_color_deterministic
-  _hi_case _hi_assert "matches hand-computed buckets" test_hash_color_matches_hand_computed_bucket
+  _hi_h2 "Testing: _hi_hash_color"
+  _hi_case _hi_assert "Deterministic across calls" test_hash_color_deterministic
+  _hi_case _hi_assert "Matches hand-computed buckets" test_hash_color_matches_hand_computed_bucket
 
-  _hi_h2 "_hi_override_color"
-  _hi_case _hi_assert "exact match" test_override_color_exact_match
-  _hi_case _hi_assert "no match fails" test_override_color_no_match_fails
+  _hi_h2 "Testing: _hi_override_color"
+  _hi_case _hi_assert "Exact match" test_override_color_exact_match
+  _hi_case _hi_assert "No match fails" test_override_color_no_match_fails
   _hi_case _hi_assert "LOCALUSER special case" test_override_color_localuser_special_case
   _hi_case _hi_assert "LOCALHOSTNAME special case" test_override_color_localhostname_special_case
 
-  _hi_h2 "_hi_ssh_host_tag"
-  _hi_case _hi_assert "leftmost tag of a multi-tag comment" test_ssh_host_tag_leftmost_of_multiple
-  _hi_case _hi_assert "untagged host fails" test_ssh_host_tag_untagged_host_fails
+  _hi_h2 "Testing: _hi_ssh_host_tag"
+  _hi_case _hi_assert "Leftmost tag of a multi-tag comment" test_ssh_host_tag_leftmost_of_multiple
+  _hi_case _hi_assert "Untagged host fails" test_ssh_host_tag_untagged_host_fails
   _hi_case _hi_assert "'Tags=' syntax and multi-alias Host lines" test_ssh_host_tag_equals_syntax_and_multialias
-  _hi_case _hi_assert "unknown host fails" test_ssh_host_tag_unknown_host_fails
+  _hi_case _hi_assert "Unknown host fails" test_ssh_host_tag_unknown_host_fails
 
-  _hi_h2 "_hi_resolve_color precedence"
-  _hi_case _hi_assert "exact override wins" test_resolve_color_override_wins
-  _hi_case _hi_assert "hosttag via ssh config" test_resolve_color_hosttag_via_ssh_config
-  _hi_case _hi_assert "usertag when no exact override" test_resolve_color_usertag_when_no_exact_override
-  _hi_case _hi_assert "falls back to the hash" test_resolve_color_falls_back_to_hash
+  _hi_h2 "Testing: _hi_resolve_color precedence"
+  _hi_case _hi_assert "Exact override wins" test_resolve_color_override_wins
+  _hi_case _hi_assert "Hosttag via ssh config" test_resolve_color_hosttag_via_ssh_config
+  _hi_case _hi_assert "Usertag when no exact override" test_resolve_color_usertag_when_no_exact_override
+  _hi_case _hi_assert "Falls back to the hash" test_resolve_color_falls_back_to_hash
 
   if [ "$_HI_FAILED" -eq 0 ]; then
     _hi_h1 "All shared.sh checks passed ($_HI_TOTAL cases)"

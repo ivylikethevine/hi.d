@@ -125,24 +125,24 @@ function run_header_tests() {
   _HI_FAILED=0
   _HI_TOTAL=0
 
-  _hi_h2 "header_row"
-  _hi_case _hi_assert "joins multiple cells" test_header_row_joins_cells
-  _hi_case _hi_assert "handles a single cell" test_header_row_single_cell
+  _hi_h2 "Testing: header_row"
+  _hi_case _hi_assert "Joins multiple cells" test_header_row_joins_cells
+  _hi_case _hi_assert "Handles a single cell" test_header_row_single_cell
 
-  _hi_h2 "banner"
-  _hi_case _hi_assert "includes label and hostname" test_banner_includes_label_and_host
-  _hi_case _hi_assert "a longer prefix shrinks the padding" test_banner_prefix_shrinks_padding
-  _hi_case _hi_assert "floors tilde padding on a pathologically long label" test_banner_floors_tildes_on_long_label
-  _hi_case _hi_assert "survives a narrow _HI_MAX_WIDTH" test_banner_narrow_width_does_not_error
+  _hi_h2 "Testing: banner"
+  _hi_case _hi_assert "Includes label and hostname" test_banner_includes_label_and_host
+  _hi_case _hi_assert "A longer prefix shrinks the padding" test_banner_prefix_shrinks_padding
+  _hi_case _hi_assert "Floors tilde padding on a pathologically long label" test_banner_floors_tildes_on_long_label
+  _hi_case _hi_assert "Survives a narrow _HI_MAX_WIDTH" test_banner_narrow_width_does_not_error
 
-  _hi_h2 "timestamp / system_info / identity (smoke tests)"
-  _hi_case _hi_assert "timestamp prints two cells" test_timestamp_runs_and_has_two_cells
-  _hi_case _hi_assert "system_info includes its static labels" test_system_info_includes_static_labels
-  _hi_case _hi_assert "identity includes its static labels" test_identity_includes_static_labels
+  _hi_h2 "Testing: timestamp / system_info / identity (smoke tests)"
+  _hi_case _hi_assert "Timestamp prints two cells" test_timestamp_runs_and_has_two_cells
+  _hi_case _hi_assert "System_info includes its static labels" test_system_info_includes_static_labels
+  _hi_case _hi_assert "Identity includes its static labels" test_identity_includes_static_labels
 
-  _hi_h2 "hi_header"
-  _hi_case _hi_assert "no output when disabled" test_hi_header_disabled_produces_no_output
-  _hi_case _hi_assert "prints the banner when enabled" test_hi_header_enabled_prints_banner
+  _hi_h2 "Testing: hi_header"
+  _hi_case _hi_assert "No output when disabled" test_hi_header_disabled_produces_no_output
+  _hi_case _hi_assert "Prints the banner when enabled" test_hi_header_enabled_prints_banner
 
   if [ "$_HI_FAILED" -eq 0 ]; then
     _hi_h1 "All header.sh checks passed ($_HI_TOTAL cases)"

@@ -109,15 +109,15 @@ function run_uninstall_tests() {
   _HI_FAILED=0
   _HI_TOTAL=0
 
-  _hi_h2 "strip_marker"
-  _hi_case _hi_assert "removes only tagged lines" test_strip_marker_removes_tagged_lines_only
-  _hi_case _hi_assert "no-op when marker absent" test_strip_marker_noop_when_marker_absent
-  _hi_case _hi_assert "safe on a missing file" test_strip_marker_safe_on_missing_file
-  _hi_case _hi_assert "install+uninstall round-trips" test_install_uninstall_round_trip
+  _hi_h2 "Testing: strip_marker"
+  _hi_case _hi_assert "Removes only tagged lines" test_strip_marker_removes_tagged_lines_only
+  _hi_case _hi_assert "No-op when marker absent" test_strip_marker_noop_when_marker_absent
+  _hi_case _hi_assert "Safe on a missing file" test_strip_marker_safe_on_missing_file
+  _hi_case _hi_assert "Install+uninstall round-trips" test_install_uninstall_round_trip
 
-  _hi_h2 "unlink_hi (skip paths only)"
-  _hi_case _hi_assert "skips a missing link" test_unlink_hi_skips_when_link_missing
-  _hi_case _hi_assert "skips a foreign link" test_unlink_hi_skips_when_link_points_elsewhere
+  _hi_h2 "Testing: unlink_hi (skip paths only)"
+  _hi_case _hi_assert "Skips a missing link" test_unlink_hi_skips_when_link_missing
+  _hi_case _hi_assert "Skips a foreign link" test_unlink_hi_skips_when_link_points_elsewhere
 
   if [ "$_HI_FAILED" -eq 0 ]; then
     _hi_h1 "All uninstall.sh logic checks passed ($_HI_TOTAL cases)"

@@ -1,8 +1,16 @@
 # hi.sh -> sshrc supercharged
 
+![CI](https://github.com/ivylikethevine/hi.d/actions/workflows/ci.yml/badge.svg)
+
 **One config directory to rule them all, uniting all shells from all hosts!**
 
 _Don't `ssh`ush your hosts, say `hi`!_
+
+### Requirements
+
+- **Client**: `bash` and `openssl` (for ssh targets - armors the bootstrap payload through the login shell) or `docker`/`podman`/`nomad`/`kubectl` for the container/alloc/pod backends.
+- **Target**: `openssl` for ssh targets; nothing extra for container/alloc/pod targets. `bash` gets you the full experience (header, colors, git prompt, aliases, vim/nano configs); without it `hi` still lands you in the best available shell (`zsh` > `fish` > `sh`) with just the aliases loaded, rather than failing outright.
+- Everything else (client and target) is plain POSIX/bash/zsh/fish shell - no compiled artifacts, no package manager, no build step.
 
 ## How it works
 
@@ -60,6 +68,30 @@ Usage: `hi foo` (just like ssh!)
 
 Reminder - place local only changes after the "`# hi-config-end`" comment in the local files.
 
+### Testing
+
+Run everything with `tests/test_runner.sh` (aliased to `hi_test` once installed) - it times each suite and prints a
+colored pass/fail summary at the end:
+
+```sh
+tests/test_runner.sh                    # every suite
+tests/test_runner.sh aliases shellcheck # just the named suite(s)
+```
+
+Suite names: `aliases`, `alias_fallthrough`, `shellcheck`, `install`, `uninstall` are fast and dependency-free -
+they're what CI runs on every push/PR. `ssh`, `docker`, `podman`, `nomad`, `kube` are end-to-end: they spin up real
+throwaway containers/clusters/agents and drive `hi.sh`'s actual connection paths against them, so they're slower and
+need the relevant backend installed - each skips cleanly with a warning instead of failing if its backend isn't
+available. Every test script is also directly executable on its own, e.g. `tests/shellcheck_test.sh`.
+
+Any script here needs `_HI_HOME` set before it'll source correctly - point it at the _parent_ of your `hi.d`
+checkout:
+
+```sh
+export _HI_HOME=/path/to/parent-of-hi.d
+tests/test_runner.sh
+```
+
 #### File list
 
 | file                                            | what it does                                                                                               |
@@ -85,7 +117,9 @@ Reminder - place local only changes after the "`# hi-config-end`" comment in the
 | `tests/test_runner.sh`                          | unified runner - times and summarizes every test below (or a chosen subset) (`hi_test`)                    |
 | `tests/test_lib.sh`                             | shared pty-fake/poll/wait helpers, plus the docker+podman backend test both of those wrap                  |
 | `tests/alias_test.sh`                           | check `aliases.sh` still loads in dash/bash/zsh/fish                                                       |
-| `tests/alias_fallthrough_test.sh`               | unit tests for `aliases.sh`'s `command -v a \|\| b \|\| ...` fallthrough and `_HI_DISABLE_*` flag logic    |
+| `tests/alias_fallthrough_test.sh`               | unit tests for `aliases.sh`'s `command -v a \| b \| ...` fallthrough and `_HI_DISABLE_*` flag logic        |
+| `tests/install_test.sh`                         | unit tests for `install.sh`'s marker-based rc rewriting, setting defaults, and config validation           |
+| `tests/uninstall_test.sh`                       | unit tests for `uninstall.sh`'s marker stripping, incl. an install+uninstall round-trip                    |
 | `tests/ssh_test.sh`                             | end-to-end test of hi's ssh path across remote login shells                                                |
 | `tests/docker_test.sh`                          | end-to-end test of hi's docker path across container shell environments (thin wrapper, see `test_lib.sh`)  |
 | `tests/podman_test.sh`                          | end-to-end test of hi's podman path across container shell environments (thin wrapper, see `test_lib.sh`)  |

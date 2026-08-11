@@ -23,6 +23,8 @@ _HI_TESTS=(
   "aliases:$_HI_TEST_ALIASES"
   "alias_fallthrough:$_HI_TEST_ALIAS_FALLTHROUGH"
   "shellcheck:$_HI_TEST_SHELLCHECK"
+  "install:$_HI_TEST_INSTALL"
+  "uninstall:$_HI_TEST_UNINSTALL"
   "ssh:$_HI_TEST_SSH"
   "docker:$_HI_TEST_DOCKER"
   "podman:$_HI_TEST_PODMAN"

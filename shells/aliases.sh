@@ -56,7 +56,7 @@ alias catn="batn"
 alias now='echo "LOCAL: $(date $_HI_HUMAN_SHORT_DATE) => UTC: $(date -u $_HI_HUMAN_SHORT_DATE)"'
 
 # for working on this repo quickly
-alias zed="$(command -v zeditor || command -v zed || command -v vi)"
+alias zed="$(command -v zeditor || command -v zed || command -v echo)"
 alias ehi="zed $_HI_ROOT"
 alias essh="zed $_HI_SSH_DIR"
 # TODO: add script/compat for local config changes?
@@ -98,7 +98,7 @@ alias mindiff="diff -Bdw"
 # fallthrough aliases for improved basics
 # alias du="$(command -v dua || command -v du)" # this breaks du -sh :/
 alias df="$(command -v duf || command -v df)"
-alias dig="$(command -v dog || command -v dig)"
+alias dig="$(command -v dog || command -v dig || command -v echo)"
 
 # directory navigation
 alias ..="cd ../"

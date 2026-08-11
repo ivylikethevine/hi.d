@@ -27,6 +27,8 @@ export _HI_TEST_PODMAN="$_HI_ROOT/tests/podman_test.sh"
 export _HI_TEST_NOMAD="$_HI_ROOT/tests/nomad_test.sh"
 export _HI_TEST_KUBE="$_HI_ROOT/tests/kube_test.sh"
 export _HI_TEST_SHELLCHECK="$_HI_ROOT/tests/shellcheck_test.sh"
+export _HI_TEST_INSTALL="$_HI_ROOT/tests/install_test.sh"
+export _HI_TEST_UNINSTALL="$_HI_ROOT/tests/uninstall_test.sh"
 
 # user configurable
 export _HI_COLORS="$_HI_ROOT/misc/colors"

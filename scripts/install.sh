@@ -353,6 +353,11 @@ function config_hi() {
   sudo ln -sfn "$_HI_LAUNCHER" "$_HI_LINK"
 }
 
+# lets tests/install_test.sh `source` this file to reach the functions above
+# (config_shell, ask_setting, ...) without running the real install below -
+# config_hi's sudo call in particular has no business firing from a test
+[[ "${BASH_SOURCE[0]}" == "$0" ]] || return 0
+
 if [ -n "$_HI_CHECK_CONFIGS_ONLY" ]; then
   _hi_h1 "Checking existing shell configs!"
   _hi_cecho " | hi_home: $_HI_HOME | hi_root: $_HI_ROOT | login shell: ${SHELL##*/}" "$BLUE"

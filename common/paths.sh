@@ -17,13 +17,13 @@ export _HI_INSTALL="$_HI_ROOT/scripts/install.sh"
 export _HI_UNINSTALL="$_HI_ROOT/scripts/uninstall.sh"
 export _HI_COLOR_PREVIEW="$_HI_ROOT/scripts/color_preview.sh"
 
-export _HI_TEST_ALIASES="$_HI_ROOT/tests/alias_test.sh"
-export _HI_TEST_SSH="$_HI_ROOT/tests/ssh_test.sh"
-export _HI_TEST_DOCKER="$_HI_ROOT/tests/docker_test.sh"
-export _HI_TEST_PODMAN="$_HI_ROOT/tests/podman_test.sh"
-export _HI_TEST_NOMAD="$_HI_ROOT/tests/nomad_test.sh"
-export _HI_TEST_KUBE="$_HI_ROOT/tests/kube_test.sh"
-export _HI_TEST_SHELLCHECK="$_HI_ROOT/tests/shellcheck_test.sh"
+# tests - only the two entry points every session needs: the lib each suite
+# sources, and the runner behind the hi_test alias below. The per-suite paths
+# live in the runner's own ordered table (tests/test_runner.sh), which is
+# their only consumer - no reason to export fifteen more names into every
+# shell hi ever touches.
+export _HI_TEST_LIB="$_HI_ROOT/tests/test_lib.sh"
+export _HI_TEST_RUN="$_HI_ROOT/tests/test_runner.sh"
 
 # user configurable
 export _HI_COLORS="$_HI_ROOT/misc/colors"
@@ -56,18 +56,10 @@ alias hi_configure="[ -f $_HI_INSTALL ] && $_HI_INSTALL --features-only"
 alias hi_reconfigure="hi_configure"
 alias hi_check_configs="[ -f $_HI_INSTALL ] && $_HI_INSTALL --check-configs"
 alias hi_update="git -C $_HI_ROOT pull"
-alias hi_status="git -C $_HI_ROOT status"
 alias hi_info="echo ' | hi_home: $_HI_HOME | hi_root: $_HI_ROOT | script: $_HI_LAUNCHER'"
 alias hi_color_preview="[ -f $_HI_COLOR_PREVIEW ] && $_HI_COLOR_PREVIEW"
-alias hi_packages_preview="sh -c 'source \"$_HI_CHECK\" && full_check'"
-alias hi_test_aliases="[ -f $_HI_TEST_ALIASES ] && $_HI_TEST_ALIASES"
-alias hi_test_ssh="[ -f $_HI_TEST_SSH ] && $_HI_TEST_SSH"
-alias hi_test_docker="[ -f $_HI_TEST_DOCKER ] && $_HI_TEST_DOCKER"
-alias hi_test_podman="[ -f $_HI_TEST_PODMAN ] && $_HI_TEST_PODMAN"
-alias hi_test_nomad="[ -f $_HI_TEST_NOMAD ] && $_HI_TEST_NOMAD"
-alias hi_test_kube="[ -f $_HI_TEST_KUBE ] && $_HI_TEST_KUBE"
-alias hi_test_shellcheck="[ -f $_HI_TEST_SHELLCHECK ] && $_HI_TEST_SHELLCHECK"
-alias hi_test_all="hi_test_aliases && hi_test_ssh && hi_test_docker && hi_test_podman && hi_test_nomad && hi_test_kube && hi_test_shellcheck"
+alias hi_packages_preview="bash -c 'source \"$_HI_CHECK\" && full_check'"
+alias hi_test="[ -f $_HI_TEST_RUN ] && $_HI_TEST_RUN"
 
 # local-only disable logic. _HI_REMOTE_SESSION is exported by load.sh, the
 # chainload entry point every remote path goes through and the local

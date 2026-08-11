@@ -1,8 +1,16 @@
-# hi.sh -> sshrc superset
+# hi.sh -> sshrc supercharged
+
+![CI](https://github.com/ivylikethevine/hi.d/actions/workflows/ci.yml/badge.svg)
 
 **One config directory to rule them all, uniting all shells from all hosts!**
 
 _Don't `ssh`ush your hosts, say `hi`!_
+
+### Requirements
+
+- **Client**: `bash` and `openssl` (for ssh targets - armors the bootstrap payload through the login shell) or `docker`/`podman`/`nomad`/`kubectl` for the container/alloc/pod backends.
+- **Target**: `openssl` for ssh targets; nothing extra for container/alloc/pod targets. `bash` gets you the full experience (header, colors, git prompt, aliases, vim/nano configs); without it `hi` still lands you in the best available shell (`zsh` > `fish` > `sh`) with just the aliases loaded, rather than failing outright.
+- Everything else (client and target) is plain POSIX/bash/zsh/fish shell - no compiled artifacts, no package manager, no build step.
 
 ## How it works
 
@@ -60,6 +68,33 @@ Usage: `hi foo` (just like ssh!)
 
 Reminder - place local only changes after the "`# hi-config-end`" comment in the local files.
 
+### Testing
+
+Run everything with `tests/test_runner.sh` (aliased to `hi_test` once installed) - it times each suite and prints a
+colored pass/fail summary at the end:
+
+```sh
+tests/test_runner.sh                    # every suite
+tests/test_runner.sh aliases shellcheck # just the named suite(s)
+```
+
+Suite names: `aliases`, `alias_fallthrough`, `shellcheck`, `install`, `uninstall`, `check`, `header`, `shared`,
+`git_prompt`, `test_lib`, `test_runner` are fast and dependency-free - they're what CI runs on every push/PR (the
+last two are the harness testing itself). `ssh`, `ssh_disconnect`, `docker`, `podman`, `nomad`, `kube` are
+end-to-end:
+they spin up real throwaway containers/clusters/agents and drive `hi.sh`'s actual connection paths against them, so
+they're slower and need the relevant backend installed - each skips cleanly with a warning instead of failing if its
+backend isn't available. Every test script is also directly executable on its own, e.g.
+`tests/compat/shellcheck_test.sh`.
+
+Any script here needs `_HI_HOME` set before it'll source correctly - point it at the _parent_ of your `hi.d`
+checkout:
+
+```sh
+export _HI_HOME=/path/to/parent-of-hi.d
+tests/test_runner.sh
+```
+
 #### File list
 
 | file                                            | what it does                                                                                               |
@@ -81,20 +116,52 @@ Reminder - place local only changes after the "`# hi-config-end`" comment in the
 | `misc/packages`                                 | what `check.sh` looks for, as `cmd:priority[,alternative:priority]`                                        |
 | `misc/colors`                                   | optional color pins for hostnames/usernames/hosttags                                                       |
 | `scripts/install.sh`                            | configure the local shells, install and update                                                             |
-| `scripts/alias_test.sh`                         | check `aliases.sh` still loads in dash/bash/zsh/fish                                                       |
 | `scripts/color_preview.sh`                      | preview what every ssh host/user resolves to (`hi_color_preview`)                                          |
-| `scripts/ssh_test.sh`                           | end-to-end test of hi's ssh path across remote login shells                                                |
-| `scripts/docker_test.sh`                        | end-to-end test of hi's docker path across container shell environments                                    |
-| `scripts/podman_test.sh`                        | end-to-end test of hi's podman path across container shell environments                                    |
-| `scripts/nomad_test.sh`                         | end-to-end test of hi's nomad path against a throwaway `nomad agent -dev`                                  |
-| `scripts/kube_test.sh`                          | end-to-end test of hi's kube path against a throwaway `kind` cluster                                       |
-| `scripts/shellcheck_test.sh`                    | runs shellcheck over every `*.sh` file in the repo                                                         |
+| `tests/test_runner.sh`                          | unified runner - times and summarizes every test below (or a chosen subset) (`hi_test`)                    |
+| `tests/test_lib.sh`                             | the whole suite skeleton: asserts/counters, scratch dir, skip preamble, probe commands, poll/pty helpers   |
+| `tests/compat/alias_test.sh`                    | check `aliases.sh` still loads in dash/bash/zsh/fish                                                       |
+| `tests/compat/alias_fallthrough_test.sh`        | unit tests for `aliases.sh`'s `command -v a \| b \| ...` fallthrough and `_HI_DISABLE_*` flag logic        |
+| `tests/compat/check_test.sh`                    | unit tests for `check.sh`'s per-priority found/missing/hide logic and packages-file parsing                |
+| `tests/compat/header_test.sh`                   | unit tests for `header.sh`'s row-joining, banner padding/floor math, and the `_HI_DISABLE_HEADER` gate     |
+| `tests/compat/shared_test.sh`                   | unit tests for `shared.sh`'s color-resolution chain (hash/override/hosttag/usertag) and `_hi_sanitize`     |
+| `tests/compat/git_prompt_test.sh`               | unit tests for `git_prompt.sh`'s status flags, ahead/behind, detached HEAD, and every in-progress state    |
+| `tests/compat/shellcheck_test.sh`               | runs shellcheck over every `*.sh` file in the repo                                                         |
+| `tests/scripts/install_test.sh`                 | unit tests for `install.sh`'s marker-based rc rewriting, setting defaults, and config validation           |
+| `tests/scripts/uninstall_test.sh`               | unit tests for `uninstall.sh`'s marker stripping, incl. an install+uninstall round-trip                    |
+| `tests/harness/test_lib_test.sh`                | unit tests for `test_lib.sh` itself - the scaffolding every other suite is built on                        |
+| `tests/harness/runner_test.sh`                  | drives the real `test_runner.sh` over fixture suites that pass/fail/are missing                            |
+| `tests/targets/ssh_test.sh`                     | end-to-end test of hi's ssh path across remote login shells                                                |
+| `tests/targets/ssh_disconnect_test.sh`          | end-to-end test that the target-side cleanup trap fires on an abrupt disconnect, not just a clean exit     |
+| `tests/targets/docker_test.sh`                  | end-to-end test of hi's docker path across container shell environments (thin wrapper, see `test_lib.sh`)  |
+| `tests/targets/podman_test.sh`                  | end-to-end test of hi's podman path across container shell environments (thin wrapper, see `test_lib.sh`)  |
+| `tests/targets/nomad_test.sh`                   | end-to-end test of hi's nomad path against a throwaway `nomad agent -dev`                                  |
+| `tests/targets/kube_test.sh`                    | end-to-end test of hi's kube path against a throwaway `kind` cluster                                       |
 
 ##### Hostname, username, and group/tag colors
 
 Every username and hostname gets a color automatically, deterministically derived from its name - there's nothing to generate and nothing that can go missing. To pin a specific color instead, add a line to `~/hi.d/misc/colors` (`username,root,red` / `hostname,prod-db,yellow` / `hosttag,desktop,green`); `hosttag` entries match the _leftmost_ tag in a `# Tags: ...` comment placed directly above a `Host` line in `~/.ssh/config`. Run `hi_color_preview` any time to preview what every ssh host and your user currently resolve to, rendered in their actual color.
 
-###### Built from/with
+###### Built from/with/in mind
 
-- sshrc - https://github.com/cdown/sshrc (forked/became `hi.sh`)
-- sshm - https://github.com/Gu1llaum-3/sshm (optional, but _highly_ recommended to configure `~/.ssh/config` hosttags)
+- sshrc - _from_ - https://github.com/cdown/sshrc (became `hi.sh`)
+- sshm - _with_ - https://github.com/Gu1llaum-3/sshm (optional, but _highly_ recommended to configure `~/.ssh/config` hosttags)
+- bat - _in mind_ - https://github.com/sharkdp/bat (essentially my reason to get the aliases.sh fallthrough logic to work as portably as possible)
+- fish - _with_ - https://github.com/fish-shell/fish (my preferred shell because its defaults/built-ins are extremely easy to understand, but one that is not POSIX-compliant)
+
+###### AI Usage
+
+Heavily inspired by: https://v2.dictionarry.dev/ai-transparency
+
+This code originally started as entirely code written by (me)[https://github.com/ivylikethevine], but I have used generative AI to write large parts of it. Regardless, all of the code in this repository is my _responsibility_. AI is a tool, not an owner of a project. I have personally understood, reviewed, and approved all of the AI generated code in this repository. It has the same level of accountability to me as any code I write.
+
+###### The MIT License (MIT)
+
+From: https://mit-license.org/
+
+Copyright © 2026 Ivy Duggan ivylikethevine.com
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the “Software”), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.

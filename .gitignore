@@ -46,6 +46,7 @@
 *.yaml
 *.yml
 !theme.yml
+!.github/workflows/*.yml
 
 *docker*
-!tests/docker_test.sh
+!**docker_test.sh

@@ -13,7 +13,7 @@ command -v openssl >/dev/null 2>&1 || {
 
 _HI_EXCLUDE=(--exclude README.md --exclude .git --exclude .gitignore --exclude scripts
   --exclude hi.sh --exclude hi.bashrc --exclude .zed --exclude .vscode --exclude .shellcheckrc
-  --exclude '*.example' --exclude tests)
+  --exclude '*.example' --exclude tests --exclude .github --exclude .claude --exclude CLAUDE.md --exclude .devcontainer)
 
 # The ssh command line is re-parsed by the remote *login* shell, so every byte
 # we send through it is base64-armored and undone on the far side.

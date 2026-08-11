@@ -89,7 +89,7 @@ function _hi_pod_running() { [ "$(kubectl get pod "$1" -o jsonpath='{.status.pha
 # shellcheck disable=SC2329 # invoked indirectly, via _hi_case's "$@"
 function _hi_run_case() {
   local label="$1" image="$2" cmd="$3" timeout_s="${4:-30}"
-  local name out_file out exit_code=0 i pid t0 t1 ok=1
+  local name out_file out exit_code=0 t0 t1 ok=1
 
   name="hi-kubetest-$label"
   _hi_h3 "Testing shape: $label"
@@ -112,19 +112,10 @@ function _hi_run_case() {
   _hi_cecho " | running: $_HI_LAUNCHER $name $cmd"
   # backgrounded so a hung fallback can't wedge the whole test suite
   "${_HI_PTY_WRAP[@]}" "$_HI_LAUNCHER" "$name" "$cmd" <&3 >"$out_file" 2>&1 &
-  pid=$!
-  for ((i = 0; i < timeout_s * 4; i++)); do
-    kill -0 "$pid" 2>/dev/null || break
-    sleep 0.25
-  done
-  if kill -0 "$pid" 2>/dev/null; then
-    _hi_h3 " | $label -- TIMED OUT after ${timeout_s}s, killing"
-    kill -9 "$pid" 2>/dev/null
-    wait "$pid" 2>/dev/null
-    exit_code=124
-  else
-    wait "$pid" 2>/dev/null || exit_code=$?
-  fi
+  # shellcheck disable=SC2329 # invoked indirectly, as _hi_wait_pid's on-timeout hook
+  function _hi_on_timeout() { _hi_h3 " | $label -- TIMED OUT after ${timeout_s}s, killing"; }
+  _hi_wait_pid "$!" "$timeout_s" _hi_on_timeout
+  exit_code="$_HI_WAIT_EXIT"
   t1="$(_hi_now)"
 
   out="$(cat "$out_file" 2>/dev/null)"

@@ -18,6 +18,7 @@ export _HI_UNINSTALL="$_HI_ROOT/scripts/uninstall.sh"
 export _HI_COLOR_PREVIEW="$_HI_ROOT/scripts/color_preview.sh"
 
 export _HI_TEST_ALIASES="$_HI_ROOT/tests/alias_test.sh"
+export _HI_TEST_ALIAS_FALLTHROUGH="$_HI_ROOT/tests/alias_fallthrough_test.sh"
 export _HI_TEST_SSH="$_HI_ROOT/tests/ssh_test.sh"
 export _HI_TEST_DOCKER="$_HI_ROOT/tests/docker_test.sh"
 export _HI_TEST_PODMAN="$_HI_ROOT/tests/podman_test.sh"
@@ -61,13 +62,14 @@ alias hi_info="echo ' | hi_home: $_HI_HOME | hi_root: $_HI_ROOT | script: $_HI_L
 alias hi_color_preview="[ -f $_HI_COLOR_PREVIEW ] && $_HI_COLOR_PREVIEW"
 alias hi_packages_preview="sh -c 'source \"$_HI_CHECK\" && full_check'"
 alias hi_test_aliases="[ -f $_HI_TEST_ALIASES ] && $_HI_TEST_ALIASES"
+alias hi_test_alias_fallthrough="[ -f $_HI_TEST_ALIAS_FALLTHROUGH ] && $_HI_TEST_ALIAS_FALLTHROUGH"
 alias hi_test_ssh="[ -f $_HI_TEST_SSH ] && $_HI_TEST_SSH"
 alias hi_test_docker="[ -f $_HI_TEST_DOCKER ] && $_HI_TEST_DOCKER"
 alias hi_test_podman="[ -f $_HI_TEST_PODMAN ] && $_HI_TEST_PODMAN"
 alias hi_test_nomad="[ -f $_HI_TEST_NOMAD ] && $_HI_TEST_NOMAD"
 alias hi_test_kube="[ -f $_HI_TEST_KUBE ] && $_HI_TEST_KUBE"
 alias hi_test_shellcheck="[ -f $_HI_TEST_SHELLCHECK ] && $_HI_TEST_SHELLCHECK"
-alias hi_test_all="hi_test_aliases && hi_test_ssh && hi_test_docker && hi_test_podman && hi_test_nomad && hi_test_kube && hi_test_shellcheck"
+alias hi_test_all="hi_test_aliases && hi_test_alias_fallthrough && hi_test_ssh && hi_test_docker && hi_test_podman && hi_test_nomad && hi_test_kube && hi_test_shellcheck"
 
 # local-only disable logic. _HI_REMOTE_SESSION is exported by load.sh, the
 # chainload entry point every remote path goes through and the local

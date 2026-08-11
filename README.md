@@ -1,4 +1,4 @@
-# hi.sh -> sshrc superset
+# hi.sh -> sshrc supercharged
 
 **One config directory to rule them all, uniting all shells from all hosts!**
 
@@ -82,6 +82,7 @@ Reminder - place local only changes after the "`# hi-config-end`" comment in the
 | `misc/colors`                                   | optional color pins for hostnames/usernames/hosttags                                                       |
 | `scripts/install.sh`                            | configure the local shells, install and update                                                             |
 | `scripts/alias_test.sh`                         | check `aliases.sh` still loads in dash/bash/zsh/fish                                                       |
+| `tests/alias_fallthrough_test.sh`               | unit tests for `aliases.sh`'s `command -v a \|\| b \|\| ...` fallthrough and `_HI_DISABLE_*` flag logic    |
 | `scripts/color_preview.sh`                      | preview what every ssh host/user resolves to (`hi_color_preview`)                                          |
 | `scripts/ssh_test.sh`                           | end-to-end test of hi's ssh path across remote login shells                                                |
 | `scripts/docker_test.sh`                        | end-to-end test of hi's docker path across container shell environments                                    |
@@ -94,7 +95,27 @@ Reminder - place local only changes after the "`# hi-config-end`" comment in the
 
 Every username and hostname gets a color automatically, deterministically derived from its name - there's nothing to generate and nothing that can go missing. To pin a specific color instead, add a line to `~/hi.d/misc/colors` (`username,root,red` / `hostname,prod-db,yellow` / `hosttag,desktop,green`); `hosttag` entries match the _leftmost_ tag in a `# Tags: ...` comment placed directly above a `Host` line in `~/.ssh/config`. Run `hi_color_preview` any time to preview what every ssh host and your user currently resolve to, rendered in their actual color.
 
-###### Built from/with
+###### Built from/with/in mind
 
-- sshrc - https://github.com/cdown/sshrc (forked/became `hi.sh`)
-- sshm - https://github.com/Gu1llaum-3/sshm (optional, but _highly_ recommended to configure `~/.ssh/config` hosttags)
+- sshrc - _from_ - https://github.com/cdown/sshrc (became `hi.sh`)
+- sshm - _with_ - https://github.com/Gu1llaum-3/sshm (optional, but _highly_ recommended to configure `~/.ssh/config` hosttags)
+- bat - _in mind_ - https://github.com/sharkdp/bat (essentially my reason to get the aliases.sh fallthrough logic to work as portably as possible)
+- fish - _with_ - https://github.com/fish-shell/fish (my preferred shell because its defaults/built-ins are extremely easy to understand, but one that is not POSIX-compliant)
+
+###### AI Usage
+
+Heavily inspired by: https://v2.dictionarry.dev/ai-transparency
+
+This code originally started as entirely code written by (me)[https://github.com/ivylikethevine], but I have used generative AI to write large parts of it. Regardless, all of the code in this repository is my _responsibility_. AI is a tool, not an owner of a project. I have personally understood, reviewed, and approved all of the AI generated code in this repository. It has the same level of accountability to me as any code I write.
+
+###### The MIT License (MIT)
+
+From: https://mit-license.org/
+
+Copyright © 2026 Ivy Duggan ivylikethevine.com
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the “Software”), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.

@@ -10,6 +10,20 @@
 # but these are the only patterns that are safe to use, since this file must be
 # POSIX+fish compliant.
 
+# nano, vim, ls and exa all get aliased further down for unrelated reasons
+# (rcfile flags, color defaults, options). In zsh, dash and POSIX sh (unlike
+# bash/fish), `command -v` returns an *alias's* definition instead of
+# skipping to the real binary once that alias exists - so any fallthrough
+# chain below that can reach one of those names has to resolve before that
+# alias is defined. Resolving them all here, before anything else in this
+# file sets an alias, keeps every chain below immune to that regardless of
+# where it's used.
+export _HI_EDITOR_BIN="$(command -v nano || command -v micro || command -v pico || command -v vim || command -v vi)"
+# exa and eza intentionally differ in preference order (exa picks exa first,
+# eza/l pick eza first), so each needs its own resolved variable.
+export _HI_EXA_BIN="$(command -v exa || command -v eza || command -v ls)"
+export _HI_EZA_BIN="$(command -v eza || command -v exa || command -v ls)"
+
 # skipped when _HI_DISABLE_EDITORS=1, leaving nano/vim at their own defaults.
 # `|| true`: some sourcers run under `set -e`, where a plain failed `[ ]`
 # guard would otherwise abort the whole shell.
@@ -24,7 +38,7 @@
 alias sudo="command sudo " # works in bash/zsh, fish has a sudo wrapper in config.fish
 
 # cli text editor defaults with preferential fallthrough
-export EDITOR="$(command -v nano || command -v micro || command -v pico || command -v vim || command -v vi)"
+export EDITOR="$_HI_EDITOR_BIN"
 alias micro="micro -autoindent=true -colorscheme=darcula -colorcolumn=80 -diffgutter=true -softwrap=true -tabsize=2"
 # ide defaults with preferential fallthrough
 export IDE="$(command -v zeditor || command -v zed || command -v code || command -v vi)"
@@ -103,14 +117,11 @@ export _HI_EXA_SHARED_OPTS='-F -1 -l -m --group-directories-first'
 export _HI_EXA_OPTS="$_HI_EXA_SHARED_OPTS --group --no-filesize"
 export _HI_EZA_OPTS="$_HI_EXA_SHARED_OPTS"' --smart-group --time-style="+%b %d %Y %H:%M"'
 export _HI_EZA_OPTS_SIZE="$_HI_EZA_OPTS --total-size"
-alias exa="$(command -v exa || command -v eza || command -v ls) $_HI_EXA_OPTS"
+alias exa="$_HI_EXA_BIN $_HI_EXA_OPTS"
 alias lr="exa"
 alias lsx="lr"
 alias lra="lr -a"
 alias lrt="lr -T -L2"
-# eza and l share the same eza-first fallback chain (exa above picks exa
-# first instead), so resolve it once instead of running command -v twice
-export _HI_EZA_BIN="$(command -v eza || command -v exa || command -v ls)"
 alias eza="$_HI_EZA_BIN $_HI_EZA_OPTS"
 alias lsz="eza"
 alias les="eza $_HI_EZA_OPTS_SIZE"

@@ -6,9 +6,9 @@
 # reusing docker_test.sh's.
 set -euo pipefail
 
-# shellcheck source=../common/bootstrap.sh
+# shellcheck source=../../common/bootstrap.sh
 source "${_HI_HOME:-$HOME}/hi.d/common/bootstrap.sh"
-# shellcheck source=./test_lib.sh
+# shellcheck source=../test_lib.sh
 source "$_HI_TEST_LIB"
 
 _hi_container_backend_test podman

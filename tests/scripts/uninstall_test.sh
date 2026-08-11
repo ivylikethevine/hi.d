@@ -14,15 +14,15 @@
 # flow) is what makes sourcing it here safe.
 set -euo pipefail
 
-# shellcheck source=../common/bootstrap.sh
+# shellcheck source=../../common/bootstrap.sh
 source "${_HI_HOME:-$HOME}/hi.d/common/bootstrap.sh"
-# shellcheck source=./test_lib.sh
+# shellcheck source=../test_lib.sh
 source "$_HI_TEST_LIB"
 
 set -- # install.sh/uninstall.sh read "$@" for their own args; give them none
-# shellcheck source=../scripts/install.sh
+# shellcheck source=../../scripts/install.sh
 source "$_HI_INSTALL" # for config_shell, used to build the round-trip fixture below
-# shellcheck source=../scripts/uninstall.sh
+# shellcheck source=../../scripts/uninstall.sh
 source "$_HI_UNINSTALL"
 
 _HI_WORKDIR="$(mktemp -d -t hi.uninstalltest.XXXXXX)"

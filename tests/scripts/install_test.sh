@@ -16,13 +16,13 @@
 # install.sh is executed directly, never when sourced.
 set -euo pipefail
 
-# shellcheck source=../common/bootstrap.sh
+# shellcheck source=../../common/bootstrap.sh
 source "${_HI_HOME:-$HOME}/hi.d/common/bootstrap.sh"
-# shellcheck source=./test_lib.sh
+# shellcheck source=../test_lib.sh
 source "$_HI_TEST_LIB"
 
 set -- # install.sh reads "$@" for its own args; make sure it sees none
-# shellcheck source=../scripts/install.sh
+# shellcheck source=../../scripts/install.sh
 source "$_HI_INSTALL"
 
 _HI_WORKDIR="$(mktemp -d -t hi.installtest.XXXXXX)"

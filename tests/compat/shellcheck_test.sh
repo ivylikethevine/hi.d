@@ -3,7 +3,7 @@
 # skipped - shellcheck doesn't support their syntax) and reports the total.
 set -euo pipefail
 
-# shellcheck source=../common/bootstrap.sh
+# shellcheck source=../../common/bootstrap.sh
 source "${_HI_HOME:-$HOME}/hi.d/common/bootstrap.sh"
 
 if ! command -v shellcheck >/dev/null 2>&1; then

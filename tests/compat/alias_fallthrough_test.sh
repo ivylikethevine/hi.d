@@ -25,9 +25,9 @@
 # shells/aliases.sh.
 set -euo pipefail
 
-# shellcheck source=../common/bootstrap.sh
+# shellcheck source=../../common/bootstrap.sh
 source "${_HI_HOME:-$HOME}/hi.d/common/bootstrap.sh"
-# shellcheck source=./test_lib.sh
+# shellcheck source=../test_lib.sh
 source "$_HI_TEST_LIB"
 
 _HI_SHELLS="zsh sh bash fish"

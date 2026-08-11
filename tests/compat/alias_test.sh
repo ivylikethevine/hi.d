@@ -4,9 +4,9 @@
 # that the file was found. Skips any shell that isn't installed.
 set -euo pipefail
 
-# shellcheck source=../common/bootstrap.sh
+# shellcheck source=../../common/bootstrap.sh
 source "${_HI_HOME:-$HOME}/hi.d/common/bootstrap.sh"
-# shellcheck source=./test_lib.sh
+# shellcheck source=../test_lib.sh
 source "$_HI_TEST_LIB"
 
 # derived straight from aliases.sh so this test can't drift out of sync with

@@ -11,11 +11,11 @@
 # files in a subshell - the real ones are never read except where noted.
 set -euo pipefail
 
-# shellcheck source=../common/bootstrap.sh
+# shellcheck source=../../common/bootstrap.sh
 source "${_HI_HOME:-$HOME}/hi.d/common/bootstrap.sh"
-# shellcheck source=./test_lib.sh
+# shellcheck source=../test_lib.sh
 source "$_HI_TEST_LIB"
-# shellcheck source=../common/shared.sh
+# shellcheck source=../../common/shared.sh
 source "$_HI_SHARED"
 
 _HI_WORKDIR="$(mktemp -d -t hi.sharedtest.XXXXXX)"

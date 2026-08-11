@@ -8,11 +8,11 @@
 # end.
 set -euo pipefail
 
-# shellcheck source=../common/bootstrap.sh
+# shellcheck source=../../common/bootstrap.sh
 source "${_HI_HOME:-$HOME}/hi.d/common/bootstrap.sh"
-# shellcheck source=./test_lib.sh
+# shellcheck source=../test_lib.sh
 source "$_HI_TEST_LIB"
-# shellcheck source=../common/check.sh
+# shellcheck source=../../common/check.sh
 source "$_HI_CHECK"
 
 _HI_WORKDIR="$(mktemp -d -t hi.checktest.XXXXXX)"

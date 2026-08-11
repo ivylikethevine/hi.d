@@ -13,11 +13,11 @@
 # nothing outside that dir is ever touched.
 set -euo pipefail
 
-# shellcheck source=../common/bootstrap.sh
+# shellcheck source=../../common/bootstrap.sh
 source "${_HI_HOME:-$HOME}/hi.d/common/bootstrap.sh"
-# shellcheck source=./test_lib.sh
+# shellcheck source=../test_lib.sh
 source "$_HI_TEST_LIB"
-# shellcheck source=../common/git_prompt.sh
+# shellcheck source=../../common/git_prompt.sh
 source "$_HI_GIT_PROMPT"
 
 command -v git >/dev/null 2>&1 || { _hi_cecho "git not installed, skipping" "$YELLOW"; exit 0; }

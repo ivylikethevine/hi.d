@@ -17,9 +17,9 @@
 # network access the first time it runs, to pull the task images.
 set -euo pipefail
 
-# shellcheck source=../common/bootstrap.sh
+# shellcheck source=../../common/bootstrap.sh
 source "${_HI_HOME:-$HOME}/hi.d/common/bootstrap.sh"
-# shellcheck source=./test_lib.sh
+# shellcheck source=../test_lib.sh
 source "$_HI_TEST_LIB"
 
 command -v nomad >/dev/null 2>&1 || { _hi_cecho "nomad not installed, skipping" "$YELLOW"; exit 0; }

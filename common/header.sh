@@ -20,8 +20,7 @@ function header_row() {
 }
 
 function timestamp() {
-  local fmt="+%a %b %-e %Y %H:%M:%S %Z"
-  header_row "$BRBLUE$(date -u "$fmt")  " "  $BRYELLOW$(date "$fmt")"
+  header_row "$BRBLUE$(date -u "$_HI_HUMAN_CENTRIC_DATE")  " "  $BRYELLOW$(date "$_HI_HUMAN_CENTRIC_DATE")"
 }
 
 function system_info() {

@@ -19,6 +19,9 @@ export _HI_COLOR_PREVIEW="$_HI_ROOT/scripts/color_preview.sh"
 export _HI_TEST_ALIASES="$_HI_ROOT/scripts/alias_test.sh"
 export _HI_TEST_SSH="$_HI_ROOT/scripts/ssh_test.sh"
 export _HI_TEST_DOCKER="$_HI_ROOT/scripts/docker_test.sh"
+export _HI_TEST_PODMAN="$_HI_ROOT/scripts/podman_test.sh"
+export _HI_TEST_NOMAD="$_HI_ROOT/scripts/nomad_test.sh"
+export _HI_TEST_KUBE="$_HI_ROOT/scripts/kube_test.sh"
 export _HI_TEST_SHELLCHECK="$_HI_ROOT/scripts/shellcheck_test.sh"
 
 # user configurable
@@ -45,6 +48,7 @@ export _HI_HUMAN_CENTRIC_DATE="+%a %b %-e %Y %H:%M:%S %Z"
 export _HI_HUMAN_SHORT_DATE="+%b %-e %y %H:%M %Z"
 
 # required helpers/commands
+alias hi="$_HI_LAUNCHER"
 alias hi_install="[ -f $_HI_INSTALL ] && $_HI_INSTALL"
 alias hi_uninstall="[ -f $_HI_UNINSTALL ] && $_HI_UNINSTALL"
 alias hi_configure="[ -f $_HI_INSTALL ] && $_HI_INSTALL --features-only"
@@ -58,8 +62,11 @@ alias hi_packages_preview="sh -c 'source \"$_HI_CHECK\" && full_check'"
 alias hi_test_aliases="[ -f $_HI_TEST_ALIASES ] && $_HI_TEST_ALIASES"
 alias hi_test_ssh="[ -f $_HI_TEST_SSH ] && $_HI_TEST_SSH"
 alias hi_test_docker="[ -f $_HI_TEST_DOCKER ] && $_HI_TEST_DOCKER"
+alias hi_test_podman="[ -f $_HI_TEST_PODMAN ] && $_HI_TEST_PODMAN"
+alias hi_test_nomad="[ -f $_HI_TEST_NOMAD ] && $_HI_TEST_NOMAD"
+alias hi_test_kube="[ -f $_HI_TEST_KUBE ] && $_HI_TEST_KUBE"
 alias hi_test_shellcheck="[ -f $_HI_TEST_SHELLCHECK ] && $_HI_TEST_SHELLCHECK"
-alias hi_test_all="hi_test_aliases && hi_test_ssh && hi_test_docker && hi_test_shellcheck"
+alias hi_test_all="hi_test_aliases && hi_test_ssh && hi_test_docker && hi_test_podman && hi_test_nomad && hi_test_kube && hi_test_shellcheck"
 
 # android dev on linux; `|| true` since paths.sh is sourced under callers'
 # `set -e` (bootstrap.sh et al) and a false test here would otherwise abort them

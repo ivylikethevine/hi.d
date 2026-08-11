@@ -13,7 +13,7 @@ command -v openssl >/dev/null 2>&1 || {
 
 _HI_EXCLUDE=(--exclude README.md --exclude .git --exclude .gitignore --exclude scripts
   --exclude hi.sh --exclude hi.bashrc --exclude .zed --exclude .vscode --exclude .shellcheckrc
-  --exclude '*.example')
+  --exclude '*.example' --exclude tests)
 
 # The ssh command line is re-parsed by the remote *login* shell, so every byte
 # we send through it is base64-armored and undone on the far side.
@@ -29,9 +29,26 @@ function _hi_is_docker_container() {
     [ "$(docker container inspect -f '{{.State.Running}}' "$1" 2>/dev/null)" = true ]
 }
 
+# podman's CLI is a drop-in for docker's here (inspect, exec, exec -i, exec
+# -it all take identical flags), so this only needs its own detection - the
+# command shapes in _say_hi_container's podman case reuse docker's outright
+function _hi_is_podman_container() {
+  command -v podman >/dev/null 2>&1 &&
+    [ "$(podman container inspect -f '{{.State.Running}}' "$1" 2>/dev/null)" = true ]
+}
+
 function _hi_is_nomad_alloc() {
   command -v nomad >/dev/null 2>&1 &&
     [ "$(nomad alloc status -t '{{.ClientStatus}}' "$1" 2>/dev/null)" = running ]
+}
+
+# like nomad's multi-task allocations (see _say_hi_container below), a
+# multi-container pod needs `-c <name>` to pick one - not passed through here,
+# so it needs a single unambiguous container. kubectl defaults to the pod's
+# first container with a warning in that case, rather than failing outright
+function _hi_is_k8s_pod() {
+  command -v kubectl >/dev/null 2>&1 &&
+    [ "$(kubectl get pod "$1" -o jsonpath='{.status.phase}' 2>/dev/null)" = Running ]
 }
 
 # Cheap check for a permanent hi.d already sitting on $DOMAIN (i.e.
@@ -186,10 +203,12 @@ $(_hi_remote_suffix)"
   return "$ec"
 }
 
-# both container types use the same style of copying our configurations, but
-# they use different syntax for the start (since both are docker containers)
-# the fancy syntax lets us re-use one function for both types of containers
-# as well as source the aliases.sh file if the container is (likely) minimal
+# four backends share this one function - docker, podman (docker-CLI-compatible,
+# so it reuses docker's exec syntax outright), nomad (its own alloc exec
+# syntax) and kube (kubectl exec, `--` separating its flags from the remote
+# command) - the per-label case below picks the right command shape, then
+# everything past it is identical: copy hi.d in the same way, and source
+# aliases.sh directly if the container/alloc/pod turns out to be (likely) minimal
 function _say_hi_container() {
   local label="$1" shell_end root fallback exit_code shell_secs size prefix
   local -a probe cp attach
@@ -199,10 +218,25 @@ function _say_hi_container() {
     cp=(docker exec -i "$DOMAIN")
     attach=(docker exec -it "$DOMAIN")
     ;;
+  podman)
+    probe=(podman exec "$DOMAIN")
+    cp=(podman exec -i "$DOMAIN")
+    attach=(podman exec -it "$DOMAIN")
+    ;;
   nomad)
     probe=(nomad alloc exec -i=false -t=false "$DOMAIN")
     cp=(nomad alloc exec -i=true -t=false "$DOMAIN")
-    attach=(nomad alloc exec "$DOMAIN")
+    # explicit -t=true rather than nomad's own "-t defaults to true if stdin
+    # is a tty session" auto-detection - that heuristic can land on the wrong
+    # answer once our stdin is a pty shared with another process instead of
+    # a plain direct terminal (e.g. a backgrounded/wrapped invocation), which
+    # then hangs the exec session outright instead of just misrendering it
+    attach=(nomad alloc exec -i=true -t=true "$DOMAIN")
+    ;;
+  kube)
+    probe=(kubectl exec "$DOMAIN" --)
+    cp=(kubectl exec -i "$DOMAIN" --)
+    attach=(kubectl exec -it "$DOMAIN" --)
     ;;
   esac
 
@@ -315,8 +349,12 @@ function _hi() {
     _say_hi 2>"$tmp"
   elif _hi_is_docker_container "$DOMAIN"; then
     _say_hi_container docker 2>"$tmp"
+  elif _hi_is_podman_container "$DOMAIN"; then
+    _say_hi_container podman 2>"$tmp"
   elif _hi_is_nomad_alloc "$DOMAIN"; then
     _say_hi_container nomad 2>"$tmp"
+  elif _hi_is_k8s_pod "$DOMAIN"; then
+    _say_hi_container kube 2>"$tmp"
   else
     _say_hi 2>"$tmp"
   fi

@@ -5,7 +5,12 @@
 # hands the incoming "sh -c '...'" command to server-side, not just bash/dash.
 # Also boots one extra debian container with hi.d pre-installed (as
 # scripts/install.sh would leave it) to prove _say_hi detects it and loads it
-# in place instead of copying a fresh one over.
+# in place instead of copying a fresh one over, plus two bash-less alpine
+# images - one with only zsh, one with only fish - to prove those two tiers of
+# _hi_remote_suffix's `for _hi_s in zsh fish sh` fallback probe actually get
+# picked when they're what's available, not just the sh tier (the plain
+# bash-less alpine image below only ever exercises sh, since it has neither
+# zsh nor fish installed).
 # Everything is ephemeral and bound to 127.0.0.1 only; nothing touches the
 # user's real ~/.ssh/config or ~/.ssh/known_hosts. Skips cleanly if docker
 # isn't installed/running. Needs network access the first time it runs, to
@@ -35,11 +40,13 @@ _hi_h2 "generating throwaway ed25519 keypair at $_HI_WORKDIR/id"
 ssh-keygen -t ed25519 -N '' -q -f "$_HI_WORKDIR/id"
 _HI_PUBKEY="$(cat "$_HI_WORKDIR/id.pub")"
 
-# --- build the two throwaway sshd images ------------------------------
+# --- build the throwaway sshd images -----------------------------------
 # one debian image covers every shell that also has bash installed (bash's
-# presence, not the login shell, is what _say_hi branches on); a separate
-# bash-less alpine image exercises its no-bash fallback path.
-mkdir -p "$_HI_WORKDIR/debian" "$_HI_WORKDIR/alpine"
+# presence, not the login shell, is what _say_hi branches on); the alpine
+# images exercise its no-bash fallback path - plain alpine has neither zsh nor
+# fish, so it only ever reaches the fallback's sh tier; alpine-zsh/alpine-fish
+# each add exactly one of those, to reach the tiers ahead of it in the probe.
+mkdir -p "$_HI_WORKDIR/debian" "$_HI_WORKDIR/alpine" "$_HI_WORKDIR/alpine-zsh" "$_HI_WORKDIR/alpine-fish"
 
 cat >"$_HI_WORKDIR/debian/Dockerfile" <<'EOF'
 FROM debian:bookworm-slim
@@ -56,6 +63,24 @@ EOF
 cat >"$_HI_WORKDIR/alpine/Dockerfile" <<'EOF'
 FROM alpine:3.20
 RUN apk add --no-cache openssh openssl \
+    && adduser -D -s /bin/ash hitest
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+ENTRYPOINT ["/entrypoint.sh"]
+EOF
+
+cat >"$_HI_WORKDIR/alpine-zsh/Dockerfile" <<'EOF'
+FROM alpine:3.20
+RUN apk add --no-cache openssh openssl zsh \
+    && adduser -D -s /bin/ash hitest
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+ENTRYPOINT ["/entrypoint.sh"]
+EOF
+
+cat >"$_HI_WORKDIR/alpine-fish/Dockerfile" <<'EOF'
+FROM alpine:3.20
+RUN apk add --no-cache openssh openssl fish \
     && adduser -D -s /bin/ash hitest
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
@@ -88,16 +113,29 @@ EOF
   printf '%s\n' "$_HI_ENTRYPOINT_BODY"
 } >"$_HI_WORKDIR/alpine/entrypoint.sh"
 
+# identical setup to plain alpine, just with zsh/fish added to the image -
+# reuse the same entrypoint.sh content rather than rebuilding it
+cp "$_HI_WORKDIR/alpine/entrypoint.sh" "$_HI_WORKDIR/alpine-zsh/entrypoint.sh"
+cp "$_HI_WORKDIR/alpine/entrypoint.sh" "$_HI_WORKDIR/alpine-fish/entrypoint.sh"
+
 _hi_h2 "Building test images"
 _HI_DEBIAN_OK=1
 _HI_ALPINE_OK=1
+_HI_ALPINE_ZSH_OK=1
+_HI_ALPINE_FISH_OK=1
 _hi_h3 "building hi-sshtest-debian from $_HI_WORKDIR/debian (log: $_HI_WORKDIR/debian.log)"
 docker build -q -t hi-sshtest-debian "$_HI_WORKDIR/debian" >/dev/null 2>"$_HI_WORKDIR/debian.log" || _HI_DEBIAN_OK=0
 _hi_h3 "building hi-sshtest-alpine from $_HI_WORKDIR/alpine (log: $_HI_WORKDIR/alpine.log)"
 docker build -q -t hi-sshtest-alpine "$_HI_WORKDIR/alpine" >/dev/null 2>"$_HI_WORKDIR/alpine.log" || _HI_ALPINE_OK=0
+_hi_h3 "building hi-sshtest-alpine-zsh from $_HI_WORKDIR/alpine-zsh (log: $_HI_WORKDIR/alpine-zsh.log)"
+docker build -q -t hi-sshtest-alpine-zsh "$_HI_WORKDIR/alpine-zsh" >/dev/null 2>"$_HI_WORKDIR/alpine-zsh.log" || _HI_ALPINE_ZSH_OK=0
+_hi_h3 "building hi-sshtest-alpine-fish from $_HI_WORKDIR/alpine-fish (log: $_HI_WORKDIR/alpine-fish.log)"
+docker build -q -t hi-sshtest-alpine-fish "$_HI_WORKDIR/alpine-fish" >/dev/null 2>"$_HI_WORKDIR/alpine-fish.log" || _HI_ALPINE_FISH_OK=0
 
 [ "$_HI_DEBIAN_OK" -eq 1 ] || _hi_cecho " | debian image failed to build, skipping its shells (see $_HI_WORKDIR/debian.log)" "$YELLOW"
 [ "$_HI_ALPINE_OK" -eq 1 ] || _hi_cecho " | alpine image failed to build, skipping the no-bash case (see $_HI_WORKDIR/alpine.log)" "$YELLOW"
+[ "$_HI_ALPINE_ZSH_OK" -eq 1 ] || _hi_cecho " | alpine-zsh image failed to build, skipping the ssh zsh-fallback case (see $_HI_WORKDIR/alpine-zsh.log)" "$YELLOW"
+[ "$_HI_ALPINE_FISH_OK" -eq 1 ] || _hi_cecho " | alpine-fish image failed to build, skipping the ssh fish-fallback case (see $_HI_WORKDIR/alpine-fish.log)" "$YELLOW"
 
 # a third image, layered on the debian one, with a real checkout of this repo
 # already sitting at ~/hi.d - i.e. what a host looks like after
@@ -132,6 +170,14 @@ _HI_CMD_BASH='test -f "$_HI_ROOT/hi.sh" && source "$_HI_ALIASES" && alias hi_inf
 # command, so this only needs to assert the copy landed and the alias took
 # shellcheck disable=2016 # this expands later
 _HI_CMD_FALLBACK='test -f "$_HI_ROOT/hi.sh" && alias hi_info >/dev/null 2>&1 && echo '"$_HI_MARKER"
+# fish aliases are functions, and its `alias name` (no value) is a syntax
+# error rather than an existence check (unlike zsh/sh above) - same assertion
+# as _HI_CMD_FALLBACK, in fish's own dialect. paths.sh IS sourced by the ssh
+# fallback rc (see hi.sh's _hi_fallback_rc), unlike the docker/podman
+# container fallback which only sources aliases.sh - so hi_info is in scope
+# here the same way it is for _HI_CMD_FALLBACK
+# shellcheck disable=2016 # this expands later
+_HI_CMD_FALLBACK_FISH='test -f "$_HI_ROOT/hi.sh"; and functions -q hi_info; and echo '"$_HI_MARKER"
 # the target already has a permanent hi.d - this asserts _say_hi pointed
 # straight at it ($_HI_ROOT = ~/hi.d, never a mktemp'd copy) instead of
 # shipping a fresh tree over
@@ -221,6 +267,14 @@ if [ "$_HI_ALPINE_OK" -eq 1 ]; then
   _hi_run_case nobash hi-sshtest-alpine /bin/ash "$_HI_CMD_FALLBACK" || _HI_FAILED=1
 fi
 
+if [ "$_HI_ALPINE_ZSH_OK" -eq 1 ]; then
+  _hi_run_case nobash-zsh hi-sshtest-alpine-zsh /bin/ash "$_HI_CMD_FALLBACK" || _HI_FAILED=1
+fi
+
+if [ "$_HI_ALPINE_FISH_OK" -eq 1 ]; then
+  _hi_run_case nobash-fish hi-sshtest-alpine-fish /bin/ash "$_HI_CMD_FALLBACK_FISH" || _HI_FAILED=1
+fi
+
 if [ "$_HI_INSTALLED_OK" -eq 1 ]; then
   _hi_run_case installed hi-sshtest-debian-installed /bin/bash "$_HI_CMD_INSTALLED" \
     'test -f /home/hitest/hi.d/.installed_sentinel' || _HI_FAILED=1
@@ -232,5 +286,5 @@ else
   _hi_h1 "hi's ssh path FAILED for one or more login shells"
 fi
 
-docker image rm -f hi-sshtest-debian hi-sshtest-alpine hi-sshtest-debian-installed
+docker image rm -f hi-sshtest-debian hi-sshtest-alpine hi-sshtest-alpine-zsh hi-sshtest-alpine-fish hi-sshtest-debian-installed
 exit "$_HI_FAILED"

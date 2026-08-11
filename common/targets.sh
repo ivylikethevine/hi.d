@@ -2,7 +2,7 @@
 # Everything `hi <target>` can connect to, one "<name>\t<kind>" line each.
 # The bash, zsh and fish completions (and `hi_colors`) all read this for
 # connection, autocomplete, and autosuggest.
-# Usage: sh targets.sh [ssh|docker|nomad] (no argument = all of them)
+# Usage: sh targets.sh [ssh|docker|podman|nomad|kube] (no argument = all of them)
 kind="${1:-all}"
 
 if [ "$kind" = ssh ] || [ "$kind" = all ]; then
@@ -20,6 +20,11 @@ if [ "$kind" = docker ] || [ "$kind" = all ]; then
     docker ps --format '{{.Names}}' 2>/dev/null | sed 's/$/\tdocker/'
 fi
 
+if [ "$kind" = podman ] || [ "$kind" = all ]; then
+  command -v podman >/dev/null 2>&1 &&
+    podman ps --format '{{.Names}}' 2>/dev/null | sed 's/$/\tpodman/'
+fi
+
 if [ "$kind" = nomad ] || [ "$kind" = all ]; then
   command -v nomad >/dev/null 2>&1 &&
     nomad job status 2>/dev/null | awk 'NR > 1 { print $1 }' | while read -r job; do
@@ -27,6 +32,12 @@ if [ "$kind" = nomad ] || [ "$kind" = all ]; then
         '{{range .}}{{if eq .ClientStatus "running"}}{{printf "%.8s" .ID}}{{"\n"}}{{end}}{{end}}' \
         "$job" 2>/dev/null | sed 's/$/\tnomad/'
     done
+fi
+
+if [ "$kind" = kube ] || [ "$kind" = all ]; then
+  command -v kubectl >/dev/null 2>&1 &&
+    kubectl get pods --field-selector=status.phase=Running \
+      -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' 2>/dev/null | sed 's/$/\tkube/'
 fi
 
 exit 0

@@ -18,9 +18,9 @@ For ssh targets specifically, `hi` first checks (over the same connection, so it
 
 **_IMPORTANT: Local-only changes MUST stay in `~/.bashrc`, `~/.zshrc`, `~/.config/fish/config.fish`, etc. - anything in this directory is copied to every host you say `hi` to._**
 
-### Docker containers
+### Docker / Podman containers
 
-`hi <name>` also works against a running docker container - if `<name>` isn't a `Host` in `~/.ssh/config` but is a running container (by name or ID), `hi` copies `~/hi.d` in and chainloads `load.sh` exactly like the ssh path, for an identical session (colors, prompt, aliases, vim/nano configs, etc). No openssl armoring is needed here (`docker exec -i` passes stdin through as raw bytes), and cleanup happens once you exit. The container needs `bash` for the full experience; without it, `hi` drops you into the best plain shell available (`zsh`/`fish`/`sh`) with our aliases and a warning.
+`hi <name>` also works against a running docker or podman container - if `<name>` isn't a `Host` in `~/.ssh/config` but is a running container (by name or ID, docker checked first), `hi` copies `~/hi.d` in and chainloads `load.sh` exactly like the ssh path, for an identical session (colors, prompt, aliases, vim/nano configs, etc). No openssl armoring is needed here (`docker exec -i`/`podman exec -i` pass stdin through as raw bytes), and cleanup happens once you exit. Podman's CLI is close enough to docker's that it reuses the exact same command shapes, just against `podman` instead. The container needs `bash` for the full experience; without it, `hi` drops you into the best plain shell available (`zsh`/`fish`/`sh`) with our aliases and a warning.
 
 ### Windows hosts
 
@@ -31,12 +31,15 @@ For ssh targets specifically, `hi` first checks (over the same connection, so it
 
 ### Nomad allocations
 
-`hi <alloc-id>` also works against a running Nomad allocation (matched by ID/prefix, checked after the ssh-host and docker-container checks) - same idea, same session, same code path as docker. Since `nomad alloc exec` has no `docker cp`/`-e` equivalent, files are streamed in with `exec -i` + `cat >` and env vars are set through a `sh -c "export ...; exec ..."` wrapper. Multi-task allocations would need `nomad alloc exec -task <name>`, which `hi` doesn't pass through, so they need a single unambiguous task.
+`hi <alloc-id>` also works against a running Nomad allocation (matched by ID/prefix, checked after the ssh-host and docker/podman-container checks) - same idea, same session, same code path as docker. Since `nomad alloc exec` has no `docker cp`/`-e` equivalent, files are streamed in with `exec -i` + `cat >` and env vars are set through a `sh -c "export ...; exec ..."` wrapper. Multi-task allocations would need `nomad alloc exec -task <name>`, which `hi` doesn't pass through, so they need a single unambiguous task.
+
+### Kubernetes pods
+
+`hi <pod-name>` also works against a running Kubernetes pod (checked last, after ssh/docker/podman/nomad) - same idea again, using `kubectl exec` with `--` separating its own flags from the remote command. Uses whatever context/namespace your `kubectl` is currently pointed at; like Nomad's multi-task allocations above, a multi-container pod needs `-c <name>` to pick one, which `hi` doesn't pass through, so it needs a single unambiguous container (`kubectl` falls back to the pod's first container with a warning rather than failing outright).
 
 ### Installation/Usage
 
-- clone this repo to `~/`
-- `~/hi.d/scripts/install.sh` (re-run it any time; it repairs its own lines, even if hi.d moved) - before touching your shell rc files it validates your existing `~/.bashrc`, `~/.zshrc` and `~/.config/fish/config.fish` (whichever are installed) with each shell's own syntax checker, and asks whether to continue if any of them have issues
+- `hi.d/scripts/install.sh` (re-run it any time; it repairs its own lines, even if hi.d moved) - before touching your shell rc files it validates your existing `~/.bashrc`, `~/.zshrc` and `~/.config/fish/config.fish` (whichever are installed) with each shell's own syntax checker, and asks whether to continue if any of them have issues
 - reload your shell!
 - run `hi_configure` any time afterward to revisit the feature toggle prompts (header, prompt, personal settings, git status, editors, aliases, header details, terminal width) without touching the shell rc wiring
 - run `hi_check_configs` any time to just re-run that shell rc validation, without the rest of the install
@@ -69,7 +72,7 @@ Reminder - place local only changes after the "`# hi-config-end`" comment in the
 | `common/check.sh`                               | reads `misc/packages`, reports what the host has                                                           |
 | `common/header.sh`                              | the connect/disconnect banner, shared by every shell                                                       |
 | `common/git_prompt.sh`                          | bash/zsh git prompt, matching fish's built-in `fish_vcs_prompt`                                            |
-| `common/targets.sh`                             | every `hi` target (ssh/docker/nomad), for all three completions                                            |
+| `common/targets.sh`                             | every `hi` target (ssh/docker/podman/nomad/kube), for all three completions                                |
 | `shells/aliases.sh`                             | personal aliases shared by bash, zsh and fish - freely editable, off wholesale via `_HI_DISABLE_ALIASES=1` |
 | `shells/bash.sh`                                | bash config                                                                                                |
 | `shells/zsh.zsh`                                | zsh config                                                                                                 |
@@ -82,6 +85,9 @@ Reminder - place local only changes after the "`# hi-config-end`" comment in the
 | `scripts/color_preview.sh`                      | preview what every ssh host/user resolves to (`hi_color_preview`)                                          |
 | `scripts/ssh_test.sh`                           | end-to-end test of hi's ssh path across remote login shells                                                |
 | `scripts/docker_test.sh`                        | end-to-end test of hi's docker path across container shell environments                                    |
+| `scripts/podman_test.sh`                        | end-to-end test of hi's podman path across container shell environments                                    |
+| `scripts/nomad_test.sh`                         | end-to-end test of hi's nomad path against a throwaway `nomad agent -dev`                                  |
+| `scripts/kube_test.sh`                          | end-to-end test of hi's kube path against a throwaway `kind` cluster                                       |
 | `scripts/shellcheck_test.sh`                    | runs shellcheck over every `*.sh` file in the repo                                                         |
 
 ##### Hostname, username, and group/tag colors

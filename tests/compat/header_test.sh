@@ -10,7 +10,7 @@
 # _HI_DISABLE_HEADER gate rounds it out.
 #
 # Nearly every function below is invoked indirectly - by name, through
-# _hi_case's/_hi_poll_bool's "$@", or as a trap hook - which SC2329 can't see.
+# _hi_case's "$@" - which SC2329 can't see.
 # shellcheck disable=SC2329
 set -euo pipefail
 

@@ -97,7 +97,7 @@ function unlink_hi() {
   sudo rm -f "$_HI_LINK"
 }
 
-# lets tests/uninstall_test.sh `source` this file to reach strip_marker/
+# lets tests/scripts/uninstall_test.sh `source` this file to reach strip_marker/
 # unlink_hi without running the real uninstall below - unlink_hi's sudo call
 # in particular has no business firing from a test
 [[ "${BASH_SOURCE[0]}" == "$0" ]] || return 0

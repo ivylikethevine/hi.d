@@ -173,15 +173,6 @@ function test_workdir_creates_a_scratch_dir() {
   [[ "$dir" == */hi.probe.* ]] && [ ! -d "$dir" ]
 }
 
-function test_workdir_registers_a_trap_that_removes_it() {
-  local dir
-  dir="$(
-    _hi_workdir probe
-    printf '%s' "$_HI_WORKDIR"
-  )"
-  [ ! -d "$dir" ]
-}
-
 function test_test_cleanup_runs_the_extra_hook_first() {
   local marker="$_HI_WORKDIR/hook-ran"
   (
@@ -210,14 +201,12 @@ function test_test_cleanup_removes_the_workdir_even_if_the_hook_fails() {
 }
 
 function test_track_container_appends_to_the_teardown_list() {
-  local -a saved_started=("${_HI_STARTED[@]:-}")
-  _HI_STARTED=()
-  _hi_track_container one
-  _hi_track_container two
-  local ok=0
-  [ "${#_HI_STARTED[@]}" -eq 2 ] && [ "${_HI_STARTED[0]}" = one ] && [ "${_HI_STARTED[1]}" = two ] && ok=1
-  _HI_STARTED=("${saved_started[@]:-}")
-  [ "$ok" -eq 1 ]
+  (
+    _HI_STARTED=()
+    _hi_track_container one
+    _hi_track_container two
+    [ "${#_HI_STARTED[@]}" -eq 2 ] && [ "${_HI_STARTED[0]}" = one ] && [ "${_HI_STARTED[1]}" = two ]
+  )
 }
 
 # ---- _hi_require / _hi_require_backend ------------------------------------
@@ -258,44 +247,75 @@ function test_require_backend_skips_when_the_backend_is_unreachable() {
 }
 
 # ---- _hi_probe_cmd --------------------------------------------------------
+#
+# These *run* the generated string rather than grepping it. What the e2e
+# suites actually depend on is that a probe echoes its marker exactly when
+# its assertion holds on the target - and substring matching can't tell that
+# apart from a probe with broken quoting or one that echoes unconditionally,
+# both of which would then only surface in a full docker/ssh run. So every
+# shape is exercised twice: once in a target-shaped fixture where it should
+# fire, once with the thing it asserts on taken away, where it must not.
 
-function test_probe_cmd_bash_shape_sources_aliases() {
-  local out
-  out="$(_hi_probe_cmd MARK bash)"
-  # shellcheck disable=SC2016 # matching literal text that expands on the target, not here
-  [[ "$out" == *'source "$_HI_ALIASES"'* && "$out" == *'alias hi_info'* && "$out" == *"echo MARK"* ]]
+# A throwaway target-shaped tree under $1: $_HI_ROOT with an hi.sh in it, plus
+# an aliases file defining the two symbols the probes assert on. Echoes the
+# root, which is $1/hi.d - so it doubles as the `installed` shape's
+# "$_HI_ROOT = $HOME/hi.d" when $1 is passed as HOME.
+function _hi_probe_fixture() {
+  local root="$1/hi.d"
+  mkdir -p "$root"
+  : >"$root/hi.sh"
+  printf '%s\n' "alias hi_info='echo hi_info'" "alias sudo='command sudo '" >"$root/aliases.sh"
+  printf '%s' "$root"
+}
+
+# Runs <shape>'s probe under that fixture and returns 0 iff it echoed the
+# marker. $2 is a prelude run before the probe, for the aliases the fallback
+# shapes expect the session to be carrying already (their whole point is that
+# they *don't* source anything themselves); $3, if given, replaces _HI_ROOT,
+# which is how the negative cases break the assertion under test. $4 picks the
+# interpreter, for the two fish dialects.
+function _hi_probe_says_ok() {
+  local shape="$1" prelude="$2" root_override="${3:-}" shell="${4:-bash}" home root out
+  home="$(mktemp -d "$_HI_WORKDIR/probe.XXXXXX")"
+  root="$(_hi_probe_fixture "$home")"
+  out="$(HOME="$home" _HI_ROOT="${root_override:-$root}" _HI_ALIASES="$root/aliases.sh" \
+    "$shell" -c "$prelude$(_hi_probe_cmd MARK "$shape")" 2>/dev/null)" || true
+  [[ "$out" == *MARK* ]]
+}
+
+function test_probe_cmd_bash_shape_fires_only_with_a_real_root() {
+  _hi_probe_says_ok bash "" &&
+    ! _hi_probe_says_ok bash "" /nonexistent/hi.d
 }
 
 # the container fallback never sources paths.sh, so hi_info isn't in scope
-# there - it has to assert on a plain alias instead
-function test_probe_cmd_fallback_shape_checks_a_plain_alias() {
-  local out
-  out="$(_hi_probe_cmd MARK fallback)"
-  [[ "$out" == *"alias sudo"* && "$out" != *"hi_info"* ]]
-}
-
-function test_probe_cmd_fish_shapes_use_fish_syntax() {
-  local plain ssh_shape
-  plain="$(_hi_probe_cmd MARK fallback_fish)"
-  ssh_shape="$(_hi_probe_cmd MARK ssh_fallback_fish)"
-  [[ "$plain" == *"functions -q sudo"* && "$plain" == *"; and echo"* ]] &&
-    [[ "$ssh_shape" == *"functions -q hi_info"* ]]
+# there - it has to assert on a plain alias the session already carries, and
+# the fixture deliberately doesn't define one unless the prelude does
+function test_probe_cmd_fallback_shape_fires_only_with_the_alias() {
+  _hi_probe_says_ok fallback "alias sudo='x'; " &&
+    ! _hi_probe_says_ok fallback ""
 }
 
 # unlike the container fallback, the ssh one does get paths.sh sourced by
 # hi.sh's _hi_fallback_rc, so hi_info is the right thing to assert on
-function test_probe_cmd_ssh_fallback_checks_hi_info() {
-  local out
-  out="$(_hi_probe_cmd MARK ssh_fallback)"
-  # shellcheck disable=SC2016 # matching literal text that expands on the target, not here
-  [[ "$out" == *"alias hi_info"* && "$out" != *'source "$_HI_ALIASES"'* ]]
+function test_probe_cmd_ssh_fallback_fires_only_with_hi_info() {
+  _hi_probe_says_ok ssh_fallback "alias hi_info='x'; " &&
+    ! _hi_probe_says_ok ssh_fallback "alias hi_info='x'; " /nonexistent/hi.d
 }
 
-function test_probe_cmd_installed_shape_asserts_the_root_is_home() {
-  local out
-  out="$(_hi_probe_cmd MARK installed)"
-  # shellcheck disable=SC2016 # matching literal text that expands on the target, not here
-  [[ "$out" == *'test "$_HI_ROOT" = "$HOME/hi.d"'* ]]
+function test_probe_cmd_installed_shape_fires_only_when_root_is_home() {
+  _hi_probe_says_ok installed "" &&
+    ! _hi_probe_says_ok installed "" /somewhere/else/hi.d
+}
+
+# fish is not POSIX, so these two shapes are a separate dialect rather than a
+# variation - which is exactly why running them beats matching their text
+function test_probe_cmd_fish_shapes_run_under_fish() {
+  command -v fish >/dev/null 2>&1 || return 0
+  _hi_probe_says_ok fallback_fish "function sudo; end; " "" fish &&
+    ! _hi_probe_says_ok fallback_fish "" "" fish &&
+    _hi_probe_says_ok ssh_fallback_fish "function hi_info; end; " "" fish &&
+    ! _hi_probe_says_ok ssh_fallback_fish "function hi_info; end; " /nonexistent/hi.d fish
 }
 
 function test_probe_cmd_rejects_an_unknown_shape() {
@@ -354,6 +374,23 @@ function test_poll_bool_abort_predicate_stops_early() {
 
 function test_poll_bool_abort_predicate_does_not_block_success() {
   _hi_poll_bool -a _hi_true 3 0.01 _hi_true
+}
+
+# A probe that costs more than the interval must not stretch the wait past the
+# budget the call site stated: 100 x 0.01 means "up to 1s", and 100 attempts
+# at 0.3s each would otherwise be half a minute. Counting the attempts is what
+# proves the wall-clock bound cut it short rather than the try count.
+function test_poll_bool_stops_at_the_wall_clock_budget() {
+  local counter="$_HI_WORKDIR/slow-count"
+  : >"$counter"
+  # shellcheck disable=SC2317 # invoked by _hi_poll_bool through "$@"
+  function _hi_slow_false() {
+    printf 'x' >>"$counter"
+    sleep 0.3
+    return 1
+  }
+  _hi_poll_bool 100 0.01 _hi_slow_false && return 1
+  [ "$(wc -c <"$counter")" -lt 20 ]
 }
 
 # ---- _hi_poll_value -------------------------------------------------------
@@ -486,12 +523,11 @@ function test_sshd_entrypoint_body_unlocks_the_test_account() {
 
 function test_ssh_keypair_writes_a_usable_key() {
   command -v ssh-keygen >/dev/null 2>&1 || return 0
-  local saved_workdir="$_HI_WORKDIR" ok=0
-  _HI_WORKDIR="$(mktemp -d "$saved_workdir/keys.XXXXXX")"
-  _hi_ssh_keypair >/dev/null
-  [ -f "$_HI_WORKDIR/id" ] && [ -f "$_HI_WORKDIR/id.pub" ] && [[ "$_HI_PUBKEY" == ssh-ed25519* ]] && ok=1
-  _HI_WORKDIR="$saved_workdir"
-  [ "$ok" -eq 1 ]
+  (
+    _HI_WORKDIR="$(mktemp -d "$_HI_WORKDIR/keys.XXXXXX")"
+    _hi_ssh_keypair >/dev/null
+    [ -f "$_HI_WORKDIR/id" ] && [ -f "$_HI_WORKDIR/id.pub" ] && [[ "$_HI_PUBKEY" == ssh-ed25519* ]]
+  )
 }
 
 function test_ssh_reachable_fails_against_a_dead_port() {
@@ -525,7 +561,6 @@ _hi_check "End honours custom banners" test_suite_end_honours_custom_banners
 
 _hi_h2 "Testing: _hi_workdir / _hi_track_container / _hi_test_cleanup"
 _hi_check "Workdir creates a scratch dir" test_workdir_creates_a_scratch_dir
-_hi_check "Workdir's trap removes it on exit" test_workdir_registers_a_trap_that_removes_it
 _hi_check "Cleanup runs the suite-specific hook" test_test_cleanup_runs_the_extra_hook_first
 _hi_check "Cleanup removes the workdir even if the hook fails" test_test_cleanup_removes_the_workdir_even_if_the_hook_fails
 _hi_check "Track_container appends to the teardown list" test_track_container_appends_to_the_teardown_list
@@ -538,15 +573,16 @@ _hi_check "Backend skips when the CLI is missing" test_require_backend_skips_whe
 _hi_check "Backend skips when it's installed but unreachable" test_require_backend_skips_when_the_backend_is_unreachable
 
 _hi_h2 "Testing: _hi_probe_cmd"
-_hi_check "Bash shape sources aliases.sh" test_probe_cmd_bash_shape_sources_aliases
-_hi_check "Container fallback checks a plain alias" test_probe_cmd_fallback_shape_checks_a_plain_alias
-_hi_check "Ssh fallback checks hi_info" test_probe_cmd_ssh_fallback_checks_hi_info
-_hi_check "Fish shapes use fish syntax" test_probe_cmd_fish_shapes_use_fish_syntax
-_hi_check "Installed shape asserts \$_HI_ROOT is ~/hi.d" test_probe_cmd_installed_shape_asserts_the_root_is_home
+_hi_check "Bash shape fires only with a real root" test_probe_cmd_bash_shape_fires_only_with_a_real_root
+_hi_check "Container fallback fires only with the alias" test_probe_cmd_fallback_shape_fires_only_with_the_alias
+_hi_check "Ssh fallback fires only with hi_info" test_probe_cmd_ssh_fallback_fires_only_with_hi_info
+_hi_check "Fish shapes run under fish" test_probe_cmd_fish_shapes_run_under_fish
+_hi_check "Installed shape fires only when \$_HI_ROOT is ~/hi.d" test_probe_cmd_installed_shape_fires_only_when_root_is_home
 _hi_check "Every shape ends with the marker" test_probe_cmd_every_shape_ends_with_the_marker
 _hi_check "Rejects an unknown shape" test_probe_cmd_rejects_an_unknown_shape
 
 _hi_h2 "Testing: _hi_poll_bool / _hi_poll_value"
+_hi_check "Poll_bool stops at the wall-clock budget" test_poll_bool_stops_at_the_wall_clock_budget
 _hi_check "Poll_bool returns 0 when already true" test_poll_bool_returns_zero_when_already_true
 _hi_check "Poll_bool returns 1 when never true" test_poll_bool_returns_one_when_never_true
 _hi_check "Poll_bool succeeds on a later attempt" test_poll_bool_succeeds_on_a_later_attempt

@@ -6,6 +6,12 @@ set -euo pipefail # must be disabled after our code (this file is part of the in
 # shellcheck source=./paths.sh
 source "${_HI_HOME:-$HOME}/hi.d/common/paths.sh"
 
+# terminal width the header/banner and _hi_h1 pad out to; 80 when unset.
+# scripts/install.sh's config_max_width writes this line for you, marker-tagged
+# and appended to this file; uncommenting it by hand is the same thing, and is
+# the shape its grep reads the current value back out of.
+# export _HI_MAX_WIDTH=120
+
 # color names match fish's set_color vocabulary; greys are skipped, since fish has none.
 _HI_COLOR_NAMES=(red green yellow blue magenta cyan brred brgreen bryellow brblue brmagenta brcyan)
 

@@ -152,7 +152,7 @@ Every username and hostname gets a color automatically, deterministically derive
 
 Heavily inspired by: https://v2.dictionarry.dev/ai-transparency
 
-This code originally started as entirely code written by (me)[https://github.com/ivylikethevine], but I have used generative AI to write large parts of it. Regardless, all of the code in this repository is my _responsibility_. AI is a tool, not an owner of a project. I have personally understood, reviewed, and approved all of the AI generated code in this repository. It has the same level of accountability to me as any code I write.
+This code originally started as entirely code written by (me)[https://github.com/ivylikethevine], but I have used generative AI to write large parts of it. Regardless, all of the code in this repository is my _responsibility_. AI is a tool, not an owner of a project. I have personally understood, reviewed, and approved all of the AI generated code in this repository. _Mainline releases_ have the same level of accountability to me as any code I write and publish.
 
 ###### The MIT License (MIT)
 

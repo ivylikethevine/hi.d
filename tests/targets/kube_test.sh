@@ -68,12 +68,11 @@ fi
 # --- the actual per-shape test -------------------------------------------
 _HI_MARKER="HI_KUBE_TEST_OK"
 
-# same reasoning as docker_test.sh/podman_test.sh: kubectl exec -it refuses a
-# tty unless our own stdin already looks like one, which isn't true once this
-# runs headless/backgrounded - fake one via fd 3 the same way (see
-# docker_test.sh for the long version of why fd 3 specifically, not fd 0)
-exec 3<&0
-_hi_pty_wrap 3 auto "no tty and no python3 to fake one - kubectl exec -it will fail outright, results may be unreliable"
+# kubectl exec -it refuses a tty unless our own stdin already looks like one,
+# which isn't true once this runs headless/backgrounded - same problem, and
+# same fd-3 answer, as every other backgrounded-launcher suite (see
+# _hi_pty_stdin in tests/test_lib.sh for the long version)
+_hi_pty_stdin auto "no tty and no python3 to fake one - kubectl exec -it will fail outright, results may be unreliable"
 
 _hi_suite_begin
 
@@ -83,11 +82,10 @@ function _hi_pod_running() { [ "$(kubectl get pod "$1" -o jsonpath='{.status.pha
 
 function _hi_run_case() {
   local label="$1" image="$2" cmd="$3" timeout_s="${4:-30}"
-  local name out_file out exit_code=0 t0 t1 ok=1
+  local name ok=0
 
   name="hi-kubetest-$label"
   _hi_h3 "Testing shape: [$label]"
-  t0="$(_hi_now)"
 
   if ! kubectl run "$name" --image="$image" --image-pull-policy=IfNotPresent \
     --restart=Never --command -- sleep infinity >"$_HI_WORKDIR/$label.run.log" 2>&1; then
@@ -102,24 +100,7 @@ function _hi_run_case() {
     return 1
   fi
 
-  out_file="$_HI_WORKDIR/$label.out"
-  _hi_cecho " | Running: $_HI_LAUNCHER $name $cmd"
-  # backgrounded so a hung fallback can't wedge the whole test suite
-  "${_HI_PTY_WRAP[@]}" "$_HI_LAUNCHER" "$name" "$cmd" <&3 >"$out_file" 2>&1 &
-  function _hi_on_timeout() { _hi_h3 " | [$label] -- TIMED OUT after ${timeout_s}s, killing"; }
-  _hi_wait_pid "$!" "$timeout_s" _hi_on_timeout
-  exit_code="$_HI_WAIT_EXIT"
-  t1="$(_hi_now)"
-
-  out="$(cat "$out_file" 2>/dev/null)"
-  if printf '%s' "$out" | grep -q "$_HI_MARKER"; then
-    _hi_cecho " | [$label] -- Kube path OK ($(_hi_elapsed "$t0" "$t1")s)" "$GREEN"
-  else
-    _hi_h3 " | [$label] -- FAILED (exit $exit_code, $(_hi_elapsed "$t0" "$t1")s)"
-    printf '%s\n' "$out" | sed 's/^/      /'
-    ok=0
-  fi
-
+  _hi_exec_case "$label" "kube path" "$_HI_MARKER" "$timeout_s" "$name" "$cmd" && ok=1
   kubectl delete pod "$name" --now >/dev/null 2>&1
   [ "$ok" -eq 1 ]
 }

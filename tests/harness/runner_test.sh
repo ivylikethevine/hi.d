@@ -167,37 +167,51 @@ function test_each_suites_own_output_still_streams() {
 
 # ---- the shipped table ----------------------------------------------------
 
-# the names are a public contract - .github/workflows/ci.yml passes these
-# eleven explicitly, and CLAUDE.md/README.md document them
-function test_shipped_table_still_has_the_ci_suite_names() {
+# The names are a public contract: .github/workflows/ci.yml passes the first
+# eleven explicitly, and CLAUDE.md/README.md document all of them. The
+# unknown-name error path is what prints the full known list, so one bad
+# invocation exercises the whole table.
+function test_shipped_table_still_has_every_suite_name() {
   local name out
   out="$("$_HI_TEST_RUN" definitely-not-a-suite 2>&1)" || true
   for name in aliases alias_fallthrough shellcheck install uninstall check header shared git_prompt \
-    test_lib test_runner; do
-    [[ "$out" == *"$name"* ]] || return 1
-  done
-}
-
-function test_shipped_table_still_has_the_backend_suite_names() {
-  local name out
-  out="$("$_HI_TEST_RUN" definitely-not-a-suite 2>&1)" || true
-  for name in ssh ssh_disconnect docker podman nomad kube; do
-    [[ "$out" == *"$name"* ]] || return 1
+    test_lib test_runner ssh ssh_disconnect docker podman nomad kube; do
+    [[ "$out" == *"$name"* ]] || {
+      _hi_cecho " | missing from the table: $name" "$RED"
+      return 1
+    }
   done
 }
 
 # every path in the shipped table has to resolve to a real executable, which
 # is exactly what the MISSING branch exists to catch at runtime - better to
-# catch it here
+# catch it here.
+#
+# The paths only exist in the runner's source, so they have to be read back
+# out of it - and a source-scraping regex that quietly stops matching would
+# leave a zero-iteration loop, which returns 0 and reports PASS having checked
+# nothing. So the entries parsed here are counted against the name list the
+# runner itself prints: drift in either the table's formatting or its contents
+# fails the case instead of hollowing it out.
 function test_every_shipped_suite_script_exists_and_is_executable() {
-  local line path
-  while IFS= read -r line; do
-    path="$_HI_ROOT/tests/${line#*:}"
+  local entry path known
+  local -a entries=() names=()
+  mapfile -t entries < <(grep -oE '^[[:space:]]*"[^":]+:[^"]+\.sh"$' "$_HI_TEST_RUN" | tr -d '" ')
+  known="$("$_HI_TEST_RUN" definitely-not-a-suite 2>&1)" || true
+  read -r -a names <<<"$(sed 's/.*(known: //; s/).*//' <<<"$known")"
+
+  if [ "${#entries[@]}" -eq 0 ] || [ "${#entries[@]}" -ne "${#names[@]}" ]; then
+    _hi_cecho " | parsed ${#entries[@]} table entries out of $_HI_TEST_RUN, runner reports ${#names[@]} suites" "$RED"
+    return 1
+  fi
+
+  for entry in "${entries[@]}"; do
+    path="$_HI_ROOT/tests/${entry#*:}"
     [ -x "$path" ] || {
       _hi_cecho " | not executable: $path" "$RED"
       return 1
     }
-  done < <(grep -oE '^    "[a-z_]+:[a-z_/]+\.sh"$' "$_HI_TEST_RUN" | tr -d '" ')
+  done
 }
 
 _hi_suite_begin
@@ -229,8 +243,7 @@ _hi_check "Pads names to the widest" test_summary_pads_names_to_the_widest
 _hi_check "Each suite's own output still streams" test_each_suites_own_output_still_streams
 
 _hi_h2 "Testing: the shipped table"
-_hi_check "Still has the eleven CI suite names" test_shipped_table_still_has_the_ci_suite_names
-_hi_check "Still has the backend suite names" test_shipped_table_still_has_the_backend_suite_names
+_hi_check "Still has every CI and backend suite name" test_shipped_table_still_has_every_suite_name
 _hi_check "Every shipped path exists and is executable" test_every_shipped_suite_script_exists_and_is_executable
 
 _hi_suite_end "test_runner.sh"

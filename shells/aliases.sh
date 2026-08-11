@@ -10,15 +10,16 @@
 # but these are the only patterns that are safe to use, since this file must be
 # POSIX+fish compliant.
 
-# nano, vim, ls and exa all get aliased further down for unrelated reasons
-# (rcfile flags, color defaults, options). In zsh, dash and POSIX sh (unlike
-# bash/fish), `command -v` returns an *alias's* definition instead of
+# nano, vim, cat, ls, exa and eza all get aliased further down for unrelated
+# reasons (rcfile flags, color defaults, options). In zsh, dash and POSIX sh
+# (unlike bash/fish), `command -v` returns an *alias's* definition instead of
 # skipping to the real binary once that alias exists - so any fallthrough
 # chain below that can reach one of those names has to resolve before that
 # alias is defined. Resolving them all here, before anything else in this
 # file sets an alias, keeps every chain below immune to that regardless of
 # where it's used.
 export _HI_EDITOR_BIN="$(command -v nano || command -v micro || command -v pico || command -v vim || command -v vi)"
+export _HI_BATCAT_BIN="$(command -v bat || command -v batcat || command -v ccat || command -v cat)"
 # exa and eza intentionally differ in preference order (exa picks exa first,
 # eza/l pick eza first), so each needs its own resolved variable.
 export _HI_EXA_BIN="$(command -v exa || command -v eza || command -v ls)"
@@ -47,7 +48,7 @@ export IDE="$(command -v zeditor || command -v zed || command -v code || command
 export _HI_BAT_OPTS='-P --tabs 2 --theme Monokai\ Extended\ Bright --style changes,grid'
 # batcat is batcat on some Linux distros (fallback to ccat)
 # ccat is cat with syntax highlighting (fallback to cat)
-alias batcat="$(command -v bat || command -v batcat || command -v ccat || command -v cat)"
+alias batcat="$_HI_BATCAT_BIN"
 alias bat="batcat $_HI_BAT_OPTS"
 alias batn="batcat $_HI_BAT_OPTS,numbers"
 alias cat="batcat"

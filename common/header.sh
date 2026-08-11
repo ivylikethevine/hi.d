@@ -8,6 +8,16 @@ source "${_HI_HOME:-$HOME}/hi.d/common/bootstrap.sh"
 # shellcheck source=./check.sh
 source "$_HI_CHECK"
 
+# per-line header toggles - uncomment one to drop that row from the banner.
+# scripts/install.sh's config_header_details writes these for you, as
+# marker-tagged lines appended to this file; uncommenting by hand is the same
+# thing, and these are the lines its setting_enabled greps for. Unlike hi's
+# _HI_DISABLE_* vars, 0 is the off-value here.
+# export _HI_HEADER_TIMESTAMP=0
+# export _HI_HEADER_SYSINFO=0
+# export _HI_HEADER_IDENTITY=0
+# export _HI_HEADER_CHECK=0
+
 function header_row() {
   local cell out=""
   for cell in "$@"; do out+="$NC | $cell"; done

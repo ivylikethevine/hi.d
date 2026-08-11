@@ -17,11 +17,7 @@ export _HI_INSTALL="$_HI_ROOT/scripts/install.sh"
 export _HI_UNINSTALL="$_HI_ROOT/scripts/uninstall.sh"
 export _HI_COLOR_PREVIEW="$_HI_ROOT/scripts/color_preview.sh"
 
-# tests - only the two entry points every session needs: the lib each suite
-# sources, and the runner behind the hi_test alias below. The per-suite paths
-# live in the runner's own ordered table (tests/test_runner.sh), which is
-# their only consumer - no reason to export fifteen more names into every
-# shell hi ever touches.
+# tests - only the two entry points every session needs
 export _HI_TEST_LIB="$_HI_ROOT/tests/test_lib.sh"
 export _HI_TEST_RUN="$_HI_ROOT/tests/test_runner.sh"
 

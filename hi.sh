@@ -29,9 +29,6 @@ function _hi_is_docker_container() {
     [ "$(docker container inspect -f '{{.State.Running}}' "$1" 2>/dev/null)" = true ]
 }
 
-# podman's CLI is a drop-in for docker's here (inspect, exec, exec -i, exec
-# -it all take identical flags), so this only needs its own detection - the
-# command shapes in _say_hi_container's podman case reuse docker's outright
 function _hi_is_podman_container() {
   command -v podman >/dev/null 2>&1 &&
     [ "$(podman container inspect -f '{{.State.Running}}' "$1" 2>/dev/null)" = true ]

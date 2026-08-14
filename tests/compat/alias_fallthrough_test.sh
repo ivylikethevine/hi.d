@@ -35,26 +35,13 @@ source "${_HI_HOME:-$HOME}/hi.d/common/bootstrap.sh"
 source "$_HI_TEST_LIB"
 
 _HI_SHELLS="zsh sh bash fish"
-# name -> resolved binary, filled in once by run_alias_fallthrough_test below
 declare -A _HI_SHELL_BIN=()
 
-# ---- fake PATH scaffolding -------------------------------------------------
-
-# writes a no-op executable named $2 into fake bin dir $1
 function _hi_fake_bin() {
   printf '%s\n' '#!/bin/sh' 'exit 0' >"$1/$2"
   chmod +x "$1/$2"
 }
 
-# builds an isolated bin dir under $_HI_WORKDIR containing only the named
-# binaries (possibly none); nothing else on PATH is required, since every
-# check below only depends on shell builtins (`.`/source, `[`/test, alias,
-# export, command) plus these fakes.
-#
-# The scenario loops below ask for the same dir over and over (once per
-# candidate set per var, and every set is re-requested for each of the four
-# shells), so an already-built dir is returned as-is rather than rewritten -
-# the name is derived from its contents, so a hit is always the same dir.
 function _hi_fake_path() {
   local dir="$_HI_WORKDIR/$1" bin
   shift
@@ -67,8 +54,6 @@ function _hi_fake_path() {
   printf '%s' "$dir"
 }
 
-# first candidate (space-separated, in aliases.sh's own preference order)
-# that's present in the installed set (space-separated); empty if none are
 function _hi_expect_winner() {
   local candidates="$1" installed="$2" c i
   for c in $candidates; do
@@ -78,10 +63,6 @@ function _hi_expect_winner() {
   done
   printf ''
 }
-
-# ---- static per-shell-family check scripts ---------------------------------
-# same two scripts are reused for every scenario below; only the env passed
-# to the shell invocation (PATH, flags, expected values) changes per run.
 
 function _hi_write_check_scripts() {
   _HI_POSIX_CHECK="$_HI_WORKDIR/posix_check.sh"
@@ -162,10 +143,6 @@ exit $fail
 EOF
 }
 
-# ---- scenario runner --------------------------------------------------------
-# runs one scenario (a set of _HI_* env vars) against one shell in a
-# from-scratch environment: only $fakepath, $HOME (empty) and the vars this
-# function passes through survive - nothing from the host shell leaks in.
 function _hi_run_scenario() {
   local shell="$1" fakepath="$2" label="$3"
   shift 3
@@ -197,12 +174,6 @@ function _hi_run_scenario() {
   fi
 }
 
-# ---- fallthrough scenarios --------------------------------------------------
-# for each var, in the exact preference order aliases.sh itself uses: with
-# every candidate installed (first should win), with only the last-resort
-# candidate installed (should fall all the way through), with only a middle
-# candidate installed (order-sensitivity, not just presence/absence), and
-# with nothing installed at all (should degrade to empty, not error)
 function run_fallthrough_tests() {
   _hi_h1 "Fallthrough (command -v a || b || ...) resolution"
   local var last mid installed expect fakepath shell
@@ -226,10 +197,6 @@ function run_fallthrough_tests() {
   done
 }
 
-# ---- flag-guard scenarios ---------------------------------------------------
-# _HI_DISABLE_EDITORS only gates the nano/vim rcfile aliases; _HI_DISABLE_ALIASES
-# returns before everything else (sudo, EDITOR, ...) but must NOT affect the
-# editors block, since that sits above the guard on purpose
 function run_flag_tests() {
   _hi_h1 "_HI_DISABLE_EDITORS / _HI_DISABLE_ALIASES guards"
   local shell fakepath

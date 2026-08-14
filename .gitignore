@@ -50,3 +50,5 @@
 
 *docker*
 !*docker_test.sh
+
+!.markdownlint.yaml

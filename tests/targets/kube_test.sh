@@ -10,16 +10,6 @@
 # the initial `command -v bash` probe is identical code for every backend and
 # is already proven there, so this only needs to prove kubectl exec's own
 # argument shapes work - once with bash present, once without.
-# The cluster gets its own throwaway kubeconfig (never ~/.kube/config) so
-# nothing here touches a real cluster context. Needs network access - once
-# for kind's own node image, and every run for the two tiny test images,
-# pulled from inside the kind node itself rather than loaded from the host's
-# docker daemon (`kind load docker-image` chokes on this host's docker
-# installation: its containerd-backed image store keeps multi-platform
-# manifest-list metadata around even for a single-platform pull, and kind's
-# `ctr images import --all-platforms` then fails looking for blobs of
-# platforms that were never actually pulled).
-# Skips cleanly if kind/kubectl/docker aren't installed/reachable.
 #
 # Nearly every function below is invoked indirectly - by name, through
 # _hi_case's/_hi_poll_bool's "$@", or as a trap hook - which SC2329 can't see.
@@ -31,10 +21,6 @@ source "${_HI_HOME:-$HOME}/hi.d/common/bootstrap.sh"
 # shellcheck source=../test_lib.sh
 source "$_HI_TEST_LIB"
 
-_hi_require kind
-_hi_require kubectl
-_hi_require_backend docker "not installed (kind needs it to run cluster nodes)"
-
 _HI_CLUSTER="hi-kubetest-$$"
 _HI_CLUSTER_UP=0
 
@@ -42,42 +28,7 @@ function _hi_kube_cleanup() {
   [ "$_HI_CLUSTER_UP" -eq 1 ] && kind delete cluster --name "$_HI_CLUSTER" >/dev/null 2>&1
   return 0
 }
-_hi_workdir kubetest _hi_kube_cleanup
-export KUBECONFIG="$_HI_WORKDIR/kubeconfig"
-_hi_h1 "Testing hi's kube path against a throwaway kind cluster"
 
-_hi_h2 "Creating kind cluster $_HI_CLUSTER"
-if ! kind create cluster --name "$_HI_CLUSTER" --kubeconfig "$KUBECONFIG" \
-  >"$_HI_WORKDIR/kind.log" 2>&1; then
-  _hi_cecho "Kind cluster never came up (see $_HI_WORKDIR/kind.log), skipping" "$YELLOW"
-  exit 0
-fi
-_HI_CLUSTER_UP=1
-_hi_cecho " | Cluster up" "$GREEN"
-
-# kind reports the cluster ready as soon as the API server answers, but the
-# controller-manager hasn't necessarily created the default namespace's
-# `default` ServiceAccount yet - a pod submitted before it exists is rejected
-# outright ("error looking up service account default/default: ... not
-# found"), so wait for it rather than race the pod creation below against it
-if ! _hi_poll_bool 40 0.5 kubectl get serviceaccount default; then
-  _hi_cecho "default ServiceAccount never showed up, skipping" "$YELLOW"
-  exit 0
-fi
-
-# --- the actual per-shape test -------------------------------------------
-_HI_MARKER="HI_KUBE_TEST_OK"
-
-# kubectl exec -it refuses a tty unless our own stdin already looks like one,
-# which isn't true once this runs headless/backgrounded - same problem, and
-# same fd-3 answer, as every other backgrounded-launcher suite (see
-# _hi_pty_stdin in tests/test_lib.sh for the long version)
-_hi_pty_stdin auto "no tty and no python3 to fake one - kubectl exec -it will fail outright, results may be unreliable"
-
-_hi_suite_begin
-
-# polls until the pod itself reports Running, so the real test isn't racing
-# the scheduler/kubelet
 function _hi_pod_running() { [ "$(kubectl get pod "$1" -o jsonpath='{.status.phase}' 2>/dev/null)" = Running ]; }
 
 function _hi_run_case() {
@@ -105,9 +56,41 @@ function _hi_run_case() {
   [ "$ok" -eq 1 ]
 }
 
-_hi_case _hi_run_case bash debian:bookworm-slim "$(_hi_probe_cmd "$_HI_MARKER" bash)"
-_hi_case _hi_run_case sh alpine:3.20 "$(_hi_probe_cmd "$_HI_MARKER" fallback)"
+function run_kube_test() {
+  _hi_require kind
+  _hi_require kubectl
+  _hi_require_backend docker "not installed (kind needs it to run cluster nodes)"
 
-_hi_suite_end "" \
-  "hi's kube path survived every shape tested ($_HI_TOTAL cases)" \
-  "hi's kube path FAILED: $_HI_FAILED/$_HI_TOTAL cases"
+  _hi_workdir kubetest _hi_kube_cleanup
+  export KUBECONFIG="$_HI_WORKDIR/kubeconfig"
+  _hi_h1 "Testing hi's kube path against a throwaway kind cluster"
+
+  _hi_h2 "Creating kind cluster $_HI_CLUSTER"
+  if ! kind create cluster --name "$_HI_CLUSTER" --kubeconfig "$KUBECONFIG" \
+    >"$_HI_WORKDIR/kind.log" 2>&1; then
+    _hi_cecho "Kind cluster never came up (see $_HI_WORKDIR/kind.log), skipping" "$YELLOW"
+    exit 0
+  fi
+  _HI_CLUSTER_UP=1
+  _hi_cecho " | Cluster up" "$GREEN"
+
+  if ! _hi_poll_bool 40 0.5 kubectl get serviceaccount default; then
+    _hi_cecho "default ServiceAccount never showed up, skipping" "$YELLOW"
+    exit 0
+  fi
+
+  _HI_MARKER="HI_KUBE_TEST_OK"
+
+  _hi_pty_stdin auto "no tty and no python3 to fake one - kubectl exec -it will fail outright, results may be unreliable"
+
+  _hi_suite_begin
+
+  _hi_case _hi_run_case bash debian:bookworm-slim "$(_hi_probe_cmd "$_HI_MARKER" bash)"
+  _hi_case _hi_run_case sh alpine:3.20 "$(_hi_probe_cmd "$_HI_MARKER" fallback)"
+
+  _hi_suite_end "" \
+    "hi's kube path survived every shape tested ($_HI_TOTAL cases)" \
+    "hi's kube path FAILED: $_HI_FAILED/$_HI_TOTAL cases"
+}
+
+run_kube_test

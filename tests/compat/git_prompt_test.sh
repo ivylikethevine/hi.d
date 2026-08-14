@@ -1,16 +1,5 @@
 #!/bin/bash
-# Unit tests for common/git_prompt.sh's _hi_git_prompt: the no-repo/disabled
-# early-outs, the porcelain=v2 status-flag counting (staged/dirty/untracked/
-# unmerged), ahead/behind arrows against an upstream, detached HEAD (short
-# sha + red branch color), the 32-char branch name truncation, every
-# in-progress operation state (REBASE via the apply backend, REBASE-i via the
-# sequencer, MERGING, CHERRY-PICKING, REVERTING, BISECTING - including that a
-# rebase shows the branch it started from, not a raw sha), and the stash
-# flag count. Every conflict scenario below replaces the same single line
-# with different content on two diverging histories, which reliably
-# conflicts regardless of git's merge heuristics (a content append often
-# doesn't). Runs against real throwaway git repos under a scratch dir -
-# nothing outside that dir is ever touched.
+# Unit tests for common/git_prompt.sh's _hi_git_prompt.
 #
 # Nearly every function below is invoked indirectly - by name, through
 # _hi_case's "$@" - which SC2329 can't see.
@@ -23,10 +12,6 @@ source "${_HI_HOME:-$HOME}/hi.d/common/bootstrap.sh"
 source "$_HI_TEST_LIB"
 # shellcheck source=../../common/git_prompt.sh
 source "$_HI_GIT_PROMPT"
-
-_hi_require git
-
-_hi_workdir gitprompttest
 
 # fresh repo, one commit, always on a branch literally named "main" -
 # forced via symbolic-ref before the first commit, so this doesn't depend on
@@ -69,7 +54,6 @@ function _hi_git_diverge() {
   git -C "$dir" commit -qam main-change
 }
 
-# ---- no repo / disabled -----------------------------------------------
 
 function test_outside_a_repo_produces_no_output() {
   local dir out
@@ -85,16 +69,12 @@ function test_disabled_flag_produces_no_output() {
   [ -z "$out" ]
 }
 
-# ---- clean status -------------------------------------------------------
-
 function test_clean_repo_shows_branch_and_checkmark() {
   local dir out
   dir="$(_hi_git_new_repo)"
   out="$(cd "$dir" && _hi_git_prompt)"
   [[ "$out" == *"main"* ]] && _hi_has_rendered "$out" "${BRGREEN}✔${NC}"
 }
-
-# ---- working tree flags -------------------------------------------------
 
 function test_staged_change_shows_bullet_count() {
   local dir out
@@ -130,8 +110,6 @@ function test_merge_conflict_shows_invalid_and_merging() {
   [[ "$out" == *"|MERGING"* ]] && _hi_has_rendered "$out" "${RED}✖1${NC}"
 }
 
-# ---- ahead/behind ---------------------------------------------------------
-
 function test_ahead_and_behind_show_arrows() {
   local dir out
   dir="$(_hi_git_new_repo)"
@@ -149,8 +127,6 @@ function test_ahead_and_behind_show_arrows() {
   [[ "$out" == *"↑2"* && "$out" == *"↓1"* ]]
 }
 
-# ---- detached HEAD ------------------------------------------------------
-
 function test_detached_head_shows_short_sha_and_red() {
   local dir sha out
   dir="$(_hi_git_new_repo)"
@@ -159,8 +135,6 @@ function test_detached_head_shows_short_sha_and_red() {
   out="$(cd "$dir" && _hi_git_prompt)"
   [[ "$out" == *"${sha:0:8}"* ]] && _hi_has_rendered "$out" "$RED"
 }
-
-# ---- long branch names ----------------------------------------------------
 
 function test_long_branch_name_is_truncated() {
   local dir long_name out
@@ -171,12 +145,6 @@ function test_long_branch_name_is_truncated() {
   [[ "$out" == *"${long_name:0:31}…"* ]]
 }
 
-# ---- in-progress operations -----------------------------------------------
-
-# Both rebase backends land in the same place from the same fixture; only the
-# rebase flags and the state git reports differ. GIT_SEQUENCE_EDITOR is set
-# for both - only `rebase -i` consults it, and it keeps the interactive one
-# from opening an editor nothing is there to close.
 function _hi_rebase_case() {
   local branch="$1" expected="$2" dir out
   shift 2
@@ -233,8 +201,6 @@ function test_bisect_shows_state() {
   [[ "$out" == *"|BISECTING"* ]]
 }
 
-# ---- stash ----------------------------------------------------------------
-
 function test_stash_shows_flag_count() {
   local dir out
   dir="$(_hi_git_new_repo)"
@@ -245,6 +211,10 @@ function test_stash_shows_flag_count() {
 }
 
 function run_git_prompt_tests() {
+  _hi_require git
+
+  _hi_workdir gitprompttest
+
   _hi_h1 "Testing common/git_prompt.sh"
 
   _hi_suite_begin

@@ -62,6 +62,7 @@ source "$_HI_HEADER"
 source "$_HI_GIT_PROMPT"
 
 _HI_MARKER="# added by hi during install"
+_HI_ANCHOR="# hi-settings-anchor"
 _HI_LINK="/usr/bin/hi"
 
 # Rewrite the block of hi-managed lines (tagged with $_HI_MARKER) in $target to
@@ -69,6 +70,11 @@ _HI_LINK="/usr/bin/hi"
 # the sourcing on a fresh machine and repairs it if hi.d has since moved -
 # stale lines pointing at an old location are replaced, not left dangling
 # alongside new ones. Empty arguments are skipped.
+#
+# The block goes in directly above $_HI_ANCHOR when the target carries one, and
+# at the end of the file otherwise. common/paths.sh carries one because its
+# local-only gate reads the _HI_DISABLE_* settings written here - appended
+# after that gate, they would be set too late to do anything.
 function config_shell() {
   local name="$1" target="$2" line existing desired="" tmpfile
   shift 2
@@ -88,8 +94,14 @@ function config_shell() {
 
   _hi_cecho " local $name out of date, updating..." "$YELLOW"
   tmpfile="$(mktemp -t hi.append.XXXXXX)"
-  grep -vF "$_HI_MARKER" "$target" >"$tmpfile" || true
-  printf '%s' "$desired" >>"$tmpfile"
+  if grep -qF "$_HI_ANCHOR" "$target"; then
+    { grep -vF "$_HI_MARKER" "$target" || true; } |
+      awk -v block="$desired" -v anchor="$_HI_ANCHOR" \
+        'index($0, anchor) && !spliced { printf "%s", block; spliced = 1 } { print }' >"$tmpfile"
+  else
+    grep -vF "$_HI_MARKER" "$target" >"$tmpfile" || true
+    printf '%s' "$desired" >>"$tmpfile"
+  fi
   mv "$tmpfile" "$target"
   _hi_cecho " local $name updated :)" "$GREEN"
 }

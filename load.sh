@@ -6,14 +6,26 @@
 # `bash --rcfile` (how hi.sh hands off to us) skips the normal startup file
 # chain, so restore it here before anything else runs - deliberately before
 # `set -euo pipefail` below, since arbitrary profile scripts on the target
-# aren't guaranteed to be safe under -e/-u.
-if [ -r /etc/profile ]; then source /etc/profile; fi
-# shellcheck disable=SC1090 # target-specific files, no fixed location
-if [ -r ~/.bash_profile ]; then source ~/.bash_profile
-elif [ -r ~/.bash_login ]; then source ~/.bash_login
-elif [ -r ~/.profile ]; then source ~/.profile
-fi
-export PATH="$PATH:$_HI_ROOT"
+# aren't guaranteed to be safe under -e/-u. It runs at source time rather than
+# from load(), since the bootloader's other shape (hi.sh's $CMDARG, for a
+# one-off `hi <target> <command>`) runs that command instead of load() and
+# still wants the target's real PATH.
+function _hi_restore_profile() {
+  if [ -r /etc/profile ]; then source /etc/profile; fi
+  # shellcheck disable=SC1090 # target-specific files, no fixed location
+  if [ -r ~/.bash_profile ]; then source ~/.bash_profile
+  elif [ -r ~/.bash_login ]; then source ~/.bash_login
+  elif [ -r ~/.profile ]; then source ~/.profile
+  fi
+  export PATH="$PATH:$_HI_ROOT"
+}
+
+# _HI_LOAD_NO_INIT=1 sources this file for its functions alone, without
+# sourcing the target's profile chain - the same "let the tests reach the
+# functions without running the real thing" hatch as the BASH_SOURCE guards at
+# the bottom of scripts/install.sh and scripts/uninstall.sh, spelled as an env
+# var because this file is only ever sourced, never executed.
+[ "${_HI_LOAD_NO_INIT:-0}" = 1 ] || _hi_restore_profile
 
 set -euo pipefail
 
@@ -64,13 +76,16 @@ function clean_all() {
       sed -i '' "$pattern" "$target"
     fi
   done
-  rm -rf "$_HI_ROOT"
+  [ -n "${_HI_CLEANUP:-}" ] && rm -rf "$_HI_ROOT"
+  return 0
 }
 
 function load() {
   local start
   start="$(_hi_now)"
   _hi_on_exit clean_all
+
+  set +euo pipefail
 
   hi_header Connected "" "${_HI_CONNECT_PREFIX:-}"
 
@@ -79,10 +94,6 @@ function load() {
   configure_files
   _hi_cecho " | " "$NC" 1
   _hi_cecho "hi loaded with... " "$BRCYAN" 1
-
-  # guard against strict mode leaking into the interactive shell we hand off to
-  # (e.g. via an exported SHELLOPTS) - it would close the session on any error
-  set +euo pipefail
 
   local shell=bash greeting="only bash today :(" color="$RED"
   if command -v fish &>/dev/null; then

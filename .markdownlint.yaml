@@ -1,0 +1,14 @@
+# Source - https://stackoverflow.com/a/74551354
+# Posted by Gabriel M. Silva
+# Retrieved 2026-08-14, License - CC BY-SA 4.0
+
+# Default state for all rules
+default: true
+
+# MD013/line-length - Line length
+MD013:
+  line_length: 9999
+  tables: false
+  stern: false
+  code_blocks: false
+  heading_line_length: 9999

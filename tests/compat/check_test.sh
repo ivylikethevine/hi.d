@@ -1,11 +1,5 @@
 #!/bin/bash
-# Unit tests for common/check.sh: check_line's found/missing/fallback/hide
-# logic per priority bucket (see the priority table atop check.sh) and
-# full_check's packages-file parsing (comment/blank skipping, row wrapping,
-# fully-hidden output). Runs against scratch packages files plus one
-# guaranteed-present command (sh) and one guaranteed-absent one - nothing in
-# the real misc/packages is read except by the dedicated fixture test at the
-# end.
+# Unit tests for common/check.sh.
 #
 # Nearly every function below is invoked indirectly - by name, through
 # _hi_case's "$@" - which SC2329 can't see.
@@ -19,13 +13,10 @@ source "$_HI_TEST_LIB"
 # shellcheck source=../../common/check.sh
 source "$_HI_CHECK"
 
-_hi_workdir checktest
 
 # shellcheck disable=SC2209 # the literal command name "sh" is intentional, not a botched `sh` invocation
 _HI_REAL_CMD=sh
 _HI_FAKE_CMD=definitely-not-a-real-hi-test-command-xyz
-
-# ---- check_line -----------------------------------------------------------
 
 function test_check_line_found_primary_is_visible_checked() {
   local -a visible=()
@@ -67,8 +58,6 @@ function test_check_line_picks_highest_priority_installed() {
   [[ "${visible[0]}" == *"bash"* ]]
 }
 
-# ---- full_check -------------------------------------------------------------
-
 function test_full_check_skips_comments_and_blanks() {
   local pkgfile="$_HI_WORKDIR/comments"
   printf '# a comment\n\n%s:5\n' "$_HI_REAL_CMD" >"$pkgfile"
@@ -106,6 +95,8 @@ function test_full_check_reads_real_packages_file_without_erroring() {
 }
 
 function run_check_tests() {
+  _hi_workdir checktest
+
   _hi_h1 "Testing common/check.sh"
 
   _hi_suite_begin

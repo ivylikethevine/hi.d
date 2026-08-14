@@ -1,13 +1,5 @@
 #!/bin/bash
-# Unit tests for common/header.sh: header_row's cell-joining, banner's label/
-# host embedding, its prefix-reserves-width behavior (the prefix text itself
-# is never printed by banner - see the comment on it below - only its length
-# shrinks the tilde padding, since the caller already printed it earlier on
-# the same terminal line), and the floor that keeps its tilde math from going
-# negative on a pathologically long label/narrow width. timestamp/system_info/
-# identity are host-dependent, so they only get smoke-tested: assert the
-# static labels they always print show up and nothing errors. hi_header's
-# _HI_DISABLE_HEADER gate rounds it out.
+# Unit tests for common/header.sh.
 #
 # Nearly every function below is invoked indirectly - by name, through
 # _hi_case's "$@" - which SC2329 can't see.
@@ -21,8 +13,6 @@ source "$_HI_TEST_LIB"
 # shellcheck source=../../common/header.sh
 source "$_HI_HEADER"
 
-# ---- header_row -------------------------------------------------------------
-
 function test_header_row_joins_cells() {
   local out
   out="$(header_row foo bar baz)"
@@ -34,8 +24,6 @@ function test_header_row_single_cell() {
   out="$(header_row solo)"
   [[ "$out" == *"| solo"* ]]
 }
-
-# ---- banner -------------------------------------------------------------
 
 function test_banner_includes_label_and_host() {
   local out host
@@ -66,8 +54,6 @@ function test_banner_narrow_width_does_not_error() {
   [ -n "$out" ]
 }
 
-# ---- timestamp / system_info / identity (smoke tests) -----------------------
-
 function test_timestamp_runs_and_has_two_cells() {
   local out
   out="$(timestamp)"
@@ -85,8 +71,6 @@ function test_identity_includes_static_labels() {
   out="$(identity)"
   [[ "$out" == *"Auth:"* && "$out" == *"Pub:"* ]]
 }
-
-# ---- hi_header ----------------------------------------------------------
 
 function test_hi_header_disabled_produces_no_output() {
   local out

@@ -13,7 +13,8 @@ command -v openssl >/dev/null 2>&1 || {
 
 _HI_EXCLUDE=(--exclude README.md --exclude .git --exclude .gitignore --exclude scripts
   --exclude hi.sh --exclude hi.bashrc --exclude .zed --exclude .vscode --exclude .shellcheckrc
-  --exclude '*.example' --exclude tests --exclude .github --exclude .claude --exclude CLAUDE.md --exclude .devcontainer)
+  --exclude '*.example' --exclude tests --exclude .github --exclude .claude
+  --exclude CLAUDE.md --exclude .devcontainer --exclude .markdownlint.yaml)
 
 _HI_ARMOR="openssl enc -base64"
 _HI_UNARMOR="tr -s ' ' '\n' | openssl enc -base64 -d"

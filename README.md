@@ -59,9 +59,11 @@ For ssh targets specifically, `hi` first checks (over the same connection, so it
 - say `hi`!
 - [optional] modify `~/hi.d/misc/*` and `~/hi.d/shells/*` to your liking!
 
---
+---
+
 Usage: `hi foo` (just like ssh!)
---
+
+---
 
 Reminder - place local only changes after the "`# hi-config-end`" comment in the local files.
 
@@ -140,22 +142,20 @@ Every username and hostname gets a color automatically, deterministically derive
 
 ###### Built from/with/in mind
 
-- sshrc - _from_ - https://github.com/cdown/sshrc (became `hi.sh`)
-- sshm - _with_ - https://github.com/Gu1llaum-3/sshm (optional, but _highly_ recommended to configure `~/.ssh/config` hosttags)
-- bat - _in mind_ - https://github.com/sharkdp/bat (essentially my reason to get the aliases.sh fallthrough logic to work as portably as possible)
-- fish - _with_ - https://github.com/fish-shell/fish (my preferred shell because its defaults/built-ins are extremely easy to understand, but one that is not POSIX-compliant)
+- [sshrc](https://github.com/cdown/sshrc) - _from_ - (became `hi.sh`)
+- [sshm](https://github.com/Gu1llaum-3/sshm) - _with_ - (optional, but _highly_ recommended to configure `~/.ssh/config` hosttags)
+- [bat](https://github.com/sharkdp/bat) - _in mind_ - (essentially my reason to get the aliases.sh fallthrough logic to work as portably as possible)
+- [fish](https://github.com/fish-shell/fish) - _with_ - (my preferred shell because its defaults/built-ins are extremely easy to understand, but one that is not POSIX-compliant)
 
 ###### AI Usage
 
-Heavily inspired by: https://v2.dictionarry.dev/ai-transparency
+Heavily inspired by: [Profilarr](https://v2.dictionarry.dev/ai-transparency)
 
-This code originally started as entirely code written by (me)[https://github.com/ivylikethevine], but I have used generative AI to write large parts of it. Regardless, all of the code in this repository is my _responsibility_. AI is a tool, not an owner of a project. I have personally understood, reviewed, and approved all of the AI generated code in this repository. _Mainline releases_ have the same level of accountability to me as any code I write and publish.
+This code originally started as entirely code written by [me](https://github.com/ivylikethevine), but I have used generative AI to write large parts of it. Regardless, all of the code in this repository is my _responsibility_. AI is a tool, not an owner of a project. I have personally understood, reviewed, and approved all of the AI generated code in this repository. _Mainline releases_ have the same level of accountability to me as any code I write and publish.
 
-###### The MIT License (MIT)
+###### The [MIT](https://mit-license.org/) License (MIT)
 
-From: https://mit-license.org/
-
-Copyright © 2026 Ivy Duggan ivylikethevine.com
+Copyright © 2026 [Ivy Duggan](https://ivylikethevine.com)
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the “Software”), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
 

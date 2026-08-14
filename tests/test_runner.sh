@@ -1,13 +1,6 @@
 #!/bin/bash
 # Unified test runner - runs every test in tests/ (or a chosen subset), times
-# each one, and prints a colored pass/fail summary table at the end, instead
-# of the old hi_test_all `&&` chain, which stopped at the first failure
-# rather than reporting the full picture. Each test's own output still
-# streams live exactly as it would running that test directly - this only
-# adds timing and a final summary around it. Every test here already reports
-# its own sub-case failure count (e.g. "3/4 shells FAILED") in its own red
-# banner when it has more than one case; this runner's summary just shows
-# each suite's overall pass/fail and duration.
+# each one, and prints a colored pass/fail summary table at the end.
 #
 # Usage: tests/test_runner.sh [name ...]
 #   no args     - run every test suite
@@ -18,14 +11,7 @@ set -euo pipefail
 source "${_HI_HOME:-$HOME}/hi.d/common/bootstrap.sh"
 
 # name:path (relative to this directory), in the order they run - fast local
-# checks first, the docker/kind/nomad-backed end-to-end tests after. The names
-# are a public contract: .github/workflows/ci.yml and CLAUDE.md both list the
-# fast ones explicitly.
-#
-# Left alone if the caller already declared it - harness/runner_test.sh drives
-# this script against a table of fixture suites that way, which is the only
-# way to exercise the failure/missing branches below without a real suite
-# having to fail.
+# checks first, the docker/kind/nomad-backed end-to-end tests after.
 if ! declare -p _HI_TESTS >/dev/null 2>&1; then
   _HI_TESTS=(
     "aliases:compat/alias_test.sh"
@@ -48,8 +34,6 @@ if ! declare -p _HI_TESTS >/dev/null 2>&1; then
   )
 fi
 
-# where those relative paths resolve from; overridable so runner_test.sh can
-# point a run at a directory of fixture suites instead of the real ones
 _HI_TESTS_DIR="${_HI_TESTS_DIR:-$_HI_ROOT/tests}"
 
 declare -a _HI_SELECTED=()
@@ -122,7 +106,6 @@ for _hi_t in "${_HI_SELECTED[@]}"; do
   fi
 done
 
-# ---- summary table -----------------------------------------------------
 _hi_h1 "Summary"
 _hi_width=0
 for _hi_name in "${_HI_NAMES[@]}"; do

@@ -1,15 +1,5 @@
 #!/bin/bash
-# Unit tests for common/shared.sh's non-trivial logic: _hi_sanitize's
-# control-char/backslash stripping, _hi_color_escape's name -> ANSI formula
-# (checked against the real RED/BRCYAN constants, so a formula regression
-# would actually be caught), _hi_hash_color's determinism (checked against
-# hand-computed sums, not just "runs twice the same"), _hi_override_color's
-# exact-match and LOCALUSER/LOCALHOSTNAME special-casing, _hi_ssh_host_tag's
-# "# Tags: ..." comment parsing (leftmost tag, multi-alias Host lines, reset
-# between hosts), and _hi_resolve_color's override > hosttag/usertag > hash
-# precedence. Everything runs against scratch $_HI_COLORS/$_HI_SSH_CONFIG
-# files in a subshell - the real ones are never read except where noted.
-#
+# Unit tests for common/shared.sh
 # Nearly every function below is invoked indirectly - by name, through
 # _hi_case's "$@" - which SC2329 can't see.
 # shellcheck disable=SC2329
@@ -22,10 +12,6 @@ source "$_HI_TEST_LIB"
 # shellcheck source=../../common/shared.sh
 source "$_HI_SHARED"
 
-_hi_workdir sharedtest
-
-# ---- _hi_sanitize -----------------------------------------------------
-
 function test_sanitize_leaves_plain_text_alone() {
   [ "$(_hi_sanitize "hello world")" = "hello world" ]
 }
@@ -33,12 +19,6 @@ function test_sanitize_leaves_plain_text_alone() {
 function test_sanitize_strips_control_chars_and_backslashes() {
   [ "$(_hi_sanitize $'a\tb\\c')" = "abc" ]
 }
-
-# ---- _hi_color_escape ---------------------------------------------------
-
-# _hi_color_escape's own printf interprets its '\e' immediately, so the
-# constant it's compared against needs the matching '%b' pass - see
-# _hi_rendered in tests/test_lib.sh.
 
 function test_color_escape_matches_red_constant() {
   [ "$(_hi_color_escape red)" = "$(_hi_rendered "$RED")" ]
@@ -52,8 +32,6 @@ function test_color_escape_unknown_name_resets() {
   [ "$(_hi_color_escape not-a-real-color)" = "$(_hi_rendered "$NC")" ]
 }
 
-# ---- _hi_hash_color -----------------------------------------------------
-
 function test_hash_color_deterministic() {
   [ "$(_hi_hash_color someuser)" = "$(_hi_hash_color someuser)" ]
 }
@@ -64,8 +42,6 @@ function test_hash_color_matches_hand_computed_bucket() {
   # ord('a')+ord('b')=97+98=195, 195 % 12 == 3 -> _HI_COLOR_NAMES[3] == blue
   [ "$(_hi_hash_color ab)" = "blue" ]
 }
-
-# ---- _hi_override_color -------------------------------------------------
 
 function test_override_color_exact_match() {
   local colors="$_HI_WORKDIR/colors.exact"
@@ -90,8 +66,6 @@ function test_override_color_localhostname_special_case() {
   printf 'hostname,LOCALHOSTNAME,magenta\n' >"$colors"
   [ "$(_HI_COLORS="$colors" _HI_LOCAL_HOSTNAME=testhost _hi_override_color hostname testhost)" = "magenta" ]
 }
-
-# ---- _hi_ssh_host_tag ---------------------------------------------------
 
 function _hi_ssh_tag_fixture() {
   local f="$_HI_WORKDIR/ssh_config"
@@ -135,8 +109,6 @@ function test_ssh_host_tag_unknown_host_fails() {
   ! _HI_SSH_CONFIG="$f" _hi_ssh_host_tag no-such-host
 }
 
-# ---- _hi_resolve_color precedence ----------------------------------------
-
 function test_resolve_color_override_wins() {
   local colors="$_HI_WORKDIR/colors.resolve1"
   printf 'username,bob,red\n' >"$colors"
@@ -163,6 +135,8 @@ function test_resolve_color_falls_back_to_hash() {
 }
 
 function run_shared_tests() {
+  _hi_workdir sharedtest
+
   _hi_h1 "Testing common/shared.sh"
 
   _hi_suite_begin

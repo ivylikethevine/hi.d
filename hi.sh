@@ -15,8 +15,6 @@ _HI_EXCLUDE=(--exclude README.md --exclude .git --exclude .gitignore --exclude s
   --exclude hi.sh --exclude hi.bashrc --exclude .zed --exclude .vscode --exclude .shellcheckrc
   --exclude '*.example' --exclude tests --exclude .github --exclude .claude --exclude CLAUDE.md --exclude .devcontainer)
 
-# The ssh command line is re-parsed by the remote *login* shell, so every byte
-# we send through it is base64-armored and undone on the far side.
 _HI_ARMOR="openssl enc -base64"
 _HI_UNARMOR="tr -s ' ' '\n' | openssl enc -base64 -d"
 
@@ -29,9 +27,6 @@ function _hi_is_docker_container() {
     [ "$(docker container inspect -f '{{.State.Running}}' "$1" 2>/dev/null)" = true ]
 }
 
-# podman's CLI is a drop-in for docker's here (inspect, exec, exec -i, exec
-# -it all take identical flags), so this only needs its own detection - the
-# command shapes in _say_hi_container's podman case reuse docker's outright
 function _hi_is_podman_container() {
   command -v podman >/dev/null 2>&1 &&
     [ "$(podman container inspect -f '{{.State.Running}}' "$1" 2>/dev/null)" = true ]
@@ -185,10 +180,6 @@ REMOTE
 $middle
 $(_hi_remote_suffix)"
 
-  # base64-armor the whole script, write to a file and run as `sh file`
-  # rather than piped into `sh`, so sh's stdin - and hence the nested
-  # `bash --rcfile`'s - stays attached to the pty ssh -t allocated, instead
-  # of being consumed by the decode pipe.
   b64="$(printf '%s' "$script" | openssl enc -base64 -A)"
   boot_tmp="$(mktemp -t hi.boot.XXXXXX)"
 

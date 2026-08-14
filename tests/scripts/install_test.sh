@@ -16,7 +16,7 @@
 # install.sh is executed directly, never when sourced.
 #
 # Nearly every function below is invoked indirectly - by name, through
-# _hi_case's/_hi_poll_bool's "$@", or as a trap hook - which SC2329 can't see.
+# _hi_case's "$@" - which SC2329 can't see.
 # shellcheck disable=SC2329
 set -euo pipefail
 
@@ -134,7 +134,7 @@ function test_visible_len_plain_text() {
 
 function test_visible_len_strips_color_codes() {
   local colored
-  printf -v colored '%b' "${GREEN}hi${NC}" # GREEN/NC are literal \e[...m text until rendered this way
+  colored="$(_hi_rendered "${GREEN}hi${NC}")"
   [ "$(_hi_visible_len "$colored")" -eq 2 ]
 }
 

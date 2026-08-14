@@ -9,9 +9,9 @@
 # banner when it has more than one case; this runner's summary just shows
 # each suite's overall pass/fail and duration.
 #
-# Usage: tests/run.sh [name ...]
+# Usage: tests/test_runner.sh [name ...]
 #   no args     - run every test suite
-#   name ...    - run only the named suite(s), e.g. `tests/run.sh docker kube`
+#   name ...    - run only the named suite(s), e.g. `tests/test_runner.sh docker kube`
 set -euo pipefail
 
 # shellcheck source=../common/bootstrap.sh

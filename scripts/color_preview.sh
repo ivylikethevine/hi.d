@@ -1,7 +1,7 @@
 #!/bin/bash
 # preview what every ssh host & every known user resolve to, rendered in that
 # actual color, plus why (override/hosttag/default) - handy when tuning
-# misc/colors. Run via `hi_colors`.
+# misc/colors. Run via `hi_color_preview`.
 set -euo pipefail
 
 # shellcheck source=../common/bootstrap.sh
@@ -20,9 +20,6 @@ function _hi_color_source() {
   printf 'default'
 }
 
-# every username with a known color: the current user plus any "username,..."
-# overrides, deduped. LOCALUSER is excluded - it's not a real name to preview,
-# it gets its own row in the users table further down instead
 function _hi_known_users() {
   local users=() cur_type cur_name
   users+=("$(whoami)")
@@ -35,7 +32,6 @@ function _hi_known_users() {
   printf '%s\n' "${users[@]}" | awk '!seen[$0]++'
 }
 
-# every "usertag,<tag>,..." tag with a color override, deduped
 function _hi_known_usertags() {
   local cur_type cur_name
   [[ -f "$_HI_COLORS" ]] || return 0
@@ -45,10 +41,6 @@ function _hi_known_usertags() {
   done <"$_HI_COLORS" | awk '!seen[$0]++'
 }
 
-# every username the hosts table's PREVIEW column renders: every known real
-# user, plus the "example" identities from the users table - the current
-# username (standing in for LOCALUSER, since that's never a real login name)
-# and each usertag name
 function _hi_preview_users() {
   local tag
   {
@@ -60,8 +52,6 @@ function _hi_preview_users() {
   } | awk '!seen[$0]++'
 }
 
-# total plain-text width of a preview cell for a group of hostnames: every
-# user gets "user@host" padded to user_width, joined by two spaces
 function _hi_group_preview_width() {
   local h n=$# pw=0
   for h in "$@"; do pw=$((pw + user_width + 1 + ${#h})); done

@@ -6,13 +6,13 @@
 
 _Don't `ssh`ush your hosts, say `hi`!_
 
-### Requirements
+## Requirements
 
 - **Client**: `bash` and `openssl` (for ssh targets - armors the bootstrap payload through the login shell) or `docker`/`podman`/`nomad`/`kubectl` for the container/alloc/pod backends.
 - **Target**: `openssl` for ssh targets; nothing extra for container/alloc/pod targets. `bash` gets you the full experience (header, colors, git prompt, aliases, vim/nano configs); without it `hi` still lands you in the best available shell (`zsh` > `fish` > `sh`) with just the aliases loaded, rather than failing outright.
 - Everything else (client and target) is plain POSIX/bash/zsh/fish shell - no compiled artifacts, no package manager, no build step.
 
-## How it works
+### How it works
 
 1. `hi.sh` runs on the client. It archives `hi.d/` (minus `.git`, this README, and `scripts/`) and sends it to the target, which unpacks it into a `/tmp` directory. `_HI_ROOT` is `$INSTALL_DIR/hi.d` on the client and `$_HI_HOME/hi.d` on the target.
 2. On the target, `$_HI_ROOT/hi.bashrc` sources `$_HI_ROOT/load.sh` and calls `load`.
@@ -55,10 +55,7 @@ For ssh targets specifically, `hi` first checks (over the same connection, so it
 - [optional] pin specific colors in `~/hi.d/misc/colors` - everything else gets a color automatically
   - run `hi_color_preview` to preview what every ssh host/your user resolves to
 - configure `~/hi.d/misc/packages` to your preferences
-- [optional] in `common/header.sh` set any of `_HI_HEADER_TIMESTAMP`, `_HI_HEADER_SYSINFO`, `_HI_HEADER_IDENTITY`, and `_HI_HEADER_CHECK` to `0` to turn off that piece of the header/greeting across shells
-- [optional] in `common/git_prompt.sh` set `_HI_GIT_PROMPT` to `0` to turn off the git prompt across shells
-- [optional] in `common/shared.sh` set `_HI_MAX_WIDTH` to your preferred terminal width (default is 80)
-- [optional] in `common/paths.sh` set `_HI_DISABLE_LOCAL=1` to keep all of the above off on this machine (the one hi.d is installed on) while still applying it when you `hi` elsewhere - `hi_configure`/`install.sh` ask about this too
+- [optional] run `hi_configure` to set all preferences, including header/prompt/git status/editors/aliases/header details/terminal width, and whether or no hi only runs on remote hosts or on local hosts as well!
 - say `hi`!
 - [optional] modify `~/hi.d/misc/*` and `~/hi.d/shells/*` to your liking!
 
@@ -152,7 +149,7 @@ Every username and hostname gets a color automatically, deterministically derive
 
 Heavily inspired by: https://v2.dictionarry.dev/ai-transparency
 
-This code originally started as entirely code written by (me)[https://github.com/ivylikethevine], but I have used generative AI to write large parts of it. Regardless, all of the code in this repository is my _responsibility_. AI is a tool, not an owner of a project. I have personally understood, reviewed, and approved all of the AI generated code in this repository. It has the same level of accountability to me as any code I write.
+This code originally started as entirely code written by (me)[https://github.com/ivylikethevine], but I have used generative AI to write large parts of it. Regardless, all of the code in this repository is my _responsibility_. AI is a tool, not an owner of a project. I have personally understood, reviewed, and approved all of the AI generated code in this repository. _Mainline releases_ have the same level of accountability to me as any code I write and publish.
 
 ###### The MIT License (MIT)
 

@@ -1,6 +1,6 @@
 #!/bin/bash
 # Unit tests for shells/aliases.sh's two pieces of logic that aren't covered
-# by tests/alias_test.sh (which only checks the file loads and everything it
+# by tests/compat/alias_test.sh (which only checks the file loads and everything it
 # unconditionally defines actually landed):
 #
 #   1. "preferential fallthrough" - the `command -v a || command -v b || ...`
@@ -25,7 +25,7 @@
 # shells/aliases.sh.
 #
 # Nearly every function below is invoked indirectly - by name, through
-# _hi_case's/_hi_poll_bool's "$@", or as a trap hook - which SC2329 can't see.
+# _hi_case's "$@" - which SC2329 can't see.
 # shellcheck disable=SC2329
 set -euo pipefail
 
@@ -35,6 +35,8 @@ source "${_HI_HOME:-$HOME}/hi.d/common/bootstrap.sh"
 source "$_HI_TEST_LIB"
 
 _HI_SHELLS="zsh sh bash fish"
+# name -> resolved binary, filled in once by run_alias_fallthrough_test below
+declare -A _HI_SHELL_BIN=()
 
 # ---- fake PATH scaffolding -------------------------------------------------
 
@@ -169,9 +171,10 @@ function _hi_run_scenario() {
   shift 3
   local script shell_bin t0 t1
 
-  # resolved with the real (unrestricted) PATH, since $fakepath below is
-  # deliberately too narrow to contain the shell binary itself
-  shell_bin="$(command -v "$shell" 2>/dev/null)" || return 0 # skip cleanly, tallied separately by the caller
+  # resolved against the real (unrestricted) PATH by the caller's one-time
+  # probe, since $fakepath below is deliberately too narrow to contain the
+  # shell binary itself; only installed shells ever reach here
+  shell_bin="${_HI_SHELL_BIN[$shell]}"
 
   if [ "$shell" = fish ]; then
     script="$_HI_FISH_CHECK"
@@ -188,7 +191,7 @@ function _hi_run_scenario() {
     _hi_cecho "  [$shell] -- $label: OK ($(_hi_elapsed "$t0" "$t1")s)" "$GREEN"
   else
     t1="$(_hi_now)"
-    _hi_h3 "[$shell] -- $label: FAILED ($(_hi_elapsed "$t0" "$t1")s)"
+    _hi_h3 "[$shell] -- $label: FAILED ($(_hi_elapsed "$t0" "$t1")s)" "$RED"
     sed 's/^/      /' "$_HI_WORKDIR/err"
     return 1
   fi
@@ -254,12 +257,14 @@ function run_alias_fallthrough_test() {
 
   _hi_write_check_scripts
 
-  # resolved once here rather than re-probed inside the scenario loops, which
-  # ask the same question 64 times over
-  local missing=""
+  # Resolved once here rather than re-probed inside the scenario loops, which
+  # ask the same question 64 times over. The resolved *path* is what gets
+  # kept, not just the name: $fakepath is deliberately too narrow to contain
+  # the shell binary, so every scenario needs the real path anyway.
+  local missing="" shell
   _HI_INSTALLED_SHELLS=""
   for shell in $_HI_SHELLS; do
-    if command -v "$shell" >/dev/null 2>&1; then
+    if _HI_SHELL_BIN[$shell]="$(command -v "$shell" 2>/dev/null)"; then
       _HI_INSTALLED_SHELLS="$_HI_INSTALLED_SHELLS $shell"
     else
       missing="$missing $shell"

@@ -1,6 +1,7 @@
 #!/bin/bash
 # shared entry point for scripts
-# this syntax is odd but required for the layered sourcing
+# `: "${X:=default}"` assigns only when X is unset, so a value an outer layer
+# already exported (hi.sh on the client, load.sh on the target) survives
 : "${_HI_HOME:=$HOME}"
 export _HI_HOME
 : "${_HI_DISABLE_LOCAL:=0}"

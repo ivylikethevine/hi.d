@@ -158,7 +158,7 @@ function test_every_shipped_suite_script_exists_and_is_executable() {
 }
 
 function run_runner_tests() {
-  hi_workdir runnertest
+  _hi_workdir runnertest
 
   _HI_FIXTURES="$_HI_WORKDIR/fixtures"
   mkdir -p "$_HI_FIXTURES"

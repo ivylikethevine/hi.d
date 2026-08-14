@@ -30,7 +30,7 @@ source "${_HI_HOME:-$HOME}/hi.d/common/bootstrap.sh"
 # shellcheck source=../test_lib.sh
 source "$_HI_TEST_LIB"
 
-_hi_require_backend docker "not installed"
+_hi_require_backend docker
 _hi_require pgrep
 
 _hi_workdir sshdisconnecttest
@@ -45,34 +45,25 @@ _hi_ssh_keypair
 # test here - is passed per-container below rather than baked into an image of
 # its own
 _hi_h2 "Building test image"
-if ! _hi_sshd_image; then
-  _hi_cecho " | Image failed to build, skipping (see $_HI_WORKDIR/sshd.log)" "$YELLOW"
-  exit 0
-fi
+_hi_sshd_image "this suite" || exit 0
 
 # --- start the one container both cases share -----------------------------
 _HI_CONTAINER="hi-sshdisconnecttest-$$"
-if ! docker run -d --rm --name "$_HI_CONTAINER" -p 127.0.0.1::22 \
-  -e "PUBKEY=$_HI_PUBKEY" -e "SSHD_OPTS=-o ClientAliveInterval=2 -o ClientAliveCountMax=1" \
-  "$_HI_SSHD_IMAGE" >/dev/null 2>"$_HI_WORKDIR/container.log"; then
-  _hi_cecho " | Failed to start container" "$RED"
-  exit 1
-fi
-_hi_track_container "$_HI_CONTAINER"
-
-_HI_PORT="$(docker port "$_HI_CONTAINER" 22/tcp | head -1 | sed 's/.*://')"
-_hi_cecho " | Container: $_HI_CONTAINER (port: $_HI_PORT)"
-
-_hi_cecho " | Waiting for sshd on 127.0.0.1:$_HI_PORT"
-if ! _hi_poll_bool 40 0.25 _hi_ssh_reachable "$_HI_PORT"; then
-  _hi_cecho " | Sshd never came up" "$RED"
-  exit 1
-fi
+_hi_sshd_container "$_HI_CONTAINER" "$_HI_SSHD_IMAGE" \
+  -e "SSHD_OPTS=-o ClientAliveInterval=2 -o ClientAliveCountMax=1" || exit 1
 
 # every local ssh process belonging to this session - the interactive client
 # plus hi.sh's own ControlMaster, if the multiplexed connection spun one up
 function _hi_ssh_disconnect_pids() {
-  pgrep -f -- "ssh .*-p $_HI_PORT .*hitest@127.0.0.1" 2>/dev/null || true
+  pgrep -f -- "ssh .*-p $_HI_SSH_PORT .*hitest@127.0.0.1" 2>/dev/null || true
+}
+
+# hi.sh's own connect-progress output has no trailing newline before the
+# command's output starts, so READY: often lands mid-line behind raw terminal
+# escape/erase codes from the pty transcript - extract it by pattern, not by
+# anchoring on the start of a line.
+function _hi_ready_dir() {
+  grep -oE 'READY:[^[:space:]]*' "$1" 2>/dev/null | sed 's/^READY://' | head -1
 }
 
 function _hi_cleanup_dir_gone() {
@@ -85,16 +76,11 @@ function test_clean_exit_removes_cleanup_dir() {
   local out_file="$_HI_WORKDIR/clean.out" cleanup_dir
 
   _hi_pty_wrap 0 auto "no tty and no python3 to fake one - results may be unreliable"
+  _hi_ssh_launch "$_HI_SSH_PORT"
   # shellcheck disable=SC2016 # $_HI_CLEANUP expands on the target, not here
-  "${_HI_PTY_WRAP[@]}" "$_HI_LAUNCHER" -p "$_HI_PORT" -i "$_HI_WORKDIR/id" \
-    "${_HI_SSH_OPTS[@]}" -o ConnectTimeout=5 hitest@127.0.0.1 \
-    'echo READY:$_HI_CLEANUP' >"$out_file" 2>&1 || true
+  "${_HI_SSH_LAUNCH[@]}" 'echo READY:$_HI_CLEANUP' >"$out_file" 2>&1 || true
 
-  # hi.sh's own connect-progress output has no trailing newline before the
-  # command's own output starts, so READY: often lands mid-line behind raw
-  # terminal escape/erase codes from the pty transcript - extract it by
-  # pattern, not by anchoring on the start of a line
-  cleanup_dir="$(grep -oE 'READY:[^[:space:]]*' "$out_file" | sed 's/^READY://' | head -1)"
+  cleanup_dir="$(_hi_ready_dir "$out_file")"
   [ -n "$cleanup_dir" ] || return 1
   # the session already ran to completion (ssh above was synchronous), so the
   # target-side trap has already had its chance to fire by now
@@ -117,23 +103,16 @@ function test_sudden_disconnect_removes_cleanup_dir() {
   # /dev/null below costs nothing and means even a SIGKILLed python3 can't
   # strand our terminal.
   _hi_pty_wrap 0 force "no python3 to give the launcher its own pty - ssh will raw-mode this terminal and the test kills it before it can restore, expect garbled output afterwards"
+  _hi_ssh_launch "$_HI_SSH_PORT"
   # shellcheck disable=SC2016 # $_HI_CLEANUP expands on the target, not here
-  "${_HI_PTY_WRAP[@]}" "$_HI_LAUNCHER" -p "$_HI_PORT" -i "$_HI_WORKDIR/id" \
-    "${_HI_SSH_OPTS[@]}" -o ConnectTimeout=5 hitest@127.0.0.1 \
-    'echo READY:$_HI_CLEANUP; sleep 30' </dev/null >"$out_file" 2>&1 &
+  "${_HI_SSH_LAUNCH[@]}" 'echo READY:$_HI_CLEANUP; sleep 30' </dev/null >"$out_file" 2>&1 &
   launcher_pid=$!
 
   # confirm the session is actually up before freezing anything - racing the
-  # freeze against a connection that hasn't started yet would be a false pass
-  if ! _hi_poll_bool 40 0.25 grep -q 'READY:' "$out_file"; then
-    kill -9 "$launcher_pid" 2>/dev/null || true
-    return 1
-  fi
-  # hi.sh's own connect-progress output has no trailing newline before the
-  # command's own output starts, so READY: often lands mid-line behind raw
-  # terminal escape/erase codes from the pty transcript - extract it by
-  # pattern, not by anchoring on the start of a line
-  cleanup_dir="$(grep -oE 'READY:[^[:space:]]*' "$out_file" | sed 's/^READY://' | head -1)"
+  # freeze against a connection that hasn't started yet would be a false pass.
+  # _hi_poll_value both waits for READY: to land and hands back the path it
+  # carried, so there's no second pass over the file to keep in step.
+  cleanup_dir="$(_hi_poll_value 40 0.25 _hi_ready_dir "$out_file")" || cleanup_dir=""
   if [ -z "$cleanup_dir" ] || ! docker exec "$_HI_CONTAINER" test -d "$cleanup_dir" 2>/dev/null; then
     kill -9 "$launcher_pid" 2>/dev/null || true
     return 1

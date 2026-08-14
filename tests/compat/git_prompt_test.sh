@@ -13,7 +13,7 @@
 # nothing outside that dir is ever touched.
 #
 # Nearly every function below is invoked indirectly - by name, through
-# _hi_case's/_hi_poll_bool's "$@", or as a trap hook - which SC2329 can't see.
+# _hi_case's "$@" - which SC2329 can't see.
 # shellcheck disable=SC2329
 set -euo pipefail
 
@@ -54,6 +54,21 @@ function _hi_git_new_repo() {
   printf '%s' "$dir"
 }
 
+# Gives repo $1 a branch $2 that conflicts with main: one commit on each,
+# both rewriting the same line of file.txt, so merging/rebasing/cherry-picking
+# either onto the other stops mid-operation with a conflict - which is the
+# state every "in-progress operation" case below needs to reach. Leaves HEAD
+# on main; callers that need to be on the branch check it out themselves.
+function _hi_git_diverge() {
+  local dir="$1" branch="$2"
+  git -C "$dir" checkout -q -b "$branch"
+  printf 'branch-value\n' >"$dir/file.txt"
+  git -C "$dir" commit -qam branch-change
+  git -C "$dir" checkout -q main
+  printf 'main-value\n' >"$dir/file.txt"
+  git -C "$dir" commit -qam main-change
+}
+
 # ---- no repo / disabled -----------------------------------------------
 
 function test_outside_a_repo_produces_no_output() {
@@ -73,56 +88,46 @@ function test_disabled_flag_produces_no_output() {
 # ---- clean status -------------------------------------------------------
 
 function test_clean_repo_shows_branch_and_checkmark() {
-  local dir out expected
+  local dir out
   dir="$(_hi_git_new_repo)"
   out="$(cd "$dir" && _hi_git_prompt)"
-  printf -v expected '%b' "${BRGREEN}✔${NC}"
-  [[ "$out" == *"main"* && "$out" == *"$expected"* ]]
+  [[ "$out" == *"main"* ]] && _hi_has_rendered "$out" "${BRGREEN}✔${NC}"
 }
 
 # ---- working tree flags -------------------------------------------------
 
 function test_staged_change_shows_bullet_count() {
-  local dir out expected
+  local dir out
   dir="$(_hi_git_new_repo)"
   printf 'two\n' >"$dir/staged.txt"
   git -C "$dir" add staged.txt
   out="$(cd "$dir" && _hi_git_prompt)"
-  printf -v expected '%b' "${YELLOW}●1${NC}"
-  [[ "$out" == *"$expected"* ]]
+  _hi_has_rendered "$out" "${YELLOW}●1${NC}"
 }
 
 function test_dirty_change_shows_plus_count() {
-  local dir out expected
+  local dir out
   dir="$(_hi_git_new_repo)"
   printf 'modified\n' >"$dir/file.txt"
   out="$(cd "$dir" && _hi_git_prompt)"
-  printf -v expected '%b' "${RED}✚1${NC}"
-  [[ "$out" == *"$expected"* ]]
+  _hi_has_rendered "$out" "${RED}✚1${NC}"
 }
 
 function test_untracked_file_shows_ellipsis_count() {
-  local dir out expected
+  local dir out
   dir="$(_hi_git_new_repo)"
   printf 'x\n' >"$dir/untracked.txt"
   out="$(cd "$dir" && _hi_git_prompt)"
-  printf -v expected '%b' "${BRBLUE}…1${NC}"
-  [[ "$out" == *"$expected"* ]]
+  _hi_has_rendered "$out" "${BRBLUE}…1${NC}"
 }
 
 function test_merge_conflict_shows_invalid_and_merging() {
-  local dir out expected
+  local dir out
   dir="$(_hi_git_new_repo)"
-  git -C "$dir" checkout -q -b other
-  printf 'other-value\n' >"$dir/file.txt"
-  git -C "$dir" commit -qam other-change
-  git -C "$dir" checkout -q main
-  printf 'main-value\n' >"$dir/file.txt"
-  git -C "$dir" commit -qam main-change
+  _hi_git_diverge "$dir" other
   git -C "$dir" merge -q other >/dev/null 2>&1 || true
   out="$(cd "$dir" && _hi_git_prompt)"
-  printf -v expected '%b' "${RED}✖1${NC}"
-  [[ "$out" == *"$expected"* && "$out" == *"|MERGING"* ]]
+  [[ "$out" == *"|MERGING"* ]] && _hi_has_rendered "$out" "${RED}✖1${NC}"
 }
 
 # ---- ahead/behind ---------------------------------------------------------
@@ -147,13 +152,12 @@ function test_ahead_and_behind_show_arrows() {
 # ---- detached HEAD ------------------------------------------------------
 
 function test_detached_head_shows_short_sha_and_red() {
-  local dir sha out expected_red
+  local dir sha out
   dir="$(_hi_git_new_repo)"
   sha="$(git -C "$dir" rev-parse HEAD)"
   git -C "$dir" -c advice.detachedHead=false checkout -q "$sha"
   out="$(cd "$dir" && _hi_git_prompt)"
-  printf -v expected_red '%b' "$RED"
-  [[ "$out" == *"${sha:0:8}"* && "$out" == *"$expected_red"* ]]
+  [[ "$out" == *"${sha:0:8}"* ]] && _hi_has_rendered "$out" "$RED"
 }
 
 # ---- long branch names ----------------------------------------------------
@@ -169,46 +173,34 @@ function test_long_branch_name_is_truncated() {
 
 # ---- in-progress operations -----------------------------------------------
 
-function test_rebase_apply_backend_shows_state_and_source_branch() {
-  local dir out
+# Both rebase backends land in the same place from the same fixture; only the
+# rebase flags and the state git reports differ. GIT_SEQUENCE_EDITOR is set
+# for both - only `rebase -i` consults it, and it keeps the interactive one
+# from opening an editor nothing is there to close.
+function _hi_rebase_case() {
+  local branch="$1" expected="$2" dir out
+  shift 2
   dir="$(_hi_git_new_repo)"
-  git -C "$dir" checkout -q -b rebase-branch
-  printf 'branch-value\n' >"$dir/file.txt"
-  git -C "$dir" commit -qam branch-change
-  git -C "$dir" checkout -q main
-  printf 'main-value\n' >"$dir/file.txt"
-  git -C "$dir" commit -qam main-change
-  git -C "$dir" checkout -q rebase-branch
-  git -C "$dir" rebase --apply main >/dev/null 2>&1 || true
+  _hi_git_diverge "$dir" "$branch"
+  git -C "$dir" checkout -q "$branch"
+  GIT_SEQUENCE_EDITOR=true git -C "$dir" "$@" >/dev/null 2>&1 || true
   out="$(cd "$dir" && _hi_git_prompt)"
-  [[ "$out" == *"REBASE 1/1"* && "$out" == *"rebase-branch"* ]]
+  [[ "$out" == *"$expected"* && "$out" == *"$branch"* ]]
+}
+
+function test_rebase_apply_backend_shows_state_and_source_branch() {
+  _hi_rebase_case rebase-branch "REBASE 1/1" rebase --apply main
 }
 
 function test_rebase_interactive_shows_state() {
-  local dir out
-  dir="$(_hi_git_new_repo)"
-  git -C "$dir" checkout -q -b interactive-branch
-  printf 'branch-value\n' >"$dir/file.txt"
-  git -C "$dir" commit -qam branch-change
-  git -C "$dir" checkout -q main
-  printf 'main-value\n' >"$dir/file.txt"
-  git -C "$dir" commit -qam main-change
-  git -C "$dir" checkout -q interactive-branch
-  GIT_SEQUENCE_EDITOR=true git -C "$dir" rebase -i main >/dev/null 2>&1 || true
-  out="$(cd "$dir" && _hi_git_prompt)"
-  [[ "$out" == *"REBASE-i 1/1"* && "$out" == *"interactive-branch"* ]]
+  _hi_rebase_case interactive-branch "REBASE-i 1/1" rebase -i main
 }
 
 function test_cherry_pick_conflict_shows_state() {
   local dir out target_sha
   dir="$(_hi_git_new_repo)"
-  git -C "$dir" checkout -q -b source-branch
-  printf 'source-value\n' >"$dir/file.txt"
-  git -C "$dir" commit -qam source-change
-  target_sha="$(git -C "$dir" rev-parse HEAD)"
-  git -C "$dir" checkout -q main
-  printf 'main-value\n' >"$dir/file.txt"
-  git -C "$dir" commit -qam main-change
+  _hi_git_diverge "$dir" source-branch
+  target_sha="$(git -C "$dir" rev-parse source-branch)"
   git -C "$dir" cherry-pick "$target_sha" >/dev/null 2>&1 || true
   out="$(cd "$dir" && _hi_git_prompt)"
   [[ "$out" == *"|CHERRY-PICKING"* ]]
@@ -244,13 +236,12 @@ function test_bisect_shows_state() {
 # ---- stash ----------------------------------------------------------------
 
 function test_stash_shows_flag_count() {
-  local dir out expected
+  local dir out
   dir="$(_hi_git_new_repo)"
   printf 'stashed-change\n' >"$dir/file.txt"
   git -C "$dir" stash push -q -m teststash >/dev/null 2>&1
   out="$(cd "$dir" && _hi_git_prompt)"
-  printf -v expected '%b' "${BRBLUE}⚑1${NC}"
-  [[ "$out" == *"$expected"* ]]
+  _hi_has_rendered "$out" "${BRBLUE}⚑1${NC}"
 }
 
 function run_git_prompt_tests() {

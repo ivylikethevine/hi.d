@@ -11,7 +11,7 @@
 # files in a subshell - the real ones are never read except where noted.
 #
 # Nearly every function below is invoked indirectly - by name, through
-# _hi_case's/_hi_poll_bool's "$@", or as a trap hook - which SC2329 can't see.
+# _hi_case's "$@" - which SC2329 can't see.
 # shellcheck disable=SC2329
 set -euo pipefail
 
@@ -36,26 +36,20 @@ function test_sanitize_strips_control_chars_and_backslashes() {
 
 # ---- _hi_color_escape ---------------------------------------------------
 
-# RED/BRCYAN/NC hold literal '\e[...m' text (interpreted later via printf
-# '%b', e.g. in _hi_cecho) - _hi_color_escape's own printf interprets its
-# '\e' immediately, so both sides need the same '%b' pass to compare equal.
+# _hi_color_escape's own printf interprets its '\e' immediately, so the
+# constant it's compared against needs the matching '%b' pass - see
+# _hi_rendered in tests/test_lib.sh.
 
 function test_color_escape_matches_red_constant() {
-  local expected
-  printf -v expected '%b' "$RED"
-  [ "$(_hi_color_escape red)" = "$expected" ]
+  [ "$(_hi_color_escape red)" = "$(_hi_rendered "$RED")" ]
 }
 
 function test_color_escape_matches_brcyan_constant() {
-  local expected
-  printf -v expected '%b' "$BRCYAN"
-  [ "$(_hi_color_escape brcyan)" = "$expected" ]
+  [ "$(_hi_color_escape brcyan)" = "$(_hi_rendered "$BRCYAN")" ]
 }
 
 function test_color_escape_unknown_name_resets() {
-  local expected
-  printf -v expected '%b' "$NC"
-  [ "$(_hi_color_escape not-a-real-color)" = "$expected" ]
+  [ "$(_hi_color_escape not-a-real-color)" = "$(_hi_rendered "$NC")" ]
 }
 
 # ---- _hi_hash_color -----------------------------------------------------

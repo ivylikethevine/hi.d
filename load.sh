@@ -47,7 +47,6 @@ function configure_files() {
   done
 }
 
-# strip our block back out of every rc file, then remove hi.d itself
 function clean_all() {
   local pair target pattern
   for pair in "${_HI_CONFIGS[@]}"; do

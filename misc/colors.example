@@ -1,15 +1,16 @@
 #type,name,color
-hosttag,desktop,green
-hosttag,work,brblue
-hosttag,laptop,brgreen
-hosttag,personal,brgreen
+hosttag,terminal,brmagenta
+hosttag,baremetal,brred
+hosttag,personal,brblue
+hosttag,work,brgreen
+hosttag,windows,bryellow
 username,root,magenta
 username,admin,red
 username,ubuntu,yellow
-username,debian,brblue
-usertag,work,cyan
-username,LOCALUSER,yellow
-hostname,LOCALHOSTNAME,magenta
+username,debian,blue
+usertag,personal,green
+username,LOCALUSER,bryellow
+hostname,LOCALHOSTNAME,brmagenta
 # type  = hosttag | username | hostname | usertag
 # color = red, green, yellow, blue, magenta, cyan, brred, brgreen, bryellow, brblue, brmagenta, brcyan
 # LOCALUSER and LOCALHOSTNAME are special username/hostname names that match

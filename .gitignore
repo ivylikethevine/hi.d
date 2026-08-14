@@ -49,4 +49,4 @@
 !.github/workflows/*.yml
 
 *docker*
-!**docker_test.sh
+!*docker_test.sh

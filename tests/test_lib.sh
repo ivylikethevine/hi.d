@@ -7,8 +7,9 @@
 # throwaway sshd fixtures ssh_test.sh and ssh_disconnect_test.sh both need,
 # faking a pty when one's needed but our own stdin isn't one, and polling some
 # backend (docker/kubectl/nomad/ssh) until a condition comes true instead of
-# racing its own async startup. Sourced through common/bootstrap.sh, same as
-# every other common/*.sh file.
+# racing its own async startup. Sources common/bootstrap.sh itself (below), so
+# one `source "$_HI_TEST_LIB"` line gets a suite hi's paths and colors along
+# with the scaffolding - that being why paths.sh still exports _HI_TEST_LIB.
 #
 # Several functions here are only ever invoked indirectly - by name, through
 # _hi_case's/_hi_poll_bool's "$@", or as a trap hook - which SC2329 can't see.
@@ -49,7 +50,7 @@ function _hi_test_cleanup() {
   fi
   for c in "${_HI_STARTED[@]:-}"; do
     if [ -n "$c" ]; then
-      "${_HI_STARTED_BACKEND:-docker}" rm -f "$c" >/dev/null 2>&1 || true
+      "${_HI_BACKEND:-docker}" rm -f "$c" >/dev/null 2>&1 || true
     fi
   done
   if [ -n "$_HI_WORKDIR" ]; then
@@ -59,7 +60,7 @@ function _hi_test_cleanup() {
 }
 
 # Registers a container for teardown by _hi_test_cleanup. Suites driving a
-# non-docker CLI set _HI_STARTED_BACKEND (podman) first - every backend that
+# non-docker CLI set _HI_BACKEND (podman) first - every backend that
 # reaches here takes docker's `rm -f <name>` shape.
 function _hi_track_container() {
   _HI_STARTED+=("$1")
@@ -93,6 +94,25 @@ function _hi_assert() {
 # _hi_check <label> <predicate...> - one counted, labelled assertion.
 function _hi_check() {
   _hi_case _hi_assert "$@"
+}
+
+# common/shared.sh's color constants hold *literal* '\e[...m' text, turned
+# into real escape bytes only by a '%b' pass - which _hi_cecho and the prompt
+# builders do at print time. So a test comparing captured output against
+# "${RED}x${NC}" has to make the same pass first, or it compares source text
+# against rendered bytes and never matches.
+#
+# _hi_rendered <text>                 - that pass, for equality/length checks
+# _hi_has_rendered <haystack> <text>  - the same, then a substring test, which
+#                                       is what nearly every caller wants
+function _hi_rendered() {
+  printf '%b' "$1"
+}
+
+function _hi_has_rendered() {
+  local needle
+  printf -v needle '%b' "$2"
+  [[ "$1" == *"$needle"* ]]
 }
 
 function _hi_suite_begin() {
@@ -129,7 +149,7 @@ function _hi_require() {
 # _hi_require for a container backend, which also has to be reachable, not
 # just installed - `docker info` is what actually proves the daemon answers.
 function _hi_require_backend() {
-  _hi_require "$1" "${2:-not installed}"
+  _hi_require "$@"
   "$1" info >/dev/null 2>&1 && return 0
   _hi_cecho "$1 not reachable, skipping" "$YELLOW"
   exit 0
@@ -198,10 +218,47 @@ function _hi_pty_wrap() {
   fi
 }
 
+# The _hi_pty_wrap preamble every suite that backgrounds the launcher through
+# _hi_exec_case needs: stashes our real stdin on fd 3 and decides the pty
+# wrap from *that*. $1 is _hi_pty_wrap's mode, $2 its warning.
+#
+# `<backend> exec -it` and `kubectl exec -it` refuse to allocate a remote tty
+# unless our own stdin already is one - true whenever this runs headless/CI -
+# so a locally-faked pty is what makes these suites reliable everywhere rather
+# than only from an interactive terminal.
+#
+# The tty check has to happen against a duplicated fd, not fd 0 directly: the
+# launcher runs backgrounded with `&`, and since job control is off in a
+# non-interactive script, bash silently rewires a backgrounded job's stdin to
+# /dev/null regardless of what the script's own stdin was - so testing `-t 0`
+# here and then handing the background job fd 0 later would report a real
+# terminal and still fail. Duplicating to fd 3 up front and threading `<&3`
+# through to the background command (which _hi_exec_case does) keeps the
+# original tty-ness intact either way - which is also why the two have to be
+# used together.
+function _hi_pty_stdin() {
+  exec 3<&0
+  _hi_pty_wrap 3 "$1" "$2"
+}
+
+# The wall-clock ceiling a "<tries> times, <interval> apart" budget is meant
+# to describe, in whole seconds (minimum 1). Counting tries alone doesn't
+# bound elapsed time: the probe's own cost is added to every interval, so
+# `40 0.25` over a probe that can take 2s - _hi_ssh_reachable's
+# ConnectTimeout=2, say - reads as 10s and can burn 90. Both polls below apply
+# this alongside the try count, whichever runs out first, so the number a call
+# site states is also its real worst case. Computed once per poll, not per
+# iteration, so the awk is a fork per wait rather than per attempt.
+function _hi_poll_budget() {
+  awk -v t="$1" -v i="$2" \
+    'BEGIN { b = t * i; b = (b == int(b) ? b : int(b) + 1); printf "%d", (b < 1 ? 1 : b) }'
+}
+
 # Polls "$@" (a command or function) up to <tries> times, <interval> seconds
-# apart, until it exits 0. Every attempt's stdout/stderr is discarded - this
-# is for conditions the caller only needs a yes/no for (container running,
-# ssh reachable, ...). Returns 1 if it never succeeded.
+# apart and no longer than their product, until it exits 0. Every attempt's
+# stdout/stderr is discarded - this is for conditions the caller only needs a
+# yes/no for (container running, ssh reachable, ...). Returns 1 if it never
+# succeeded.
 #
 # An optional leading `-a <fn>` gives up early when <fn> starts failing: for
 # waits on something that can die outright rather than just stay false (a
@@ -213,31 +270,35 @@ function _hi_poll_bool() {
     abort="$2"
     shift 2
   fi
-  local tries="$1" interval="$2" i
+  local tries="$1" interval="$2" i deadline
   shift 2
+  deadline=$((SECONDS + $(_hi_poll_budget "$tries" "$interval")))
   for ((i = 0; i < tries; i++)); do
     "$@" >/dev/null 2>&1 && return 0
     if [ -n "$abort" ] && ! "$abort"; then
       return 1
     fi
+    [ "$SECONDS" -lt "$deadline" ] || return 1
     sleep "$interval"
   done
   return 1
 }
 
-# Polls "$@" up to <tries> times, <interval> seconds apart, until it prints
-# non-empty stdout - for conditions where the caller also needs the value
-# that showed up (e.g. an allocation ID), not just a yes/no. Prints that
-# value and returns 0 on success; returns 1 if nothing ever showed up.
+# _hi_poll_bool's sibling for conditions where the caller also needs the value
+# that showed up (e.g. an allocation ID), not just a yes/no: polls until "$@"
+# prints something on stdout, under the same try-count and wall-clock bounds.
+# Prints that value and returns 0 on success; returns 1 if nothing ever showed.
 function _hi_poll_value() {
-  local tries="$1" interval="$2" out i
+  local tries="$1" interval="$2" out i deadline
   shift 2
+  deadline=$((SECONDS + $(_hi_poll_budget "$tries" "$interval")))
   for ((i = 0; i < tries; i++)); do
     out="$("$@" 2>/dev/null)"
     if [ -n "$out" ]; then
       printf '%s' "$out"
       return 0
     fi
+    [ "$SECONDS" -lt "$deadline" ] || return 1
     sleep "$interval"
   done
   return 1
@@ -268,6 +329,51 @@ function _hi_wait_pid() {
   else
     wait "$pid" 2>/dev/null || _HI_WAIT_EXIT=$?
   fi
+}
+
+# The half of an e2e case that has nothing to do with the backend: run
+# $_HI_LAUNCHER against an already-created, already-ready target, then decide
+# the case on whether the suite's marker came back.
+#
+#   _hi_exec_case <label> <what> <marker> <timeout_s> <target> <cmd> [hook]
+#
+# <what> names the path under test for the success line ("docker path", "kube
+# path"); <hook>, if given, is a function run on timeout while the launcher is
+# still alive to be inspected (nomad_test.sh dumps `nomad alloc status` there,
+# so a hang is diagnosable rather than a dead end).
+#
+# The launcher is backgrounded so a hung fallback - a shell that never honors
+# the trailing `exit` - can't wedge the whole suite, and takes its stdin from
+# fd 3, which _hi_pty_stdin must have set up first (see the long version
+# there). The elapsed time reported is the launcher's own, not the whole case:
+# creating and waiting on the target is the caller's, and it reports that
+# separately.
+#
+# Returns 0 iff the marker showed up; on failure the target's output is dumped
+# indented, since that's the only record of what the far side actually did.
+function _hi_exec_case() {
+  local label="$1" what="$2" marker="$3" timeout_s="$4" target="$5" cmd="$6" hook="${7:-}"
+  local out_file="$_HI_WORKDIR/$label.out" exit_code t0 t1
+
+  _hi_cecho " | Running: $_HI_LAUNCHER $target $cmd"
+  t0="$(_hi_now)"
+  "${_HI_PTY_WRAP[@]}" "$_HI_LAUNCHER" "$target" "$cmd" <&3 >"$out_file" 2>&1 &
+  function _hi_on_timeout() {
+    _hi_h3 " | [$label] -- TIMED OUT after ${timeout_s}s, killing" "$RED"
+    [ -n "$hook" ] && "$hook"
+    return 0
+  }
+  _hi_wait_pid "$!" "$timeout_s" _hi_on_timeout
+  exit_code="$_HI_WAIT_EXIT"
+  t1="$(_hi_now)"
+
+  if grep -q "$marker" "$out_file" 2>/dev/null; then
+    _hi_cecho " | [$label] -- $what OK ($(_hi_elapsed "$t0" "$t1")s)" "$GREEN"
+    return 0
+  fi
+  _hi_h3 " | [$label] -- FAILED (exit $exit_code, $(_hi_elapsed "$t0" "$t1")s)" "$RED"
+  sed 's/^/      /' "$out_file" 2>/dev/null
+  return 1
 }
 
 # ---- throwaway sshd fixtures ----------------------------------------------
@@ -303,6 +409,24 @@ exec /usr/sbin/sshd -D -e -o PasswordAuthentication=no -o PermitRootLogin=no -o 
 EOF
 )"
 
+# One image build, in the shape every build site in the e2e suites wants:
+#
+#   _hi_build_image <label> <tag> <what> <build-args...>
+#
+# stderr lands in $_HI_WORKDIR/<label>.log and the yellow skip warning points
+# at it, so a failed build says where to look instead of scrolling past.
+# <what> completes "... failed to build, skipping <what>". Returns non-zero on
+# failure, which is what callers flag the affected cases off. Builds go
+# through $_HI_BACKEND (docker unless the suite drives something else).
+function _hi_build_image() {
+  local label="$1" tag="$2" what="$3"
+  shift 3
+  _hi_h3 "Building $tag" "$BLUE"
+  "${_HI_BACKEND:-docker}" build -q -t "$tag" "$@" >/dev/null 2>"$_HI_WORKDIR/$label.log" && return 0
+  _hi_cecho " | $tag failed to build, skipping $what (see $_HI_WORKDIR/$label.log)" "$YELLOW"
+  return 1
+}
+
 # Client-side ssh flags every connection in both suites needs: never touch the
 # user's real known_hosts, never fall back to their real keys, stay quiet.
 declare -a _HI_SSH_OPTS=(
@@ -323,8 +447,8 @@ function _hi_ssh_keypair() {
 # Builds $_HI_SSHD_IMAGE. It carries the superset of shells both suites want
 # (bash's presence, not the login shell, is what _say_hi branches on, so one
 # image covers every with-bash login shell) and picks its login shell up from
-# $LOGIN_SHELL at run time. Returns non-zero if the build failed, leaving the
-# reason in $_HI_WORKDIR/sshd.log.
+# $LOGIN_SHELL at run time. Returns non-zero if the build failed, having
+# already reported it; $1 says what the caller is about to skip as a result.
 function _hi_sshd_image() {
   local ctx="$_HI_WORKDIR/sshd"
   mkdir -p "$ctx"
@@ -347,8 +471,7 @@ EOF
     printf '%s\n' "$_HI_SSHD_ENTRYPOINT_BODY"
   } >"$ctx/entrypoint.sh"
 
-  _hi_h3 "Building $_HI_SSHD_IMAGE from $ctx"
-  docker build -q -t "$_HI_SSHD_IMAGE" "$ctx" >/dev/null 2>"$_HI_WORKDIR/sshd.log"
+  _hi_build_image sshd "$_HI_SSHD_IMAGE" "$1" "$ctx"
 }
 
 # Polls until the container's sshd on 127.0.0.1:$1 actually completes a
@@ -357,6 +480,42 @@ EOF
 function _hi_ssh_reachable() {
   ssh -i "$_HI_WORKDIR/id" -p "$1" -o BatchMode=yes "${_HI_SSH_OPTS[@]}" \
     -o ConnectTimeout=2 hitest@127.0.0.1 true
+}
+
+# Boots one throwaway sshd container <name> from <image>, waits until its sshd
+# actually answers, and leaves the mapped port in $_HI_SSH_PORT. Any further
+# arguments go to `docker run` ahead of the image - that's how the per-suite
+# `-e` vars ride in (LOGIN_SHELL, SSHD_OPTS), instead of each wanting an image
+# of its own. Registers the container for teardown, and returns non-zero,
+# having said why, if it never came up.
+function _hi_sshd_container() {
+  local name="$1" image="$2"
+  shift 2
+
+  if ! docker run -d --rm --name "$name" -p 127.0.0.1::22 -e "PUBKEY=$_HI_PUBKEY" "$@" "$image" \
+    >/dev/null 2>"$_HI_WORKDIR/$name.log"; then
+    _hi_cecho " | Failed to start container (see $_HI_WORKDIR/$name.log)" "$RED"
+    return 1
+  fi
+  _hi_track_container "$name"
+
+  _HI_SSH_PORT="$(docker port "$name" 22/tcp | head -1 | sed 's/.*://')"
+  _hi_cecho " | Container: $name (port: $_HI_SSH_PORT)"
+  _hi_cecho " | Waiting for sshd on 127.0.0.1:$_HI_SSH_PORT"
+  if ! _hi_poll_bool 40 0.25 _hi_ssh_reachable "$_HI_SSH_PORT"; then
+    _hi_cecho " | Sshd never came up" "$RED"
+    return 1
+  fi
+}
+
+# The client-side launcher invocation both ssh suites make: hi.sh pointed at
+# the throwaway sshd on 127.0.0.1:$1, with the keypair and flags the fixtures
+# above set up. Left in the array $_HI_SSH_LAUNCH rather than run here, since
+# the callers redirect and background it differently - append the remote
+# command and go. Call it *after* _hi_pty_wrap, whose result it captures.
+function _hi_ssh_launch() {
+  _HI_SSH_LAUNCH=("${_HI_PTY_WRAP[@]}" "$_HI_LAUNCHER" -p "$1" -i "$_HI_WORKDIR/id"
+    "${_HI_SSH_OPTS[@]}" -o ConnectTimeout=5 hitest@127.0.0.1)
 }
 
 # ---- the docker/podman end-to-end suite -----------------------------------
@@ -376,7 +535,7 @@ function _hi_container_backend_test() {
   local backend="$1" marker
 
   _hi_require_backend "$backend"
-  _HI_STARTED_BACKEND="$backend"
+  _HI_BACKEND="$backend"
   _hi_workdir "${backend}test"
   _hi_h1 "Testing hi's $backend path across container shell environments"
 
@@ -387,36 +546,20 @@ function _hi_container_backend_test() {
   # `for s in zsh fish sh` probe - a plain alpine image already has nothing but
   # sh, so it needs no image build of its own.
   _hi_h2 "Building test images"
-  local shell zsh_ok=1 fish_ok=1
+  local shell
+  local -A shell_ok=()
   for shell in zsh fish; do
     mkdir -p "$_HI_WORKDIR/$shell"
     printf 'FROM alpine:3.20\nRUN apk add --no-cache %s\n' "$shell" >"$_HI_WORKDIR/$shell/Dockerfile"
-    _hi_h3 "Building hi-${backend}test-$shell" "$BLUE"
-    if ! "$backend" build -q -t "hi-${backend}test-$shell" "$_HI_WORKDIR/$shell" \
-      >/dev/null 2>"$_HI_WORKDIR/$shell.log"; then
-      _hi_cecho " | $shell image failed to build, skipping the $shell fallback (see $_HI_WORKDIR/$shell.log)" "$YELLOW"
-      if [ "$shell" = zsh ]; then zsh_ok=0; else fish_ok=0; fi
-    fi
+    shell_ok[$shell]=1
+    _hi_build_image "$shell" "hi-${backend}test-$shell" "the $shell fallback" "$_HI_WORKDIR/$shell" ||
+      shell_ok[$shell]=0
   done
 
   # --- the actual per-shell test -------------------------------------------
   marker="HI_$(printf '%s' "$backend" | tr '[:lower:]' '[:upper:]')_TEST_OK"
 
-  # <backend> exec -it refuses to allocate a remote tty unless our own stdin
-  # already is one - true whenever this runs headless/CI. Route through a
-  # locally-faked pty in that case so the test is reliable everywhere, not just
-  # when someone happens to run it from an interactive terminal.
-  #
-  # The check has to happen against a duplicated fd, not fd 0 directly: this
-  # function backgrounds the actual launcher with `&` below (_hi_run_case), and
-  # since job control is off in a non-interactive script, bash silently
-  # rewires a backgrounded job's stdin to /dev/null regardless of what the
-  # script's own stdin was - so testing `-t 0` here and then handing the
-  # background job fd 0 later would report a real terminal and still fail.
-  # Duplicating to fd 3 up front and threading `<&3` through to the background
-  # command (see _hi_run_case) keeps the original tty-ness intact either way.
-  exec 3<&0
-  _hi_pty_wrap 3 auto "no tty and no python3 to fake one - $backend exec -it will fail outright, results may be unreliable"
+  _hi_pty_stdin auto "no tty and no python3 to fake one - $backend exec -it will fail outright, results may be unreliable"
 
   _hi_suite_begin
 
@@ -424,13 +567,14 @@ function _hi_container_backend_test() {
   # racing the container's start
   function _hi_container_running() { [ "$("$backend" container inspect -f '{{.State.Running}}' "$1" 2>/dev/null)" = true ]; }
 
+  # everything specific to this backend: create the container, wait for it,
+  # hand it to _hi_exec_case, tear it down again
   function _hi_run_case() {
-    local label="$1" image="$2" cmd="$3" timeout_s="${4:-20}"
-    local name out_file out exit_code=0 t0 t1 ok=1
+    local label="$1" image="$2" cmd="$3" timeout_s="${4:-30}"
+    local name ok=0
 
     name="hi-${backend}test-$label-$$"
     _hi_h3 "Testing shell: $label"
-    t0="$(_hi_now)"
 
     if ! "$backend" run -d --name "$name" "$image" tail -f /dev/null >/dev/null 2>"$_HI_WORKDIR/$label.run.log"; then
       _hi_cecho " | Failed to start container (image: $image)" "$RED"
@@ -444,38 +588,23 @@ function _hi_container_backend_test() {
       return 1
     fi
 
-    out_file="$_HI_WORKDIR/$label.out"
-    _hi_cecho " | Running: $_HI_LAUNCHER $name $cmd"
-    # backgrounded so a hung fallback (e.g. a shell that never honors the
-    # trailing `exit`) can't wedge the whole test suite
-    "${_HI_PTY_WRAP[@]}" "$_HI_LAUNCHER" "$name" "$cmd" <&3 >"$out_file" 2>&1 &
-    function _hi_on_timeout() { _hi_h3 " | [$label] -- TIMED OUT after ${timeout_s}s, killing"; }
-    _hi_wait_pid "$!" "$timeout_s" _hi_on_timeout
-    exit_code="$_HI_WAIT_EXIT"
-    t1="$(_hi_now)"
-
-    out="$(cat "$out_file" 2>/dev/null)"
-    if printf '%s' "$out" | grep -q "$marker"; then
-      _hi_cecho " | [$label] -- $backend path OK ($(_hi_elapsed "$t0" "$t1")s)" "$GREEN"
-    else
-      _hi_h3 " | [$label] -- FAILED (exit $exit_code, $(_hi_elapsed "$t0" "$t1")s)"
-      printf '%s\n' "$out" | sed 's/^/      /'
-      ok=0
-    fi
-
+    _hi_exec_case "$label" "$backend path" "$marker" "$timeout_s" "$name" "$cmd" && ok=1
     "$backend" rm -f "$name" >/dev/null 2>&1
     [ "$ok" -eq 1 ]
   }
 
-  # each guarded with `if`, not `&&`: under `set -e` a failing `[ ... ] && ...`
-  # list is itself a failing command, which would abandon the cases after it
+  # label:probe shape, one per bash-less arm of the fallback's `for s in zsh
+  # fish sh` probe; guarded with `if`, not `&&`, since under `set -e` a failing
+  # `[ ... ] && ...` list is itself a failing command and would abandon the
+  # cases after it
   _hi_case _hi_run_case bash debian:bookworm-slim "$(_hi_probe_cmd "$marker" bash)"
-  if [ "$zsh_ok" -eq 1 ]; then
-    _hi_case _hi_run_case zsh "hi-${backend}test-zsh" "$(_hi_probe_cmd "$marker" fallback)"
-  fi
-  if [ "$fish_ok" -eq 1 ]; then
-    _hi_case _hi_run_case fish "hi-${backend}test-fish" "$(_hi_probe_cmd "$marker" fallback_fish)"
-  fi
+  local spec
+  for spec in zsh:fallback fish:fallback_fish; do
+    shell="${spec%%:*}"
+    if [ "${shell_ok[$shell]}" -eq 1 ]; then
+      _hi_case _hi_run_case "$shell" "hi-${backend}test-$shell" "$(_hi_probe_cmd "$marker" "${spec#*:}")"
+    fi
+  done
   _hi_case _hi_run_case sh alpine:3.20 "$(_hi_probe_cmd "$marker" fallback)"
 
   "$backend" image rm -f "hi-${backend}test-zsh" "hi-${backend}test-fish" >/dev/null 2>&1 || true

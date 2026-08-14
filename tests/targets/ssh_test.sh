@@ -28,7 +28,7 @@ source "${_HI_HOME:-$HOME}/hi.d/common/bootstrap.sh"
 # shellcheck source=../test_lib.sh
 source "$_HI_TEST_LIB"
 
-_hi_require_backend docker "not installed"
+_hi_require_backend docker
 
 _hi_workdir sshtest
 _hi_h1 "Testing hi's ssh path across remote login shells"
@@ -43,8 +43,7 @@ _hi_ssh_keypair
 # the probe.
 _hi_h2 "Building test images"
 _HI_DEBIAN_OK=1
-_hi_sshd_image || _HI_DEBIAN_OK=0
-[ "$_HI_DEBIAN_OK" -eq 1 ] || _hi_cecho " | Debian image failed to build, skipping its shells (see $_HI_WORKDIR/sshd.log)" "$YELLOW"
+_hi_sshd_image "its shells" || _HI_DEBIAN_OK=0
 
 # label:extra apk package - one image per no-bash tier of the fallback probe,
 # all three sharing one Dockerfile/entrypoint shape rather than four
@@ -64,20 +63,19 @@ for _hi_img in alpine: alpine-zsh:zsh alpine-fish:fish; do
     printf '%s\n' "$_HI_SSHD_ENTRYPOINT_BODY"
   } >"$_hi_ctx/entrypoint.sh"
 
-  _hi_h3 "Building hi-sshtest-$_hi_label from $_hi_ctx"
-  if docker build -q -t "hi-sshtest-$_hi_label" "$_hi_ctx" >/dev/null 2>"$_HI_WORKDIR/$_hi_label.log"; then
-    _HI_ALPINE_OK[$_hi_label]=1
-  else
+  _HI_ALPINE_OK[$_hi_label]=1
+  _hi_build_image "$_hi_label" "hi-sshtest-$_hi_label" "its fallback case" "$_hi_ctx" ||
     _HI_ALPINE_OK[$_hi_label]=0
-    _hi_cecho " | ${_hi_label} image failed to build, skipping its fallback case (see $_HI_WORKDIR/$_hi_label.log)" "$YELLOW"
-  fi
 done
 
 # one more image, layered on the shared debian one, with a real checkout of
 # this repo already sitting at ~/hi.d - i.e. what a host looks like after
 # scripts/install.sh has run there. The build context is $_HI_ROOT itself
 # (this checkout), so it's an exact copy, uncommitted changes included.
-_HI_INSTALLED_OK=$_HI_DEBIAN_OK
+# Only reachable when the debian image it layers on actually built, so the
+# flag starts at 0 and the build is the only thing that can raise it - a
+# warning about a log file that was never written would just misdirect.
+_HI_INSTALLED_OK=0
 if [ "$_HI_DEBIAN_OK" -eq 1 ]; then
   mkdir -p "$_HI_WORKDIR/debian-installed"
   cat >"$_HI_WORKDIR/debian-installed/Dockerfile" <<EOF
@@ -87,12 +85,9 @@ RUN chmod +x /home/hitest/hi.d/hi.sh \\
     && touch /home/hitest/hi.d/.installed_sentinel \\
     && chown hitest:hitest /home/hitest/hi.d/.installed_sentinel
 EOF
-  _hi_cecho " | Building hi-sshtest-debian-installed from $_HI_ROOT"
-  docker build -q -t hi-sshtest-debian-installed \
-    -f "$_HI_WORKDIR/debian-installed/Dockerfile" "$_HI_ROOT" \
-    >/dev/null 2>"$_HI_WORKDIR/debian-installed.log" || _HI_INSTALLED_OK=0
+  _hi_build_image debian-installed hi-sshtest-debian-installed "the pre-installed case" \
+    -f "$_HI_WORKDIR/debian-installed/Dockerfile" "$_HI_ROOT" && _HI_INSTALLED_OK=1
 fi
-[ "$_HI_INSTALLED_OK" -eq 1 ] || _hi_cecho " | Debian-installed image failed to build, skipping the pre-installed case (see $_HI_WORKDIR/debian-installed.log)" "$YELLOW"
 
 # --- the actual per-shell test -----------------------------------------
 _HI_MARKER="HI_SSH_TEST_OK"
@@ -109,41 +104,28 @@ _hi_pty_wrap 0 auto "no tty and no python3 to fake one - ssh -t may not get a re
 _hi_suite_begin
 
 function _hi_run_case() {
-  local label="$1" image="$2" login_shell="$3" cmd="$4" post="${5:-}" name port out exit_code=0 t0 t1 ok=1
+  local label="$1" image="$2" login_shell="$3" cmd="$4" post="${5:-}" name out exit_code=0 t0 t1 ok=1
 
   name="hi-sshtest-$label-$$"
-  _hi_h3 "Testing login shell: $label"
+  _hi_h3 "Testing login shell: $label ($login_shell)"
   t0="$(_hi_now)"
 
-  if ! docker run -d --rm --name "$name" -p 127.0.0.1::22 \
-    -e "PUBKEY=$_HI_PUBKEY" -e "LOGIN_SHELL=$login_shell" "$image" >/dev/null 2>"$_HI_WORKDIR/$label.log"; then
-    _hi_cecho " | Failed to start container" "$RED"
-    return 1
-  fi
-  _hi_track_container "$name"
-  _hi_cecho " | Container: $name (login shell: $login_shell)"
+  _hi_sshd_container "$name" "$image" -e "LOGIN_SHELL=$login_shell" || return 1
 
-  port="$(docker port "$name" 22/tcp | head -1 | sed 's/.*://')"
-  _hi_cecho " | Waiting for sshd on 127.0.0.1:$port"
-  if ! _hi_poll_bool 40 0.25 _hi_ssh_reachable "$port"; then
-    _hi_cecho " | Sshd never came up" "$RED"
-    return 1
-  fi
-
-  _hi_cecho " | Running: $_HI_LAUNCHER -p $port hitest@127.0.0.1 $cmd"
-  out="$("${_HI_PTY_WRAP[@]}" "$_HI_LAUNCHER" -p "$port" -i "$_HI_WORKDIR/id" "${_HI_SSH_OPTS[@]}" \
-    -o ConnectTimeout=5 hitest@127.0.0.1 "$cmd" 2>&1)" || exit_code=$?
+  _hi_cecho " | Running: $_HI_LAUNCHER -p $_HI_SSH_PORT hitest@127.0.0.1 $cmd"
+  _hi_ssh_launch "$_HI_SSH_PORT"
+  out="$("${_HI_SSH_LAUNCH[@]}" "$cmd" 2>&1)" || exit_code=$?
   t1="$(_hi_now)"
 
   if printf '%s' "$out" | grep -q "$_HI_MARKER"; then
     if [ -n "$post" ] && ! docker exec "$name" sh -c "$post" >/dev/null 2>&1; then
-      _hi_h3 " | [$label] -- post-check FAILED: $post ($(_hi_elapsed "$t0" "$t1")s)"
+      _hi_h3 " | [$label] -- post-check FAILED: $post ($(_hi_elapsed "$t0" "$t1")s)" "$RED"
       ok=0
     else
       _hi_cecho " | [$label] -- ssh path OK ($(_hi_elapsed "$t0" "$t1")s)" "$GREEN"
     fi
   else
-    _hi_h3 " | [$label] -- FAILED (exit $exit_code, $(_hi_elapsed "$t0" "$t1")s)"
+    _hi_h3 " | [$label] -- FAILED (exit $exit_code, $(_hi_elapsed "$t0" "$t1")s)" "$RED"
     printf '%s\n' "$out" | sed 's/^/      /'
     ok=0
   fi
@@ -161,11 +143,9 @@ fi
 # label:image-suffix:probe shape - the plain and zsh tiers assert through the
 # same posix dialect, fish needs its own
 for _hi_case_spec in nobash:alpine:ssh_fallback nobash-zsh:alpine-zsh:ssh_fallback nobash-fish:alpine-fish:ssh_fallback_fish; do
-  _hi_label="${_hi_case_spec%%:*}"
-  _hi_rest="${_hi_case_spec#*:}"
-  _hi_image="${_hi_rest%%:*}"
+  IFS=: read -r _hi_label _hi_image _hi_shape <<<"$_hi_case_spec"
   if [ "${_HI_ALPINE_OK[$_hi_image]}" -eq 1 ]; then
-    _hi_case _hi_run_case "$_hi_label" "hi-sshtest-$_hi_image" /bin/ash "$(_hi_probe_cmd "$_HI_MARKER" "${_hi_rest#*:}")"
+    _hi_case _hi_run_case "$_hi_label" "hi-sshtest-$_hi_image" /bin/ash "$(_hi_probe_cmd "$_HI_MARKER" "$_hi_shape")"
   fi
 done
 

@@ -153,6 +153,37 @@ function test_suite_end_honours_custom_banners() {
   [[ "$pass" == *"custom pass line"* && "$fail" == *"custom fail line"* ]]
 }
 
+function test_report_counts_writes_total_and_failed() {
+  local file
+  file="$_HI_WORKDIR/counts.reported"
+  (
+    _HI_COUNTS_FILE="$file"
+    _hi_report_counts 9 2
+  )
+  [ "$(cat "$file")" = "9 2" ]
+}
+
+# run standalone (no runner above it) the helper must do nothing at all,
+# rather than erroring on an unset path
+function test_report_counts_is_a_noop_without_a_counts_file() {
+  (
+    unset _HI_COUNTS_FILE
+    _hi_report_counts 1 0
+  )
+}
+
+function test_suite_end_reports_its_counts() {
+  local file
+  file="$_HI_WORKDIR/counts.suite_end"
+  (
+    _HI_COUNTS_FILE="$file"
+    _HI_TOTAL=5
+    _HI_FAILED=2
+    _hi_suite_end thing >/dev/null
+  ) || true
+  [ "$(cat "$file")" = "5 2" ]
+}
+
 function test_workdir_creates_a_scratch_dir() {
   local dir
   dir="$(
@@ -492,6 +523,11 @@ function run_test_lib_tests() {
   _hi_check "End's default pass wording uses the subject" test_suite_end_default_wording_uses_the_subject
   _hi_check "End's default failure wording shows the ratio" test_suite_end_default_failure_wording_shows_the_ratio
   _hi_check "End honours custom banners" test_suite_end_honours_custom_banners
+
+  _hi_h2 "Testing: _hi_report_counts"
+  _hi_check "Writes total and failed" test_report_counts_writes_total_and_failed
+  _hi_check "No-op without a counts file" test_report_counts_is_a_noop_without_a_counts_file
+  _hi_check "End reports its counts" test_suite_end_reports_its_counts
 
   _hi_h2 "Testing: _hi_workdir / _hi_track_container / _hi_test_cleanup"
   _hi_check "Workdir creates a scratch dir" test_workdir_creates_a_scratch_dir

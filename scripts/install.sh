@@ -5,6 +5,7 @@ set -euo pipefail
 
 _HI_FEATURES_ONLY=""
 _HI_CHECK_CONFIGS_ONLY=""
+_HI_ASSUME_YES=0
 while [ $# -gt 0 ]; do
   case "$1" in
   --features-only)
@@ -15,15 +16,22 @@ while [ $# -gt 0 ]; do
     _HI_CHECK_CONFIGS_ONLY=1
     shift
     ;;
+  -y | --yes)
+    _HI_ASSUME_YES=1
+    shift
+    ;;
   -h | --help)
     cat <<'EOF'
-Usage: install.sh [--features-only] [--check-configs]
+Usage: install.sh [--features-only] [--check-configs] [--yes]
 
 Wires up the local shells to source this hi.d checkout and links hi.sh onto
 PATH. Safe to re-run any time - it repairs its own lines and leaves
 everything else alone. The install location is always wherever this script
 lives (hi.d's parent directory), not a path you pass in - hi.d installs in
 place.
+
+Note: this needs sudo to link hi.sh into /usr/bin, and every prompt keeps
+its current setting when there is no tty to answer on.
 
   --features-only  Skip the shell rc wiring and the hi.sh symlink - just
                    re-run the feature toggle prompts. This is what
@@ -32,12 +40,15 @@ place.
                    ~/.bashrc, ~/.zshrc and ~/.config/fish/config.fish -
                    skip everything else. This is what `hi_check_configs`
                    calls.
+  -y, --yes        Install even if that validation finds problems. Without
+                   it, a non-interactive run stops rather than rewriting
+                   shell configs that don't parse.
 EOF
     exit 0
     ;;
   *)
     echo "install.sh: unrecognized argument: $1" >&2
-    echo "Usage: install.sh [--features-only] [--check-configs]" >&2
+    echo "Usage: install.sh [--features-only] [--check-configs] [--yes]" >&2
     exit 1
     ;;
   esac
@@ -194,8 +205,10 @@ function show_preview() {
 }
 
 # banner() needs an arg, so wrap it to match every other preview function's
-# zero-arg signature that ask_setting's $5 expects
-function _hi_banner_preview() { banner Connected; }
+# zero-arg signature that ask_setting's $5 expects; _HI_HEADER_BANNER is unset
+# for the call (in a subshell) since a previously-disabled toggle would
+# otherwise render an empty preview of the thing being asked about
+function _hi_banner_preview() { (unset _HI_HEADER_BANNER && banner Connected); }
 
 # sample "user@host cwd" line, colored exactly like shells/bash.sh's real
 # HI_PS1 (see _hi_user_escape/_hi_host_escape/_hi_at_color), just with the
@@ -270,11 +283,13 @@ function config_features() {
 # off, since asking about its pieces would be moot.
 function config_header_details() {
   local target="$_HI_ROOT/common/header.sh"
-  local dis_ts="" dis_sys="" dis_id="" dis_chk=""
+  local dis_banner="" dis_ts="" dis_sys="" dis_id="" dis_chk=""
   if ! setting_enabled _HI_DISABLE_HEADER "$_HI_ROOT/common/paths.sh" 1; then
     return 0
   fi
   _hi_h2 "Choosing header details"
+  ask_setting _HI_HEADER_BANNER " Show the connect/disconnect banner line?" "$target" 0 _hi_banner_preview ||
+    dis_banner="export _HI_HEADER_BANNER=0"
   ask_setting _HI_HEADER_TIMESTAMP " Show the timestamp line?" "$target" 0 timestamp ||
     dis_ts="export _HI_HEADER_TIMESTAMP=0"
   ask_setting _HI_HEADER_SYSINFO " Show the system info line (OS, CPU, RAM)?" "$target" 0 system_info ||
@@ -283,7 +298,7 @@ function config_header_details() {
     dis_id="export _HI_HEADER_IDENTITY=0"
   ask_setting _HI_HEADER_CHECK " Show the installed-packages check?" "$target" 0 full_check ||
     dis_chk="export _HI_HEADER_CHECK=0"
-  config_shell "header details" "$target" "$dis_ts" "$dis_sys" "$dis_id" "$dis_chk"
+  config_shell "header details" "$target" "$dis_banner" "$dis_ts" "$dis_sys" "$dis_id" "$dis_chk"
 }
 
 # Ask for the header/banner's terminal width and write it into
@@ -338,14 +353,20 @@ function check_shell_configs() {
 }
 
 # Gate the install on check_shell_configs: if issues turn up, ask whether to
-# proceed anyway. Non-interactive runs (no tty) continue automatically rather
-# than hang on a prompt nobody can answer - same convention as ask_setting.
+# proceed anyway. Unlike ask_setting, a non-interactive run does *not* wave
+# this through - install.sh rewrites the very files that failed to parse, and
+# nobody is watching to notice. Pass --yes to take that decision up front.
 function config_validate_shells() {
   check_shell_configs && return 0
   _hi_cecho " found issues in your existing shell config(s) above" "$YELLOW"
-  if [ ! -t 0 ]; then
-    _hi_cecho " non-interactive run, continuing anyway" "$YELLOW"
+  if [ "$_HI_ASSUME_YES" = 1 ]; then
+    _hi_cecho " --yes given, continuing anyway" "$YELLOW"
     return 0
+  fi
+  if [ ! -t 0 ]; then
+    _hi_cecho " non-interactive run and the configs above look broken - aborting" "$RED"
+    _hi_cecho " re-run with --yes to install over them anyway" "$YELLOW"
+    exit 1
   fi
   local reply=""
   read -r -p " Continue installing anyway? [y/N] " reply || reply=""

@@ -16,6 +16,16 @@ function _hi_fixture() {
   chmod +x "$_HI_FIXTURES/$1.sh"
 }
 
+# A fixture that reports a case tally the way _hi_report_counts does, so the
+# runner's pass/fail columns can be driven without standing up a real suite.
+# Writes "<total> <failed>" to $_HI_COUNTS_FILE and exits with the fail count.
+function _hi_counting_fixture() {
+  # shellcheck disable=SC2016 # $_HI_COUNTS_FILE is resolved when the fixture runs
+  printf '#!/bin/bash\nprintf "ran:%s\\n"\nprintf "%s %s\\n" >"$_HI_COUNTS_FILE"\nexit %s\n' \
+    "$1" "$2" "$3" "$3" >"$_HI_FIXTURES/$1.sh"
+  chmod +x "$_HI_FIXTURES/$1.sh"
+}
+
 function _hi_run_runner() {
   local table="$1" line
   shift
@@ -110,13 +120,89 @@ function test_summary_lists_every_suite_with_a_duration() {
     printf '%s\n' "$_HI_RUN_OUT" | grep -qE 'beta .*FAILED \(3\)'
 }
 
+# The summary rows carry color, so every measurement below strips the escapes
+# first and then reads the row whose name cell is $1 - "SUITE" for the header
+# and "TOTAL" for the totals row, both of which sit in the same column.
+function _hi_summary_field() {
+  printf '%s\n' "$_HI_RUN_OUT" | sed 's/\x1b\[[0-9;]*m//g' |
+    awk -v n="$1" -v what="$2" '$1 == "|" && $2 == n {
+      print (what == "len" ? length($0) : index($0, "PASS")); exit
+    }'
+}
+
 function test_summary_pads_names_to_the_widest() {
-  local short_line
+  local short long
   _hi_run_runner $'a:green.sh\nlongername:green.sh'
-  short_line="$(printf '%s\n' "$_HI_RUN_OUT" | grep -E '^\s*\S*\s*\| a ' | head -1)"
-  # "a" is padded out to "longername"'s width, so PASS starts at the same
-  # column on both rows
-  [[ "$short_line" == *"a           PASS"* ]]
+  # a short name is padded out to the column width, so the STATUS cell starts
+  # at the same offset on every row
+  short="$(_hi_summary_field a col)"
+  long="$(_hi_summary_field longername col)"
+  [ -n "$short" ] && [ "$short" != 0 ] && [ "$short" = "$long" ]
+}
+
+# the table is sized like every other banner hi prints - see common/shared.sh's
+# _HI_MAX_WIDTH, which the _hi_h1 rules above and below the table already use
+function test_summary_rows_span_hi_max_width() {
+  local row
+  export _HI_MAX_WIDTH=72
+  _hi_run_runner $'a:green.sh\nlongername:green.sh'
+  unset _HI_MAX_WIDTH
+  for row in SUITE a longername TOTAL; do
+    [ "$(_hi_summary_field "$row" len)" = 72 ] || {
+      _hi_cecho " | row '$row' is $(_hi_summary_field "$row" len) wide, expected 72" "$RED"
+      return 1
+    }
+  done
+}
+
+function test_summary_tracks_a_wider_hi_max_width() {
+  export _HI_MAX_WIDTH=110
+  _hi_run_runner $'a:green.sh'
+  unset _HI_MAX_WIDTH
+  [ "$(_hi_summary_field TOTAL len)" = 110 ]
+}
+
+# too narrow to fit the names, the column keeps its natural size and the row
+# overflows - a truncated suite name would be worse than a long line
+function test_summary_narrow_width_does_not_truncate_names() {
+  export _HI_MAX_WIDTH=20
+  _hi_run_runner $'averylongsuitename:green.sh'
+  unset _HI_MAX_WIDTH
+  [ -n "$(_hi_summary_field averylongsuitename len)" ]
+}
+
+function test_summary_has_a_column_header() {
+  _hi_run_runner $'a:green.sh'
+  printf '%s\n' "$_HI_RUN_OUT" | grep -qE 'SUITE .*STATUS .*PASS .*FAIL .*TIME'
+}
+
+# 7 cases, 2 of them failing, must render as 5 passed / 2 failed
+function test_summary_shows_each_suites_case_counts() {
+  _hi_counting_fixture counted 7 2
+  _hi_run_runner $'counted:counted.sh'
+  printf '%s\n' "$_HI_RUN_OUT" | grep -qE 'counted .*FAILED \(2\) +5 +2 '
+}
+
+# a suite that never reported (no _hi_suite_end - a backend skip, or a bare
+# script) must read as "-", not as a silent 0
+function test_summary_shows_dashes_when_no_counts_were_reported() {
+  _hi_run_runner $'a:green.sh'
+  printf '%s\n' "$_HI_RUN_OUT" | grep -qE 'a +PASS +- +- '
+}
+
+# the totals row sums subtests across suites: (6-1) + (4-0) passed, 1 + 0 failed
+function test_summary_totals_sum_every_suites_cases() {
+  _hi_counting_fixture six 6 1
+  _hi_counting_fixture four 4 0
+  _hi_run_runner $'six:six.sh\nfour:four.sh'
+  printf '%s\n' "$_HI_RUN_OUT" | grep -qE 'TOTAL +2 suite\(s\) +9 +1 '
+}
+
+# suites that reported nothing must not drag the totals to "-" or crash the sum
+function test_summary_totals_ignore_suites_without_counts() {
+  _hi_counting_fixture three 3 0
+  _hi_run_runner $'three:three.sh\nplain:green.sh'
+  printf '%s\n' "$_HI_RUN_OUT" | grep -qE 'TOTAL +2 suite\(s\) +3 +0 '
 }
 
 function test_each_suites_own_output_still_streams() {
@@ -127,7 +213,7 @@ function test_each_suites_own_output_still_streams() {
 function test_shipped_table_still_has_every_suite_name() {
   local name out
   out="$("$_HI_TEST_RUN" definitely-not-a-suite 2>&1)" || true
-  for name in aliases alias_fallthrough shellcheck install uninstall check header shared git_prompt \
+  for name in aliases alias_fallthrough shellcheck install uninstall hi check header shared git_prompt \
     targets load test_lib test_runner ssh ssh_disconnect docker podman nomad kube; do
     [[ "$out" == *"$name"* ]] || {
       _hi_cecho " | missing from the table: $name" "$RED"
@@ -193,7 +279,17 @@ function run_runner_tests() {
   _hi_h2 "Testing: summary table"
   _hi_check "Lists every suite with a duration" test_summary_lists_every_suite_with_a_duration
   _hi_check "Pads names to the widest" test_summary_pads_names_to_the_widest
+  _hi_check "Rows span _HI_MAX_WIDTH" test_summary_rows_span_hi_max_width
+  _hi_check "Tracks a wider _HI_MAX_WIDTH" test_summary_tracks_a_wider_hi_max_width
+  _hi_check "A narrow width doesn't truncate names" test_summary_narrow_width_does_not_truncate_names
   _hi_check "Each suite's own output still streams" test_each_suites_own_output_still_streams
+
+  _hi_h2 "Testing: summary case counts"
+  _hi_check "Has a column header" test_summary_has_a_column_header
+  _hi_check "Shows each suite's pass/fail counts" test_summary_shows_each_suites_case_counts
+  _hi_check "Shows - when a suite reported no counts" test_summary_shows_dashes_when_no_counts_were_reported
+  _hi_check "Totals sum every suite's cases" test_summary_totals_sum_every_suites_cases
+  _hi_check "Totals ignore suites without counts" test_summary_totals_ignore_suites_without_counts
 
   _hi_h2 "Testing: the shipped table"
   _hi_check "Still has every CI and backend suite name" test_shipped_table_still_has_every_suite_name

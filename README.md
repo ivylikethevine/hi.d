@@ -130,7 +130,7 @@ tests/test_runner.sh
 | `tests/compat/shellcheck_test.sh`               | runs shellcheck over every `*.sh` file in the repo                                                         |
 | `tests/scripts/install_test.sh`                 | unit tests for `install.sh`'s marker-based rc rewriting, setting defaults, and config validation           |
 | `tests/scripts/uninstall_test.sh`               | unit tests for `uninstall.sh`'s marker stripping, incl. an install+uninstall round-trip                    |
-| `tests/harness/test_lib_test.sh`                | unit tests for `test_lib.sh` itself - the scaffolding every other suite is built on                        |
+| `tests/harness/lib_test.sh`                     | unit tests for `test_lib.sh` itself - the scaffolding every other suite is built on                        |
 | `tests/harness/runner_test.sh`                  | drives the real `test_runner.sh` over fixture suites that pass/fail/are missing                            |
 | `tests/targets/ssh_test.sh`                     | end-to-end test of hi's ssh path across remote login shells                                                |
 | `tests/targets/ssh_disconnect_test.sh`          | end-to-end test that the target-side cleanup trap fires on an abrupt disconnect, not just a clean exit     |

@@ -31,6 +31,11 @@ export _HI_EZA_BIN="$(command -v eza || command -v exa || command -v ls)"
 [ "$_HI_DISABLE_EDITORS" != 1 ] && alias nano="nano --rcfile $_HI_NANORC" || true
 [ "$_HI_DISABLE_EDITORS" != 1 ] && alias vim="$(command -v nvim || command -v vim) -u $_HI_VIMRC" || true
 
+# misc/theme.yml styles eza itself, not any alias hi defines, so it belongs
+# above the early return: turning the personal aliases off shouldn't silently
+# strip the theme from an eza the user runs directly.
+export EZA_CONFIG_DIR="$_HI_THEME_DIR"
+
 # everything below this line is purely personal preference, freely editable
 # without touching hi's own functionality (that all lives in
 # common/bootstrap.sh now). Skip it wholesale when _HI_DISABLE_ALIASES=1.
@@ -77,6 +82,7 @@ alias ps="ps aux"
 
 # good safety mechanism
 alias rm="rm -iv"
+alias rmv="rm -rv"
 
 # default recursive copy with progress
 alias cp="cp -rv"
@@ -113,7 +119,6 @@ alias lsr="lsa -R"
 
 # eza/exa (its predecessor) improved ls; time format per
 # https://docs.rs/chrono/latest/chrono/format/strftime/index.html
-export EZA_CONFIG_DIR="$_HI_ROOT/misc" # eza theme customization, misc/theme.yml
 export _HI_EXA_SHARED_OPTS='-F -1 -l -m --group-directories-first'
 export _HI_EXA_OPTS="$_HI_EXA_SHARED_OPTS --group --no-filesize"
 export _HI_EZA_OPTS="$_HI_EXA_SHARED_OPTS"' --smart-group --time-style="+%b %d %Y %H:%M"'

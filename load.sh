@@ -104,10 +104,13 @@ function load() {
   _hi_cecho "$greeting" "$color" 1
   _hi_cecho " | load: $(_hi_elapsed "$start" "$(_hi_now)")s | copy: ${_HI_COPY_TIME:--1}s"
 
+  # keep the session's own status: `hi <target>` should report a shell that
+  # exited non-zero rather than always claiming success
+  local shell_ec=0
   if [ "$shell" = fish ]; then
-    fish -C "set fish_greeting ''" -i # the header above is our greeting
+    fish -C "set fish_greeting ''" -i || shell_ec=$? # the header above is our greeting
   else
-    "$shell" -i
+    "$shell" -i || shell_ec=$?
   fi
 
   local size
@@ -115,9 +118,9 @@ function load() {
   _hi_cecho " $size" "$NC" 1
   if [[ "${_HI_DISABLE_HEADER:-0}" != 1 ]]; then
     banner Disconnected "$BRRED" " $size"
-    timestamp
+    [[ "${_HI_HEADER_TIMESTAMP:-1}" == 0 ]] || timestamp
   fi
   _hi_cecho " | " "$NC" 1
   _hi_cecho "hi closing! " "$BRPURPLE"
-  exit 0
+  exit "$shell_ec"
 }

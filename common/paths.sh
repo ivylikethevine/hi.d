@@ -26,6 +26,8 @@ export _HI_COLORS="$_HI_ROOT/misc/colors"
 export _HI_PACKAGES="$_HI_ROOT/misc/packages"
 export _HI_VIMRC="$_HI_ROOT/misc/vim.rc"
 export _HI_NANORC="$_HI_ROOT/misc/nano.rc"
+# eza reads its theme from a *directory* (misc/theme.yml), not a file path
+export _HI_THEME_DIR="$_HI_ROOT/misc"
 export _HI_ALIASES="$_HI_ROOT/shells/aliases.sh"
 export _HI_BASHRC="$_HI_ROOT/shells/bash.sh"
 export _HI_ZSHRC="$_HI_ROOT/shells/zsh.zsh"
@@ -44,18 +46,23 @@ export _HI_HOME_FISH_CONFIG="$HOME/.config/fish/config.fish"
 export _HI_HUMAN_CENTRIC_DATE="+%a %b %-e %Y %H:%M:%S %Z"
 export _HI_HUMAN_SHORT_DATE="+%b %-e %y %H:%M %Z"
 
-# required helpers/commands
+# required helpers/commands.
+# hi.sh's $_HI_EXCLUDE strips scripts/, tests/ and .git from the tree it
+# copies to a target, so the helpers below simply aren't there in a hi
+# session. Each one says so instead of silently doing nothing - and each
+# tests the *negation* first, because `[ -f x ] && cmd || echo` would also
+# print the message whenever cmd itself exited non-zero.
 alias hi="$_HI_LAUNCHER"
-alias hi_install="[ -f $_HI_INSTALL ] && $_HI_INSTALL"
-alias hi_uninstall="[ -f $_HI_UNINSTALL ] && $_HI_UNINSTALL"
-alias hi_configure="[ -f $_HI_INSTALL ] && $_HI_INSTALL --features-only"
+alias hi_install="[ ! -f $_HI_INSTALL ] && echo 'hi_install needs the full hi.d checkout - not available in a hi session' || $_HI_INSTALL"
+alias hi_uninstall="[ ! -f $_HI_UNINSTALL ] && echo 'hi_uninstall needs the full hi.d checkout - not available in a hi session' || $_HI_UNINSTALL"
+alias hi_configure="[ ! -f $_HI_INSTALL ] && echo 'hi_configure needs the full hi.d checkout - not available in a hi session' || $_HI_INSTALL --features-only"
 alias hi_reconfigure="hi_configure"
-alias hi_check_configs="[ -f $_HI_INSTALL ] && $_HI_INSTALL --check-configs"
-alias hi_update="git -C $_HI_ROOT pull"
+alias hi_check_configs="[ ! -f $_HI_INSTALL ] && echo 'hi_check_configs needs the full hi.d checkout - not available in a hi session' || $_HI_INSTALL --check-configs"
+alias hi_update="[ ! -d $_HI_ROOT/.git ] && echo 'hi_update needs the full hi.d checkout - not available in a hi session' || git -C $_HI_ROOT pull"
 alias hi_info="echo ' | hi_home: $_HI_HOME | hi_root: $_HI_ROOT | script: $_HI_LAUNCHER'"
-alias hi_color_preview="[ -f $_HI_COLOR_PREVIEW ] && $_HI_COLOR_PREVIEW"
+alias hi_color_preview="[ ! -f $_HI_COLOR_PREVIEW ] && echo 'hi_color_preview needs the full hi.d checkout - not available in a hi session' || $_HI_COLOR_PREVIEW"
 alias hi_packages_preview="bash -c 'source \"$_HI_CHECK\" && full_check'"
-alias hi_test="[ -f $_HI_TEST_RUN ] && $_HI_TEST_RUN"
+alias hi_test="[ ! -f $_HI_TEST_RUN ] && echo 'hi_test needs the full hi.d checkout - not available in a hi session' || $_HI_TEST_RUN"
 
 # scripts/install.sh splices the "export _HI_DISABLE_*=1" lines it writes in
 # directly above this anchor, never at the end of the file: the local-only

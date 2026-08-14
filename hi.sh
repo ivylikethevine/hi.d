@@ -6,11 +6,6 @@ set -euo pipefail # must be disabled after our code (this file is part of the in
 # shellcheck source=./common/bootstrap.sh
 source "${_HI_HOME:-$HOME}/hi.d/common/bootstrap.sh"
 
-command -v openssl >/dev/null 2>&1 || {
-  _hi_cecho >&2 "hi requires openssl on [$(_hi_hostname)], but it is not installed. Aborting..." "$RED"
-  exit 1
-}
-
 _HI_EXCLUDE=(--exclude README.md --exclude .git --exclude .gitignore --exclude scripts
   --exclude hi.sh --exclude hi.bashrc --exclude .zed --exclude .vscode --exclude .shellcheckrc
   --exclude '*.example' --exclude tests --exclude .github --exclude .claude
@@ -135,6 +130,15 @@ REMOTE
 function _say_hi() {
   local size hi_esc nc_esc script middle b64 boot_tmp remote_root tmp_root ctl_path ec=0
   local -a ctl_opts
+
+  # only this path armors its payload ($_HI_ARMOR/$_HI_UNARMOR and the base64
+  # of the bootloader below) - the container backends stream through their own
+  # CLI's `cp`/`exec`, so they must not be blocked on an openssl the client
+  # never uses. The target gets its own check in _hi_remote_preamble.
+  command -v openssl >/dev/null 2>&1 || {
+    _hi_cecho >&2 "hi requires openssl on [$(_hi_hostname)] to reach an ssh target, but it is not installed. Aborting..." "$RED"
+    return 1
+  }
 
   hi_esc="$(printf '%b' "$YELLOW")"
   nc_esc="$(printf '%b' "$NC")"
@@ -305,7 +309,14 @@ function _hi_parse() {
   SSHARGS=()
   while [ $# -gt 0 ]; do
     case $1 in
-    -b | -c | -D | -E | -e | -F | -I | -i | -L | -l | -m | -O | -o | -p | -Q | -R | -S | -W | -w)
+    # every ssh option that takes a separate value, so the value is never
+    # mistaken for the target. -B/-J especially: without them `hi -J bastion
+    # myhost` would treat "bastion" as the target and connect to the wrong host
+    -B | -b | -c | -D | -E | -e | -F | -I | -i | -J | -L | -l | -m | -O | -o | -p | -Q | -R | -S | -W | -w)
+      [ "$#" -ge 2 ] || {
+        _hi_cecho "hi: $1 needs a value" "$RED" >&2
+        exit 1
+      }
       SSHARGS+=("$1" "$2")
       shift
       ;;
@@ -367,6 +378,12 @@ function _hi() {
   exit "$exit_code"
 }
 
-set +euo pipefail # must be disabled after our code (this file is part of the interactive shell - any error would close the session)
+set +euo pipefail # the connection paths below run against unknown hosts, where a probe that fails is normal, not fatal
+
+# Same hatch as scripts/install.sh and scripts/uninstall.sh: sourcing this
+# file defines its functions without connecting to anything, which is what
+# tests/compat/hi_test.sh needs. Executed normally (the only way hi runs -
+# `alias hi` points straight at this script), $0 is this file and we dispatch.
+[[ "${BASH_SOURCE[0]}" == "$0" ]] || return 0
 
 _hi "$@"

@@ -32,11 +32,13 @@ function run_shellcheck() {
   shellcheck -x -Calways -S style "${_HI_SH_FILES[@]}" | tee "$_HI_SC_LOG"
   _HI_SC_EXIT="${PIPESTATUS[0]}"
   if [ "$_HI_SC_EXIT" -eq 0 ]; then
+    _hi_report_counts "${#_HI_SH_FILES[@]}" 0
     _hi_h1 "Found no issues (${#_HI_SH_FILES[@]} files, $(_hi_elapsed "$_HI_T0" "$(_hi_now)")s)"
   else
     # -Calways leaves ANSI codes in $_HI_SC_LOG (needed for the live colorized
     # stream above), so they have to be stripped before "^In " can match
     _HI_SC_FAILED=$(sed 's/\x1b\[[0-9;]*m//g' "$_HI_SC_LOG" | grep -oE '^In .* line [0-9]+:' | sed -E 's/^In (.*) line [0-9]+:/\1/' | sort -u | wc -l)
+    _hi_report_counts "${#_HI_SH_FILES[@]}" "$_HI_SC_FAILED"
     _hi_h1 "Found issues: $_HI_SC_FAILED/${#_HI_SH_FILES[@]} files ($(_hi_elapsed "$_HI_T0" "$(_hi_now)")s)" "$RED"
     exit "$_HI_SC_FAILED"
   fi

@@ -72,6 +72,27 @@ function test_identity_includes_static_labels() {
   [[ "$out" == *"Auth:"* && "$out" == *"Pub:"* ]]
 }
 
+function test_banner_disabled_produces_no_output() {
+  local out
+  out="$(_HI_HEADER_BANNER=0 banner TestBanner)"
+  [ -z "$out" ]
+}
+
+# guards the default: the toggle is opt-out, so an unset var must still print
+function test_banner_prints_when_toggle_unset() {
+  local out
+  out="$(unset _HI_HEADER_BANNER && banner TestBanner)"
+  [[ "$out" == *"TestBanner"* ]]
+}
+
+# the regression this toggle exists for: silencing the banner must leave the
+# rest of the header alone, unlike _HI_DISABLE_HEADER which kills all of it
+function test_hi_header_banner_off_keeps_detail_lines() {
+  local out
+  out="$(_HI_HEADER_BANNER=0 hi_header Connected)"
+  [[ "$out" != *"Connected"* && "$out" == *"Cores:"* && "$out" == *"RAM:"* ]]
+}
+
 function test_hi_header_disabled_produces_no_output() {
   local out
   out="$(_HI_DISABLE_HEADER=1 hi_header Connected)"
@@ -98,6 +119,8 @@ function run_header_tests() {
   _hi_check "A longer prefix shrinks the padding" test_banner_prefix_shrinks_padding
   _hi_check "Floors tilde padding on a pathologically long label" test_banner_floors_tildes_on_long_label
   _hi_check "Survives a narrow _HI_MAX_WIDTH" test_banner_narrow_width_does_not_error
+  _hi_check "No output when _HI_HEADER_BANNER=0" test_banner_disabled_produces_no_output
+  _hi_check "Still prints when the toggle is unset" test_banner_prints_when_toggle_unset
 
   _hi_h2 "Testing: timestamp / system_info / identity (smoke tests)"
   _hi_check "Timestamp prints two cells" test_timestamp_runs_and_has_two_cells
@@ -107,6 +130,7 @@ function run_header_tests() {
   _hi_h2 "Testing: hi_header"
   _hi_check "No output when disabled" test_hi_header_disabled_produces_no_output
   _hi_check "Prints the banner when enabled" test_hi_header_enabled_prints_banner
+  _hi_check "Banner off still prints the detail lines" test_hi_header_banner_off_keeps_detail_lines
 
   _hi_suite_end "header.sh"
 }

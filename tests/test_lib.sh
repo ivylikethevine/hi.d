@@ -99,8 +99,22 @@ function _hi_suite_begin() {
   _HI_TOTAL=0
 }
 
+# _hi_report_counts <total> <failed> - hand this suite's tally up to
+# test_runner.sh, which sums every suite's into the pass/fail columns of its
+# summary table. $_HI_COUNTS_FILE is only set when running under the runner,
+# so a suite executed on its own is a no-op here. A suite that exits before
+# reporting (_hi_require's skip path) contributes nothing, which is why the
+# runner renders "-" rather than 0 for those. _hi_suite_end calls this for
+# every suite built on the standard counters; shellcheck_test.sh, whose unit
+# is files rather than cases, calls it directly.
+function _hi_report_counts() {
+  [ -n "${_HI_COUNTS_FILE:-}" ] || return 0
+  printf '%s %s\n' "$1" "$2" >"$_HI_COUNTS_FILE"
+}
+
 function _hi_suite_end() {
   local subject="$1"
+  _hi_report_counts "$_HI_TOTAL" "$_HI_FAILED"
   if [ "$_HI_FAILED" -eq 0 ]; then
     _hi_h1 "${2:-All $subject checks passed ($_HI_TOTAL cases)}"
   else

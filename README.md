@@ -78,13 +78,14 @@ tests/test_runner.sh aliases shellcheck # just the named suite(s)
 ```
 
 Suite names: `aliases`, `alias_fallthrough`, `shellcheck`, `install`, `uninstall`, `check`, `header`, `shared`,
-`git_prompt`, `test_lib`, `test_runner` are fast and dependency-free - they're what CI runs on every push/PR (the
-last two are the harness testing itself). `ssh`, `ssh_disconnect`, `docker`, `podman`, `nomad`, `kube` are
-end-to-end:
+`git_prompt`, `targets`, `load`, `test_lib`, `test_runner` are fast and dependency-free - they're the first thing CI
+runs on every push/PR (the last two are the harness testing itself). `ssh`, `ssh_disconnect`, `docker`, `podman`,
+`nomad`, `kube` are end-to-end:
 they spin up real throwaway containers/clusters/agents and drive `hi.sh`'s actual connection paths against them, so
 they're slower and need the relevant backend installed - each skips cleanly with a warning instead of failing if its
-backend isn't available. Every test script is also directly executable on its own, e.g.
-`tests/compat/shellcheck_test.sh`.
+backend isn't available. CI runs `ssh`, `ssh_disconnect` and `docker` as a second job once the fast ones pass, which
+between them cover both halves of `hi.sh` (`_say_hi` and `_say_hi_container`). Every test script is also directly
+executable on its own, e.g. `tests/compat/shellcheck_test.sh`.
 
 Any script here needs `_HI_HOME` set before it'll source correctly - point it at the _parent_ of your `hi.d`
 checkout:
@@ -124,6 +125,8 @@ tests/test_runner.sh
 | `tests/compat/header_test.sh`                   | unit tests for `header.sh`'s row-joining, banner padding/floor math, and the `_HI_DISABLE_HEADER` gate     |
 | `tests/compat/shared_test.sh`                   | unit tests for `shared.sh`'s color-resolution chain (hash/override/hosttag/usertag) and `_hi_sanitize`     |
 | `tests/compat/git_prompt_test.sh`               | unit tests for `git_prompt.sh`'s status flags, ahead/behind, detached HEAD, and every in-progress state    |
+| `tests/compat/targets_test.sh`                  | unit tests for `targets.sh`, against fixture ssh configs and fake docker/podman/nomad/kubectl CLIs         |
+| `tests/compat/load_test.sh`                     | unit tests for `load.sh`'s rc grafting, marker stripping, and disposable-vs-permanent `$_HI_ROOT` cleanup  |
 | `tests/compat/shellcheck_test.sh`               | runs shellcheck over every `*.sh` file in the repo                                                         |
 | `tests/scripts/install_test.sh`                 | unit tests for `install.sh`'s marker-based rc rewriting, setting defaults, and config validation           |
 | `tests/scripts/uninstall_test.sh`               | unit tests for `uninstall.sh`'s marker stripping, incl. an install+uninstall round-trip                    |
@@ -152,13 +155,3 @@ Every username and hostname gets a color automatically, deterministically derive
 Heavily inspired by: [Profilarr](https://v2.dictionarry.dev/ai-transparency)
 
 This code originally started as entirely code written by [me](https://github.com/ivylikethevine), but I have used generative AI to write large parts of it. Regardless, all of the code in this repository is my _responsibility_. AI is a tool, not an owner of a project. I have personally understood, reviewed, and approved all of the AI generated code in this repository. _Mainline releases_ have the same level of accountability to me as any code I write and publish.
-
-###### The [MIT](https://mit-license.org/) License (MIT)
-
-Copyright © 2026 [Ivy Duggan](https://ivylikethevine.com)
-
-Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the “Software”), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.

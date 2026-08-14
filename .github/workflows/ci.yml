@@ -31,4 +31,19 @@ jobs:
       - name: Run fast test suites
         env:
           _HI_HOME: ${{ github.workspace }}/..
-        run: "${{ github.workspace }}/tests/test_runner.sh aliases alias_fallthrough shellcheck install uninstall check header shared git_prompt test_lib test_runner"
+        run: "${{ github.workspace }}/tests/test_runner.sh aliases alias_fallthrough shellcheck install uninstall check header shared git_prompt targets load test_lib test_runner"
+
+  # e2e tests, excluding podman/nomad/kube.
+  # they'd need extra tooling to cover code paths docker and ssh already reach
+  # (_say_hi_container is one function behind four command shapes).
+  e2e:
+    runs-on: ubuntu-latest
+    needs: test
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run end-to-end suites
+        env:
+          _HI_HOME: ${{ github.workspace }}/..
+        run: "${{ github.workspace }}/tests/test_runner.sh ssh ssh_disconnect docker"

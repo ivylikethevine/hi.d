@@ -57,10 +57,18 @@ alias hi_color_preview="[ -f $_HI_COLOR_PREVIEW ] && $_HI_COLOR_PREVIEW"
 alias hi_packages_preview="bash -c 'source \"$_HI_CHECK\" && full_check'"
 alias hi_test="[ -f $_HI_TEST_RUN ] && $_HI_TEST_RUN"
 
+# scripts/install.sh splices the "export _HI_DISABLE_*=1" lines it writes in
+# directly above this anchor, never at the end of the file: the local-only
+# gate below *reads* those settings, so anything appended after it would be
+# set too late to have any effect. Keep the anchor text in sync with
+# $_HI_ANCHOR in scripts/install.sh.
+# hi-settings-anchor
+
 # local-only disable logic. _HI_REMOTE_SESSION is exported by load.sh, the
 # chainload entry point every remote path goes through and the local
 # install's own shells never do, so it's what tells the two apart.
 export _HI_DISABLE_LOCAL
+export _HI_REMOTE_SESSION
 
 [ "$_HI_DISABLE_LOCAL" = 1 ] && [ "$_HI_REMOTE_SESSION" != 1 ] && {
   export _HI_DISABLE_HEADER=1

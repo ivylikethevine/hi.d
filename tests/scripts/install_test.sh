@@ -55,6 +55,37 @@ function test_config_shell_skips_empty_args() {
   [ "$(grep -cF "$_HI_MARKER" "$target")" -eq 1 ]
 }
 
+function test_config_shell_splices_above_the_anchor() {
+  local target="$_HI_WORKDIR/anchored" block_line gate_line
+  printf '%s\n' "export SOMETHING=1" "$_HI_ANCHOR" "[ \"\$SOMETHING\" = 1 ] && echo gate" >"$target"
+  config_shell anchored "$target" "export _HI_DISABLE_LOCAL=1"
+  block_line="$(grep -nF "$_HI_MARKER" "$target" | cut -d: -f1)"
+  gate_line="$(grep -nF "$_HI_ANCHOR" "$target" | cut -d: -f1)"
+  [ -n "$block_line" ] && [ "$block_line" -lt "$gate_line" ]
+}
+
+function test_config_shell_rewrites_in_place_above_the_anchor() {
+  local target="$_HI_WORKDIR/anchored-repair"
+  printf '%s\n' "$_HI_ANCHOR" "tail line" >"$target"
+  config_shell anchored "$target" "export _HI_DISABLE_LOCAL=1"
+  config_shell anchored "$target" "export _HI_DISABLE_HEADER=1"
+  [ "$(grep -cF "$_HI_MARKER" "$target")" -eq 1 ] || return 1
+  grep -qF "_HI_DISABLE_HEADER" "$target" || return 1
+  ! grep -qF "_HI_DISABLE_LOCAL" "$target" || return 1
+  [ "$(tail -1 "$target")" = "tail line" ]
+}
+
+function test_config_shell_appends_when_there_is_no_anchor() {
+  local target="$_HI_WORKDIR/unanchored"
+  printf '%s\n' "first line" >"$target"
+  config_shell unanchored "$target" "hi line"
+  [[ "$(tail -1 "$target")" == *"hi line"* ]]
+}
+
+function test_paths_sh_still_carries_the_anchor() {
+  grep -qF "$_HI_ANCHOR" "$_HI_ROOT/common/paths.sh"
+}
+
 function test_setting_enabled_default_true_when_absent() {
   local target="$_HI_WORKDIR/absent"
   : >"$target"
@@ -140,8 +171,6 @@ function test_check_one_config_skips_empty_file() {
   check_one_config bash "$target" bash bash -n
 }
 
-# ---- config_hi (skip path only - the sudo-affecting match is out of scope) --
-
 function test_config_hi_skips_when_already_linked() {
   local link="$_HI_WORKDIR/already-linked"
   ln -sfn "$_HI_LAUNCHER" "$link"
@@ -164,6 +193,10 @@ function run_install_tests() {
   _hi_check "Repairs a stale line" test_config_shell_repairs_stale_line
   _hi_check "Preserves unrelated content" test_config_shell_preserves_unrelated_content
   _hi_check "Skips empty args" test_config_shell_skips_empty_args
+  _hi_check "Splices the block above the anchor" test_config_shell_splices_above_the_anchor
+  _hi_check "Rewrites an anchored block in place" test_config_shell_rewrites_in_place_above_the_anchor
+  _hi_check "Appends when there's no anchor" test_config_shell_appends_when_there_is_no_anchor
+  _hi_check "common/paths.sh still carries the anchor" test_paths_sh_still_carries_the_anchor
 
   _hi_h2 "Testing: setting_enabled"
   _hi_check "Defaults to enabled when absent" test_setting_enabled_default_true_when_absent

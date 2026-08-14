@@ -128,7 +128,7 @@ function test_shipped_table_still_has_every_suite_name() {
   local name out
   out="$("$_HI_TEST_RUN" definitely-not-a-suite 2>&1)" || true
   for name in aliases alias_fallthrough shellcheck install uninstall check header shared git_prompt \
-    test_lib test_runner ssh ssh_disconnect docker podman nomad kube; do
+    targets load test_lib test_runner ssh ssh_disconnect docker podman nomad kube; do
     [[ "$out" == *"$name"* ]] || {
       _hi_cecho " | missing from the table: $name" "$RED"
       return 1

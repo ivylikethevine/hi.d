@@ -57,6 +57,27 @@ function _hi_run_case() {
   [ "$ok" -eq 1 ]
 }
 
+function _hi_run_interactive_case() {
+  local label="$1" image="$2" login_shell="$3" post="${4:-}" name ok=0
+
+  name="hi-sshtest-$label-$$"
+  _hi_h3 "Testing interactive session: $label ($login_shell)"
+
+  _hi_sshd_container "$name" "$image" -e "LOGIN_SHELL=$login_shell" || return 1
+  _hi_ssh_launch "$_HI_SSH_PORT"
+
+  if _hi_interactive_case "$label" "ssh path" "$_HI_MARKER" 90 "${_HI_SSH_LAUNCH_BARE[@]}"; then
+    ok=1
+    if [ -n "$post" ] && ! docker exec "$name" sh -c "$post" >/dev/null 2>&1; then
+      _hi_h3 " | [$label] -- post-check FAILED: $post" "$RED"
+      ok=0
+    fi
+  fi
+
+  docker rm -f "$name" >/dev/null 2>&1
+  [ "$ok" -eq 1 ]
+}
+
 function run_ssh_tests() {
   _hi_require_backend docker
 
@@ -100,6 +121,7 @@ EOF
   _HI_MARKER="HI_SSH_TEST_OK"
 
   _hi_pty_wrap 0 auto "no tty and no python3 to fake one - ssh -t may not get a real pty, results may be unreliable"
+  _hi_pty_force
 
   _hi_suite_begin
 
@@ -119,6 +141,18 @@ EOF
   if [ "$_HI_INSTALLED_OK" -eq 1 ]; then
     _hi_case _hi_run_case installed hi-sshtest-debian-installed /bin/bash "$(_hi_probe_cmd "$_HI_MARKER" installed)" \
       'test -f /home/hitest/hi.d/.installed_sentinel'
+    # the one case that catches load.sh's clean_all deleting the target's own
+    # permanent install: a command-shaped case can't, since $CMDARG means
+    # clean_all never runs at all. Also asserts the rc graft came back out.
+    _hi_case _hi_run_interactive_case installed-interactive hi-sshtest-debian-installed /bin/bash \
+      'test -f /home/hitest/hi.d/.installed_sentinel && test -x /home/hitest/hi.d/hi.sh && ! grep -q hi-config-start /home/hitest/.bashrc'
+  fi
+
+  if [ "$_HI_DEBIAN_OK" -eq 1 ]; then
+    # the mirror image: a tree hi *did* ship over has to be gone afterwards,
+    # so the guard above can't be satisfied by never cleaning up at all
+    _hi_case _hi_run_interactive_case copied-interactive "$_HI_SSHD_IMAGE" /bin/bash \
+      '! ls -d /tmp/*.hi.* >/dev/null 2>&1'
   fi
 
   docker image rm -f hi-sshtest-alpine hi-sshtest-alpine-zsh hi-sshtest-alpine-fish hi-sshtest-debian-installed >/dev/null 2>&1 || true

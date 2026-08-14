@@ -70,7 +70,9 @@ if [[ "${_HI_DISABLE_PERSONAL:-0}" != 1 ]]; then
   zstyle ':completion:*' verbose yes
   zstyle ':completion:*' use-cache on
   zstyle ':completion:*' rehash true
-  zstyle ':completion:*' cache-path "$XDG_CACHE_HOME/zsh/.zcompcache"
+  # XDG_CACHE_HOME is unset on most targets, which would leave this pointing at
+  # an unwritable /zsh/.zcompcache - fall back to the spec's own default
+  zstyle ':completion:*' cache-path "${XDG_CACHE_HOME:-$HOME/.cache}/zsh/.zcompcache"
   zstyle ':completion:*' squeeze-slashes true
   zstyle ':completion:*' complete-options true
   zstyle ':completion:*' group-name ''

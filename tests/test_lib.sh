@@ -163,6 +163,8 @@ function _hi_probe_cmd() {
   esac
 }
 
+_HI_PTY_SPAWN='import pty, sys; sys.exit(pty.spawn(sys.argv[1:]))'
+
 # Sets the global array _HI_PTY_WRAP to a python3-based pty-spawn prefix
 # whenever it's needed, empty otherwise. $1 is the fd to check for tty-ness,
 # $2 is "auto" (only wrap if fd $1 isn't a real tty) or "force" (always
@@ -174,11 +176,24 @@ function _hi_pty_wrap() {
   _HI_PTY_WRAP=()
   if [ "$mode" = force ] || [ ! -t "$fd" ]; then
     if command -v python3 >/dev/null 2>&1; then
-      _HI_PTY_WRAP=(python3 -c 'import pty, sys; sys.exit(pty.spawn(sys.argv[1:]))')
+      _HI_PTY_WRAP=(python3 -c "$_HI_PTY_SPAWN")
     else
       _hi_cecho " | $warning" "$YELLOW"
     fi
   fi
+}
+
+# The same prefix in its own array, always built, alongside whatever
+# _hi_pty_wrap decided. _hi_interactive_case needs one even when the suite is
+# running on a real terminal: it drives the session by *writing* to the
+# launcher's stdin, so that stdin is a pipe from us rather than the terminal,
+# and both `ssh -t` and `<backend> exec -it` want a tty there. Left empty when
+# python3 is missing, which is what makes those cases skip rather than fail.
+_HI_PTY_FORCED=()
+function _hi_pty_force() {
+  _HI_PTY_FORCED=()
+  command -v python3 >/dev/null 2>&1 && _HI_PTY_FORCED=(python3 -c "$_HI_PTY_SPAWN")
+  return 0
 }
 
 # The _hi_pty_wrap preamble every suite that backgrounds the launcher through
@@ -288,6 +303,61 @@ function _hi_exec_case() {
   return 1
 }
 
+# Like _hi_exec_case, but drives a real *interactive* session instead of a
+# one-off command - the only shape that reaches load.sh's load(). hi.sh's
+# $CMDARG replaces `load` outright in the bootloader (see _hi_bootloader), so a
+# command-shaped case never exercises the header, the rc grafting, the shell
+# handoff or clean_all; this one does. The session is driven by piping a
+# printf and an `exit` into it after a settle, and it asserts both the marker
+# (an interactive shell really came up and ran our line) and load()'s closing
+# line (its exit path ran, rather than the session dying early).
+#
+# _hi_interactive_case <label> <what> <marker> <timeout_s> <launcher...> -
+# where <launcher...> is the *bare* command, with no pty prefix of its own:
+# _HI_PTY_FORCED is prepended here (see _hi_pty_force, which the suite must
+# have called first).
+function _hi_interactive_case() {
+  local label="$1" what="$2" marker="$3" timeout_s="$4"
+  shift 4
+  local out_file="$_HI_WORKDIR/$label.interactive.out" exit_code t0 t1
+  # a pty echoes back everything we type, so the line we send must not itself
+  # contain what we grep for - the shell has to assemble it. printf's two
+  # arguments arrive space-separated on the echoed line and hyphen-joined only
+  # in the real output, in every shell load() might hand us.
+  local expected="$marker-INTERACTIVE"
+
+  if [ "${#_HI_PTY_FORCED[@]}" -eq 0 ]; then
+    _hi_cecho " | [$label] -- skipped: no python3 to drive an interactive pty" "$YELLOW"
+    return 0
+  fi
+
+  _hi_cecho " | Running (interactive): $*"
+  t0="$(_hi_now)"
+  # the leading sleep lets the session get all the way to its shell before the
+  # input lands; the trailing one keeps the pipe open long enough for load()'s
+  # closing lines to make it into the transcript
+  {
+    sleep "${_HI_INTERACTIVE_SETTLE:-4}"
+    printf "printf '%%s-%%s\\\\n' %s INTERACTIVE\nexit\n" "$marker"
+    sleep 2
+  } | "${_HI_PTY_FORCED[@]}" "$@" >"$out_file" 2>&1 &
+  function _hi_on_timeout() {
+    _hi_h3 " | [$label] -- TIMED OUT after ${timeout_s}s, killing" "$RED"
+    return 0
+  }
+  _hi_wait_pid "$!" "$timeout_s" _hi_on_timeout
+  exit_code="$_HI_WAIT_EXIT"
+  t1="$(_hi_now)"
+
+  if grep -qF "$expected" "$out_file" 2>/dev/null && grep -q "hi closing" "$out_file" 2>/dev/null; then
+    _hi_cecho " | [$label] -- $what OK ($(_hi_elapsed "$t0" "$t1")s)" "$GREEN"
+    return 0
+  fi
+  _hi_h3 " | [$label] -- FAILED (exit $exit_code, $(_hi_elapsed "$t0" "$t1")s)" "$RED"
+  sed 's/^/      /' "$out_file" 2>/dev/null
+  return 1
+}
+
 _HI_SSHD_IMAGE=hi-test-sshd
 
 _HI_SSHD_ENTRYPOINT_BODY="$(
@@ -386,9 +456,12 @@ function _hi_sshd_container() {
 # above set up. Left in the array $_HI_SSH_LAUNCH rather than run here, since
 # the callers redirect and background it differently - append the remote
 # command and go. Call it *after* _hi_pty_wrap, whose result it captures.
+# $_HI_SSH_LAUNCH_BARE is the same command without that prefix, for
+# _hi_interactive_case, which brings its own (see _hi_pty_force).
 function _hi_ssh_launch() {
-  _HI_SSH_LAUNCH=("${_HI_PTY_WRAP[@]}" "$_HI_LAUNCHER" -p "$1" -i "$_HI_WORKDIR/id"
+  _HI_SSH_LAUNCH_BARE=("$_HI_LAUNCHER" -p "$1" -i "$_HI_WORKDIR/id"
     "${_HI_SSH_OPTS[@]}" -o ConnectTimeout=5 hitest@127.0.0.1)
+  _HI_SSH_LAUNCH=("${_HI_PTY_WRAP[@]}" "${_HI_SSH_LAUNCH_BARE[@]}")
 }
 
 # Boots throwaway containers - one per shell environment - and drives hi.sh's
@@ -402,7 +475,7 @@ function _hi_ssh_launch() {
 # if $backend isn't installed/running. Needs network access the first time it
 # runs, to pull/build the test images.
 function _hi_container_backend_test() {
-  local backend="$1" marker
+  local backend="$1" marker _HI_CONTAINER=""
 
   _hi_require_backend "$backend"
   _HI_BACKEND="$backend"
@@ -423,36 +496,61 @@ function _hi_container_backend_test() {
   marker="HI_$(printf '%s' "$backend" | tr '[:lower:]' '[:upper:]')_TEST_OK"
 
   _hi_pty_stdin auto "no tty and no python3 to fake one - $backend exec -it will fail outright, results may be unreliable"
+  _hi_pty_force
 
   _hi_suite_begin
 
   function _hi_container_running() { [ "$("$backend" container inspect -f '{{.State.Running}}' "$1" 2>/dev/null)" = true ]; }
 
-  function _hi_run_case() {
-    local label="$1" image="$2" cmd="$3" timeout_s="${4:-30}"
-    local name ok=0
+  function _hi_start_case_container() {
+    local label="$1" image="$2"
 
-    name="hi-${backend}test-$label-$$"
+    _HI_CONTAINER="hi-${backend}test-$label-$$"
     _hi_h3 "Testing shell: $label"
 
-    if ! "$backend" run -d --name "$name" "$image" tail -f /dev/null >/dev/null 2>"$_HI_WORKDIR/$label.run.log"; then
+    if ! "$backend" run -d --name "$_HI_CONTAINER" "$image" tail -f /dev/null \
+      >/dev/null 2>"$_HI_WORKDIR/$label.run.log"; then
       _hi_cecho " | Failed to start container (image: $image)" "$RED"
       return 1
     fi
-    _hi_track_container "$name"
-    _hi_cecho " | Container: $name (image: $image)"
+    _hi_track_container "$_HI_CONTAINER"
+    _hi_cecho " | Container: $_HI_CONTAINER (image: $image)"
 
-    if ! _hi_poll_bool 40 0.25 _hi_container_running "$name"; then
+    if ! _hi_poll_bool 40 0.25 _hi_container_running "$_HI_CONTAINER"; then
       _hi_cecho " | Container never reported running" "$RED"
       return 1
     fi
+  }
 
-    _hi_exec_case "$label" "$backend path" "$marker" "$timeout_s" "$name" "$cmd" && ok=1
-    "$backend" rm -f "$name" >/dev/null 2>&1
+  function _hi_run_case() {
+    local label="$1" image="$2" cmd="$3" timeout_s="${4:-30}"
+    local ok=0
+
+    _hi_start_case_container "$label" "$image" || return 1
+    _hi_exec_case "$label" "$backend path" "$marker" "$timeout_s" "$_HI_CONTAINER" "$cmd" && ok=1
+    "$backend" rm -f "$_HI_CONTAINER" >/dev/null 2>&1
+    [ "$ok" -eq 1 ]
+  }
+
+  function _hi_run_interactive_case() {
+    local label="$1" image="$2" timeout_s="${3:-60}"
+    local ok=0
+
+    _hi_start_case_container "$label" "$image" || return 1
+    if _hi_interactive_case "$label" "$backend path (interactive)" "$marker" \
+      "$timeout_s" "$_HI_LAUNCHER" "$_HI_CONTAINER"; then
+      ok=1
+      if "$backend" exec "$_HI_CONTAINER" sh -c 'ls -d /tmp/*.hi.log.* >/dev/null 2>&1'; then
+        _hi_cecho " | [$label] -- FAILED: hi.d's copy was left behind in the container" "$RED"
+        ok=0
+      fi
+    fi
+    "$backend" rm -f "$_HI_CONTAINER" >/dev/null 2>&1
     [ "$ok" -eq 1 ]
   }
 
   _hi_case _hi_run_case bash debian:bookworm-slim "$(_hi_probe_cmd "$marker" bash)"
+  _hi_case _hi_run_interactive_case bash-interactive debian:bookworm-slim
   local spec
   for spec in zsh:fallback fish:fallback_fish; do
     shell="${spec%%:*}"

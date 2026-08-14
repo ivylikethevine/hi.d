@@ -6,12 +6,6 @@ set -euo pipefail # must be disabled after our code (this file is part of the in
 # shellcheck source=./paths.sh
 source "${_HI_HOME:-$HOME}/hi.d/common/paths.sh"
 
-# terminal width the header/banner and _hi_h1 pad out to; 80 when unset.
-# scripts/install.sh's config_max_width writes this line for you, marker-tagged
-# and appended to this file; uncommenting it by hand is the same thing, and is
-# the shape its grep reads the current value back out of.
-# export _HI_MAX_WIDTH=120
-
 # color names match fish's set_color vocabulary; greys are skipped, since fish has none.
 _HI_COLOR_NAMES=(red green yellow blue magenta cyan brred brgreen bryellow brblue brmagenta brcyan)
 
@@ -61,10 +55,7 @@ function _hi_elapsed() {
   awk -v a="$1" -v b="$2" 'BEGIN { printf "%.3f", b - a }'
 }
 
-# du -sh on $_HI_ROOT with the size column pulled out; "$@" are any extra du
-# args (e.g. hi.sh's --exclude list, applied before the copy happens).
 # --apparent-size is a GNU-only flag, probed lazily (and cached) on first use
-# so plain local shell startups that never call this pay nothing for it.
 function _hi_du_size() {
   if [ -z "${_HI_LINUX_FLAGS+x}" ]; then
     _HI_LINUX_FLAGS=""
@@ -129,9 +120,8 @@ function _hi_hash_color() {
   printf '%s\n' "${_HI_COLOR_NAMES[sum % ${#_HI_COLOR_NAMES[@]}]}"
 }
 
-# the user/host of the machine hi.d is permanently installed on.
-# hi.sh ships these ahead as
-# _HI_LOCAL_USER/_HI_LOCAL_HOSTNAME (see hi.sh's _hi_remote_preamble)
+# the user/host of the machine hi.d is permanently installed on. hi.sh ships
+# these ahead as _HI_LOCAL_USER/_HI_LOCAL_HOSTNAME (see hi.sh's _hi_remote_preamble)
 function _hi_local_username() { printf '%s\n' "${_HI_LOCAL_USER:-$(whoami)}"; }
 function _hi_local_hostname() { printf '%s\n' "${_HI_LOCAL_HOSTNAME:-$(_hi_hostname)}"; }
 
@@ -191,10 +181,6 @@ function _hi_ssh_tag_color() {
   return 1
 }
 
-# type is "hostname" or "username"; tag is only meaningful for "username" -
-# it's the hosttag of whatever host the user is currently on (see
-# _HI_TARGET_TAG below), letting a "usertag,<tag>,<color>" entry color every
-# user on a tagged host, unless that user also has its own exact override
 function _hi_resolve_color() {
   local type="$1" name="$2" tag="${3:-}"
   _hi_override_color "$type" "$name" && return

@@ -11,18 +11,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # dash/bash ship on ubuntu-latest already; zsh/fish don't - install
-      # them so alias_test.sh/alias_fallthrough_test.sh get full shell
-      # coverage instead of silently skipping (both tests skip whatever
-      # shell isn't installed, rather than failing on it)
       - name: Install zsh and fish
         run: sudo apt-get update && sudo apt-get install -y zsh fish
 
-      # ubuntu-latest's apt package lags upstream badly (0.9.x, vs. the
-      # 0.11.0 this repo is actually kept clean against) and older releases
-      # flag/miss things the current one doesn't - install the real upstream
-      # binary instead of trusting whatever apt happens to carry, so CI
-      # checks the same thing local `shellcheck -x -S style` runs do
+      # ubuntu-latest's apt package lags upstream badly so we install
+      # the latest upstream binary
       - name: Install shellcheck
         env:
           SHELLCHECK_VERSION: 0.11.0
@@ -35,10 +28,6 @@ jobs:
           rm -rf /tmp/shellcheck.tar.xz "/tmp/shellcheck-v${SHELLCHECK_VERSION}"
           shellcheck --version
 
-      # actions/checkout puts the repo at $GITHUB_WORKSPACE, which is
-      # .../work/hi.d/hi.d since this repo is named hi.d - so hi.d's own
-      # paths.sh ($_HI_ROOT="$_HI_HOME/hi.d") is satisfied by pointing
-      # _HI_HOME at its parent, no copying needed
       - name: Run fast test suites
         env:
           _HI_HOME: ${{ github.workspace }}/..

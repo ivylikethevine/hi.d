@@ -2,8 +2,7 @@
 # Reverses scripts/install.sh: strips hi's marker-tagged lines from the local
 # shell rc files and removes the /usr/bin/hi symlink if it points at this
 # hi.d. Leaves the hi.d checkout itself in place - delete that yourself
-# (rm -rf it) once you're done with it, since that's a bigger call than
-# "undo what install.sh wired into the system".
+# (rm -rf it) once you're done with it.
 set -euo pipefail
 
 _HI_DIR_ARG=""

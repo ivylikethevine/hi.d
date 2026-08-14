@@ -23,6 +23,8 @@ if ! declare -p _HI_TESTS >/dev/null 2>&1; then
     "header:compat/header_test.sh"
     "shared:compat/shared_test.sh"
     "git_prompt:compat/git_prompt_test.sh"
+    "targets:compat/targets_test.sh"
+    "load:compat/load_test.sh"
     "test_lib:harness/test_lib_test.sh"
     "test_runner:harness/runner_test.sh"
     "ssh:targets/ssh_test.sh"

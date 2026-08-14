@@ -14,7 +14,7 @@ command -v openssl >/dev/null 2>&1 || {
 _HI_EXCLUDE=(--exclude README.md --exclude .git --exclude .gitignore --exclude scripts
   --exclude hi.sh --exclude hi.bashrc --exclude .zed --exclude .vscode --exclude .shellcheckrc
   --exclude '*.example' --exclude tests --exclude .github --exclude .claude
-  --exclude CLAUDE.md --exclude .devcontainer --exclude .markdownlint.yaml)
+  --exclude CLAUDE.md --exclude .devcontainer --exclude .markdownlint.yaml --exclude LICENSE)
 
 _HI_ARMOR="openssl enc -base64"
 _HI_UNARMOR="tr -s ' ' '\n' | openssl enc -base64 -d"
@@ -147,7 +147,9 @@ function _say_hi() {
 
   if [ -n "$remote_root" ]; then
     # scripts/install.sh has already run on the target - load that copy in
-    # place instead of shipping a fresh one over, and never delete it
+    # place instead of shipping a fresh one over, and never delete it:
+    # deliberately no _HI_CLEANUP here, which is exactly what tells load.sh's
+    # clean_all to leave $_HI_ROOT alone when the session ends
     tmp_root="${remote_root%/hi.d}"
     middle="$(cat <<REMOTE
       export _HI_HOME="$tmp_root"
@@ -182,7 +184,9 @@ $middle
 $(_hi_remote_suffix)"
 
   b64="$(printf '%s' "$script" | openssl enc -base64 -A)"
-  boot_tmp="$(mktemp -t hi.boot.XXXXXX)"
+  # -u: a name only, never a local file - the directory it names is created on
+  # the *target* by the mkdir below (which fails loudly if the name is taken)
+  boot_tmp="$(mktemp -u -t hi.boot.XXXXXX)"
 
   # shellcheck disable=SC2029
   ssh -t "${ctl_opts[@]}" "${SSHARGS[@]}" "$DOMAIN" \
@@ -191,7 +195,7 @@ $(_hi_remote_suffix)"
     "Write-Host 'hi from PowerShell - no bash or sh on this host, hi.d colors/aliases are unavailable' -ForegroundColor Yellow" || ec=$?
 
   ssh -O exit "${ctl_opts[@]}" "$DOMAIN" >/dev/null 2>&1 || true
-  rm -rf "$ctl_path" "$boot_tmp" 2>/dev/null || true
+  rm -rf "$ctl_path" 2>/dev/null || true
   return "$ec"
 }
 
@@ -287,7 +291,9 @@ function _say_hi_container() {
   "${cp[@]}" sh -c "cat > '$root/hi.d/hi.sh' && chmod +x '$root/hi.d/hi.sh'" <"$0"
   _hi_bootloader | "${cp[@]}" sh -c "cat > '$root/hi.d/hi.bashrc'"
 
-  "${attach[@]}" sh -c "export _HI_HOME='$root' _HI_ROOT='$root/hi.d' _HI_COPY_TIME='$(_hi_copy_time "$copy_start" "$_HI_SHELL_START" "$shell_end")' _HI_CONNECT_PREFIX='$prefix'; exec bash --rcfile '$root/hi.d/hi.bashrc'"
+  # _HI_CLEANUP marks this tree as disposable for load.sh's clean_all - the
+  # `rm -rf "$root"` below is the client-side belt to its braces
+  "${attach[@]}" sh -c "export _HI_HOME='$root' _HI_ROOT='$root/hi.d' _HI_CLEANUP='$root' _HI_COPY_TIME='$(_hi_copy_time "$copy_start" "$_HI_SHELL_START" "$shell_end")' _HI_CONNECT_PREFIX='$prefix'; exec bash --rcfile '$root/hi.d/hi.bashrc'"
   exit_code=$?
 
   "${probe[@]}" rm -rf "$root" >/dev/null 2>&1

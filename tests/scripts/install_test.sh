@@ -1,19 +1,5 @@
 #!/bin/bash
-# Unit tests for scripts/install.sh's reusable logic: the marker-based
-# rc-file rewriting (config_shell, shared with scripts/uninstall.sh's
-# strip_marker - see uninstall_test.sh), its idempotency/repair behavior,
-# setting_enabled's "is this currently on" detection, tmpdir_line,
-# ask_setting's non-interactive defaulting, config_hi's already-linked skip
-# path, and check_one_config's syntax validation. All run against scratch
-# files under a temp dir - nothing real (rc files, /usr/bin/hi) is ever
-# touched.
-#
-# install.sh runs its actual install unconditionally once sourced, past its
-# function definitions - reaching config_hi's real `sudo ln` branch from a
-# test would be an unwanted system change. The
-# `[[ "${BASH_SOURCE[0]}" == "$0" ]] || return 0` guard right above that flow
-# in install.sh is what makes sourcing it here safe: it only runs when
-# install.sh is executed directly, never when sourced.
+# Unit tests for scripts/install.sh's reusable logic.
 #
 # Nearly every function below is invoked indirectly - by name, through
 # _hi_case's "$@" - which SC2329 can't see.
@@ -29,9 +15,6 @@ set -- # install.sh reads "$@" for its own args; make sure it sees none
 # shellcheck source=../../scripts/install.sh
 source "$_HI_INSTALL"
 
-_hi_workdir installtest
-
-# ---- config_shell -----------------------------------------------------
 
 function test_config_shell_fresh_insert() {
   local target="$_HI_WORKDIR/fresh"
@@ -72,8 +55,6 @@ function test_config_shell_skips_empty_args() {
   [ "$(grep -cF "$_HI_MARKER" "$target")" -eq 1 ]
 }
 
-# ---- setting_enabled ----------------------------------------------------
-
 function test_setting_enabled_default_true_when_absent() {
   local target="$_HI_WORKDIR/absent"
   : >"$target"
@@ -91,8 +72,6 @@ function test_setting_enabled_respects_custom_off_value() {
   printf 'export _HI_HEADER_TIMESTAMP=0\n' >"$target"
   ! setting_enabled _HI_HEADER_TIMESTAMP "$target" 0
 }
-
-# ---- tmpdir_line ----------------------------------------------------------
 
 function test_tmpdir_line_empty_when_home_matches() {
   local out
@@ -112,8 +91,6 @@ function test_tmpdir_line_fish_variant() {
   [ "$out" = 'set -gx _HI_HOME "/opt/elsewhere"' ]
 }
 
-# ---- ask_setting (non-interactive defaulting) ------------------------------
-
 function test_ask_setting_default_keeps_enabled() {
   local target="$_HI_WORKDIR/ask_enabled"
   : >"$target"
@@ -126,8 +103,6 @@ function test_ask_setting_default_keeps_disabled() {
   ! ask_setting _HI_DISABLE_FOO "" "$target" 1 "" </dev/null
 }
 
-# ---- _hi_visible_len --------------------------------------------------
-
 function test_visible_len_plain_text() {
   [ "$(_hi_visible_len "hello")" -eq 5 ]
 }
@@ -137,8 +112,6 @@ function test_visible_len_strips_color_codes() {
   colored="$(_hi_rendered "${GREEN}hi${NC}")"
   [ "$(_hi_visible_len "$colored")" -eq 2 ]
 }
-
-# ---- check_one_config -------------------------------------------------
 
 function test_check_one_config_valid_bash() {
   command -v bash >/dev/null 2>&1 || return 0
@@ -179,6 +152,8 @@ function test_config_hi_skips_when_already_linked() {
 }
 
 function run_install_tests() {
+  _hi_workdir installtest
+
   _hi_h1 "Testing scripts/install.sh's reusable logic"
 
   _hi_suite_begin

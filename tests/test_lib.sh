@@ -1,15 +1,5 @@
 #!/bin/bash
-# Shared scaffolding for every suite under tests/ - the bits that were
-# previously copy-pasted near-identically across the files in compat/,
-# scripts/ and targets/: the pass/fail assert and its counters, the scratch
-# workdir and its exit trap, the "backend isn't installed, skip cleanly"
-# preamble, the marker probe commands the e2e suites run on the target, the
-# throwaway sshd fixtures ssh_test.sh and ssh_disconnect_test.sh both need,
-# faking a pty when one's needed but our own stdin isn't one, and polling some
-# backend (docker/kubectl/nomad/ssh) until a condition comes true instead of
-# racing its own async startup. Sources common/bootstrap.sh itself (below), so
-# one `source "$_HI_TEST_LIB"` line gets a suite hi's paths and colors along
-# with the scaffolding - that being why paths.sh still exports _HI_TEST_LIB.
+# Shared scaffolding for every suite under tests
 #
 # Several functions here are only ever invoked indirectly - by name, through
 # _hi_case's/_hi_poll_bool's "$@", or as a trap hook - which SC2329 can't see.
@@ -18,8 +8,6 @@ set -euo pipefail
 
 # shellcheck source=../common/bootstrap.sh
 source "${_HI_HOME:-$HOME}/hi.d/common/bootstrap.sh"
-
-# ---- suite scaffolding ----------------------------------------------------
 
 # Scratch dir every suite works in, plus the containers a suite has started
 # that its exit trap has to tear down. Both are set up by _hi_workdir and
@@ -96,15 +84,6 @@ function _hi_check() {
   _hi_case _hi_assert "$@"
 }
 
-# common/shared.sh's color constants hold *literal* '\e[...m' text, turned
-# into real escape bytes only by a '%b' pass - which _hi_cecho and the prompt
-# builders do at print time. So a test comparing captured output against
-# "${RED}x${NC}" has to make the same pass first, or it compares source text
-# against rendered bytes and never matches.
-#
-# _hi_rendered <text>                 - that pass, for equality/length checks
-# _hi_has_rendered <haystack> <text>  - the same, then a substring test, which
-#                                       is what nearly every caller wants
 function _hi_rendered() {
   printf '%b' "$1"
 }
@@ -120,12 +99,6 @@ function _hi_suite_begin() {
   _HI_TOTAL=0
 }
 
-# Closing banner + exit status for a suite: green when nothing failed, red
-# with the failed/total count otherwise, exiting with the number of failed
-# cases (which is what test_runner.sh reports per suite). $1 is the subject
-# for the default wording ("check.sh" -> "All check.sh checks passed (N
-# cases)"); $2/$3 override the pass/fail lines outright, for suites whose
-# banners aren't about "checks" (shells, scenarios, connection paths).
 function _hi_suite_end() {
   local subject="$1"
   if [ "$_HI_FAILED" -eq 0 ]; then
@@ -136,26 +109,18 @@ function _hi_suite_end() {
   exit "$_HI_FAILED"
 }
 
-# Skips the whole suite (exit 0, not a failure - see test_runner.sh's summary)
-# unless $1 is on PATH. $2 overrides the default "not installed" reason, for
-# the backends whose absence needs explaining (nomad's dev agent needing
-# docker, kind needing it to run cluster nodes, ...).
 function _hi_require() {
   command -v "$1" >/dev/null 2>&1 && return 0
   _hi_cecho "$1 ${2:-not installed}, skipping" "$YELLOW"
   exit 0
 }
 
-# _hi_require for a container backend, which also has to be reachable, not
-# just installed - `docker info` is what actually proves the daemon answers.
 function _hi_require_backend() {
   _hi_require "$@"
   "$1" info >/dev/null 2>&1 && return 0
   _hi_cecho "$1 not reachable, skipping" "$YELLOW"
   exit 0
 }
-
-# ---- target-side probe commands -------------------------------------------
 
 # The command each e2e suite runs *on the target* to prove hi actually landed
 # there; it echoes $1 (the suite's marker) only if the assertion holds, and
@@ -198,8 +163,6 @@ function _hi_probe_cmd() {
   esac
 }
 
-# ---- polling / process helpers --------------------------------------------
-
 # Sets the global array _HI_PTY_WRAP to a python3-based pty-spawn prefix
 # whenever it's needed, empty otherwise. $1 is the fd to check for tty-ness,
 # $2 is "auto" (only wrap if fd $1 isn't a real tty) or "force" (always
@@ -241,29 +204,11 @@ function _hi_pty_stdin() {
   _hi_pty_wrap 3 "$1" "$2"
 }
 
-# The wall-clock ceiling a "<tries> times, <interval> apart" budget is meant
-# to describe, in whole seconds (minimum 1). Counting tries alone doesn't
-# bound elapsed time: the probe's own cost is added to every interval, so
-# `40 0.25` over a probe that can take 2s - _hi_ssh_reachable's
-# ConnectTimeout=2, say - reads as 10s and can burn 90. Both polls below apply
-# this alongside the try count, whichever runs out first, so the number a call
-# site states is also its real worst case. Computed once per poll, not per
-# iteration, so the awk is a fork per wait rather than per attempt.
 function _hi_poll_budget() {
   awk -v t="$1" -v i="$2" \
     'BEGIN { b = t * i; b = (b == int(b) ? b : int(b) + 1); printf "%d", (b < 1 ? 1 : b) }'
 }
 
-# Polls "$@" (a command or function) up to <tries> times, <interval> seconds
-# apart and no longer than their product, until it exits 0. Every attempt's
-# stdout/stderr is discarded - this is for conditions the caller only needs a
-# yes/no for (container running, ssh reachable, ...). Returns 1 if it never
-# succeeded.
-#
-# An optional leading `-a <fn>` gives up early when <fn> starts failing: for
-# waits on something that can die outright rather than just stay false (a
-# backgrounded agent process, say), there's no point burning the full timeout
-# once it's gone.
 function _hi_poll_bool() {
   local abort=""
   if [ "$1" = -a ]; then
@@ -284,10 +229,6 @@ function _hi_poll_bool() {
   return 1
 }
 
-# _hi_poll_bool's sibling for conditions where the caller also needs the value
-# that showed up (e.g. an allocation ID), not just a yes/no: polls until "$@"
-# prints something on stdout, under the same try-count and wall-clock bounds.
-# Prints that value and returns 0 on success; returns 1 if nothing ever showed.
 function _hi_poll_value() {
   local tries="$1" interval="$2" out i deadline
   shift 2
@@ -304,15 +245,6 @@ function _hi_poll_value() {
   return 1
 }
 
-# Waits up to <timeout_s> for backgrounded <pid> to finish (polled in 0.25s
-# steps), killing it and setting _HI_WAIT_EXIT=124 if it never does -
-# otherwise _HI_WAIT_EXIT is its real exit code. Shared by every e2e test's
-# "launcher hung" guard (docker/podman/nomad/kube_test.sh), so a hung fallback
-# shell can't wedge the whole suite. On timeout, "$@" (if given, e.g.
-# nomad_test.sh's alloc-status dump) runs before the kill, while the process
-# is still alive to inspect; relies on bash's dynamic scoping to see the
-# caller's locals ($label, $alloc, ...), same as _hi_container_running/
-# _hi_pod_running already do when passed to _hi_poll_bool by name.
 function _hi_wait_pid() {
   local pid="$1" timeout_s="$2" i
   shift 2
@@ -331,26 +263,6 @@ function _hi_wait_pid() {
   fi
 }
 
-# The half of an e2e case that has nothing to do with the backend: run
-# $_HI_LAUNCHER against an already-created, already-ready target, then decide
-# the case on whether the suite's marker came back.
-#
-#   _hi_exec_case <label> <what> <marker> <timeout_s> <target> <cmd> [hook]
-#
-# <what> names the path under test for the success line ("docker path", "kube
-# path"); <hook>, if given, is a function run on timeout while the launcher is
-# still alive to be inspected (nomad_test.sh dumps `nomad alloc status` there,
-# so a hang is diagnosable rather than a dead end).
-#
-# The launcher is backgrounded so a hung fallback - a shell that never honors
-# the trailing `exit` - can't wedge the whole suite, and takes its stdin from
-# fd 3, which _hi_pty_stdin must have set up first (see the long version
-# there). The elapsed time reported is the launcher's own, not the whole case:
-# creating and waiting on the target is the caller's, and it reports that
-# separately.
-#
-# Returns 0 iff the marker showed up; on failure the target's output is dumped
-# indented, since that's the only record of what the far side actually did.
 function _hi_exec_case() {
   local label="$1" what="$2" marker="$3" timeout_s="$4" target="$5" cmd="$6" hook="${7:-}"
   local out_file="$_HI_WORKDIR/$label.out" exit_code t0 t1
@@ -376,26 +288,8 @@ function _hi_exec_case() {
   return 1
 }
 
-# ---- throwaway sshd fixtures ----------------------------------------------
-
-# The one debian sshd image ssh_test.sh and ssh_disconnect_test.sh share.
-# Deliberately *not* removed on the way out of either suite: it's a
-# multi-minute apt-based build, it's tagged deterministically, and having the
-# second suite reuse what the first built is the whole point. The
-# suite-specific images layered on or beside it (the alpine variants, the
-# pre-installed one) are still cleaned up by their own suites.
 _HI_SSHD_IMAGE=hi-test-sshd
 
-# Everything both sshd entrypoints do past the shebang/login-shell line -
-# useradd/adduser -D both lock the account, and sshd refuses locked accounts
-# outright even for pubkey auth, so both need the chpasswd unlock. Kept as a
-# string rather than a file so the alpine images in ssh_test.sh can prepend
-# their own `#!/bin/sh` header to the same body.
-#
-# $SSHD_OPTS is appended unquoted so a suite can pass extra sshd flags at
-# `docker run` time instead of baking a second near-identical image:
-# ssh_disconnect_test.sh needs a short ClientAliveInterval so the server gives
-# up on a gone-silent client in seconds rather than the OS-default TCP timeout.
 _HI_SSHD_ENTRYPOINT_BODY="$(
   cat <<'EOF'
 echo "hitest:*" | chpasswd -e
@@ -409,15 +303,6 @@ exec /usr/sbin/sshd -D -e -o PasswordAuthentication=no -o PermitRootLogin=no -o 
 EOF
 )"
 
-# One image build, in the shape every build site in the e2e suites wants:
-#
-#   _hi_build_image <label> <tag> <what> <build-args...>
-#
-# stderr lands in $_HI_WORKDIR/<label>.log and the yellow skip warning points
-# at it, so a failed build says where to look instead of scrolling past.
-# <what> completes "... failed to build, skipping <what>". Returns non-zero on
-# failure, which is what callers flag the affected cases off. Builds go
-# through $_HI_BACKEND (docker unless the suite drives something else).
 function _hi_build_image() {
   local label="$1" tag="$2" what="$3"
   shift 3
@@ -427,8 +312,6 @@ function _hi_build_image() {
   return 1
 }
 
-# Client-side ssh flags every connection in both suites needs: never touch the
-# user's real known_hosts, never fall back to their real keys, stay quiet.
 declare -a _HI_SSH_OPTS=(
   -o StrictHostKeyChecking=no
   -o UserKnownHostsFile=/dev/null
@@ -436,19 +319,12 @@ declare -a _HI_SSH_OPTS=(
   -o IdentitiesOnly=yes
 )
 
-# Throwaway ed25519 keypair at $_HI_WORKDIR/id, with the public half left in
-# $_HI_PUBKEY for the container entrypoint to install as authorized_keys.
 function _hi_ssh_keypair() {
   _hi_h2 "Generating throwaway ed25519 keypair at $_HI_WORKDIR/id"
   ssh-keygen -t ed25519 -N '' -q -f "$_HI_WORKDIR/id"
   _HI_PUBKEY="$(cat "$_HI_WORKDIR/id.pub")"
 }
 
-# Builds $_HI_SSHD_IMAGE. It carries the superset of shells both suites want
-# (bash's presence, not the login shell, is what _say_hi branches on, so one
-# image covers every with-bash login shell) and picks its login shell up from
-# $LOGIN_SHELL at run time. Returns non-zero if the build failed, having
-# already reported it; $1 says what the caller is about to skip as a result.
 function _hi_sshd_image() {
   local ctx="$_HI_WORKDIR/sshd"
   mkdir -p "$ctx"
@@ -474,9 +350,6 @@ EOF
   _hi_build_image sshd "$_HI_SSHD_IMAGE" "$1" "$ctx"
 }
 
-# Polls until the container's sshd on 127.0.0.1:$1 actually completes a
-# handshake, so the real test isn't racing the container's boot. Uses the
-# keypair _hi_ssh_keypair left in $_HI_WORKDIR.
 function _hi_ssh_reachable() {
   ssh -i "$_HI_WORKDIR/id" -p "$1" -o BatchMode=yes "${_HI_SSH_OPTS[@]}" \
     -o ConnectTimeout=2 hitest@127.0.0.1 true
@@ -518,19 +391,16 @@ function _hi_ssh_launch() {
     "${_HI_SSH_OPTS[@]}" -o ConnectTimeout=5 hitest@127.0.0.1)
 }
 
-# ---- the docker/podman end-to-end suite -----------------------------------
-
 # Boots throwaway containers - one per shell environment - and drives hi.sh's
 # real _say_hi_container against each of them over `<backend> exec`. Podman's
-# CLI is a full drop-in for docker's here (inspect/exec/-i/-it all take
-# identical flags - see hi.sh's own comment on _hi_is_podman_container), so
+# CLI is a full drop-in for docker's here, so
 # docker_test.sh and podman_test.sh are both just `_hi_container_backend_test
 # docker|podman` - this one function proves both branches of
 # _say_hi_container: the bash-present main path (tar copy + `bash --rcfile`),
 # and every arm of the bash-less fallback's `for s in zsh fish sh` probe.
 # Everything is ephemeral and nothing touches host ssh config. Skips cleanly
 # if $backend isn't installed/running. Needs network access the first time it
-# runs, to pull/build the test images (cached by $backend afterwards).
+# runs, to pull/build the test images.
 function _hi_container_backend_test() {
   local backend="$1" marker
 
@@ -539,12 +409,6 @@ function _hi_container_backend_test() {
   _hi_workdir "${backend}test"
   _hi_h1 "Testing hi's $backend path across container shell environments"
 
-  # --- build the test images ----------------------------------------------
-  # debian ships bash out of the box, so it alone exercises _say_hi_container's
-  # main branch. The other three are bash-less images, each with exactly one of
-  # zsh/fish/sh on PATH, so each exercises exactly one arm of the fallback's
-  # `for s in zsh fish sh` probe - a plain alpine image already has nothing but
-  # sh, so it needs no image build of its own.
   _hi_h2 "Building test images"
   local shell
   local -A shell_ok=()
@@ -556,19 +420,14 @@ function _hi_container_backend_test() {
       shell_ok[$shell]=0
   done
 
-  # --- the actual per-shell test -------------------------------------------
   marker="HI_$(printf '%s' "$backend" | tr '[:lower:]' '[:upper:]')_TEST_OK"
 
   _hi_pty_stdin auto "no tty and no python3 to fake one - $backend exec -it will fail outright, results may be unreliable"
 
   _hi_suite_begin
 
-  # polls until the container is actually running, so the real test isn't
-  # racing the container's start
   function _hi_container_running() { [ "$("$backend" container inspect -f '{{.State.Running}}' "$1" 2>/dev/null)" = true ]; }
 
-  # everything specific to this backend: create the container, wait for it,
-  # hand it to _hi_exec_case, tear it down again
   function _hi_run_case() {
     local label="$1" image="$2" cmd="$3" timeout_s="${4:-30}"
     local name ok=0
@@ -593,10 +452,6 @@ function _hi_container_backend_test() {
     [ "$ok" -eq 1 ]
   }
 
-  # label:probe shape, one per bash-less arm of the fallback's `for s in zsh
-  # fish sh` probe; guarded with `if`, not `&&`, since under `set -e` a failing
-  # `[ ... ] && ...` list is itself a failing command and would abandon the
-  # cases after it
   _hi_case _hi_run_case bash debian:bookworm-slim "$(_hi_probe_cmd "$marker" bash)"
   local spec
   for spec in zsh:fallback fish:fallback_fish; do

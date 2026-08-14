@@ -1,17 +1,5 @@
 #!/bin/bash
-# Unit tests for scripts/uninstall.sh's reusable logic: strip_marker (the
-# exact inverse of install.sh's config_shell - both are exercised together
-# here to prove they round-trip) and unlink_hi's detection of whether
-# /usr/bin/hi (or a scratch stand-in for it, in these tests) actually points
-# at this hi.d before touching it. Everything runs against scratch files -
-# the real /usr/bin/hi is never read or written, and the one code path that
-# would call `sudo rm` is deliberately never exercised here (it's a one-line
-# passthrough with nothing to unit test; what's actually error-prone is the
-# skip/detection logic around it, which these do cover - see
-# install_test.sh's matching config_hi coverage for the same reasoning).
-#
-# uninstall.sh's own BASH_SOURCE guard (see its comment right above its main
-# flow) is what makes sourcing it here safe.
+# Unit tests for scripts/uninstall.sh's reusable logic.
 #
 # Nearly every function below is invoked indirectly - by name, through
 # _hi_case's "$@" - which SC2329 can't see.
@@ -28,10 +16,6 @@ set -- # install.sh/uninstall.sh read "$@" for their own args; give them none
 source "$_HI_INSTALL" # for config_shell, used to build the round-trip fixture below
 # shellcheck source=../../scripts/uninstall.sh
 source "$_HI_UNINSTALL"
-
-_hi_workdir uninstalltest
-
-# ---- strip_marker -----------------------------------------------------
 
 function test_strip_marker_removes_tagged_lines_only() {
   local target="$_HI_WORKDIR/tagged"
@@ -68,8 +52,6 @@ function test_install_uninstall_round_trip() {
   [ "$before" = "$after" ]
 }
 
-# ---- unlink_hi (skip paths only - the sudo-affecting match is out of scope) --
-
 function test_unlink_hi_skips_when_link_missing() {
   local link="$_HI_WORKDIR/no-such-link"
   (
@@ -88,6 +70,8 @@ function test_unlink_hi_skips_when_link_points_elsewhere() {
 }
 
 function run_uninstall_tests() {
+  _hi_workdir uninstalltest
+
   _hi_h1 "Testing scripts/uninstall.sh's reusable logic"
 
   _hi_suite_begin

@@ -17,6 +17,7 @@ _Don't `ssh`ush your hosts, say `hi`!_
 ### How it works
 
 1. `hi.sh` runs on the client. It archives `hi.d/` and sends it to the target. What it leaves out is `hi.sh` itself, `.git`, `scripts/`, `tests/`, `.github/`, the `*.example` files, this README, `LICENSE` and the editor/tooling dotfiles - see `$_HI_EXCLUDE` at the top of `hi.sh` for the authoritative list. The target unpacks it into a `/tmp` directory. `_HI_ROOT` is `$INSTALL_DIR/hi.d` on the client and `$_HI_HOME/hi.d` on the target.
+   Your own `settings.sh`, `colors` and `packages` live outside the tree (see [Configuration](#configuration)), so they follow in a second, much smaller archive unpacked over the target's `misc/` - `$_HI_OVERLAY_FILES` in `hi.sh`. Nothing is sent if you haven't overridden anything.
 2. On the target, `$_HI_ROOT/hi.bashrc` sources `$_HI_ROOT/load.sh` and calls `load`.
 3. `load.sh` prints the header, appends hi's shell configs to the host's own rc files, and starts a session in the highest priority shell available (fish > zsh > bash).
    Note this order is the reverse of the one below, and deliberately so: `load.sh` only runs at all when the target _has_ bash, so it is free to prefer the nicest shell available. The `zsh > fish > sh` order quoted elsewhere is the **no-bash fallback**, which is ranking what's left after bash turned out to be missing.
@@ -52,15 +53,15 @@ For ssh targets specifically, `hi` first checks (over the same connection, so it
 
 - `hi.d/scripts/install.sh` (re-run it any time; it repairs its own lines, even if hi.d moved) - before touching your shell rc files it validates your existing `~/.bashrc`, `~/.zshrc` and `~/.config/fish/config.fish` (whichever are installed) with each shell's own syntax checker, and asks whether to continue if any of them have issues
 - reload your shell!
-- run `hi_configure` any time afterward to revisit the feature toggle prompts - header, prompt, personal settings, git status, editors, aliases, header details, terminal width, and whether hi styles this machine too or only the hosts you say `hi` to - without touching the shell rc wiring. Answers land in `misc/settings.sh`; see [Configuration](#configuration) below
+- run `hi_configure` any time afterward to revisit the feature toggle prompts - header, prompt, personal settings, git status, editors, aliases, header details, terminal width, and whether hi styles this machine too or only the hosts you say `hi` to - without touching the shell rc wiring. Answers land in `~/.config/hi.d/settings.sh`; see [Configuration](#configuration) below
 - run `hi_check_configs` any time to just re-run that shell rc validation, without the rest of the install
 - configure `~/.ssh/config` tags via sshm
-- [optional] pin specific colors in `~/hi.d/misc/colors` - everything else gets a color automatically
+- [optional] pin specific colors in `~/.config/hi.d/colors` - everything else gets a color automatically. Copy `hi.d/misc/colors` there to start from the shipped defaults
   - run `hi_color_preview` to preview what every ssh host/your user resolves to
-- configure `~/hi.d/misc/packages` to your preferences
+- [optional] copy `hi.d/misc/packages` to `~/.config/hi.d/packages` and edit it to your preferences
 - say `hi`!
-- [optional] modify `~/hi.d/misc/*` and `~/hi.d/shells/*` to your liking!
-- done with it? `hi.d/scripts/uninstall.sh` (aliased to `hi_uninstall`) is the inverse of the install: it strips hi's lines back out of your rc files, removes `misc/settings.sh`, and unlinks `/usr/bin/hi`. It leaves the `hi.d` directory itself alone - delete that yourself if you want it gone
+- [optional] modify `~/hi.d/misc/*` and `~/hi.d/shells/*` to your liking - though anything with an overlay (`settings.sh`, `colors`, `packages`) is better edited in `~/.config/hi.d/`, which keeps the checkout clean for `hi_update`
+- done with it? `hi.d/scripts/uninstall.sh` (aliased to `hi_uninstall`) is the inverse of the install: it strips hi's lines back out of your rc files, removes the `settings.sh` it wrote, and unlinks `/usr/bin/hi`. It leaves the `hi.d` directory itself alone - and your `colors`/`packages`, which are yours - delete those yourself if you want them gone
 
 ---
 
@@ -72,11 +73,24 @@ Reminder - place local only changes after the "`# hi-config-end`" comment in the
 
 ### Configuration
 
+Your config lives **outside the checkout**, in `${XDG_CONFIG_HOME:-$HOME/.config}/hi.d/` (`$_HI_CONFIG_DIR`).
+Three files there override the tree's copies, one file at a time - anything you haven't overridden keeps
+tracking the default the tree ships, so `hi_update` still delivers changes to the rest:
+
+| overlay file                 | overrides          | what it is                       |
+| ---------------------------- | ------------------ | -------------------------------- |
+| `~/.config/hi.d/settings.sh` | `misc/settings.sh` | what `hi_configure` writes       |
+| `~/.config/hi.d/colors`      | `misc/colors`      | your color pins                  |
+| `~/.config/hi.d/packages`    | `misc/packages`    | what the package check looks for |
+
+This is what keeps configuring hi.d from dirtying the checkout (so `hi_update`'s `git pull` keeps applying
+cleanly), and it is why the tree never has to be writable at all - it can be root-owned, installed by a package
+manager. All three ride along to every host you say `hi` to, in their own small archive unpacked over the
+target's `misc/`.
+
 Everything below is an environment variable, checked at the point it's used. `hi_configure` writes your answers to
-**`misc/settings.sh`**, which is gitignored (so configuring hi.d never dirties the checkout, and `hi_update`'s
-`git pull` keeps applying cleanly) and which every shell sources ahead of `common/paths.sh`. It is a plain
-`#!/bin/sh` script of `export NAME=value` lines, valid in sh, bash, zsh and fish alike. That file also rides
-along in the payload, so the choices you make locally apply on every host you say `hi` to.
+`~/.config/hi.d/settings.sh`, which every shell sources ahead of `common/paths.sh`. It is a plain `#!/bin/sh`
+script of `export NAME=value` lines, valid in sh, bash, zsh and fish alike.
 
 You never have to use `hi_configure` - exporting any of these by hand works just as well, and takes precedence for
 that shell.
@@ -145,8 +159,9 @@ between them cover both halves of `hi.sh` (`_say_hi` and `_say_hi_container`). E
 executable on its own, e.g. `tests/compat/shellcheck_test.sh`.
 
 The tests are local-only: `tests/` is one of the directories `hi.sh` strips from the payload, so `hi_test` on a
-target tells you so rather than running (the same goes for `hi_install`, `hi_configure`, `hi_check_configs`,
-`hi_color_preview` and `hi_update`).
+target tells you so rather than running (the same goes for `hi_install`, `hi_configure`, `hi_check_configs` and
+`hi_color_preview`). `hi_update` is the odd one out - it needs a `.git`, which is absent both in a hi session and
+in an install a package manager laid down, so it says where to update instead of running `git pull` in a non-repo.
 
 Any script here needs `_HI_HOME` set before it'll source correctly - point it at the _parent_ of your `hi.d`
 checkout:
@@ -169,16 +184,16 @@ tests/test_runner.sh
 | `common/header.sh`                              | the connect/disconnect banner, shared by every shell                                                       |     |                                               |
 | `common/git_prompt.sh`                          | bash/zsh git prompt, matching fish's built-in `fish_vcs_prompt`                                            |     |                                               |
 | `common/targets.sh`                             | every `hi` target (ssh/docker/podman/nomad/kube), for all three completions - cached and timeout-bounded   |     |                                               |
-| `misc/settings.sh`                              | what `hi_configure` writes - gitignored, sourced by every shell (see [Configuration](#configuration))      |     |                                               |
+| `misc/settings.sh`                              | legacy location for what `hi_configure` writes - it now writes `~/.config/hi.d/settings.sh` instead        |     |                                               |
 | `shells/aliases.sh`                             | personal aliases shared by bash, zsh and fish - freely editable, off wholesale via `_HI_DISABLE_ALIASES=1` |     |                                               |
 | `shells/bash.sh`                                | bash config                                                                                                |     |                                               |
 | `shells/zsh.zsh`                                | zsh config                                                                                                 |     |                                               |
 | `shells/config.fish`                            | fish config                                                                                                |     |                                               |
 | `misc/vim.rc`, `misc/nano.rc`, `misc/theme.yml` | vim, nano and eza configs                                                                                  |     |                                               |
-| `misc/packages`                                 | what `check.sh` looks for, as `cmd:priority[,alternative:priority]`                                        |     |                                               |
-| `misc/colors`                                   | optional color pins for hostnames/usernames/hosttags                                                       |     |                                               |
-| `scripts/install.sh`                            | configure the local shells, install and update                                                             |     |                                               |
-| `scripts/uninstall.sh`                          | the inverse: strip hi's rc lines, drop `misc/settings.sh`, unlink `/usr/bin/hi` (`hi_uninstall`)           |     |                                               |
+| `misc/packages`                                 | default for `check.sh`, as `cmd:priority[,alternative:priority]` - override in `~/.config/hi.d/packages`   |     |                                               |
+| `misc/colors`                                   | default color pins for hostnames/usernames/hosttags - override in `~/.config/hi.d/colors`                  |     |                                               |
+| `scripts/install.sh`                            | configure the local shells, install and update - `--prefix`/`$DESTDIR` for packagers                       |     |                                               |
+| `scripts/uninstall.sh`                          | the inverse: strip hi's rc lines, drop the `settings.sh` it wrote, unlink `/usr/bin/hi` (`hi_uninstall`)   |     |                                               |
 | `scripts/color_preview.sh`                      | preview what every ssh host/user resolves to (`hi_color_preview`)                                          |     |                                               |
 | `tests/test_runner.sh`                          | unified runner - times and summarizes every test below (or a chosen subset) (`hi_test`)                    |     |                                               |
 | `tests/test_lib.sh`                             | the whole suite skeleton: asserts/counters, scratch dir, skip preamble, probe commands, poll/pty helpers   |     |                                               |

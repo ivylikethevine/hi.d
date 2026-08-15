@@ -21,8 +21,16 @@ if [ -z "${_hi_bootstrapped:-}" ]; then
   : "${_HI_DISABLE_ALIASES:=0}"
   export _HI_DISABLE_LOCAL _HI_REMOTE_SESSION _HI_DISABLE_HEADER _HI_DISABLE_PROMPT
   export _HI_DISABLE_PERSONAL _HI_DISABLE_GIT_STATUS _HI_DISABLE_EDITORS _HI_DISABLE_ALIASES
+  # the config overlay and its settings.sh, resolved exactly as bootstrap.sh
+  # does it - see the note there and by paths.sh's local-only gate
+  : "${_HI_CONFIG_DIR:=${XDG_CONFIG_HOME:-$HOME/.config}/hi.d}"
+  export _HI_CONFIG_DIR
   # shellcheck source=../misc/settings.sh disable=SC1091 # gitignored, may not exist
-  [ -f "${_HI_HOME:-$HOME}/hi.d/misc/settings.sh" ] && . "${_HI_HOME:-$HOME}/hi.d/misc/settings.sh" || true
+  if [ -f "$_HI_CONFIG_DIR/settings.sh" ]; then
+    . "$_HI_CONFIG_DIR/settings.sh"
+  elif [ -f "${_HI_HOME:-$HOME}/hi.d/misc/settings.sh" ]; then
+    . "${_HI_HOME:-$HOME}/hi.d/misc/settings.sh"
+  fi
   # shellcheck source=./paths.sh
   source "${_HI_HOME:-$HOME}/hi.d/common/paths.sh"
 fi

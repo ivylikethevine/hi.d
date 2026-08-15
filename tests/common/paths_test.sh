@@ -151,6 +151,78 @@ function test_environment_beats_the_defaults() {
     'source "$_HI_HOME/hi.d/common/bootstrap.sh"; printf "%s" "$_HI_DISABLE_EDITORS"')" = 1 ]
 }
 
+# --- the config overlay -----------------------------------------------------
+#
+# settings/colors/packages each resolve to $_HI_CONFIG_DIR's copy when the user
+# has made one and to the tree's otherwise, per file rather than all-or-nothing.
+# That is what keeps configuring hi.d from dirtying the checkout - and what lets
+# the tree be root-owned, which is the whole reason a distro package can work.
+#
+# test_lib.sh points $_HI_CONFIG_DIR at a scratch path that doesn't exist, so
+# the un-overridden direction is the default here and a real ~/.config/hi.d
+# can't decide the result.
+
+# Print $1's value from a child shell that went through bootstrap, with
+# $_HI_CONFIG_DIR pointed at $2.
+function _hi_resolved() {
+  _HI_CONFIG_DIR="$2" bash -c \
+    'source "$_HI_HOME/hi.d/common/bootstrap.sh"; printf "%s" "${!1}"' _ "$1"
+}
+
+function _hi_overlay_dir() {
+  local dir="$_HI_WORKDIR/overlay"
+  mkdir -p "$dir"
+  printf '%s' "$dir"
+}
+
+function test_overlay_settings_win() {
+  local dir
+  dir="$(_hi_overlay_dir)"
+  printf '#!/bin/sh\n' >"$dir/settings.sh"
+  [ "$(_hi_resolved _HI_SETTINGS "$dir")" = "$dir/settings.sh" ]
+}
+
+function test_overlay_colors_win() {
+  local dir
+  dir="$(_hi_overlay_dir)"
+  printf 'hostname,foo,brred\n' >"$dir/colors"
+  [ "$(_hi_resolved _HI_COLORS "$dir")" = "$dir/colors" ]
+}
+
+# per file, not all-or-nothing: an overlay holding only colors must leave
+# packages tracking the tree, or `hi_update` would stop delivering new defaults
+# for everything the user never overrode
+function test_overlay_falls_back_per_file() {
+  local dir
+  dir="$(_hi_overlay_dir)"
+  printf 'hostname,foo,brred\n' >"$dir/colors"
+  rm -f "$dir/packages"
+  [ "$(_hi_resolved _HI_PACKAGES "$dir")" = "$_HI_ROOT/misc/packages" ]
+}
+
+function test_no_overlay_uses_the_tree() {
+  local dir="$_HI_WORKDIR/no-such-overlay"
+  [ "$(_hi_resolved _HI_COLORS "$dir")" = "$_HI_ROOT/misc/colors" ] &&
+    [ "$(_hi_resolved _HI_SETTINGS "$dir")" = "$_HI_ROOT/misc/settings.sh" ]
+}
+
+# install.sh needs somewhere to write on a machine that has no overlay yet, so
+# this one is unguarded and always points at the overlay
+function test_settings_write_always_points_at_the_overlay() {
+  local dir="$_HI_WORKDIR/no-such-overlay"
+  [ "$(_hi_resolved _HI_SETTINGS_WRITE "$dir")" = "$dir/settings.sh" ]
+}
+
+# the gate reads what install.sh wrote, and after this change that file is the
+# overlay's - so the ordering test above has to hold from there too
+function test_overlay_settings_are_visible_to_the_gate() {
+  local dir home
+  dir="$(_hi_overlay_dir)"
+  home="$(_hi_scratch_tree overlaygate common misc shells)"
+  printf 'export _HI_DISABLE_LOCAL=1\n' >"$dir/settings.sh"
+  _hi_all_gated "$(_HI_HOME="$home" _HI_CONFIG_DIR="$dir" _hi_gate 0 0)" 1
+}
+
 function run_paths_tests() {
   _hi_workdir pathstest
 
@@ -174,6 +246,14 @@ function run_paths_tests() {
   _hi_check "aliases.sh sources cleanly under set -u" test_aliases_source_cleanly_under_nounset
   _hi_check "Settings beat the defaults" test_settings_beat_the_defaults
   _hi_check "The environment beats the defaults" test_environment_beats_the_defaults
+
+  _hi_h2 "Testing: the \$_HI_CONFIG_DIR overlay"
+  _hi_check "Overlay settings win" test_overlay_settings_win
+  _hi_check "Overlay colors win" test_overlay_colors_win
+  _hi_check "Falls back per file" test_overlay_falls_back_per_file
+  _hi_check "No overlay uses the tree" test_no_overlay_uses_the_tree
+  _hi_check "Settings are written to the overlay" test_settings_write_always_points_at_the_overlay
+  _hi_check "Overlay settings reach the gate" test_overlay_settings_are_visible_to_the_gate
 
   _hi_suite_end "paths.sh"
 }

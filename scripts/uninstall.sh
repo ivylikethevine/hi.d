@@ -73,14 +73,23 @@ source "$_HI_HOME/hi.d/common/bootstrap.sh"
 source "$_HI_ROOT/common/rcfile.sh"
 
 # The other half of being install's inverse: drop the settings file it wrote.
+# Both locations, since an install predating the config overlay left one inside
+# the tree - uninstall has to keep recognising what older installs wrote, the
+# same contract strip_marker has with older rc lines.
+#
+# Only settings.sh. The overlay's colors and packages are hand-written config,
+# not something install.sh produced, so they are left alone for the same reason
+# the checkout itself is.
 function strip_settings() {
   _hi_h2 "Checking settings"
-  if [ -f "$_HI_SETTINGS" ]; then
-    rm -f "$_HI_SETTINGS"
-    _hi_cecho " removed ${_HI_SETTINGS#"$_HI_ROOT/"} :)" "$GREEN"
-  else
-    _hi_cecho " no ${_HI_SETTINGS#"$_HI_ROOT/"} to remove :)" "$GREEN"
-  fi
+  local found=0 target
+  for target in "$_HI_SETTINGS_WRITE" "$_HI_ROOT/misc/settings.sh"; do
+    [ -f "$target" ] || continue
+    rm -f "$target"
+    _hi_cecho " removed $target :)" "$GREEN"
+    found=1
+  done
+  ((found)) || _hi_cecho " no settings.sh to remove :)" "$GREEN"
 }
 
 function unlink_hi() {

@@ -11,8 +11,38 @@ _HI_EXCLUDE=(--exclude README.md --exclude .git --exclude .gitignore --exclude s
   --exclude '*.example' --exclude tests --exclude .github --exclude .claude
   --exclude CLAUDE.md --exclude .devcontainer --exclude .markdownlint.yaml --exclude LICENSE)
 
+# The user's config overlay ($_HI_CONFIG_DIR, outside the tree), by the names it
+# has to land under in the target's misc/. Until the overlay existed these rode
+# along inside the payload above for free; now they need their own stream.
+_HI_OVERLAY_FILES=(settings.sh colors packages)
+
 _HI_ARMOR="openssl enc -base64"
 _HI_UNARMOR="tr -s ' ' '\n' | openssl enc -base64 -d"
+
+# true when the user has any overlay at all. Both transports ask first rather
+# than piping an empty archive at `tar mxzf -`, which is an "unexpected EOF"
+# error rather than a no-op - an unconfigured user must pay nothing for this.
+function _hi_has_overlay() {
+  local f
+  for f in "${_HI_OVERLAY_FILES[@]}"; do
+    [ -f "$_HI_CONFIG_DIR/$f" ] && return 0
+  done
+  return 1
+}
+
+# A tar of whichever overlay files the user has, to be unpacked over the
+# target's misc/. One `tar` with explicit member names rather than a rename
+# pass, so it stays portable to bsdtar (no GNU --transform) and the members land
+# at misc/'s top level under the names paths.sh already looks for.
+function _hi_overlay_tar() {
+  local f
+  local -a present=()
+  for f in "${_HI_OVERLAY_FILES[@]}"; do
+    [ -f "$_HI_CONFIG_DIR/$f" ] && present+=("$f")
+  done
+  ((${#present[@]})) || return 0
+  tar czf - -h -C "$_HI_CONFIG_DIR" "${present[@]}"
+}
 
 # Reads ~/.ssh/config directly rather than through targets.sh, which would fork
 # a shell, an awk and a grep plus the completion cache to answer a question
@@ -99,8 +129,14 @@ EOF
 # it until scripts/install.sh runs: a bare `.` on a missing file doesn't just
 # fail in ash/dash, it abandons the rest of the file - taking paths.sh,
 # aliases.sh and $CMDARG with it.
+#
+# _HI_CONFIG_DIR is the target's own misc/, not ${XDG_CONFIG_HOME:-...}: the
+# overlay we shipped was extracted over that directory, and a ~/.config/hi.d
+# belonging to whoever we logged in as is not the config this session is meant
+# to run with. Same reasoning as the two transports that set it.
 function _hi_fallback_rc() {
   cat <<EOF
+export _HI_CONFIG_DIR=\$_HI_ROOT/misc
 export _HI_REMOTE_SESSION=1
 export _HI_DISABLE_LOCAL=0
 export _HI_DISABLE_HEADER=0
@@ -180,6 +216,7 @@ REMOTE
 # it's there.
 function _say_hi() {
   local size hi_esc nc_esc script middle b64 boot_tmp remote_root tmp_root ctl_path ec=0
+  local overlay overlay_line=""
   local -a ctl_opts
 
   # only this path armors its payload; the container backends stream through
@@ -214,9 +251,20 @@ REMOTE
     )"
   else
     size="$(_hi_size)"
+    # second, tiny stream over the tree we just unpacked: $_HI_EXCLUDE only ever
+    # carried the *in-tree* misc/, so an overlay outside it has to be sent
+    # explicitly. Empty (and the line omitted entirely) when there is no
+    # overlay to send. _HI_CONFIG_DIR then points at the target's own misc/, so
+    # paths.sh resolves against what we shipped rather than against a
+    # ~/.config/hi.d belonging to whoever we logged in as.
+    if _hi_has_overlay; then
+      overlay="$(_hi_overlay_tar | $_HI_ARMOR)"
+      overlay_line="echo \"$overlay\" | $_HI_UNARMOR | tar mxzf - -C \"\$_HI_ROOT/misc\""
+    fi
     middle="$(cat <<REMOTE
       export _HI_HOME=\$(mktemp -d -t $(whoami).hi.XXXXXX) # busybox mktemp needs exactly six X
       export _HI_ROOT=\$_HI_HOME/hi.d
+      export _HI_CONFIG_DIR=\$_HI_ROOT/misc
       export _HI_CLEANUP=\$_HI_HOME
       mkdir "\$_HI_ROOT"
       trap 'rm -rf \$_HI_CLEANUP' exit
@@ -226,6 +274,7 @@ REMOTE
       chmod +x "\$_HI_ROOT/hi.sh"
       echo "$(_hi_bootloader | $_HI_ARMOR)" | $_HI_UNARMOR > "\$_hi_rc_dir/hi.bashrc"
       echo "$(tar czf - -h -C "$_HI_HOME" "${_HI_EXCLUDE[@]}" hi.d | $_HI_ARMOR)" | $_HI_UNARMOR | tar mxzf - -C "\$_HI_HOME"
+      $overlay_line
       export _HI_CONNECT_PREFIX=" $size"
 REMOTE
     )"
@@ -303,6 +352,8 @@ function _say_hi_container() {
     # quotes/spaces in the user's command. Toggle defaults lead for the same
     # reason _hi_fallback_rc's do: aliases.sh reads both bare, and this path
     # copies it without paths.sh or settings.sh to define them.
+    # No config overlay here either, for the same reason - nothing on this path
+    # reads $_HI_COLORS or $_HI_PACKAGES, so there is nothing for it to affect.
     { printf 'export _HI_DISABLE_EDITORS=0\nexport _HI_DISABLE_ALIASES=0\n'
       printf '. %s/aliases.sh 2>/dev/null\n' "$root"
       [ -n "${CMDARG:-}" ] && printf '%s\n' "$CMDARG"; } |
@@ -337,12 +388,21 @@ function _say_hi_container() {
     return 1
   fi
 
+  # the config overlay, as a second stream over the misc/ the tar above just
+  # laid down - see the ssh path for why it can't ride along in the first one.
+  # Failing to place it is not worth losing the session over: the shell still
+  # comes up, just with the tree's default colors/packages.
+  if _hi_has_overlay &&
+    ! _hi_overlay_tar | "${cp[@]}" sh -c "tar mxzf - -C '$root/hi.d/misc'" 2>"$tmp"; then
+    _hi_cecho " failed to copy your hi.d config overlay into [$DOMAIN], using defaults" "$YELLOW"
+  fi
+
   "${cp[@]}" sh -c "cat > '$root/hi.d/hi.sh' && chmod +x '$root/hi.d/hi.sh'" <"$0"
   _hi_bootloader | "${cp[@]}" sh -c "cat > '$root/hi.d/hi.bashrc'"
 
   # _HI_CLEANUP marks this tree as disposable for load.sh's clean_all - the
   # `rm -rf "$root"` below is the client-side belt to its braces
-  "${attach[@]}" sh -c "export _HI_HOME='$root' _HI_ROOT='$root/hi.d' _HI_CLEANUP='$root' _HI_COPY_TIME='$(_hi_copy_time "$copy_start" "$_HI_SHELL_START" "$shell_end")' _HI_CONNECT_PREFIX='$prefix'; exec bash --rcfile '$root/hi.d/hi.bashrc'"
+  "${attach[@]}" sh -c "export _HI_HOME='$root' _HI_ROOT='$root/hi.d' _HI_CONFIG_DIR='$root/hi.d/misc' _HI_CLEANUP='$root' _HI_COPY_TIME='$(_hi_copy_time "$copy_start" "$_HI_SHELL_START" "$shell_end")' _HI_CONNECT_PREFIX='$prefix'; exec bash --rcfile '$root/hi.d/hi.bashrc'"
   exit_code=$?
 
   "${probe[@]}" rm -rf "$root" >/dev/null 2>&1

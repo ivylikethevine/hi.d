@@ -23,11 +23,22 @@ export _HI_REMOTE_SESSION
 : "${_HI_DISABLE_ALIASES:=0}"
 export _HI_DISABLE_HEADER _HI_DISABLE_PROMPT _HI_DISABLE_PERSONAL
 export _HI_DISABLE_GIT_STATUS _HI_DISABLE_EDITORS _HI_DISABLE_ALIASES
+# where the user's config overlay lives. paths.sh resolves settings/colors/
+# packages against it but can't derive it (fish has no ${X:-y}), so every entry
+# point sets it; `:=` leaves an outer layer's value alone the way $_HI_HOME above
+# is left alone, which is what lets hi.sh point a target at its own copy.
+: "${_HI_CONFIG_DIR:=${XDG_CONFIG_HOME:-$HOME/.config}/hi.d}"
+export _HI_CONFIG_DIR
 # the settings scripts/install.sh writes, ahead of paths.sh because its
 # local-only gate reads them (see the note by that gate). $_HI_SETTINGS isn't
-# defined yet - it comes *from* paths.sh - so the path is spelled out here.
+# defined yet - it comes *from* paths.sh - so both candidates are spelled out
+# here, overlay first, exactly as paths.sh will resolve them a moment later.
 # shellcheck source=../misc/settings.sh disable=SC1091 # gitignored, may not exist
-[ -f "$_HI_HOME/hi.d/misc/settings.sh" ] && . "$_HI_HOME/hi.d/misc/settings.sh" || true
+if [ -f "$_HI_CONFIG_DIR/settings.sh" ]; then
+  . "$_HI_CONFIG_DIR/settings.sh"
+elif [ -f "$_HI_HOME/hi.d/misc/settings.sh" ]; then
+  . "$_HI_HOME/hi.d/misc/settings.sh"
+fi
 # shellcheck source=./paths.sh
 source "$_HI_HOME/hi.d/common/paths.sh"
 # Not exported: it tells shared.sh the preamble above already ran, so it can

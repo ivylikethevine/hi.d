@@ -40,7 +40,7 @@ function system_info() {
     base_mhz=$(awk -F'@ *' '/model name/ && NF>1 { gsub(/GHz.*/, "", $2); printf "%.0f", $2 * 1000; exit }' /proc/cpuinfo 2>/dev/null || true)
     # `read < file`, not $(cat file): the redirect fails silently on a missing
     # file and read is a builtin, so a miss costs no fork
-    local khz
+    local khz=0
     if [ -z "$base_mhz" ] && [ -f "$base_freq_path" ]; then
       read -r khz <"$base_freq_path" 2>/dev/null || khz=0
       base_mhz=$((khz / 1000))

@@ -6,6 +6,17 @@
 # shellcheck disable=SC2329
 set -euo pipefail
 
+# Isolation, and it has to happen before bootstrap.sh: that resolves
+# $_HI_SETTINGS/$_HI_COLORS/$_HI_PACKAGES against $_HI_CONFIG_DIR once, so by
+# the time a suite runs it is too late to stop the developer's own
+# ~/.config/hi.d from deciding what those point at. Deliberately a path that
+# does not exist yet, so the baseline every suite starts from is "no overlay,
+# in-tree defaults"; a test wanting an overlay mkdir's this and writes into it,
+# and _hi_test_cleanup takes it away again. Same rule as never touching the
+# real ~/hi.d.
+export XDG_CONFIG_HOME="${TMPDIR:-/tmp}/hi.testcfg.$$"
+export _HI_CONFIG_DIR="$XDG_CONFIG_HOME/hi.d"
+
 # shellcheck source=../common/bootstrap.sh
 source "${_HI_HOME:-$HOME}/hi.d/common/bootstrap.sh"
 
@@ -44,6 +55,8 @@ function _hi_test_cleanup() {
   if [ -n "$_HI_WORKDIR" ]; then
     rm -rf "$_HI_WORKDIR" || true
   fi
+  # the isolated config overlay from the top of this file, if a test made one
+  rm -rf "$XDG_CONFIG_HOME" || true
   return 0
 }
 

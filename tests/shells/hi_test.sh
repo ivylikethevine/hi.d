@@ -267,6 +267,62 @@ function test_exclude_list_covers_the_untravelled_paths() {
   done
 }
 
+# --- the config overlay -----------------------------------------------------
+#
+# $_HI_EXCLUDE only ever carried the *in-tree* misc/, so once the user's real
+# settings/colors/packages live outside the tree they need their own stream or a
+# target silently falls back to the shipped defaults. These assert the two
+# halves that can be checked without a target: that nothing is sent when there
+# is nothing to send, and that what is sent lands under the names paths.sh
+# looks for.
+
+function _hi_overlay_fixture() {
+  local dir="$_HI_WORKDIR/$1"
+  mkdir -p "$dir"
+  shift
+  for f in "$@"; do printf 'x\n' >"$dir/$f"; done
+  printf '%s' "$dir"
+}
+
+function test_overlay_is_empty_without_one() {
+  local dir="$_HI_WORKDIR/no-overlay"
+  mkdir -p "$dir"
+  ! (_HI_CONFIG_DIR="$dir" _hi_has_overlay) &&
+    [ -z "$(_HI_CONFIG_DIR="$dir" _hi_overlay_tar)" ]
+}
+
+function test_overlay_is_seen_when_present() {
+  local dir
+  dir="$(_hi_overlay_fixture some colors)"
+  (_HI_CONFIG_DIR="$dir" _hi_has_overlay)
+}
+
+# members land at the archive's top level under their plain names, since it is
+# unpacked *over* the target's misc/ - a "colors" that arrived as "hi.d/colors"
+# or "./config/colors" would be invisible to paths.sh
+function test_overlay_tar_members_are_bare_names() {
+  local dir listing
+  dir="$(_hi_overlay_fixture members colors packages settings.sh)"
+  listing="$(_HI_CONFIG_DIR="$dir" _hi_overlay_tar | tar tzf -)"
+  [ "$(printf '%s\n' "$listing" | sort | paste -sd, -)" = "colors,packages,settings.sh" ]
+}
+
+# only what the user actually has - an overlay holding one file must not carry
+# a placeholder for the other two, which would shadow the tree's defaults
+function test_overlay_tar_carries_only_what_exists() {
+  local dir
+  dir="$(_hi_overlay_fixture partial colors)"
+  [ "$(_HI_CONFIG_DIR="$dir" _hi_overlay_tar | tar tzf -)" = "colors" ]
+}
+
+# On a target, $_HI_CONFIG_DIR is the misc/ we just unpacked over, not
+# ${XDG_CONFIG_HOME:-...}: a ~/.config/hi.d belonging to whoever we logged in as
+# is not the config this session was asked to run with.
+function test_fallback_rc_points_config_dir_at_the_shipped_tree() {
+  # shellcheck disable=SC2016 # $_HI_ROOT is the target's to expand, not ours
+  [[ "$(CMDARG="" _hi_fallback_rc)" == *'export _HI_CONFIG_DIR=$_HI_ROOT/misc'* ]]
+}
+
 function run_hi_tests() {
   _hi_workdir hitest
   _hi_write_shims
@@ -314,6 +370,13 @@ function run_hi_tests() {
 
   _hi_h2 "Testing: payload excludes"
   _hi_check "Still strips .git/scripts/tests/hi.sh" test_exclude_list_covers_the_untravelled_paths
+
+  _hi_h2 "Testing: the config overlay stream"
+  _hi_check "Nothing sent without an overlay" test_overlay_is_empty_without_one
+  _hi_check "Seen when present" test_overlay_is_seen_when_present
+  _hi_check "Members are bare names" test_overlay_tar_members_are_bare_names
+  _hi_check "Carries only what exists" test_overlay_tar_carries_only_what_exists
+  _hi_check "Fallback rc points at the shipped tree" test_fallback_rc_points_config_dir_at_the_shipped_tree
 
   _hi_suite_end "hi.sh"
 }

@@ -6,6 +6,11 @@ set -euo pipefail
 _HI_FEATURES_ONLY=""
 _HI_CHECK_CONFIGS_ONLY=""
 _HI_ASSUME_YES=0
+# --prefix, or a non-empty $DESTDIR, puts this script in packaging mode: lay the
+# tree down for someone else's package manager instead of wiring up this user's
+# shells. See install_tree below.
+_HI_PREFIX=""
+_HI_USAGE="Usage: install.sh [--features-only] [--check-configs] [--yes] [--prefix <dir>]"
 # one `shift` after the case, not one per arm: an arm added without its own was
 # an infinite loop
 while [ $# -gt 0 ]; do
@@ -13,40 +18,65 @@ while [ $# -gt 0 ]; do
   --features-only) _HI_FEATURES_ONLY=1 ;;
   --check-configs) _HI_CHECK_CONFIGS_ONLY=1 ;;
   -y | --yes) _HI_ASSUME_YES=1 ;;
+  --prefix)
+    [ $# -ge 2 ] || {
+      echo "install.sh: --prefix requires a path" >&2
+      exit 1
+    }
+    _HI_PREFIX="$2"
+    shift
+    ;;
+  --prefix=*) _HI_PREFIX="${1#--prefix=}" ;;
   -h | --help)
-    cat <<'EOF'
-Usage: install.sh [--features-only] [--check-configs] [--yes]
+    cat <<EOF
+$_HI_USAGE
 
 Wires up the local shells to source this hi.d checkout and links hi.sh onto
 PATH. Safe to re-run any time - it repairs its own lines and leaves
 everything else alone. The install location is always wherever this script
 lives (hi.d's parent directory), not a path you pass in - hi.d installs in
-place.
+place. Your own answers never land in the tree: they go to
+\${XDG_CONFIG_HOME:-\$HOME/.config}/hi.d/, so this works against a checkout
+you don't own.
 
 Note: this needs sudo to link hi.sh into /usr/bin, and every prompt keeps
 its current setting when there is no tty to answer on.
 
   --features-only  Skip the shell rc wiring and the hi.sh symlink - just
                    re-run the feature toggle prompts. This is what
-                   `hi_configure` calls once hi.d is installed.
+                   \`hi_configure\` calls once hi.d is installed.
   --check-configs  Only run the pre-install validation of your existing
                    ~/.bashrc, ~/.zshrc and ~/.config/fish/config.fish -
-                   skip everything else. This is what `hi_check_configs`
+                   skip everything else. This is what \`hi_check_configs\`
                    calls.
   -y, --yes        Install even if that validation finds problems. Without
                    it, a non-interactive run stops rather than rewriting
                    shell configs that don't parse.
+  --prefix <dir>   Packaging mode (also entered by setting \$DESTDIR): copy
+                   the tree to \$DESTDIR<dir>/hi.d, link <dir>/hi.d/hi.sh in
+                   /usr/bin, and drop an /etc/profile.d snippet - then stop.
+                   Touches no shell rc file, asks nothing, runs no sudo.
+                   Defaults to /usr/share. This is what a PKGBUILD's
+                   package() or a deb/rpm recipe calls; each user then runs
+                   \`hi_install\` once for their own shells.
 EOF
     exit 0
     ;;
   *)
     echo "install.sh: unrecognized argument: $1" >&2
-    echo "Usage: install.sh [--features-only] [--check-configs] [--yes]" >&2
+    echo "$_HI_USAGE" >&2
     exit 1
     ;;
   esac
   shift
 done
+
+# Either flag alone is enough - a packager who passes only $DESTDIR still gets
+# /usr/share, and one who passes only --prefix is installing straight to a live
+# root. Resolved before the prefix default so "was it asked for" is answerable.
+_HI_PACKAGING=""
+if [ -n "$_HI_PREFIX" ] || [ -n "${DESTDIR:-}" ]; then _HI_PACKAGING=1; fi
+: "${_HI_PREFIX:=/usr/share}"
 
 # Locate hi.d relative to this script (resolving symlinks) - hi.d's parent
 # directory is always the install dir, since this installs in place.
@@ -73,12 +103,15 @@ source "$_HI_GIT_PROMPT"
 source "$_HI_ROOT/common/rcfile.sh"
 
 # Only emit an _HI_HOME export when hi.d isn't at $HOME/hi.d; every consumer
-# already defaults it to $HOME.
+# already defaults it to $HOME. $2 overrides which home is meant, for the
+# /etc/profile.d snippet packaging mode writes - there the answer is the
+# package's prefix, not where this script happens to be running from.
 function tmpdir_line() {
-  [ "$_HI_HOME" = "$HOME" ] && return 0
+  local home="${2:-$_HI_HOME}"
+  [ "$home" = "$HOME" ] && return 0
   case "$1" in
-  fish) printf 'set -gx _HI_HOME "%s"' "$_HI_HOME" ;;
-  *) printf 'export _HI_HOME="%s"' "$_HI_HOME" ;;
+  fish) printf 'set -gx _HI_HOME "%s"' "$home" ;;
+  *) printf 'export _HI_HOME="%s"' "$home" ;;
   esac
 }
 
@@ -281,30 +314,47 @@ function config_max_width() {
   _HI_SETTING_LINES+=("${value:+export _HI_MAX_WIDTH=$value}")
 }
 
-# $_HI_SETTINGS is hi's own file, not one of the user's rc files, and it holds
-# nothing but `export NAME=value` lines - so it gets a real `#!/bin/sh` line 1,
-# which every shell that sources it (sh, bash, zsh, fish) reads as a comment
-# and which lets editors, `file` and shellcheck see a POSIX sh script rather
-# than an anonymous fragment. Any other shebang is replaced rather than left
-# alongside: dash and fish both source this, so sh is the only correct one.
+# $_HI_SETTINGS_WRITE is hi's own file, not one of the user's rc files, and it
+# holds nothing but `export NAME=value` lines - so it gets a real `#!/bin/sh`
+# line 1, which every shell that sources it (sh, bash, zsh, fish) reads as a
+# comment and which lets editors, `file` and shellcheck see a POSIX sh script
+# rather than an anonymous fragment. Any other shebang is replaced rather than
+# left alongside: dash and fish both source this, so sh is the only correct one.
 # config_shell rewrites only its own marker-tagged block, so this line stays.
+#
+# Reads come from $_HI_SETTINGS (which resolves to the in-tree copy until an
+# overlay exists) and writes go to $_HI_SETTINGS_WRITE (always the overlay), so
+# an install predating the overlay is read once and rewritten outside the tree.
 function ensure_settings_shebang() {
   local shebang='#!/bin/sh' first="" tmpfile
-  mkdir -p "$(dirname "$_HI_SETTINGS")"
-  if [ -f "$_HI_SETTINGS" ]; then
-    IFS= read -r first <"$_HI_SETTINGS" || first=""
+  mkdir -p "$(dirname "$_HI_SETTINGS_WRITE")"
+  if [ -f "$_HI_SETTINGS_WRITE" ]; then
+    IFS= read -r first <"$_HI_SETTINGS_WRITE" || first=""
   fi
   [ "$first" = "$shebang" ] && return 0
 
   tmpfile="$(mktemp -t hi.settings.XXXXXX)"
   printf '%s\n' "$shebang" >"$tmpfile"
-  if [ -f "$_HI_SETTINGS" ]; then
+  if [ -f "$_HI_SETTINGS_WRITE" ]; then
     case "$first" in
-    '#!'*) tail -n +2 "$_HI_SETTINGS" >>"$tmpfile" ;;
-    *) cat "$_HI_SETTINGS" >>"$tmpfile" ;;
+    '#!'*) tail -n +2 "$_HI_SETTINGS_WRITE" >>"$tmpfile" ;;
+    *) cat "$_HI_SETTINGS_WRITE" >>"$tmpfile" ;;
     esac
   fi
-  mv "$tmpfile" "$_HI_SETTINGS"
+  mv "$tmpfile" "$_HI_SETTINGS_WRITE"
+}
+
+# Older installs wrote settings into the tree. Now that the answers have been
+# re-read and written to the overlay, drop that file: leaving it would mean two
+# files claiming to be the settings, and the in-tree one is the copy that dirties
+# the checkout and blocks `hi_update`. Only ever the path *inside* the tree, and
+# only when it isn't the file just written.
+function migrate_in_tree_settings() {
+  local legacy="$_HI_ROOT/misc/settings.sh"
+  [ "$legacy" = "$_HI_SETTINGS_WRITE" ] && return 0
+  [ -f "$legacy" ] || return 0
+  rm -f "$legacy"
+  _hi_cecho " moved your settings out of the checkout to $_HI_SETTINGS_WRITE :)" "$GREEN"
 }
 
 # Runs $@'s syntax-check flag against an existing rc file (without executing it)
@@ -361,13 +411,65 @@ function config_validate_shells() {
 
 function config_hi() {
   _hi_h2 "Checking hi.sh"
-  chmod +x "$_HI_LAUNCHER"
+  # Only when it isn't already executable, and never fatally: on a packaged
+  # install the tree is root-owned and hi.sh already has its mode set by the
+  # packager, so an unconditional chmod would abort the whole run under `set -e`
+  # for a user configuring a perfectly good install.
+  if [ ! -x "$_HI_LAUNCHER" ] && ! chmod +x "$_HI_LAUNCHER" 2>/dev/null; then
+    _hi_cecho " couldn't make $_HI_LAUNCHER executable - is it owned by root?" "$YELLOW"
+  fi
   if [ "$(readlink "$_HI_LINK" 2>/dev/null)" = "$_HI_LAUNCHER" ]; then
     _hi_cecho " $_HI_LINK already points at $_HI_LAUNCHER :)" "$GREEN"
     return 0
   fi
   _hi_cecho " Linking $_HI_LINK -> $_HI_LAUNCHER... [password required]" "$BLUE"
   sudo ln -sfn "$_HI_LAUNCHER" "$_HI_LINK"
+}
+
+# What a package ships. Deliberately spelled out rather than derived from
+# hi.sh's $_HI_EXCLUDE: that list answers "what does a target need for one
+# session", this one answers "what does an installed copy need forever", and the
+# two differ on scripts/ - excluded from a payload, required here so a user of a
+# packaged install can still run `hi_install`/`hi_uninstall`/`hi_color_preview`
+# against it. tests/ is in neither; `hi_test` reports itself unavailable.
+_HI_PACKAGE_CONTENTS=(common misc scripts shells hi.sh load.sh LICENSE README.md)
+
+# Packaging mode. hi.d normally installs *in place*, which assumes the tree is
+# somewhere you own; here the tree is copied to a staging root for a package
+# manager to own instead, and every part of the normal install that reaches
+# outside that root - rc files, sudo, the settings the user hasn't chosen yet -
+# is skipped. Each user runs `hi_install` themselves afterwards; their answers
+# go to $_HI_CONFIG_DIR, so that works against a root-owned tree.
+function install_tree() {
+  local dest="${DESTDIR:-}$_HI_PREFIX/hi.d" bindir="${DESTDIR:-}/usr/bin"
+  local profile="${DESTDIR:-}/etc/profile.d/hi.d.sh" item line
+  _hi_h2 "Installing the tree"
+
+  mkdir -p "$dest"
+  for item in "${_HI_PACKAGE_CONTENTS[@]}"; do
+    [ -e "$_HI_ROOT/$item" ] || continue
+    cp -R "$_HI_ROOT/$item" "$dest/"
+  done
+  chmod +x "$dest/hi.sh"
+  _hi_cecho " $dest :)" "$GREEN"
+
+  # the link target is where hi.sh will live on the *installed* system, so it
+  # deliberately has no $DESTDIR on it - that staging prefix isn't there at
+  # runtime and a link pointing into it would dangle
+  mkdir -p "$bindir"
+  ln -sfn "$_HI_PREFIX/hi.d/hi.sh" "$bindir/hi"
+  _hi_cecho " $bindir/hi -> $_HI_PREFIX/hi.d/hi.sh :)" "$GREEN"
+
+  # Every shell needs $_HI_HOME before it sources anything, and a package can't
+  # rewrite the user's rc files to say so - this is the one place it can put it
+  # that every login shell reads. Empty (and skipped) for a $HOME prefix, which
+  # is the one case every consumer already defaults correctly.
+  line="$(tmpdir_line sh "$_HI_PREFIX")"
+  if [ -n "$line" ]; then
+    mkdir -p "$(dirname "$profile")"
+    printf '#!/bin/sh\n# added by hi.d during packaging\n%s\n' "$line" >"$profile"
+    _hi_cecho " $profile :)" "$GREEN"
+  fi
 }
 
 # lets tests/scripts/install_test.sh `source` this file to reach the functions above
@@ -379,10 +481,22 @@ if [ -n "$_HI_CHECK_CONFIGS_ONLY" ]; then
   _hi_h1 "Checking existing shell configs!"
 elif [ -n "$_HI_FEATURES_ONLY" ]; then
   _hi_h1 "Configuring hi.sh features!"
+elif [ -n "$_HI_PACKAGING" ]; then
+  _hi_h1 "Packaging hi.sh!"
 else
   _hi_h1 "Installing (or reinstalling) hi.sh!"
 fi
 _hi_cecho " | hi_home: $_HI_HOME | hi_root: $_HI_ROOT | login shell: ${SHELL##*/}" "$BLUE"
+
+# Before every prompt and every check: this run belongs to a package manager,
+# not to a user with shells to wire up or settings to choose.
+if [ -n "$_HI_PACKAGING" ]; then
+  _hi_cecho " | destdir: ${DESTDIR:-<none>} | prefix: $_HI_PREFIX" "$BLUE"
+  install_tree
+  _hi_h1 "Packaged!"
+  _hi_cecho " | each user runs hi_install once for their own shells; their settings go to \$XDG_CONFIG_HOME/hi.d" "$BLUE"
+  exit 0
+fi
 
 if [ -n "$_HI_CHECK_CONFIGS_ONLY" ]; then
   check_shell_configs
@@ -400,7 +514,8 @@ config_max_width
 # documents: config_shell rewrites the whole marker block in its target, so
 # three separate calls against one file would each wipe the other two.
 ensure_settings_shebang
-config_shell settings "$_HI_SETTINGS" "${_HI_SETTING_LINES[@]}"
+config_shell settings "$_HI_SETTINGS_WRITE" "${_HI_SETTING_LINES[@]}"
+migrate_in_tree_settings
 
 if [ -n "$_HI_FEATURES_ONLY" ]; then
   _hi_h1 "Features updated!"

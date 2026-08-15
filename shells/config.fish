@@ -12,10 +12,23 @@ for _hi_toggle in _HI_DISABLE_LOCAL _HI_REMOTE_SESSION _HI_DISABLE_HEADER \
   set -q $_hi_toggle; or set -gx $_hi_toggle 0
 end
 set -e _hi_toggle
+# where the user's config overlay lives, which paths.sh resolves against but
+# can't derive - fish has no ${XDG_CONFIG_HOME:-...}, which is the whole reason
+# every entry point sets this itself. Only when unset, so hi.sh can point a
+# target at the copy it shipped.
+if not set -q _HI_CONFIG_DIR
+  set -q XDG_CONFIG_HOME; and set -gx _HI_CONFIG_DIR $XDG_CONFIG_HOME/hi.d
+  set -q _HI_CONFIG_DIR; or set -gx _HI_CONFIG_DIR ~/.config/hi.d
+end
 # the settings scripts/install.sh writes, ahead of paths.sh because paths.sh's
 # local-only gate reads them (see the note by that gate). They are plain
-# `export NAME=value` lines, which fish understands natively.
-test -f $_HI_HOME/hi.d/misc/settings.sh; and source $_HI_HOME/hi.d/misc/settings.sh
+# `export NAME=value` lines, which fish understands natively. Overlay first,
+# exactly as paths.sh resolves $_HI_SETTINGS a moment later.
+if test -f $_HI_CONFIG_DIR/settings.sh
+  source $_HI_CONFIG_DIR/settings.sh
+else if test -f $_HI_HOME/hi.d/misc/settings.sh
+  source $_HI_HOME/hi.d/misc/settings.sh
+end
 source $_HI_HOME/hi.d/common/paths.sh
 source $_HI_ALIASES
 

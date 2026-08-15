@@ -3,7 +3,7 @@
 #
 # Its job is to render the same answers the live prompt would give, so what
 # matters is that its own precedence logic (_hi_color_source) agrees with
-# common/shared.sh's _hi_resolve_color, and that the helpers feeding the table
+# common/core.sh's _hi_resolve_color, and that the helpers feeding the table
 # read misc/colors the way the rest of hi does. Everything runs against a
 # fixture misc/colors and ~/.ssh/config in the scratch dir, so the output is
 # fixed rather than "whatever this machine is configured with".
@@ -13,8 +13,8 @@
 # shellcheck disable=SC2329
 set -euo pipefail
 
-# shellcheck source=../../common/bootstrap.sh
-source "${_HI_HOME:-$HOME}/hi.d/common/bootstrap.sh"
+# shellcheck source=../../common/core.sh
+source "${_HI_HOME:-$HOME}/hi.d/common/core.sh"
 # shellcheck source=../test_lib.sh
 source "$_HI_TEST_LIB"
 # shellcheck source=../../scripts/color_preview.sh

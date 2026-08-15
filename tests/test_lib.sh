@@ -17,8 +17,8 @@ set -euo pipefail
 export XDG_CONFIG_HOME="${TMPDIR:-/tmp}/hi.testcfg.$$"
 export _HI_CONFIG_DIR="$XDG_CONFIG_HOME/hi.d"
 
-# shellcheck source=../common/bootstrap.sh
-source "${_HI_HOME:-$HOME}/hi.d/common/bootstrap.sh"
+# shellcheck source=../common/core.sh
+source "${_HI_HOME:-$HOME}/hi.d/common/core.sh"
 
 # Scratch dir every suite works in, plus the containers a suite has started
 # that its exit trap has to tear down. Both are set up by _hi_workdir and
@@ -108,6 +108,29 @@ function _hi_scratch_tree() {
   for dir in "$@"; do cp -r "$_HI_ROOT/$dir" "$root/"; done
   printf '%s' "$_HI_WORKDIR/$name"
 }
+
+# _hi_settings_fixture <name> <fn...> - run <fn...> with $_HI_ROOT,
+# $_HI_CONFIG_DIR and $_HI_SETTINGS pointed at throwaway paths under
+# $_HI_WORKDIR/<name>. scripts/install.sh's writers (config_shell,
+# ensure_settings_shebang) and its uninstall half (strip_settings) all reach for
+# those three, which in a real run are this very checkout and the developer's
+# own overlay - the same shadowing load_test.sh's _hi_clean_all wrapper does
+# before letting clean_all near $_HI_ROOT.
+#
+# The scratch overlay is deliberately a *different* directory from the scratch
+# tree's misc/, so "writes land outside the tree" is something the tests can see
+# rather than assume.
+function _hi_settings_fixture() {
+  local dir="$_HI_WORKDIR/$1"
+  local _HI_ROOT="$dir" _HI_CONFIG_DIR="$dir/config"
+  local _HI_SETTINGS="$dir/config/settings.sh"
+  mkdir -p "$dir/common" "$dir/misc" "$dir/config"
+  shift
+  "$@" >/dev/null
+}
+
+# where _hi_settings_fixture's run writes, as the assertions see it
+function _hi_fixture_settings() { printf '%s' "$_HI_WORKDIR/$1/config/settings.sh"; }
 
 function _hi_rendered() {
   printf '%b' "$1"

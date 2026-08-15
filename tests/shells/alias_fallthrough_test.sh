@@ -1,6 +1,6 @@
 #!/bin/bash
 # Unit tests for shells/aliases.sh's two pieces of logic that aren't covered
-# by tests/compat/alias_test.sh (which only checks the file loads and everything it
+# by tests/shells/alias_test.sh (which only checks the file loads and everything it
 # unconditionally defines actually landed):
 #
 #   1. "preferential fallthrough" - the `command -v a || command -v b || ...`
@@ -29,8 +29,8 @@
 # shellcheck disable=SC2329
 set -euo pipefail
 
-# shellcheck source=../../common/bootstrap.sh
-source "${_HI_HOME:-$HOME}/hi.d/common/bootstrap.sh"
+# shellcheck source=../../common/core.sh
+source "${_HI_HOME:-$HOME}/hi.d/common/core.sh"
 # shellcheck source=../test_lib.sh
 source "$_HI_TEST_LIB"
 

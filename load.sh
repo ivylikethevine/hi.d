@@ -19,9 +19,9 @@ function _hi_restore_profile() {
 }
 
 # _HI_LOAD_NO_INIT=1 sources this file for its functions alone, skipping the
-# target's profile chain - the same hatch as the BASH_SOURCE guards in
-# scripts/install.sh and scripts/uninstall.sh, spelled as an env var because
-# this file is only ever sourced, never executed.
+# target's profile chain - the same hatch as scripts/install.sh's BASH_SOURCE
+# guard, spelled as an env var because this file is only ever sourced, never
+# executed.
 [ "${_HI_LOAD_NO_INIT:-0}" = 1 ] || _hi_restore_profile
 
 set -euo pipefail
@@ -31,8 +31,8 @@ set -euo pipefail
 # "reached via hi" from "the machine hi.d lives on".
 export _HI_REMOTE_SESSION=1
 
-# shellcheck source=./common/bootstrap.sh
-source "${_HI_HOME:-$HOME}/hi.d/common/bootstrap.sh"
+# shellcheck source=./common/core.sh
+source "${_HI_HOME:-$HOME}/hi.d/common/core.sh"
 # shellcheck source=./common/header.sh
 source "$_HI_HEADER"
 
@@ -110,6 +110,9 @@ function load() {
   fi
 
   local size
+  # no arguments on purpose: the whole shipped tree is measured here, unlike
+  # hi.sh's _hi_size, which passes $_HI_EXCLUDE
+  # shellcheck disable=SC2119
   size="$(_hi_du_size)"
   _hi_cecho " $size" "$NC" 1
   if [[ "${_HI_DISABLE_HEADER:-0}" != 1 ]]; then

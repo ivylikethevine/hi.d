@@ -20,8 +20,8 @@
 # shellcheck disable=SC2329
 set -euo pipefail
 
-# shellcheck source=../../common/bootstrap.sh
-source "${_HI_HOME:-$HOME}/hi.d/common/bootstrap.sh"
+# shellcheck source=../../common/core.sh
+source "${_HI_HOME:-$HOME}/hi.d/common/core.sh"
 # shellcheck source=../test_lib.sh
 source "$_HI_TEST_LIB"
 
@@ -29,12 +29,12 @@ _HI_GATED_VARS=(_HI_DISABLE_HEADER _HI_DISABLE_PROMPT _HI_DISABLE_PERSONAL
   _HI_DISABLE_GIT_STATUS _HI_DISABLE_EDITORS _HI_DISABLE_ALIASES)
 
 # Source paths.sh in a child shell with $1/$2 as the two gate inputs, then
-# print "<var>=<value>" for every toggle the gate governs. bootstrap.sh does
-# the defaulting paths.sh relies on ( _HI_DISABLE_LOCAL / _HI_REMOTE_SESSION
-# both have to exist), so the child goes through it exactly like a real shell.
+# print "<var>=<value>" for every toggle the gate governs. core.sh does the
+# defaulting paths.sh relies on ( _HI_DISABLE_LOCAL / _HI_REMOTE_SESSION both
+# have to exist), so the child goes through it exactly like a real shell.
 function _hi_gate() {
   _HI_DISABLE_LOCAL="$1" _HI_REMOTE_SESSION="$2" bash -c '
-    source "$_HI_HOME/hi.d/common/bootstrap.sh"
+    source "$_HI_HOME/hi.d/common/core.sh"
     for v in "$@"; do printf "%s=%s\n" "$v" "${!v:-}"; done
   ' _ "${_HI_GATED_VARS[@]}"
 }
@@ -77,21 +77,9 @@ function test_toggles_stay_on_remotely_without_local_only() {
 function test_paths_sources_cleanly_under_strict_mode() {
   _HI_DISABLE_LOCAL=0 _HI_REMOTE_SESSION=0 bash -c '
     set -euo pipefail
-    source "$_HI_HOME/hi.d/common/bootstrap.sh"
+    source "$_HI_HOME/hi.d/common/core.sh"
     [ -n "$_HI_ROOT" ]
   '
-}
-
-# $_HI_SETTINGS is sourced *ahead* of paths.sh precisely so the gate can read
-# what install.sh wrote. A settings file arriving after it would parse fine
-# and do nothing, which is the failure this catches.
-function test_settings_are_visible_to_the_gate() {
-  local home
-  home="$(_hi_scratch_tree tree common misc shells)"
-  printf 'export _HI_DISABLE_LOCAL=1\n' >"$home/hi.d/misc/settings.sh"
-  # _HI_DISABLE_LOCAL comes only from the settings file here, so every toggle
-  # flipping proves the gate saw it
-  _hi_all_gated "$(_HI_HOME="$home" _hi_gate 0 0)" 1
 }
 
 # --- toggle defaults --------------------------------------------------------
@@ -118,55 +106,53 @@ function _hi_none_unset() {
   return 0
 }
 
-function test_bootstrap_defines_every_toggle() {
+# core.sh is the one entry point for bash and zsh, and what config.fish's
+# `bash -c` reaches directly
+function test_core_defines_every_toggle() {
   # shellcheck disable=SC2016 # this is source for a child bash, not for us
-  _hi_none_unset "$(_hi_defaults_via 'source "$_HI_HOME/hi.d/common/bootstrap.sh"')"
-}
-
-# shared.sh is reached directly, without bootstrap, by config.fish's `bash -c`
-function test_shared_defines_every_toggle() {
-  # shellcheck disable=SC2016 # this is source for a child bash, not for us
-  _hi_none_unset "$(_hi_defaults_via 'source "$_HI_HOME/hi.d/common/shared.sh"')"
+  _hi_none_unset "$(_hi_defaults_via 'source "$_HI_HOME/hi.d/common/core.sh"')"
 }
 
 # the whole point: sourcing aliases.sh under `set -u` must not be fatal
 function test_aliases_source_cleanly_under_nounset() {
   bash -c 'set -euo pipefail
-    source "$_HI_HOME/hi.d/common/bootstrap.sh"
+    source "$_HI_HOME/hi.d/common/core.sh"
     source "$_HI_ALIASES"' 2>/dev/null
 }
 
 function test_settings_beat_the_defaults() {
-  local home
-  home="$(_hi_scratch_tree prec common misc shells)"
-  printf 'export _HI_DISABLE_PROMPT=1\n' >"$home/hi.d/misc/settings.sh"
-  [ "$(_HI_HOME="$home" bash -c \
-    'source "$_HI_HOME/hi.d/common/bootstrap.sh"; printf "%s" "$_HI_DISABLE_PROMPT"')" = 1 ]
+  local dir
+  dir="$(_hi_overlay_dir)"
+  printf 'export _HI_DISABLE_PROMPT=1\n' >"$dir/settings.sh"
+  [ "$(_HI_CONFIG_DIR="$dir" bash -c \
+    'source "$_HI_HOME/hi.d/common/core.sh"; printf "%s" "$_HI_DISABLE_PROMPT"')" = 1 ]
 }
 
 # an explicit export from the caller's environment outranks the default too,
 # which is what makes `_HI_DISABLE_PROMPT=1 bash` work as a one-off
 function test_environment_beats_the_defaults() {
   [ "$(_HI_DISABLE_EDITORS=1 bash -c \
-    'source "$_HI_HOME/hi.d/common/bootstrap.sh"; printf "%s" "$_HI_DISABLE_EDITORS"')" = 1 ]
+    'source "$_HI_HOME/hi.d/common/core.sh"; printf "%s" "$_HI_DISABLE_EDITORS"')" = 1 ]
 }
 
 # --- the config overlay -----------------------------------------------------
 #
-# settings/colors/packages each resolve to $_HI_CONFIG_DIR's copy when the user
-# has made one and to the tree's otherwise, per file rather than all-or-nothing.
-# That is what keeps configuring hi.d from dirtying the checkout - and what lets
-# the tree be root-owned, which is the whole reason a distro package can work.
+# colors and packages each resolve to $_HI_CONFIG_DIR's copy when the user has
+# made one and to the tree's otherwise, per file rather than all-or-nothing;
+# settings.sh only ever resolves to the overlay, since that is the only place
+# install.sh writes it. That is what keeps configuring hi.d from dirtying the
+# checkout - and what lets the tree be root-owned, which is the whole reason a
+# distro package can work.
 #
 # test_lib.sh points $_HI_CONFIG_DIR at a scratch path that doesn't exist, so
 # the un-overridden direction is the default here and a real ~/.config/hi.d
 # can't decide the result.
 
-# Print $1's value from a child shell that went through bootstrap, with
+# Print $1's value from a child shell that went through core.sh, with
 # $_HI_CONFIG_DIR pointed at $2.
 function _hi_resolved() {
   _HI_CONFIG_DIR="$2" bash -c \
-    'source "$_HI_HOME/hi.d/common/bootstrap.sh"; printf "%s" "${!1}"' _ "$1"
+    'source "$_HI_HOME/hi.d/common/core.sh"; printf "%s" "${!1}"' _ "$1"
 }
 
 function _hi_overlay_dir() {
@@ -175,7 +161,7 @@ function _hi_overlay_dir() {
   printf '%s' "$dir"
 }
 
-function test_overlay_settings_win() {
+function test_settings_resolve_to_the_overlay() {
   local dir
   dir="$(_hi_overlay_dir)"
   printf '#!/bin/sh\n' >"$dir/settings.sh"
@@ -203,14 +189,14 @@ function test_overlay_falls_back_per_file() {
 function test_no_overlay_uses_the_tree() {
   local dir="$_HI_WORKDIR/no-such-overlay"
   [ "$(_hi_resolved _HI_COLORS "$dir")" = "$_HI_ROOT/misc/colors" ] &&
-    [ "$(_hi_resolved _HI_SETTINGS "$dir")" = "$_HI_ROOT/misc/settings.sh" ]
+    [ "$(_hi_resolved _HI_PACKAGES "$dir")" = "$_HI_ROOT/misc/packages" ]
 }
 
-# install.sh needs somewhere to write on a machine that has no overlay yet, so
-# this one is unguarded and always points at the overlay
-function test_settings_write_always_points_at_the_overlay() {
+# ...but settings.sh still points into the overlay on a machine that has no
+# overlay yet, unguarded, because that is where install.sh has to write it
+function test_settings_point_at_the_overlay_before_it_exists() {
   local dir="$_HI_WORKDIR/no-such-overlay"
-  [ "$(_hi_resolved _HI_SETTINGS_WRITE "$dir")" = "$dir/settings.sh" ]
+  [ "$(_hi_resolved _HI_SETTINGS "$dir")" = "$dir/settings.sh" ]
 }
 
 # the gate reads what install.sh wrote, and after this change that file is the
@@ -237,22 +223,18 @@ function run_paths_tests() {
   _hi_check "Toggles stay on remotely without local-only" test_toggles_stay_on_remotely_without_local_only
   _hi_check "Sources cleanly under strict mode" test_paths_sources_cleanly_under_strict_mode
 
-  _hi_h2 "Testing: misc/settings.sh reaches the gate"
-  _hi_check "Settings are visible to the gate" test_settings_are_visible_to_the_gate
-
   _hi_h2 "Testing: the toggles are always defined"
-  _hi_check "bootstrap.sh defines every toggle" test_bootstrap_defines_every_toggle
-  _hi_check "shared.sh defines every toggle" test_shared_defines_every_toggle
+  _hi_check "core.sh defines every toggle" test_core_defines_every_toggle
   _hi_check "aliases.sh sources cleanly under set -u" test_aliases_source_cleanly_under_nounset
   _hi_check "Settings beat the defaults" test_settings_beat_the_defaults
   _hi_check "The environment beats the defaults" test_environment_beats_the_defaults
 
   _hi_h2 "Testing: the \$_HI_CONFIG_DIR overlay"
-  _hi_check "Overlay settings win" test_overlay_settings_win
+  _hi_check "Settings resolve to the overlay" test_settings_resolve_to_the_overlay
   _hi_check "Overlay colors win" test_overlay_colors_win
   _hi_check "Falls back per file" test_overlay_falls_back_per_file
   _hi_check "No overlay uses the tree" test_no_overlay_uses_the_tree
-  _hi_check "Settings are written to the overlay" test_settings_write_always_points_at_the_overlay
+  _hi_check "Settings point at the overlay before it exists" test_settings_point_at_the_overlay_before_it_exists
   _hi_check "Overlay settings reach the gate" test_overlay_settings_are_visible_to_the_gate
 
   _hi_suite_end "paths.sh"

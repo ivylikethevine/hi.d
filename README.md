@@ -16,7 +16,7 @@ _Don't `ssh`ush your hosts, say `hi`!_
 
 ### How it works
 
-1. `hi.sh` runs on the client. It archives `hi.d/` and sends it to the target. What it leaves out is `hi.sh` itself, `.git`, `scripts/`, `tests/`, `.github/`, the `*.example` files, this README, `LICENSE` and the editor/tooling dotfiles - see `$_HI_EXCLUDE` at the top of `hi.sh` for the authoritative list. The target unpacks it into a `/tmp` directory. `_HI_ROOT` is `$INSTALL_DIR/hi.d` on the client and `$_HI_HOME/hi.d` on the target.
+1. `hi.sh` runs on the client. It archives `hi.d/` and sends it to the target. What it leaves out is `hi.sh` itself, `.git`, `scripts/`, `tests/`, `.github/`, this README, `LICENSE` and the editor/tooling dotfiles - see `$_HI_EXCLUDE` at the top of `hi.sh` for the authoritative list. The target unpacks it into a `/tmp` directory. `_HI_ROOT` is `$INSTALL_DIR/hi.d` on the client and `$_HI_HOME/hi.d` on the target.
    Your own `settings.sh`, `colors` and `packages` live outside the tree (see [Configuration](#configuration)), so they follow in a second, much smaller archive unpacked over the target's `misc/` - `$_HI_OVERLAY_FILES` in `hi.sh`. Nothing is sent if you haven't overridden anything.
 2. On the target, `$_HI_ROOT/hi.bashrc` sources `$_HI_ROOT/load.sh` and calls `load`.
 3. `load.sh` prints the header, appends hi's shell configs to the host's own rc files, and starts a session in the highest priority shell available (fish > zsh > bash).
@@ -61,7 +61,7 @@ For ssh targets specifically, `hi` first checks (over the same connection, so it
 - [optional] copy `hi.d/misc/packages` to `~/.config/hi.d/packages` and edit it to your preferences
 - say `hi`!
 - [optional] modify `~/hi.d/misc/*` and `~/hi.d/shells/*` to your liking - though anything with an overlay (`settings.sh`, `colors`, `packages`) is better edited in `~/.config/hi.d/`, which keeps the checkout clean for `hi_update`
-- done with it? `hi.d/scripts/uninstall.sh` (aliased to `hi_uninstall`) is the inverse of the install: it strips hi's lines back out of your rc files, removes the `settings.sh` it wrote, and unlinks `/usr/bin/hi`. It leaves the `hi.d` directory itself alone - and your `colors`/`packages`, which are yours - delete those yourself if you want them gone
+- done with it? `hi.d/scripts/uninstall.sh` (aliased to `hi_uninstall`, and a one-line shim onto `install.sh --uninstall`) is the inverse of the install: it strips hi's lines back out of your rc files, removes the `settings.sh` it wrote, and unlinks `/usr/bin/hi`. It leaves the `hi.d` directory itself alone - and your `colors`/`packages`, which are yours - delete those yourself if you want them gone
 
 ---
 
@@ -74,14 +74,15 @@ Reminder - place local only changes after the "`# hi-config-end`" comment in the
 ### Configuration
 
 Your config lives **outside the checkout**, in `${XDG_CONFIG_HOME:-$HOME/.config}/hi.d/` (`$_HI_CONFIG_DIR`).
-Three files there override the tree's copies, one file at a time - anything you haven't overridden keeps
-tracking the default the tree ships, so `hi_update` still delivers changes to the rest:
+`colors` and `packages` there override the tree's copies, one file at a time - anything you haven't
+overridden keeps tracking the default the tree ships, so `hi_update` still delivers changes to the rest.
+`settings.sh` has no in-tree counterpart at all: `hi_configure` only ever writes it here.
 
-| overlay file                 | overrides          | what it is                       |
-| ---------------------------- | ------------------ | -------------------------------- |
-| `~/.config/hi.d/settings.sh` | `misc/settings.sh` | what `hi_configure` writes       |
-| `~/.config/hi.d/colors`      | `misc/colors`      | your color pins                  |
-| `~/.config/hi.d/packages`    | `misc/packages`    | what the package check looks for |
+| overlay file                 | overrides       | what it is                       |
+| ---------------------------- | --------------- | -------------------------------- |
+| `~/.config/hi.d/settings.sh` | -               | what `hi_configure` writes       |
+| `~/.config/hi.d/colors`      | `misc/colors`   | your color pins                  |
+| `~/.config/hi.d/packages`    | `misc/packages` | what the package check looks for |
 
 This is what keeps configuring hi.d from dirtying the checkout (so `hi_update`'s `git pull` keeps applying
 cleanly), and it is why the tree never has to be writable at all - it can be root-owned, installed by a package
@@ -148,7 +149,7 @@ tests/test_runner.sh                    # every suite
 tests/test_runner.sh aliases shellcheck # just the named suite(s)
 ```
 
-Suite names: `aliases`, `alias_fallthrough`, `shellcheck`, `install`, `uninstall`, `hi`, `check`, `header`, `shared`,
+Suite names: `aliases`, `alias_fallthrough`, `shellcheck`, `install`, `hi`, `header`, `core`,
 `git_prompt`, `targets`, `paths`, `color_preview`, `load`, `test_lib`, `test_runner` are fast and dependency-free - they're the first thing CI
 runs on every push/PR (the last two are the harness testing itself). `ssh`, `ssh_disconnect`, `docker`, `podman`,
 `nomad`, `kube` are end-to-end:
@@ -156,7 +157,7 @@ they spin up real throwaway containers/clusters/agents and drive `hi.sh`'s actua
 they're slower and need the relevant backend installed - each skips cleanly with a warning instead of failing if its
 backend isn't available. CI runs `ssh`, `ssh_disconnect` and `docker` as a second job once the fast ones pass, which
 between them cover both halves of `hi.sh` (`_say_hi` and `_say_hi_container`). Every test script is also directly
-executable on its own, e.g. `tests/compat/shellcheck_test.sh`.
+executable on its own, e.g. `tests/shells/shellcheck_test.sh`.
 
 The tests are local-only: `tests/` is one of the directories `hi.sh` strips from the payload, so `hi_test` on a
 target tells you so rather than running (the same goes for `hi_install`, `hi_configure`, `hi_check_configs` and
@@ -178,39 +179,34 @@ tests/test_runner.sh
 | `hi.sh`                                         | runs on the client: pick the target, copy hi.d, chainload `load.sh`                                        |     |                                               |
 | `load.sh`                                       | runs on the target: header, rc grafting, shell handoff, cleanup                                            |     |                                               |
 | `common/paths.sh`                               | every path hi uses (the only file fish and sh both source)                                                 |     |                                               |
-| `common/bootstrap.sh`                           | one-line entry point for bash/zsh: paths, colors, hi's own aliases                                         |     |                                               |
-| `common/shared.sh`                              | palette, `_hi_cecho`, host/user color resolution (see below)                                               |     |                                               |
-| `common/check.sh`                               | reads `misc/packages`, reports what the host has                                                           |     |                                               |
-| `common/header.sh`                              | the connect/disconnect banner, shared by every shell                                                       |     |                                               |
+| `common/core.sh`                                | the entry point every bash/zsh script sources: settings, paths, palette, `_hi_cecho`, color resolution     |     |                                               |
+| `common/header.sh`                              | the connect/disconnect banner, shared by every shell, plus the `misc/packages` check it ends with          |     |                                               |
 | `common/git_prompt.sh`                          | bash/zsh git prompt, matching fish's built-in `fish_vcs_prompt`                                            |     |                                               |
 | `common/targets.sh`                             | every `hi` target (ssh/docker/podman/nomad/kube), for all three completions - cached and timeout-bounded   |     |                                               |
-| `misc/settings.sh`                              | legacy location for what `hi_configure` writes - it now writes `~/.config/hi.d/settings.sh` instead        |     |                                               |
 | `shells/aliases.sh`                             | personal aliases shared by bash, zsh and fish - freely editable, off wholesale via `_HI_DISABLE_ALIASES=1` |     |                                               |
 | `shells/bash.sh`                                | bash config                                                                                                |     |                                               |
 | `shells/zsh.zsh`                                | zsh config                                                                                                 |     |                                               |
 | `shells/config.fish`                            | fish config                                                                                                |     |                                               |
 | `misc/vim.rc`, `misc/nano.rc`, `misc/theme.yml` | vim, nano and eza configs                                                                                  |     |                                               |
-| `misc/packages`                                 | default for `check.sh`, as `cmd:priority[,alternative:priority]` - override in `~/.config/hi.d/packages`   |     |                                               |
+| `misc/packages`                                 | default for the packages check, as `cmd:priority[,alternative:priority]` - override in `~/.config/hi.d/packages` |     |                                         |
 | `misc/colors`                                   | default color pins for hostnames/usernames/hosttags - override in `~/.config/hi.d/colors`                  |     |                                               |
-| `scripts/install.sh`                            | configure the local shells, install and update - `--prefix`/`$DESTDIR` for packagers                       |     |                                               |
-| `scripts/uninstall.sh`                          | the inverse: strip hi's rc lines, drop the `settings.sh` it wrote, unlink `/usr/bin/hi` (`hi_uninstall`)   |     |                                               |
+| `scripts/install.sh`                            | configure the local shells, install, update and uninstall - `--prefix`/`$DESTDIR` for packagers            |     |                                               |
+| `scripts/uninstall.sh`                          | one-line shim onto `install.sh --uninstall` (`hi_uninstall`)                                               |     |                                               |
 | `scripts/color_preview.sh`                      | preview what every ssh host/user resolves to (`hi_color_preview`)                                          |     |                                               |
 | `tests/test_runner.sh`                          | unified runner - times and summarizes every test below (or a chosen subset) (`hi_test`)                    |     |                                               |
 | `tests/test_lib.sh`                             | the whole suite skeleton: asserts/counters, scratch dir, skip preamble, probe commands, poll/pty helpers   |     |                                               |
 | `tests/shells/alias_test.sh`                    | check `aliases.sh` still loads in dash/bash/zsh/fish                                                       |     |                                               |
 | `tests/shells/alias_fallthrough_test.sh`        | unit tests for `aliases.sh`'s `command -v a \                                                              | b \ | ...`fallthrough and`_HI_DISABLE_*` flag logic |
-| `tests/common/check_test.sh`                    | unit tests for `check.sh`'s per-priority found/missing/hide logic and packages-file parsing                |     |                                               |
-| `tests/common/header_test.sh`                   | unit tests for `header.sh`'s row-joining, banner padding/floor math, and the `_HI_DISABLE_HEADER` gate     |     |                                               |
-| `tests/common/shared_test.sh`                   | unit tests for `shared.sh`'s color-resolution chain (hash/override/hosttag/usertag) and `_hi_sanitize`     |     |                                               |
+| `tests/common/header_test.sh`                   | unit tests for `header.sh`: row-joining, banner padding/floor math, the `_HI_DISABLE_HEADER` gate, and the per-priority found/missing/hide logic of the packages check |     |     |
+| `tests/common/core_test.sh`                     | unit tests for `core.sh`'s color-resolution chain (hash/override/hosttag/usertag) and `_hi_sanitize`       |     |                                               |
 | `tests/common/git_prompt_test.sh`               | unit tests for `git_prompt.sh`'s status flags, ahead/behind, detached HEAD, and every in-progress state    |     |                                               |
 | `tests/common/targets_test.sh`                  | unit tests for `targets.sh` and `bash.sh`'s completion, against fixture ssh configs and fake backend CLIs  |     |                                               |
 | `tests/common/paths_test.sh`                    | unit tests for `paths.sh`'s local-only gate, both directions, and that settings reach it                   |     |                                               |
 | `tests/scripts/color_preview_test.sh`           | unit tests for `color_preview.sh`'s precedence, table inputs and layout helpers                            |     |                                               |
 | `tests/shells/hi_test.sh`                       | unit tests for `hi.sh`'s argument parsing, backend predicates and generated bootloader/fallback rc         |     |                                               |
 | `tests/shells/load_test.sh`                     | unit tests for `load.sh`'s rc grafting, marker stripping, and disposable-vs-permanent `$_HI_ROOT` cleanup  |     |                                               |
-| `tests/shells/shellcheck_test.sh`               | the lint gate: shellcheck over every `*.sh`, plus `zsh -n`/`fish --no-execute` on the two it can't parse   |     |                                               |
-| `tests/scripts/install_test.sh`                 | unit tests for `install.sh`'s marker-based rc rewriting, setting defaults, and config validation           |     |                                               |
-| `tests/scripts/uninstall_test.sh`               | unit tests for `uninstall.sh`'s marker stripping, incl. an install+uninstall round-trip                    |     |                                               |
+| `tests/shells/shellcheck_test.sh`               | the lint gate: shellcheck over every `*.sh`, plus `zsh -n`/`fish --no-execute` on every file those shells parse themselves |     |                             |
+| `tests/scripts/install_test.sh`                 | unit tests for `install.sh`: marker-based rc rewriting, setting defaults, config validation, packaging mode, and the `--uninstall` half incl. a round-trip |     |     |
 | `tests/harness/lib_test.sh`                     | unit tests for `test_lib.sh` itself - the scaffolding every other suite is built on                        |     |                                               |
 | `tests/harness/runner_test.sh`                  | drives the real `test_runner.sh` over fixture suites that pass/fail/are missing                            |     |                                               |
 | `tests/targets/ssh_test.sh`                     | end-to-end test of hi's ssh path across remote login shells                                                |     |                                               |
@@ -233,6 +229,8 @@ Every username and hostname gets a color automatically, deterministically derive
 
 ###### AI Usage
 
-Heavily inspired by: [Profilarr](https://v2.dictionarry.dev/ai-transparency)
+Heavily inspired by: [Dictionarry/Profilarr's AI Transparency Statement](https://v2.dictionarry.dev/ai-transparency)
 
 This code originally started as entirely code written by [me](https://github.com/ivylikethevine), but I have used generative AI to write large parts of it. Regardless, all of the code in this repository is my _responsibility_. AI is a tool, not an owner of a project. I have personally understood, reviewed, and approved all of the AI generated code in this repository. _Mainline releases_ have the same level of accountability to me as any code I write and publish.
+
+TODO: Increase mac compatibility by removing read/mapfile operations not present on bash 3

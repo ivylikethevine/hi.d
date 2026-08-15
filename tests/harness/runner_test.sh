@@ -6,8 +6,8 @@
 # shellcheck disable=SC2329
 set -euo pipefail
 
-# shellcheck source=../../common/bootstrap.sh
-source "${_HI_HOME:-$HOME}/hi.d/common/bootstrap.sh"
+# shellcheck source=../../common/core.sh
+source "${_HI_HOME:-$HOME}/hi.d/common/core.sh"
 # shellcheck source=../test_lib.sh
 source "$_HI_TEST_LIB"
 
@@ -158,7 +158,7 @@ function test_summary_pads_names_to_the_widest() {
   [ -n "$short" ] && [ "$short" != 0 ] && [ "$short" = "$long" ]
 }
 
-# the table is sized like every other banner hi prints - see common/shared.sh's
+# the table is sized like every other banner hi prints - see common/core.sh's
 # _HI_MAX_WIDTH, which the _hi_h1 rules above and below the table already use
 function test_summary_rows_span_hi_max_width() {
   local row

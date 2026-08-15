@@ -22,12 +22,10 @@ if not set -q _HI_CONFIG_DIR
 end
 # the settings scripts/install.sh writes, ahead of paths.sh because paths.sh's
 # local-only gate reads them (see the note by that gate). They are plain
-# `export NAME=value` lines, which fish understands natively. Overlay first,
-# exactly as paths.sh resolves $_HI_SETTINGS a moment later.
+# `export NAME=value` lines, which fish understands natively - and they always
+# live in the overlay, which is the one path paths.sh can't tell us yet.
 if test -f $_HI_CONFIG_DIR/settings.sh
   source $_HI_CONFIG_DIR/settings.sh
-else if test -f $_HI_HOME/hi.d/misc/settings.sh
-  source $_HI_HOME/hi.d/misc/settings.sh
 end
 source $_HI_HOME/hi.d/common/paths.sh
 source $_HI_ALIASES
@@ -49,7 +47,7 @@ end
 set -l hi_key "$USER@"(prompt_hostname)
 test -f $_HI_COLORS; and set hi_key "$hi_key:"(command stat -c %Y $_HI_COLORS 2>/dev/null; or command stat -f %m $_HI_COLORS 2>/dev/null)
 if not set -q __hi_colors_key; or test "$__hi_colors_key" != "$hi_key"
-  set -l hi_colors (bash -c "source $_HI_SHARED; _hi_user_color; _hi_host_color")
+  set -l hi_colors (bash -c "source $_HI_CORE; _hi_user_color; _hi_host_color")
   set -U __hi_color_user $hi_colors[1]
   set -U __hi_color_host $hi_colors[2]
   set -U __hi_colors_key "$hi_key"

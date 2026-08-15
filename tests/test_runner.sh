@@ -7,8 +7,8 @@
 #   name ...    - run only the named suite(s), e.g. `tests/test_runner.sh docker kube`
 set -euo pipefail
 
-# shellcheck source=../common/bootstrap.sh
-source "${_HI_HOME:-$HOME}/hi.d/common/bootstrap.sh"
+# shellcheck source=../common/core.sh
+source "${_HI_HOME:-$HOME}/hi.d/common/core.sh"
 
 # group:name:path (relative to this directory), in the order they run - fast
 # local checks first, the docker/kind/nomad-backed end-to-end tests after.
@@ -24,11 +24,9 @@ if ! declare -p _HI_TESTS >/dev/null 2>&1; then
     "fast:alias_fallthrough:shells/alias_fallthrough_test.sh"
     "fast:shellcheck:shells/shellcheck_test.sh"
     "fast:install:scripts/install_test.sh"
-    "fast:uninstall:scripts/uninstall_test.sh"
     "fast:hi:shells/hi_test.sh"
-    "fast:check:common/check_test.sh"
     "fast:header:common/header_test.sh"
-    "fast:shared:common/shared_test.sh"
+    "fast:core:common/core_test.sh"
     "fast:git_prompt:common/git_prompt_test.sh"
     "fast:targets:common/targets_test.sh"
     "fast:paths:common/paths_test.sh"

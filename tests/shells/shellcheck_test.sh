@@ -1,29 +1,43 @@
 #!/bin/bash
-# The repo's lint gate. shellcheck covers every *.sh file; shells/zsh.zsh and
-# shells/config.fish aren't shell it can parse, so they get their own shell's
-# syntax checker instead (`zsh -n` / `fish --no-execute`, the same two
-# scripts/install.sh already runs against the user's rc files). Without that
-# second half those two files are checked by nothing at all.
+# The repo's lint gate. shellcheck covers every *.sh file; on top of that, every
+# file a non-bash shell parses for itself is run through that shell's own syntax
+# checker (`zsh -n` / `fish --no-execute`) - see $_HI_NATIVE_LINT below. Without
+# that second half, shells/zsh.zsh and shells/config.fish are checked by nothing
+# at all, and the files fish and zsh share with sh are only ever checked as sh.
 set -euo pipefail
 
-# shellcheck source=../../common/bootstrap.sh
-source "${_HI_HOME:-$HOME}/hi.d/common/bootstrap.sh"
+# shellcheck source=../../common/core.sh
+source "${_HI_HOME:-$HOME}/hi.d/common/core.sh"
 # shellcheck source=../test_lib.sh
 source "$_HI_TEST_LIB"
 
-# "<file>:<shell>:<flag...>" for each file shellcheck can't read. Skipped with
-# a warning when that shell isn't installed - unlike shellcheck below, whose
-# absence is a hard failure, these are a supplement to the gate rather than
-# the gate itself.
-# shells/aliases.sh is checked twice on purpose: shellcheck reads it as sh
-# above, and fish parses it here, because fish sources that exact file too. It
-# is the one file in the repo that has to satisfy both, and the failure mode is
-# silent - a perfectly good `${X:-0}` is a fish parse error that aborts the
-# whole file, taking every alias with it.
+# "<file>:<shell>:<flag...>", one per file/shell pair shellcheck's own reading
+# doesn't cover. Skipped with a warning when that shell isn't installed: these
+# supplement the gate rather than being it, unlike the shellcheck run below,
+# whose absence is a hard failure.
+# (A comment line here must never *begin* with the word shellcheck - that reads
+# as a directive and fails the very lint this file runs.)
+#
+# Two kinds of entry. shells/zsh.zsh and shells/config.fish are not shell the
+# linter can parse at all, so their own shell's syntax checker (`zsh -n` /
+# `fish --no-execute`, the same two scripts/install.sh runs against the user's
+# rc files) is the only thing checking them.
+#
+# The rest are files shellcheck *does* read - as sh or bash - that another shell
+# also sources for real, so they have to parse in both. shells/aliases.sh and
+# common/paths.sh are the two fish sources directly, and the failure mode there
+# is silent: a perfectly good `${X:-0}` is a fish parse error that aborts the
+# whole file, taking every alias (or every path) with it. zsh reaches
+# common/core.sh, common/git_prompt.sh and both of those through shells/zsh.zsh.
 _HI_NATIVE_LINT=(
   "shells/zsh.zsh:zsh:-n"
   "shells/config.fish:fish:--no-execute"
   "shells/aliases.sh:fish:--no-execute"
+  "common/paths.sh:fish:--no-execute"
+  "shells/aliases.sh:zsh:-n"
+  "common/paths.sh:zsh:-n"
+  "common/core.sh:zsh:-n"
+  "common/git_prompt.sh:zsh:-n"
 )
 
 # Syntax-check the files above, returning how many failed. Adds its files to

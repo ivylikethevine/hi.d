@@ -4,8 +4,8 @@
 # misc/colors. Run via `hi_color_preview`.
 set -euo pipefail
 
-# shellcheck source=../common/bootstrap.sh
-source "${_HI_HOME:-$HOME}/hi.d/common/bootstrap.sh"
+# shellcheck source=../common/core.sh
+source "${_HI_HOME:-$HOME}/hi.d/common/core.sh"
 
 case "${1:-}" in
 -h | --help)
@@ -18,7 +18,7 @@ appear in, alongside *why* they resolve that way (an exact override, an
 ssh-config tag, or the hash of the name).
 
 Takes no arguments. Reads:
-  misc/colors        the type,name,color pins (see misc/colors.example)
+  misc/colors        the type,name,color pins (its own comments explain them)
   ~/.ssh/config      hosts, and the "# Tags: ..." comments above them
                      (override with $_HI_SSH_CONFIG)
 
@@ -42,7 +42,7 @@ function _hi_color_source() {
   printf 'default'
 }
 
-# both read misc/colors through common/shared.sh's _hi_colors_names
+# both read misc/colors through common/core.sh's _hi_colors_names
 function _hi_known_users() {
   { _hi_whoami; _hi_colors_names username LOCALUSER; } | awk '!seen[$0]++'
 }
@@ -328,9 +328,9 @@ function _hi_print_hosts_table() {
   done
 }
 
-# same hatch as scripts/install.sh and scripts/uninstall.sh: sourcing this
+# same hatch as scripts/install.sh: sourcing this
 # file defines its functions without rendering anything, which is what
-# tests/compat/color_preview_test.sh needs
+# tests/scripts/color_preview_test.sh needs
 [[ "${BASH_SOURCE[0]}" == "$0" ]] || return 0
 
 _hi_print_users_table

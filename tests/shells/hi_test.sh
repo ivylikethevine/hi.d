@@ -2,7 +2,7 @@
 # Unit tests for hi.sh - the client entry point.
 #
 # hi.sh is only ever *executed*, so it ends with the same `[[ BASH_SOURCE ==
-# $0 ]] || return 0` hatch scripts/install.sh and scripts/uninstall.sh use:
+# $0 ]] || return 0` hatch scripts/install.sh uses:
 # sourcing it here defines every function without connecting to anything.
 #
 # What that leaves reachable is the pure half of the file - argument parsing,
@@ -22,8 +22,8 @@
 # shellcheck disable=SC2329,SC2317
 set -euo pipefail
 
-# shellcheck source=../../common/bootstrap.sh
-source "${_HI_HOME:-$HOME}/hi.d/common/bootstrap.sh"
+# shellcheck source=../../common/core.sh
+source "${_HI_HOME:-$HOME}/hi.d/common/core.sh"
 # shellcheck source=../test_lib.sh
 source "$_HI_TEST_LIB"
 # shellcheck source=../../hi.sh

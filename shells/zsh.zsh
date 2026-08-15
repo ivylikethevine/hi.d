@@ -1,7 +1,7 @@
 #!/bin/zsh
 
 # === start required configuration ===
-source "${_HI_HOME:-$HOME}/hi.d/common/bootstrap.sh"
+source "${_HI_HOME:-$HOME}/hi.d/common/core.sh"
 source "$_HI_GIT_PROMPT"
 source "$_HI_ALIASES"
 

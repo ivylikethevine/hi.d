@@ -3,12 +3,12 @@
 # Runs on the client - copies hi.d to the target and chainloads load.sh there.
 set -euo pipefail # must be disabled after our code (this file is part of the interactive shell - any error would close the session)
 
-# shellcheck source=./common/bootstrap.sh
-source "${_HI_HOME:-$HOME}/hi.d/common/bootstrap.sh"
+# shellcheck source=./common/core.sh
+source "${_HI_HOME:-$HOME}/hi.d/common/core.sh"
 
 _HI_EXCLUDE=(--exclude README.md --exclude .git --exclude .gitignore --exclude scripts
   --exclude hi.sh --exclude hi.bashrc --exclude .zed --exclude .vscode --exclude .shellcheckrc
-  --exclude '*.example' --exclude tests --exclude .github --exclude .claude
+  --exclude tests --exclude .github --exclude .claude
   --exclude CLAUDE.md --exclude .devcontainer --exclude .markdownlint.yaml --exclude LICENSE)
 
 # The user's config overlay ($_HI_CONFIG_DIR, outside the tree), by the names it
@@ -484,9 +484,9 @@ function _hi() {
 
 set +euo pipefail # the connection paths below run against unknown hosts, where a probe that fails is normal, not fatal
 
-# Same hatch as scripts/install.sh and scripts/uninstall.sh: sourcing this file
-# defines its functions without connecting to anything, which tests/compat/
-# hi_test.sh needs. Executed normally, $0 is this file and we dispatch.
+# Same hatch as scripts/install.sh: sourcing this file defines its functions
+# without connecting to anything, which tests/shells/hi_test.sh needs. Executed
+# normally, $0 is this file and we dispatch.
 [[ "${BASH_SOURCE[0]}" == "$0" ]] || return 0
 
 _hi "$@"

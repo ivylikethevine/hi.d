@@ -1,16 +1,14 @@
 #!/bin/bash
-# Unit tests for common/shared.sh
+# Unit tests for common/core.sh
 # Nearly every function below is invoked indirectly - by name, through
 # _hi_case's "$@" - which SC2329 can't see.
 # shellcheck disable=SC2329
 set -euo pipefail
 
-# shellcheck source=../../common/bootstrap.sh
-source "${_HI_HOME:-$HOME}/hi.d/common/bootstrap.sh"
+# shellcheck source=../../common/core.sh
+source "${_HI_HOME:-$HOME}/hi.d/common/core.sh"
 # shellcheck source=../test_lib.sh
 source "$_HI_TEST_LIB"
-# shellcheck source=../../common/shared.sh
-source "$_HI_SHARED"
 
 function test_sanitize_leaves_plain_text_alone() {
   [ "$(_hi_sanitize "hello world")" = "hello world" ]
@@ -134,10 +132,10 @@ function test_resolve_color_falls_back_to_hash() {
   [ "$(_HI_COLORS="$colors" _hi_resolve_color username unknownxyz)" = "$(_hi_hash_color unknownxyz)" ]
 }
 
-function run_shared_tests() {
+function run_core_tests() {
   _hi_workdir sharedtest
 
-  _hi_h1 "Testing common/shared.sh"
+  _hi_h1 "Testing common/core.sh"
 
   _hi_suite_begin
 
@@ -172,7 +170,7 @@ function run_shared_tests() {
   _hi_check "Usertag when no exact override" test_resolve_color_usertag_when_no_exact_override
   _hi_check "Falls back to the hash" test_resolve_color_falls_back_to_hash
 
-  _hi_suite_end "shared.sh"
+  _hi_suite_end "core.sh"
 }
 
-run_shared_tests
+run_core_tests

@@ -1,13 +1,16 @@
 #!/bin/bash
-# Unit tests for scripts/install.sh's reusable logic.
+# Unit tests for scripts/install.sh's reusable logic - both halves of it, since
+# `--uninstall` lives in the same script: the marker-based rc rewriting and the
+# settings/toggle handling, then the stripping that reverses them (incl. an
+# install+uninstall round trip).
 #
 # Nearly every function below is invoked indirectly - by name, through
 # _hi_case's "$@" - which SC2329 can't see.
 # shellcheck disable=SC2329
 set -euo pipefail
 
-# shellcheck source=../../common/bootstrap.sh
-source "${_HI_HOME:-$HOME}/hi.d/common/bootstrap.sh"
+# shellcheck source=../../common/core.sh
+source "${_HI_HOME:-$HOME}/hi.d/common/core.sh"
 # shellcheck source=../test_lib.sh
 source "$_HI_TEST_LIB"
 
@@ -66,51 +69,33 @@ function test_config_shell_appends_at_the_end() {
 # Nothing is spliced into common/paths.sh any more - the settings live in
 # $_HI_SETTINGS, which every entry point sources *ahead* of paths.sh so that
 # paths.sh's local-only gate can read them. That ordering is the load-bearing
-# property now, and it's spread across four files (no single include line is
-# valid in sh, bash, zsh and fish alike), so assert it in all four.
+# property now, and it's spread across three files (no single include line is
+# valid in sh, bash, zsh and fish alike), so assert it in each.
+# Comment lines are filtered out first: both files explain themselves in prose
+# that names the very files being looked for, and a comment mentioning paths.sh
+# above the code that sources settings.sh would read as the wrong order.
+function _hi_first_code_line() {
+  grep -n "$2" "$1" | grep -v ':[[:space:]]*#' | head -1 | cut -d: -f1
+}
+
 function _hi_sources_settings_before_paths() {
   local target="$1" settings_line paths_line
-  settings_line="$(grep -n 'misc/settings\.sh' "$target" | head -1 | cut -d: -f1)"
-  paths_line="$(grep -n 'common/paths\.sh' "$target" | head -1 | cut -d: -f1)"
+  settings_line="$(_hi_first_code_line "$target" 'settings\.sh')"
+  paths_line="$(_hi_first_code_line "$target" 'paths\.sh')"
   [ -n "$settings_line" ] && [ -n "$paths_line" ] && [ "$settings_line" -lt "$paths_line" ]
 }
 
-function test_bootstrap_sources_settings_first() {
-  _hi_sources_settings_before_paths "$_HI_ROOT/common/bootstrap.sh"
-}
-
-function test_shared_sources_settings_first() {
-  _hi_sources_settings_before_paths "$_HI_ROOT/common/shared.sh"
+function test_core_sources_settings_first() {
+  _hi_sources_settings_before_paths "$_HI_ROOT/common/core.sh"
 }
 
 function test_fish_config_sources_settings_first() {
   _hi_sources_settings_before_paths "$_HI_ROOT/shells/config.fish"
 }
 
-# hi.sh's fallback rc is the fourth entry point, but it's *generated* rather
+# hi.sh's fallback rc is the third entry point, but it's *generated* rather
 # than sourced, so it's asserted against _hi_fallback_rc's real output over in
-# tests/compat/hi_test.sh instead of by grepping the file.
-
-# config_shell and ensure_settings_shebang write into $_HI_ROOT and
-# $_HI_SETTINGS_WRITE - which for a real run are this very checkout and the
-# user's real overlay. Shadow them with scratch paths first, the same way
-# load_test.sh's _hi_clean_all wrapper shadows $_HI_ROOT before letting
-# clean_all near it.
-#
-# The scratch overlay is deliberately a *different* directory from the scratch
-# tree's misc/, so "writes land outside the tree" is something these tests can
-# see rather than assume.
-function _hi_settings_fixture() {
-  local dir="$_HI_WORKDIR/$1"
-  local _HI_ROOT="$dir" _HI_CONFIG_DIR="$dir/config"
-  local _HI_SETTINGS="$dir/misc/settings.sh" _HI_SETTINGS_WRITE="$dir/config/settings.sh"
-  mkdir -p "$dir/common" "$dir/misc"
-  shift
-  "$@" >/dev/null
-}
-
-# where _hi_settings_fixture's install writes, as the assertions see it
-function _hi_fixture_settings() { printf '%s' "$_HI_WORKDIR/$1/config/settings.sh"; }
+# tests/shells/hi_test.sh instead of by grepping the file.
 
 # settings.sh is sourced by sh, bash, zsh and fish, so line 1 has to be the
 # `#!/bin/sh` all four read as a comment - and has to stay line 1 once
@@ -131,7 +116,7 @@ function test_settings_are_written_outside_the_tree() {
 
 function _hi_shebang_then_settings() {
   ensure_settings_shebang
-  config_shell settings "$_HI_SETTINGS_WRITE" "export _HI_DISABLE_PROMPT=1"
+  config_shell settings "$_HI_SETTINGS" "export _HI_DISABLE_PROMPT=1"
 }
 
 function test_shebang_stays_first_under_the_settings_block() {
@@ -156,7 +141,7 @@ function test_shebang_is_not_duplicated_on_reruns() {
 # dash and fish both source this file, so sh is the only correct one
 function _hi_shebang_wrong() {
   mkdir -p "$_HI_CONFIG_DIR"
-  printf '%s\n%s\n' '#!/bin/bash' 'export _HI_MAX_WIDTH=120' >"$_HI_SETTINGS_WRITE"
+  printf '%s\n%s\n' '#!/bin/bash' 'export _HI_MAX_WIDTH=120' >"$_HI_SETTINGS"
   ensure_settings_shebang
 }
 
@@ -175,7 +160,7 @@ function test_shebang_replaces_a_different_one_and_keeps_content() {
 function _hi_settings_one_write() {
   local -a _HI_SETTING_LINES=("export _HI_DISABLE_PROMPT=1" "" "export _HI_HEADER_CHECK=0")
   mkdir -p "$_HI_CONFIG_DIR"
-  config_shell settings "$_HI_SETTINGS_WRITE" "${_HI_SETTING_LINES[@]}"
+  config_shell settings "$_HI_SETTINGS" "${_HI_SETTING_LINES[@]}"
 }
 
 function test_config_settings_writes_every_group_at_once() {
@@ -183,24 +168,6 @@ function test_config_settings_writes_every_group_at_once() {
   local f
   f="$(_hi_fixture_settings onewrite)"
   grep -qF "export _HI_DISABLE_PROMPT=1" "$f" && grep -qF "export _HI_HEADER_CHECK=0" "$f"
-}
-
-# An install predating the overlay left settings inside the tree. The answers in
-# it are read back through $_HI_SETTINGS, rewritten to the overlay, and the
-# in-tree copy taken away - two files both claiming to be the settings is the
-# failure this prevents.
-function _hi_settings_migrate() {
-  mkdir -p "$_HI_CONFIG_DIR"
-  printf '#!/bin/sh\nexport _HI_MAX_WIDTH=120\n' >"$_HI_SETTINGS"
-  ensure_settings_shebang
-  config_shell settings "$_HI_SETTINGS_WRITE" "export _HI_MAX_WIDTH=120"
-  migrate_in_tree_settings
-}
-
-function test_in_tree_settings_are_migrated_to_the_overlay() {
-  _hi_settings_fixture migrate _hi_settings_migrate
-  grep -qF "export _HI_MAX_WIDTH=120" "$(_hi_fixture_settings migrate)" &&
-    [ ! -e "$_HI_WORKDIR/migrate/misc/settings.sh" ]
 }
 
 # this run's answer wins over the file, which still holds the previous run's
@@ -398,6 +365,93 @@ function test_install_tree_touches_no_rc_file() {
   [ ! -e "$dest/root" ] && [ ! -e "$dest$HOME" ] && [ ! -e "$dest/etc/bash.bashrc" ]
 }
 
+# --- the uninstall half -----------------------------------------------------
+
+function test_strip_marker_removes_tagged_lines_only() {
+  local target="$_HI_WORKDIR/tagged"
+  printf '%s\n' "# a user comment" "alias ll='ls -la'" >"$target"
+  config_shell fixture "$target" "hi line one" "hi line two"
+  strip_marker test "$target"
+  grep -qF "# a user comment" "$target" &&
+    grep -qF "alias ll='ls -la'" "$target" &&
+    ! grep -qF "$_HI_MARKER" "$target" &&
+    ! grep -qF "hi line one" "$target"
+}
+
+function test_strip_marker_noop_when_marker_absent() {
+  local target="$_HI_WORKDIR/untagged" before after
+  printf '%s\n' "just a normal file" >"$target"
+  before="$(cat "$target")"
+  strip_marker test "$target"
+  after="$(cat "$target")"
+  [ "$before" = "$after" ]
+}
+
+function test_strip_marker_safe_on_missing_file() {
+  strip_marker test "$_HI_WORKDIR/does-not-exist"
+}
+
+function test_install_uninstall_round_trip() {
+  local target="$_HI_WORKDIR/roundtrip" before after
+  printf '%s\n' "# pre-existing line" >"$target"
+  before="$(cat "$target")"
+  config_shell fixture "$target" "some hi config line"
+  grep -qF "some hi config line" "$target" || return 1
+  strip_marker fixture "$target"
+  after="$(cat "$target")"
+  [ "$before" = "$after" ]
+}
+
+function _hi_strip_written_settings() {
+  ensure_settings_shebang
+  strip_settings
+}
+
+function test_strip_settings_removes_what_install_wrote() {
+  _hi_settings_fixture strip _hi_strip_written_settings
+  [ ! -e "$(_hi_fixture_settings strip)" ]
+}
+
+# colors and packages are the user's own writing, not something install.sh
+# produced - uninstall leaves them for the same reason it leaves the checkout
+function _hi_strip_beside_colors() {
+  printf 'hostname,foo,brred\n' >"$_HI_CONFIG_DIR/colors"
+  ensure_settings_shebang
+  strip_settings
+}
+
+function test_strip_settings_leaves_the_rest_of_the_overlay() {
+  _hi_settings_fixture keep _hi_strip_beside_colors
+  [ -f "$_HI_WORKDIR/keep/config/colors" ] && [ ! -e "$(_hi_fixture_settings keep)" ]
+}
+
+function test_strip_settings_is_quiet_when_there_is_nothing() {
+  _hi_settings_fixture nothing strip_settings
+}
+
+function test_unlink_hi_skips_when_link_missing() {
+  local link="$_HI_WORKDIR/no-such-link"
+  (
+    _HI_LINK="$link"
+    unlink_hi
+  ) | grep -q "leaving it alone"
+}
+
+function test_unlink_hi_skips_when_link_points_elsewhere() {
+  local link="$_HI_WORKDIR/elsewhere-link"
+  ln -sfn /bin/true "$link"
+  (
+    _HI_LINK="$link"
+    unlink_hi
+  ) | grep -q "leaving it alone"
+}
+
+# the shim is the only reason `hi_uninstall` and the documented
+# scripts/uninstall.sh path still work, so assert it points at the flag
+function test_uninstall_shim_delegates_to_install() {
+  grep -qF -- '--uninstall' "$_HI_UNINSTALL" && grep -qF 'install.sh' "$_HI_UNINSTALL"
+}
+
 function run_install_tests() {
   _hi_workdir installtest
 
@@ -414,8 +468,7 @@ function run_install_tests() {
   _hi_check "Appends at the end" test_config_shell_appends_at_the_end
 
   _hi_h2 "Testing: settings are sourced ahead of paths.sh"
-  _hi_check "common/bootstrap.sh" test_bootstrap_sources_settings_first
-  _hi_check "common/shared.sh" test_shared_sources_settings_first
+  _hi_check "common/core.sh" test_core_sources_settings_first
   _hi_check "shells/config.fish" test_fish_config_sources_settings_first
 
   _hi_h2 "Testing: ensure_settings_shebang"
@@ -427,7 +480,6 @@ function run_install_tests() {
   _hi_h2 "Testing: config_settings"
   _hi_check "Writes every group at once" test_config_settings_writes_every_group_at_once
   _hi_check "Written outside the tree" test_settings_are_written_outside_the_tree
-  _hi_check "In-tree settings are migrated" test_in_tree_settings_are_migrated_to_the_overlay
   _hi_check "setting_off sees this run's answer" test_setting_off_sees_this_runs_answer
 
   _hi_h2 "Testing: setting_off / setting_enabled"
@@ -465,6 +517,22 @@ function run_install_tests() {
   _hi_check "Links hi without DESTDIR in the target" test_install_tree_links_hi_without_destdir_in_the_target
   _hi_check "Writes the profile.d snippet" test_install_tree_writes_the_profile_snippet
   _hi_check "Touches no rc file" test_install_tree_touches_no_rc_file
+
+  _hi_h2 "Testing: strip_marker (--uninstall)"
+  _hi_check "Removes only tagged lines" test_strip_marker_removes_tagged_lines_only
+  _hi_check "No-op when marker absent" test_strip_marker_noop_when_marker_absent
+  _hi_check "Safe on a missing file" test_strip_marker_safe_on_missing_file
+  _hi_check "Install+uninstall round-trips" test_install_uninstall_round_trip
+
+  _hi_h2 "Testing: strip_settings"
+  _hi_check "Removes what install wrote" test_strip_settings_removes_what_install_wrote
+  _hi_check "Leaves the rest of the overlay" test_strip_settings_leaves_the_rest_of_the_overlay
+  _hi_check "Quiet when there is nothing" test_strip_settings_is_quiet_when_there_is_nothing
+
+  _hi_h2 "Testing: unlink_hi (skip paths only)"
+  _hi_check "Skips a missing link" test_unlink_hi_skips_when_link_missing
+  _hi_check "Skips a foreign link" test_unlink_hi_skips_when_link_points_elsewhere
+  _hi_check "uninstall.sh shims onto --uninstall" test_uninstall_shim_delegates_to_install
 
   _hi_suite_end "install.sh logic"
 }

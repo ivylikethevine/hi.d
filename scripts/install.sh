@@ -1,22 +1,33 @@
 #!/bin/bash
 # Points the local shells at hi.d's configs and links hi.sh onto $PATH.
 # Safe to re-run: it repairs the lines it owns and leaves everything else alone.
+#
+# --uninstall is the exact inverse and lives here rather than in a script of its
+# own: both halves own the same marker-tagged lines and the same symlink, and
+# when they were two files the contract between them was two copies of a string
+# staying identical. scripts/uninstall.sh is a shim onto this flag.
 set -euo pipefail
 
 _HI_FEATURES_ONLY=""
 _HI_CHECK_CONFIGS_ONLY=""
+# _MODE, not a bare _HI_UNINSTALL: common/paths.sh exports that name as the path
+# to scripts/uninstall.sh, and it is sourced below - a flag by that name would be
+# overwritten with a non-empty path and turn every plain `install.sh` run into an
+# uninstall.
+_HI_UNINSTALL_MODE=""
 _HI_ASSUME_YES=0
 # --prefix, or a non-empty $DESTDIR, puts this script in packaging mode: lay the
 # tree down for someone else's package manager instead of wiring up this user's
 # shells. See install_tree below.
 _HI_PREFIX=""
-_HI_USAGE="Usage: install.sh [--features-only] [--check-configs] [--yes] [--prefix <dir>]"
+_HI_USAGE="Usage: install.sh [--features-only] [--check-configs] [--uninstall] [--yes] [--prefix <dir>]"
 # one `shift` after the case, not one per arm: an arm added without its own was
 # an infinite loop
 while [ $# -gt 0 ]; do
   case "$1" in
   --features-only) _HI_FEATURES_ONLY=1 ;;
   --check-configs) _HI_CHECK_CONFIGS_ONLY=1 ;;
+  --uninstall) _HI_UNINSTALL_MODE=1 ;;
   -y | --yes) _HI_ASSUME_YES=1 ;;
   --prefix)
     [ $# -ge 2 ] || {
@@ -49,6 +60,12 @@ its current setting when there is no tty to answer on.
                    ~/.bashrc, ~/.zshrc and ~/.config/fish/config.fish -
                    skip everything else. This is what \`hi_check_configs\`
                    calls.
+  --uninstall      The inverse: strip hi's lines back out of those three rc
+                   files, remove the settings.sh this wrote, and unlink
+                   /usr/bin/hi if it points at this hi.d. Safe to re-run.
+                   hi.d itself is left in place - rm -rf it yourself once
+                   you're done with it. This is what \`hi_uninstall\` (and
+                   scripts/uninstall.sh) calls.
   -y, --yes        Install even if that validation finds problems. Without
                    it, a non-interactive run stops rather than rewriting
                    shell configs that don't parse.
@@ -89,18 +106,62 @@ done
 _HI_HOME="$(cd -P "$(dirname "$_HI_SELF")/../.." && pwd)"
 export _HI_HOME
 
-# shellcheck source=../common/bootstrap.sh
-source "$_HI_HOME/hi.d/common/bootstrap.sh"
+# shellcheck source=../common/core.sh
+source "$_HI_HOME/hi.d/common/core.sh"
 # shellcheck source=../common/header.sh
 source "$_HI_HEADER"
 # shellcheck source=../common/git_prompt.sh
 source "$_HI_GIT_PROMPT"
 
-# $_HI_MARKER/$_HI_LINK (common/paths.sh) and config_shell/strip_marker
-# (common/rcfile.sh) are shared with scripts/uninstall.sh, which has to
-# recognise exactly what this writes.
-# shellcheck source=../common/rcfile.sh
-source "$_HI_ROOT/common/rcfile.sh"
+# Ownership of the lines hi adds to a user's shell rc files: writing them
+# (config_shell) and taking them back out (strip_marker). $_HI_MARKER comes from
+# common/paths.sh.
+#
+# Deliberately not merged with load.sh's configure_files/clean_all: those graft
+# a whole file into a *target's* rc for one session, keyed by start/end block
+# comments. These own individual lines in a permanent local rc, tagged one by
+# one.
+
+# Rewrite the hi-managed block (tagged with $_HI_MARKER) in $target to be
+# exactly $@, leaving other content untouched - so this both installs on a fresh
+# machine and repairs stale lines if hi.d has moved. Empty arguments are
+# skipped, so a setting left at its default contributes nothing.
+function config_shell() {
+  local name="$1" target="$2" line existing desired="" tmpfile
+  shift 2
+  _hi_h2 "Checking $name"
+
+  mkdir -p "$(dirname "$target")"
+  touch "$target"
+  for line in "$@"; do
+    [ -n "$line" ] && desired+="$(printf '%-45s %s' "$line" "$_HI_MARKER")"$'\n'
+  done
+
+  existing="$(grep -F "$_HI_MARKER" "$target" || true)"
+  if [ "$existing" = "${desired%$'\n'}" ]; then
+    _hi_cecho " local $name up to date :)" "$GREEN"
+    return 0
+  fi
+
+  _hi_cecho " local $name out of date, updating..." "$YELLOW"
+  tmpfile="$(mktemp -t hi.append.XXXXXX)"
+  grep -vF "$_HI_MARKER" "$target" >"$tmpfile" || true
+  printf '%s' "$desired" >>"$tmpfile"
+  mv "$tmpfile" "$target"
+  _hi_cecho " local $name updated :)" "$GREEN"
+}
+
+# config_shell with an empty block, plus a quieter report for the common
+# "there was nothing here anyway" case.
+function strip_marker() {
+  local name="$1" target="$2"
+  if [ ! -f "$target" ] || ! grep -qF "$_HI_MARKER" "$target"; then
+    _hi_h2 "Checking $name"
+    _hi_cecho " local $name has no hi lines :)" "$GREEN"
+    return 0
+  fi
+  config_shell "$name" "$target"
+}
 
 # Only emit an _HI_HOME export when hi.d isn't at $HOME/hi.d; every consumer
 # already defaults it to $HOME. $2 overrides which home is meant, for the
@@ -294,7 +355,7 @@ function config_header_details() {
 }
 
 # Ask for the header/banner's terminal width. Entering nothing keeps whatever's
-# already configured; entering 80 (common/shared.sh's own built-in default,
+# already configured; entering 80 (common/core.sh's own built-in default,
 # via ${_HI_MAX_WIDTH:-80}) clears the override instead of writing it out.
 function config_max_width() {
   local target="$_HI_SETTINGS" current value reply=""
@@ -314,47 +375,30 @@ function config_max_width() {
   _HI_SETTING_LINES+=("${value:+export _HI_MAX_WIDTH=$value}")
 }
 
-# $_HI_SETTINGS_WRITE is hi's own file, not one of the user's rc files, and it
+# $_HI_SETTINGS is hi's own file, not one of the user's rc files, and it
 # holds nothing but `export NAME=value` lines - so it gets a real `#!/bin/sh`
 # line 1, which every shell that sources it (sh, bash, zsh, fish) reads as a
 # comment and which lets editors, `file` and shellcheck see a POSIX sh script
 # rather than an anonymous fragment. Any other shebang is replaced rather than
 # left alongside: dash and fish both source this, so sh is the only correct one.
 # config_shell rewrites only its own marker-tagged block, so this line stays.
-#
-# Reads come from $_HI_SETTINGS (which resolves to the in-tree copy until an
-# overlay exists) and writes go to $_HI_SETTINGS_WRITE (always the overlay), so
-# an install predating the overlay is read once and rewritten outside the tree.
 function ensure_settings_shebang() {
   local shebang='#!/bin/sh' first="" tmpfile
-  mkdir -p "$(dirname "$_HI_SETTINGS_WRITE")"
-  if [ -f "$_HI_SETTINGS_WRITE" ]; then
-    IFS= read -r first <"$_HI_SETTINGS_WRITE" || first=""
+  mkdir -p "$(dirname "$_HI_SETTINGS")"
+  if [ -f "$_HI_SETTINGS" ]; then
+    IFS= read -r first <"$_HI_SETTINGS" || first=""
   fi
   [ "$first" = "$shebang" ] && return 0
 
   tmpfile="$(mktemp -t hi.settings.XXXXXX)"
   printf '%s\n' "$shebang" >"$tmpfile"
-  if [ -f "$_HI_SETTINGS_WRITE" ]; then
+  if [ -f "$_HI_SETTINGS" ]; then
     case "$first" in
-    '#!'*) tail -n +2 "$_HI_SETTINGS_WRITE" >>"$tmpfile" ;;
-    *) cat "$_HI_SETTINGS_WRITE" >>"$tmpfile" ;;
+    '#!'*) tail -n +2 "$_HI_SETTINGS" >>"$tmpfile" ;;
+    *) cat "$_HI_SETTINGS" >>"$tmpfile" ;;
     esac
   fi
-  mv "$tmpfile" "$_HI_SETTINGS_WRITE"
-}
-
-# Older installs wrote settings into the tree. Now that the answers have been
-# re-read and written to the overlay, drop that file: leaving it would mean two
-# files claiming to be the settings, and the in-tree one is the copy that dirties
-# the checkout and blocks `hi_update`. Only ever the path *inside* the tree, and
-# only when it isn't the file just written.
-function migrate_in_tree_settings() {
-  local legacy="$_HI_ROOT/misc/settings.sh"
-  [ "$legacy" = "$_HI_SETTINGS_WRITE" ] && return 0
-  [ -f "$legacy" ] || return 0
-  rm -f "$legacy"
-  _hi_cecho " moved your settings out of the checkout to $_HI_SETTINGS_WRITE :)" "$GREEN"
+  mv "$tmpfile" "$_HI_SETTINGS"
 }
 
 # Runs $@'s syntax-check flag against an existing rc file (without executing it)
@@ -426,6 +470,43 @@ function config_hi() {
   sudo ln -sfn "$_HI_LAUNCHER" "$_HI_LINK"
 }
 
+# --- uninstalling -----------------------------------------------------------
+
+# The other half of being install's inverse: drop the settings file it wrote.
+# Only settings.sh - the overlay's colors and packages are hand-written config,
+# not something this script produced, so they are left alone for the same reason
+# the checkout itself is.
+function strip_settings() {
+  _hi_h2 "Checking settings"
+  if [ ! -f "$_HI_SETTINGS" ]; then
+    _hi_cecho " no settings.sh to remove :)" "$GREEN"
+    return 0
+  fi
+  rm -f "$_HI_SETTINGS"
+  _hi_cecho " removed $_HI_SETTINGS :)" "$GREEN"
+}
+
+function unlink_hi() {
+  _hi_h2 "Checking hi.sh"
+  if [ "$(readlink "$_HI_LINK" 2>/dev/null)" != "$_HI_LAUNCHER" ]; then
+    _hi_cecho " $_HI_LINK doesn't point at this hi.d, leaving it alone" "$GREEN"
+    return 0
+  fi
+  _hi_cecho " Unlinking $_HI_LINK... [password required]" "$BLUE"
+  sudo rm -f "$_HI_LINK"
+}
+
+# Strips hi's marker-tagged lines from the local shell rc files, removes the
+# settings file, and unlinks /usr/bin/hi if it points at this hi.d. Leaves the
+# checkout itself in place - delete that yourself once you're done with it.
+function run_uninstall() {
+  strip_marker bashrc "$_HI_HOME_BASHRC"
+  strip_marker zshrc "$_HI_HOME_ZSHRC"
+  strip_marker config.fish "$_HI_HOME_FISH_CONFIG"
+  strip_settings
+  unlink_hi
+}
+
 # What a package ships. Deliberately spelled out rather than derived from
 # hi.sh's $_HI_EXCLUDE: that list answers "what does a target need for one
 # session", this one answers "what does an installed copy need forever", and the
@@ -473,12 +554,15 @@ function install_tree() {
 }
 
 # lets tests/scripts/install_test.sh `source` this file to reach the functions above
-# (config_shell, ask_setting, ...) without running the real install below -
-# config_hi's sudo call in particular has no business firing from a test
+# (config_shell, strip_marker, ask_setting, ...) without running the real install
+# below - config_hi's and unlink_hi's sudo calls in particular have no business
+# firing from a test
 [[ "${BASH_SOURCE[0]}" == "$0" ]] || return 0
 
 if [ -n "$_HI_CHECK_CONFIGS_ONLY" ]; then
   _hi_h1 "Checking existing shell configs!"
+elif [ -n "$_HI_UNINSTALL_MODE" ]; then
+  _hi_h1 "Uninstalling hi.sh!"
 elif [ -n "$_HI_FEATURES_ONLY" ]; then
   _hi_h1 "Configuring hi.sh features!"
 elif [ -n "$_HI_PACKAGING" ]; then
@@ -487,6 +571,13 @@ else
   _hi_h1 "Installing (or reinstalling) hi.sh!"
 fi
 _hi_cecho " | hi_home: $_HI_HOME | hi_root: $_HI_ROOT | login shell: ${SHELL##*/}" "$BLUE"
+
+if [ -n "$_HI_UNINSTALL_MODE" ]; then
+  run_uninstall
+  _hi_h1 "Uninstalled!"
+  _hi_cecho " | hi.d itself is still at $_HI_ROOT - rm -rf it yourself if you're done with it" "$BLUE"
+  exit 0
+fi
 
 # Before every prompt and every check: this run belongs to a package manager,
 # not to a user with shells to wire up or settings to choose.
@@ -514,8 +605,7 @@ config_max_width
 # documents: config_shell rewrites the whole marker block in its target, so
 # three separate calls against one file would each wipe the other two.
 ensure_settings_shebang
-config_shell settings "$_HI_SETTINGS_WRITE" "${_HI_SETTING_LINES[@]}"
-migrate_in_tree_settings
+config_shell settings "$_HI_SETTINGS" "${_HI_SETTING_LINES[@]}"
 
 if [ -n "$_HI_FEATURES_ONLY" ]; then
   _hi_h1 "Features updated!"

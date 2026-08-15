@@ -8,7 +8,7 @@
 # slowest (four of five backends are a subprocess each). Two knobs keep it honest:
 #   _HI_PROBE_TIMEOUT  seconds any one backend CLI gets (default 2, needs GNU
 #                      `timeout`), or an unreachable daemon hangs completion
-#                      unbounded. Shared with common/shared.sh's _hi_probe.
+#                      unbounded. Shared with common/core.sh's _hi_probe.
 #   _HI_TARGETS_TTL    seconds a result is reused (default 5, 0 disables). A
 #                      just-started container may not appear until it expires;
 #                      the trade for not paying ~110ms per TAB.

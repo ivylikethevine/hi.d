@@ -2,15 +2,15 @@
 # every path hi uses, in one place. Sourced by fish as well as bash/zsh, so it
 # must stay to plain `export NAME=value` lines (plus simple `[ ] && export`
 # guards) - no functions, no ${var:-...}.
-# $_HI_HOME and $_HI_CONFIG_DIR must already be set (common/bootstrap.sh does
-# that for bash/zsh); see the note above the user-configurable block below.
+# $_HI_HOME and $_HI_CONFIG_DIR must already be set (common/core.sh does that
+# for bash/zsh); see the note above the user-configurable block below.
 # shellcheck disable=SC2139 # aliases are meant to expand $_HI_* now, not later
+# shellcheck disable=SC2153 # $_HI_HOME is set by whoever sources this, not here
 
 # hi.d itself
 export _HI_ROOT="$_HI_HOME/hi.d"
 export _HI_LAUNCHER="$_HI_ROOT/hi.sh"
-export _HI_SHARED="$_HI_ROOT/common/shared.sh"
-export _HI_CHECK="$_HI_ROOT/common/check.sh"
+export _HI_CORE="$_HI_ROOT/common/core.sh"
 export _HI_HEADER="$_HI_ROOT/common/header.sh"
 export _HI_GIT_PROMPT="$_HI_ROOT/common/git_prompt.sh"
 export _HI_TARGETS="$_HI_ROOT/common/targets.sh"
@@ -24,34 +24,32 @@ export _HI_TEST_RUN="$_HI_ROOT/tests/test_runner.sh"
 
 # user configurable
 #
-# Each of these three is a *pair*: the default the tree ships, then an overlay
-# in $_HI_CONFIG_DIR that replaces it wholesale when the user has made one. Per
-# file, not merged - anything you haven't overridden keeps tracking the tree's
-# copy, so `hi_update` still delivers new defaults for the rest. That overlay
-# lives outside the tree so that configuring hi.d neither dirties the checkout
-# (which would stop `hi_update`'s git pull applying cleanly) nor needs the tree
-# to be writable at all - a package manager owns /usr/share, not you.
+# Your own settings, colors and packages live in $_HI_CONFIG_DIR, outside the
+# tree, so that configuring hi.d neither dirties the checkout (which would stop
+# `hi_update`'s git pull applying cleanly) nor needs the tree to be writable at
+# all - a package manager owns /usr/share, not you. hi.sh ships whichever of
+# them you have to every target, since $_HI_EXCLUDE only ever carried the
+# in-tree copies.
 #
 # $_HI_CONFIG_DIR itself can't be derived here: it wants
 # ${XDG_CONFIG_HOME:-$HOME/.config}/hi.d and fish has no such expansion. Each
 # entry point computes it before sourcing this file, knowing its own shell -
-# the same four sites listed by the local-only gate at the bottom.
+# the same three sites listed by the local-only gate at the bottom.
 #
-# settings.sh holds every _HI_DISABLE_*/_HI_HEADER_*/_HI_MAX_WIDTH choice
-# scripts/install.sh writes. See the local-only gate below for why it is
-# sourced before this file, not from it. hi.sh ships whichever of the three
-# resolve to an overlay to every target, since $_HI_EXCLUDE only ever carried
-# the in-tree copies.
-export _HI_SETTINGS="$_HI_ROOT/misc/settings.sh"
-[ -f "$_HI_CONFIG_DIR/settings.sh" ] && export _HI_SETTINGS="$_HI_CONFIG_DIR/settings.sh"
+# colors and packages are each a *pair*: the default the tree ships, then the
+# overlay's copy when the user has made one. Per file, not merged - anything you
+# haven't overridden keeps tracking the tree's copy, so `hi_update` still
+# delivers new defaults for the rest. settings.sh has no in-tree half:
+# scripts/install.sh is the only thing that writes it and it writes here, so the
+# path is unguarded - on a fresh machine no `[ -f ]` test could find it yet, and
+# install.sh must still know where to put it. It holds every
+# _HI_DISABLE_*/_HI_HEADER_*/_HI_MAX_WIDTH choice, and is sourced ahead of this
+# file rather than from it - see the local-only gate below.
+export _HI_SETTINGS="$_HI_CONFIG_DIR/settings.sh"
 export _HI_COLORS="$_HI_ROOT/misc/colors"
 [ -f "$_HI_CONFIG_DIR/colors" ] && export _HI_COLORS="$_HI_CONFIG_DIR/colors"
 export _HI_PACKAGES="$_HI_ROOT/misc/packages"
 [ -f "$_HI_CONFIG_DIR/packages" ] && export _HI_PACKAGES="$_HI_CONFIG_DIR/packages"
-# where scripts/install.sh *writes* its answers. Unguarded on purpose: on a
-# fresh machine the file doesn't exist yet, so no `[ -f ]` test could find it,
-# and install.sh must still know where to put it.
-export _HI_SETTINGS_WRITE="$_HI_CONFIG_DIR/settings.sh"
 export _HI_VIMRC="$_HI_ROOT/misc/vim.rc"
 export _HI_NANORC="$_HI_ROOT/misc/nano.rc"
 # eza reads its theme from a *directory* (misc/theme.yml), not a file path
@@ -61,10 +59,10 @@ export _HI_BASHRC="$_HI_ROOT/shells/bash.sh"
 export _HI_ZSHRC="$_HI_ROOT/shells/zsh.zsh"
 export _HI_FISH_CONFIG="$_HI_ROOT/shells/config.fish"
 
-# The contract between install.sh and uninstall.sh: the tag install writes on
-# every line it owns, and the symlink it manages. Here rather than in either
-# script because a marker reworded in one alone would make hi_uninstall a
-# silent no-op that still reports success.
+# The tag scripts/install.sh writes on every line it owns, and the symlink it
+# manages. Here with every other _HI_* constant rather than inside that script,
+# so that both halves of it (install and --uninstall) and anything else that
+# ever has to recognise hi's lines read the strings from one place.
 export _HI_MARKER="# added by hi during install"
 export _HI_LINK="/usr/bin/hi"
 
@@ -99,30 +97,29 @@ alias hi="$_HI_LAUNCHER"
 alias hi_install="[ ! -f $_HI_INSTALL ] && echo 'hi_install $_HI_NO_CHECKOUT' || $_HI_INSTALL"
 alias hi_uninstall="[ ! -f $_HI_UNINSTALL ] && echo 'hi_uninstall $_HI_NO_CHECKOUT' || $_HI_UNINSTALL"
 alias hi_configure="[ ! -f $_HI_INSTALL ] && echo 'hi_configure $_HI_NO_CHECKOUT' || $_HI_INSTALL --features-only"
-alias hi_reconfigure="hi_configure"
 alias hi_check_configs="[ ! -f $_HI_INSTALL ] && echo 'hi_check_configs $_HI_NO_CHECKOUT' || $_HI_INSTALL --check-configs"
 # .git rather than a file: $_HI_EXCLUDE strips it, so this is the right test
 # here - and it is also absent from a packaged install, which $_HI_NO_GIT covers
 alias hi_update="[ ! -d $_HI_ROOT/.git ] && echo 'hi_update: $_HI_NO_GIT' || git -C $_HI_ROOT pull"
 alias hi_info="echo ' | hi_home: $_HI_HOME | hi_root: $_HI_ROOT | script: $_HI_LAUNCHER'"
 alias hi_color_preview="[ ! -f $_HI_COLOR_PREVIEW ] && echo 'hi_color_preview $_HI_NO_CHECKOUT' || $_HI_COLOR_PREVIEW"
-# no guard: common/ *is* shipped to targets, so check.sh is always there
-alias hi_packages_preview="bash -c 'source \"$_HI_CHECK\" && full_check'"
+# no guard: common/ *is* shipped to targets, so header.sh is always there
+alias hi_packages_preview="bash -c 'source \"$_HI_HEADER\" && full_check'"
 alias hi_test="[ ! -f $_HI_TEST_RUN ] && echo 'hi_test $_HI_NO_CHECKOUT' || $_HI_TEST_RUN"
 
-# The gate below reads the settings scripts/install.sh writes, so $_HI_SETTINGS
-# is sourced ahead of this file rather than from it: no single include line is
-# valid in all four shells that source paths.sh (`.` is not fish syntax,
-# `source` is not dash's). Each entry point does it instead, knowing its own
-# shell - common/bootstrap.sh (bash/zsh), common/shared.sh (reached directly by
-# fish's `bash -c`), shells/config.fish, and hi.sh's _hi_fallback_rc. Add a
-# fifth here if a new one appears.
+# The gate below reads the settings scripts/install.sh writes, so that file is
+# sourced ahead of this one rather than from it: no single include line is valid
+# in all four shells that source paths.sh (`.` is not fish syntax, `source` is
+# not dash's). Each entry point does it instead, knowing its own shell -
+# common/core.sh (bash/zsh, and what fish's `bash -c` reaches),
+# shells/config.fish, and hi.sh's _hi_fallback_rc. Add a fourth here if a new
+# one appears.
 #
-# Those same four also set $_HI_CONFIG_DIR, for the same reason: this file's
-# overlay guards need it, and ${XDG_CONFIG_HOME:-$HOME/.config} is not
-# something fish can expand. They each source the overlay's settings.sh in
-# preference to the in-tree one, which is the one resolution they have to do
-# for themselves - $_HI_SETTINGS doesn't exist until this file runs.
+# Those same three also set $_HI_CONFIG_DIR, for the same reason: this file's
+# paths are resolved against it, and ${XDG_CONFIG_HOME:-$HOME/.config} is not
+# something fish can expand. They each spell out $_HI_CONFIG_DIR/settings.sh,
+# which is the one path they have to derive for themselves - $_HI_SETTINGS
+# doesn't exist until this file runs.
 #
 # local-only disable logic. _HI_REMOTE_SESSION is exported by load.sh, which
 # every remote path chainloads and the local install's shells never do, so it

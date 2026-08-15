@@ -4,8 +4,8 @@
 # (and, only when the tree is disposable, hi.d itself) back out again.
 #
 # load.sh is sourced here with _HI_LOAD_NO_INIT=1, which skips its profile
-# restoration and leaves just the functions - the same hatch install.sh and
-# uninstall.sh get from their BASH_SOURCE guards. Everything it touches is
+# restoration and leaves just the functions - the same hatch install.sh gets
+# from its BASH_SOURCE guard. Everything it touches is
 # redirected into the scratch dir by reassigning _HI_CONFIGS (built from
 # $_HI_BASHRC/$_HI_HOME_BASHRC at source time) and _HI_ROOT.
 #
@@ -19,8 +19,8 @@
 # shellcheck disable=SC2329
 set -euo pipefail
 
-# shellcheck source=../../common/bootstrap.sh
-source "${_HI_HOME:-$HOME}/hi.d/common/bootstrap.sh"
+# shellcheck source=../../common/core.sh
+source "${_HI_HOME:-$HOME}/hi.d/common/core.sh"
 # shellcheck source=../test_lib.sh
 source "$_HI_TEST_LIB"
 

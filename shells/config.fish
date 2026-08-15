@@ -30,9 +30,19 @@ function fish_greeting
   set -q fish_greeting; or bash -c "source $_HI_HEADER; hi_header Online"
 end
 
-set -l hi_colors (bash -c "source $_HI_SHARED; _hi_user_color; _hi_host_color")
-set -gx fish_color_user $hi_colors[1]
-set -gx fish_color_host $hi_colors[2]
+# That bash call is a whole process for two color names that only change with
+# the user, host or misc/colors. Memoized in a universal variable keyed on all
+# three, so it runs on the first fish shell after a change and no others.
+set -l hi_key "$USER@"(prompt_hostname)
+test -f $_HI_COLORS; and set hi_key "$hi_key:"(command stat -c %Y $_HI_COLORS 2>/dev/null; or command stat -f %m $_HI_COLORS 2>/dev/null)
+if not set -q __hi_colors_key; or test "$__hi_colors_key" != "$hi_key"
+  set -l hi_colors (bash -c "source $_HI_SHARED; _hi_user_color; _hi_host_color")
+  set -U __hi_color_user $hi_colors[1]
+  set -U __hi_color_host $hi_colors[2]
+  set -U __hi_colors_key "$hi_key"
+end
+set -gx fish_color_user $__hi_color_user
+set -gx fish_color_host $__hi_color_host
 set -gx fish_color_host_remote $fish_color_host
 
 # wrapper so aliases (which are functions in fish) still work under sudo.

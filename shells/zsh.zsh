@@ -11,7 +11,8 @@ setopt prompt_subst
 _hi_interactive_extras
 
 if [[ "${_HI_DISABLE_PROMPT:-0}" != 1 ]]; then
-  if tput setaf 1 >/dev/null 2>&1; then
+  _hi_prime_identity
+  if _hi_has_color; then
     export CLICOLOR=1
     export LSCOLORS=gafacadabaegedabagacad
     # %F{} has no bright variants, so brred/brblue/... fall back to their base color
@@ -28,7 +29,15 @@ fi
 # completion: `hi` from the shared target list, `exa` the same way as `eza`
 zmodload zsh/complist
 autoload -Uz compinit promptinit
-compinit
+# A bare `compinit` re-scans and security-checks all of $fpath on every zsh
+# start - typically 50-150ms. Full check once a day, trust the dump in between
+# (-C). (#qN.mh+24): N so a missing dump isn't an error, .mh+24 for "older
+# than 24 hours".
+if [[ -n ${ZDOTDIR:-$HOME}/.zcompdump(#qN.mh+24) ]]; then
+  compinit
+else
+  compinit -C
+fi
 promptinit
 _hi() {
   local -a targets descs

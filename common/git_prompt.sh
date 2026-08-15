@@ -7,9 +7,13 @@ set -euo pipefail # must be disabled after our code (this file is part of the in
 _hi_git_prompt() {
   [[ "${_HI_DISABLE_GIT_STATUS:-0}" == 1 ]] && return
 
-  local rev_info git_dir ref="" detached=0
-  rev_info=$(LANG=C git rev-parse --is-inside-work-tree --git-dir 2>/dev/null) || return
-  git_dir="${rev_info#*$'\n'}"
+  # --no-optional-locks on both git calls: without it `git status` refreshes and
+  # *rewrites* .git/index every prompt - real I/O and lock contention per
+  # keystroke-to-prompt cycle, tens to hundreds of ms on a large checkout. The
+  # output is identical. rev-parse exits non-zero outside a repo without
+  # --is-inside-work-tree too, whose answer was read and discarded.
+  local git_dir ref="" detached=0
+  git_dir=$(LANG=C git --no-optional-locks rev-parse --git-dir 2>/dev/null) || return
 
   local ahead=0 behind=0 staged=0 dirty=0 invalid=0 untracked=0 line
   while IFS= read -r line; do
@@ -30,7 +34,7 @@ _hi_git_prompt() {
     "u "*) ((invalid++)) ;;
     "? "*) ((untracked++)) ;;
     esac
-  done < <(LANG=C git status --porcelain=v2 --branch 2>/dev/null)
+  done < <(LANG=C git --no-optional-locks status --porcelain=v2 --branch 2>/dev/null)
 
   if [[ -z "$ref" ]]; then
     detached=1

@@ -84,6 +84,18 @@ function _hi_check() {
   _hi_case _hi_assert "$@"
 }
 
+# _hi_scratch_tree <name> <dir...> - a throwaway hi.d under $_HI_WORKDIR/<name>
+# holding copies of the named top-level directories, and prints the _HI_HOME
+# that points at it. What a "minimal shipped tree" needs is one edit here
+# rather than one per suite that stands one up.
+function _hi_scratch_tree() {
+  local name="$1" root="$_HI_WORKDIR/$1/hi.d" dir
+  shift
+  mkdir -p "$root"
+  for dir in "$@"; do cp -r "$_HI_ROOT/$dir" "$root/"; done
+  printf '%s' "$_HI_WORKDIR/$name"
+}
+
 function _hi_rendered() {
   printf '%b' "$1"
 }
@@ -349,6 +361,35 @@ function _hi_wait_pid() {
   fi
 }
 
+# _hi_timed_out <label> <timeout_s> [hook] - _hi_wait_pid's timeout callback,
+# reached through its "$@". One top-level function, since the two case runners
+# below each used to define a *global* `_hi_on_timeout` and the second silently
+# redefined the first.
+# shellcheck disable=SC2329
+function _hi_timed_out() {
+  _hi_h3 " | [$1] -- TIMED OUT after ${2}s, killing" "$RED"
+  [ -n "${3:-}" ] && "$3"
+  return 0
+}
+
+# _hi_case_result <label> <what> <exit> <t0> <t1> <out_file> <marker...> - the
+# verdict both case runners reach: OK with a timing, or FAILED with the
+# transcript indented under it. Every marker given must be present.
+function _hi_case_result() {
+  local label="$1" what="$2" exit_code="$3" t0="$4" t1="$5" out_file="$6" marker ok=1
+  shift 6
+  for marker in "$@"; do
+    grep -qF "$marker" "$out_file" 2>/dev/null || ok=0
+  done
+  if [ "$ok" -eq 1 ]; then
+    _hi_cecho " | [$label] -- $what OK ($(_hi_elapsed "$t0" "$t1")s)" "$GREEN"
+    return 0
+  fi
+  _hi_h3 " | [$label] -- FAILED (exit $exit_code, $(_hi_elapsed "$t0" "$t1")s)" "$RED"
+  sed 's/^/      /' "$out_file" 2>/dev/null
+  return 1
+}
+
 function _hi_exec_case() {
   local label="$1" what="$2" marker="$3" timeout_s="$4" target="$5" cmd="$6" hook="${7:-}"
   local out_file="$_HI_WORKDIR/$label.out" exit_code t0 t1
@@ -356,22 +397,11 @@ function _hi_exec_case() {
   _hi_cecho " | Running: $_HI_LAUNCHER $target $cmd"
   t0="$(_hi_now)"
   "${_HI_PTY_WRAP[@]}" "$_HI_LAUNCHER" "$target" "$cmd" <&3 >"$out_file" 2>&1 &
-  function _hi_on_timeout() {
-    _hi_h3 " | [$label] -- TIMED OUT after ${timeout_s}s, killing" "$RED"
-    [ -n "$hook" ] && "$hook"
-    return 0
-  }
-  _hi_wait_pid "$!" "$timeout_s" _hi_on_timeout
+  _hi_wait_pid "$!" "$timeout_s" _hi_timed_out "$label" "$timeout_s" "$hook"
   exit_code="$_HI_WAIT_EXIT"
   t1="$(_hi_now)"
 
-  if grep -q "$marker" "$out_file" 2>/dev/null; then
-    _hi_cecho " | [$label] -- $what OK ($(_hi_elapsed "$t0" "$t1")s)" "$GREEN"
-    return 0
-  fi
-  _hi_h3 " | [$label] -- FAILED (exit $exit_code, $(_hi_elapsed "$t0" "$t1")s)" "$RED"
-  sed 's/^/      /' "$out_file" 2>/dev/null
-  return 1
+  _hi_case_result "$label" "$what" "$exit_code" "$t0" "$t1" "$out_file" "$marker"
 }
 
 # True once the target's session has actually reached a shell, so
@@ -432,21 +462,13 @@ function _hi_interactive_case() {
     # line lands rather than for a flat two seconds
     _hi_poll_bool 20 0.25 grep -q "hi closing" "$out_file" || true
   } | "${_HI_PTY_FORCED[@]}" "$@" >"$out_file" 2>&1 &
-  function _hi_on_timeout() {
-    _hi_h3 " | [$label] -- TIMED OUT after ${timeout_s}s, killing" "$RED"
-    return 0
-  }
-  _hi_wait_pid "$!" "$timeout_s" _hi_on_timeout
+  _hi_wait_pid "$!" "$timeout_s" _hi_timed_out "$label" "$timeout_s"
   exit_code="$_HI_WAIT_EXIT"
   t1="$(_hi_now)"
 
-  if grep -qF "$expected" "$out_file" 2>/dev/null && grep -q "hi closing" "$out_file" 2>/dev/null; then
-    _hi_cecho " | [$label] -- $what OK ($(_hi_elapsed "$t0" "$t1")s)" "$GREEN"
-    return 0
-  fi
-  _hi_h3 " | [$label] -- FAILED (exit $exit_code, $(_hi_elapsed "$t0" "$t1")s)" "$RED"
-  sed 's/^/      /' "$out_file" 2>/dev/null
-  return 1
+  # both markers: the interactive shell really came up and ran our line, and
+  # load()'s exit path ran rather than the session dying early
+  _hi_case_result "$label" "$what" "$exit_code" "$t0" "$t1" "$out_file" "$expected" "hi closing"
 }
 
 _HI_SSHD_IMAGE=hi-test-sshd

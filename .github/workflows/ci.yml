@@ -6,34 +6,27 @@ on:
   pull_request:
 
 jobs:
-  # The fast, dependency-free suites. macOS is here because hi.d explicitly
-  # targets it (common/header.sh has a whole macOS branch) and nothing ever
-  # exercised that: it runs advisory-only for now, since macOS ships bash 3.2
-  # and the suites use bash-4 builtins - see the portability findings. It
-  # reports without blocking rather than being left out and never looked at.
+  # The fast, dependency-free suites.
   test:
-    name: fast suites (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    continue-on-error: ${{ matrix.advisory }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: ubuntu-latest
-            advisory: false
-          - os: macos-latest
-            advisory: true
+    name: fast suites (ubuntu-latest)
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
       - name: Install zsh and fish
-        if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y zsh fish
 
       # ubuntu-latest's apt package lags upstream badly so we install
       # the latest upstream binary
+      - name: Cache shellcheck
+        id: shellcheck-cache
+        uses: actions/cache@v4
+        with:
+          path: /usr/local/bin/shellcheck
+          key: shellcheck-0.11.0-linux-x86_64
+
       - name: Install shellcheck
-        if: runner.os == 'Linux'
+        if: steps.shellcheck-cache.outputs.cache-hit != 'true'
         env:
           SHELLCHECK_VERSION: 0.11.0
         run: |
@@ -45,15 +38,32 @@ jobs:
           rm -rf /tmp/shellcheck.tar.xz "/tmp/shellcheck-v${SHELLCHECK_VERSION}"
           shellcheck --version
 
+      - name: Run fast test suites
+        env:
+          _HI_HOME: ${{ github.workspace }}/..
+        run: "${{ github.workspace }}/tests/test_runner.sh --group fast"
+
+  # hi.d explicitly targets macOS (common/header.sh has a whole macOS branch)
+  # and nothing ever exercised it. Advisory-only for now: macOS ships bash 3.2
+  # and the suites use bash-4 builtins. Its own job rather than an advisory leg
+  # of `test`, because the e2e jobs below gate on `test` - and waiting on a
+  # runner whose result is explicitly allowed to fail put the macOS queue on
+  # the critical path of every push for nothing.
+  test-macos:
+    name: fast suites (macos-latest)
+    runs-on: macos-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
       # zsh is macOS's own login shell, so only fish and shellcheck are missing
       - name: Install fish and shellcheck
-        if: runner.os == 'macOS'
         run: brew install fish shellcheck
 
       - name: Run fast test suites
         env:
           _HI_HOME: ${{ github.workspace }}/..
-        run: "${{ github.workspace }}/tests/test_runner.sh aliases alias_fallthrough shellcheck install uninstall hi check header shared git_prompt targets paths color_preview load test_lib test_runner"
+        run: "${{ github.workspace }}/tests/test_runner.sh --group fast"
 
   # .markdownlint.yaml has been in the repo unenforced; this is what makes it
   # mean something. Its own job so a prose-only failure is obvious at a glance
@@ -81,7 +91,7 @@ jobs:
       - name: Run end-to-end suites
         env:
           _HI_HOME: ${{ github.workspace }}/..
-        run: "${{ github.workspace }}/tests/test_runner.sh ssh ssh_disconnect docker"
+        run: "${{ github.workspace }}/tests/test_runner.sh --group e2e"
 
   # podman/nomad/kube used to be left out on the grounds that ssh and docker
   # already reach both halves of hi.sh. They don't reach everything, though:
@@ -98,17 +108,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install podman
-        run: sudo apt-get update && sudo apt-get install -y podman
-
-      - name: Install nomad
+      # podman and nomad install together after the hashicorp repo is added, so
+      # the job pays for one `apt-get update` rather than two
+      - name: Install podman and nomad
         run: |
           set -euo pipefail
           curl -sSfL https://apt.releases.hashicorp.com/gpg |
             sudo gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
           echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" |
             sudo tee /etc/apt/sources.list.d/hashicorp.list >/dev/null
-          sudo apt-get update && sudo apt-get install -y nomad
+          sudo apt-get update && sudo apt-get install -y podman nomad
           nomad version
 
       - name: Install kind
@@ -119,4 +128,4 @@ jobs:
       - name: Run backend end-to-end suites
         env:
           _HI_HOME: ${{ github.workspace }}/..
-        run: "${{ github.workspace }}/tests/test_runner.sh podman nomad kube"
+        run: "${{ github.workspace }}/tests/test_runner.sh --group backends"

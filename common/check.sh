@@ -20,8 +20,12 @@ _HI_NO=(hide "$BRYELLOW" "$YELLOW" hide hide "$BRRED")
 # proper color and mark it as installed or missing (or hide it as per above)
 function check_line() {
   local pair cmd priority color best best_priority best_idx=0 idx=0 found=0 symbol rendered
-  local -a pairs
-  IFS=',' read -ra pairs <<<"$1"
+  # word-split on the local IFS rather than `read -ra <<<`, whose here-string is
+  # a pipe (or temp file on bash < 5.1) per package line - ~30 per header
+  local IFS=','
+  # shellcheck disable=SC2206 # deliberate split on IFS; the file has no globs
+  local -a pairs=($1)
+  unset IFS
   best="${pairs[0]%:*}"
   best_priority="${pairs[0]#*:}"
 

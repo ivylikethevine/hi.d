@@ -65,33 +65,15 @@ export _HI_HOME
 # shellcheck source=../common/bootstrap.sh
 source "$_HI_HOME/hi.d/common/bootstrap.sh"
 
-_HI_MARKER="# added by hi during install"
-_HI_LINK="/usr/bin/hi"
+# $_HI_MARKER and $_HI_LINK come from common/paths.sh, and strip_marker from
+# common/rcfile.sh alongside the config_shell it is the inverse of - this file
+# used to define all three itself, so recognising what install.sh wrote
+# depended on two copies of a string staying identical.
+# shellcheck source=../common/rcfile.sh
+source "$_HI_ROOT/common/rcfile.sh"
 
-# Remove every line tagged with $_HI_MARKER from $target, leaving everything
-# else untouched. Mirrors config_shell in install.sh, just with an empty
-# desired block.
-function strip_marker() {
-  local name="$1" target="$2" tmpfile
-  _hi_h2 "Checking $name"
-
-  if [ ! -f "$target" ] || ! grep -qF "$_HI_MARKER" "$target"; then
-    _hi_cecho " local $name has no hi lines :)" "$GREEN"
-    return 0
-  fi
-
-  tmpfile="$(mktemp -t hi.uninstall.XXXXXX)"
-  grep -vF "$_HI_MARKER" "$target" >"$tmpfile" || true
-  mv "$tmpfile" "$target"
-  _hi_cecho " local $name cleaned :)" "$GREEN"
-}
-
-# The other half of being install's inverse: drop the settings file it wrote,
-# plus any marker lines an install from before $_HI_SETTINGS existed left
-# behind in the three tracked source files (install.sh's
-# migrate_legacy_settings sweeps the same three).
+# The other half of being install's inverse: drop the settings file it wrote.
 function strip_settings() {
-  local target
   _hi_h2 "Checking settings"
   if [ -f "$_HI_SETTINGS" ]; then
     rm -f "$_HI_SETTINGS"
@@ -99,10 +81,6 @@ function strip_settings() {
   else
     _hi_cecho " no ${_HI_SETTINGS#"$_HI_ROOT/"} to remove :)" "$GREEN"
   fi
-  for target in "$_HI_ROOT/common/paths.sh" "$_HI_ROOT/common/header.sh" "$_HI_ROOT/common/shared.sh"; do
-    grep -qF "$_HI_MARKER" "$target" 2>/dev/null || continue
-    strip_marker "${target#"$_HI_ROOT/"}" "$target"
-  done
 }
 
 function unlink_hi() {

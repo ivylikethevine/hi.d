@@ -11,37 +11,45 @@ source "${_HI_HOME:-$HOME}/hi.d/common/bootstrap.sh"
 # shellcheck source=../test_lib.sh
 source "$_HI_TEST_LIB"
 
+# _hi_fixture <name> <exit> [counts-line] - a stand-in suite: announces itself
+# as "ran:<name>", optionally writes <counts-line> to $_HI_COUNTS_FILE the way
+# _hi_report_counts/_hi_report_skip do, and exits <exit>. One writer rather
+# than three near-copies of the same hand-escaped printf format.
 function _hi_fixture() {
-  printf '#!/bin/bash\nprintf "ran:%s\\n"\nexit %s\n' "$1" "$2" >"$_HI_FIXTURES/$1.sh"
+  {
+    printf '#!/bin/bash\nprintf "ran:%s\\n"\n' "$1"
+    # shellcheck disable=SC2016 # $_HI_COUNTS_FILE is resolved when the fixture runs
+    [ -n "${3:-}" ] && printf 'printf "%%s\\n" "%s" >"$_HI_COUNTS_FILE"\n' "$3"
+    printf 'exit %s\n' "$2"
+  } >"$_HI_FIXTURES/$1.sh"
   chmod +x "$_HI_FIXTURES/$1.sh"
 }
 
-# A fixture that reports a case tally the way _hi_report_counts does, so the
-# runner's pass/fail columns can be driven without standing up a real suite.
-# Writes "<total> <failed>" to $_HI_COUNTS_FILE and exits with the fail count.
+# A suite reporting a case tally: "<total> <failed>", exiting with the fail count.
 function _hi_counting_fixture() {
-  # shellcheck disable=SC2016 # $_HI_COUNTS_FILE is resolved when the fixture runs
-  printf '#!/bin/bash\nprintf "ran:%s\\n"\nprintf "%s %s\\n" >"$_HI_COUNTS_FILE"\nexit %s\n' \
-    "$1" "$2" "$3" "$3" >"$_HI_FIXTURES/$1.sh"
-  chmod +x "$_HI_FIXTURES/$1.sh"
+  _hi_fixture "$1" "$3" "$2 $3"
 }
 
 # a suite that stood down without running anything - what _hi_require does
 # when its backend is missing. Exits 0 like a passing suite, so only the SKIP
 # line in $_HI_COUNTS_FILE tells the runner the two apart.
 function _hi_skipping_fixture() {
-  # shellcheck disable=SC2016 # $_HI_COUNTS_FILE is resolved when the fixture runs
-  printf '#!/bin/bash\nprintf "ran:%s\\n"\nprintf "SKIP %s\\n" >"$_HI_COUNTS_FILE"\nexit 0\n' \
-    "$1" "${2:-no backend}" >"$_HI_FIXTURES/$1.sh"
-  chmod +x "$_HI_FIXTURES/$1.sh"
+  _hi_fixture "$1" 0 "SKIP ${2:-no backend}"
 }
 
 function _hi_run_runner() {
   local table="$1" line
   shift
   local -a entries=()
+  # Fixtures are written "<name>:<path>" - the group is what the real table
+  # carries for CI's sake and no case here is about, so a two-field row gets
+  # the default one rather than every call site restating it.
   while IFS= read -r line; do
-    [ -n "$line" ] && entries+=("$line")
+    [ -n "$line" ] || continue
+    case "$line" in
+    *:*:*) entries+=("$line") ;;
+    *) entries+=("fast:$line") ;;
+    esac
   done <<<"$table"
 
   _HI_RUN_EXIT=0
@@ -250,68 +258,86 @@ function test_each_suites_own_output_still_streams() {
   [[ "$_HI_RUN_OUT" == *"ran:green"* ]]
 }
 
-function test_shipped_table_still_has_every_suite_name() {
-  local name out
-  out="$("$_HI_TEST_RUN" definitely-not-a-suite 2>&1)" || true
-  for name in aliases alias_fallthrough shellcheck install uninstall hi check header shared git_prompt \
-    targets load test_lib test_runner ssh ssh_disconnect docker podman nomad kube; do
-    [[ "$out" == *"$name"* ]] || {
-      _hi_cecho " | missing from the table: $name" "$RED"
-      return 1
-    }
-  done
+# The shipped table, straight from --list: "<group> <name>" per suite. This
+# used to be a hardcoded name list here plus a `sed` over the runner's own
+# error message - parsing a UI string as an API. The hardcoded copy had already
+# drifted: paths, color_preview and kube were in the table and not in the list,
+# so the test meant to catch drift was silently ignoring three suites.
+function _hi_runner_list() {
+  "$_HI_TEST_RUN" --list 2>/dev/null
 }
 
-# A suite registered in _HI_TESTS but missing from ci.yml never runs on a push,
-# and nothing says so - which is exactly what happened to the `hi` suite: added
-# to the table, left out of the workflow, silently unexercised. The workflow's
-# fast-suite line has to name every non-e2e suite in the table.
-function test_ci_runs_every_fast_suite() {
-  local workflow="$_HI_ROOT/.github/workflows/ci.yml" line known name missing=""
-  local -a names=()
-  [ -f "$workflow" ] || return 0 # a shipped tree has no .github
-  # the closing quote goes, or the last name on the line reads as `name"` and
-  # is reported missing even when it is right there
-  line="$(grep -o 'test_runner\.sh [a-z_ ]*"' "$workflow" | head -1 | tr -d '"')"
-  [ -n "$line" ] || {
-    _hi_cecho " | no fast-suite line found in ci.yml" "$RED"
+function test_shipped_table_lists_a_group_and_name_per_suite() {
+  local group name count=0
+  while read -r group name; do
+    [ -n "$group" ] && [ -n "$name" ] || {
+      _hi_cecho " | malformed --list row: $group $name" "$RED"
+      return 1
+    }
+    count=$((count + 1))
+  done < <(_hi_runner_list)
+  [ "$count" -gt 0 ] || {
+    _hi_cecho " | --list returned nothing" "$RED"
     return 1
   }
-  # the real table, read back out of the runner's own error message - the same
-  # source test_shipped_table_still_has_every_suite_name uses, and the only one
-  # available here since $_HI_TESTS lives inside the runner, not this suite
-  known="$("$_HI_TEST_RUN" definitely-not-a-suite 2>&1)" || true
-  read -r -a names <<<"$(sed 's/.*(known: //; s/).*//' <<<"$known")"
-  [ "${#names[@]}" -gt 0 ] || {
+}
+
+# Every suite has to be in a group CI actually runs, or it never runs on a push
+# and nothing says so - which is what happened to the `hi` suite. CI invokes
+# groups by name now (see ci.yml's `--group fast`/`e2e`/`backends`), so this
+# checks the workflow runs every group the table uses rather than every suite.
+function test_ci_runs_every_group_in_the_table() {
+  local workflow="$_HI_ROOT/.github/workflows/ci.yml" group name missing=""
+  local -a groups=()
+  [ -f "$workflow" ] || return 0 # a shipped tree has no .github
+  while read -r group name; do
+    [[ " ${groups[*]} " == *" $group "* ]] || groups+=("$group")
+  done < <(_hi_runner_list)
+  [ "${#groups[@]}" -gt 0 ] || {
     _hi_cecho " | couldn't read the suite table back out of the runner" "$RED"
     return 1
   }
-  for name in "${names[@]}"; do
-    case "$name" in
-    ssh | ssh_disconnect | docker | podman | nomad | kube) continue ;; # e2e, own jobs
-    esac
-    [[ " $line " == *" $name "* ]] || missing+=" $name"
+  for group in "${groups[@]}"; do
+    grep -qF -- "--group $group" "$workflow" || missing+=" $group"
   done
   [ -z "$missing" ] || {
-    _hi_cecho " | registered in the runner but not run by CI:$missing" "$RED"
+    _hi_cecho " | groups in the runner but not run by CI:$missing" "$RED"
     return 1
   }
 }
 
-function test_every_shipped_suite_script_exists_and_is_executable() {
-  local entry path known
-  local -a entries=() names=()
-  mapfile -t entries < <(grep -oE '^[[:space:]]*"[^":]+:[^"]+\.sh"$' "$_HI_TEST_RUN" | tr -d '" ')
-  known="$("$_HI_TEST_RUN" definitely-not-a-suite 2>&1)" || true
-  read -r -a names <<<"$(sed 's/.*(known: //; s/).*//' <<<"$known")"
+# Each suite selectable on its own, and every group non-empty: together these
+# are what makes `--group` a safe thing for CI to depend on.
+# --group is what ci.yml invokes, so every group the table uses has to select
+# at least one suite - and only suites of that group
+function test_every_group_selects_only_its_own_suites() {
+  local group rows
+  while read -r group; do
+    rows="$("$_HI_TEST_RUN" --group "$group" --list 2>/dev/null)"
+    [ -n "$rows" ] || {
+      _hi_cecho " | group selects nothing: $group" "$RED"
+      return 1
+    }
+    [ -z "$(printf '%s\n' "$rows" | awk -v g="$group" '$1 != g')" ] || {
+      _hi_cecho " | --group $group returned another group's suites" "$RED"
+      return 1
+    }
+  done < <(_hi_runner_list | awk '!seen[$1]++ {print $1}')
+}
 
-  if [ "${#entries[@]}" -eq 0 ] || [ "${#entries[@]}" -ne "${#names[@]}" ]; then
-    _hi_cecho " | parsed ${#entries[@]} table entries out of $_HI_TEST_RUN, runner reports ${#names[@]} suites" "$RED"
+function test_every_shipped_suite_script_exists_and_is_executable() {
+  local entry path count=0
+  local -a entries=()
+  mapfile -t entries < <(grep -oE '^[[:space:]]*"[^":]+:[^":]+:[^"]+\.sh"$' "$_HI_TEST_RUN" | tr -d '" ')
+  while read -r _ _; do count=$((count + 1)); done < <(_hi_runner_list)
+
+  if [ "${#entries[@]}" -eq 0 ] || [ "${#entries[@]}" -ne "$count" ]; then
+    _hi_cecho " | parsed ${#entries[@]} table entries out of $_HI_TEST_RUN, runner reports $count suites" "$RED"
     return 1
   fi
 
   for entry in "${entries[@]}"; do
-    path="$_HI_ROOT/tests/${entry#*:}"
+    path="$_HI_ROOT/tests/${entry##*:}"
     [ -x "$path" ] || {
       _hi_cecho " | not executable: $path" "$RED"
       return 1
@@ -374,9 +400,10 @@ function run_runner_tests() {
   _hi_check "Contributes no cases" test_a_skipping_suite_contributes_no_cases
 
   _hi_h2 "Testing: the shipped table"
-  _hi_check "Still has every CI and backend suite name" test_shipped_table_still_has_every_suite_name
+  _hi_check "Lists a group and name per suite" test_shipped_table_lists_a_group_and_name_per_suite
   _hi_check "Every shipped path exists and is executable" test_every_shipped_suite_script_exists_and_is_executable
-  _hi_check "CI runs every fast suite in the table" test_ci_runs_every_fast_suite
+  _hi_check "CI runs every group in the table" test_ci_runs_every_group_in_the_table
+  _hi_check "Each group selects only its own" test_every_group_selects_only_its_own_suites
 
   _hi_suite_end "test_runner.sh"
 }

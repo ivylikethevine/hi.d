@@ -1,6 +1,8 @@
 # hi.sh -> sshrc supercharged
 
-![CI](https://github.com/ivylikethevine/hi.d/actions/workflows/ci.yml/badge.svg?branch=develop)
+![CI (main)](https://github.com/ivylikethevine/hi.d/actions/workflows/ci.yml/badge.svg)
+
+![CI (develop)](https://github.com/ivylikethevine/hi.d/actions/workflows/ci.yml/badge.svg?branch=develop)
 
 **One config directory to rule them all, uniting all shells from all hosts!**
 
@@ -72,7 +74,8 @@ Reminder - place local only changes after the "`# hi-config-end`" comment in the
 
 Everything below is an environment variable, checked at the point it's used. `hi_configure` writes your answers to
 **`misc/settings.sh`**, which is gitignored (so configuring hi.d never dirties the checkout, and `hi_update`'s
-`git pull` keeps applying cleanly) and which every shell sources ahead of `common/paths.sh`. That file also rides
+`git pull` keeps applying cleanly) and which every shell sources ahead of `common/paths.sh`. It is a plain
+`#!/bin/sh` script of `export NAME=value` lines, valid in sh, bash, zsh and fish alike. That file also rides
 along in the payload, so the choices you make locally apply on every host you say `hi` to.
 
 You never have to use `hi_configure` - exporting any of these by hand works just as well, and takes precedence for
@@ -110,18 +113,16 @@ Each is **on by default**; set it to `0` to hide that line. All are ignored when
 
 #### Everything else
 
-| variable                   | default         | what it does                                                                   |
-| -------------------------- | --------------- | ------------------------------------------------------------------------------ |
-| `_HI_MAX_WIDTH`            | `80`            | terminal columns the header and banner are drawn to                            |
-| `_HI_HOME`                 | `$HOME`         | the **parent** of your `hi.d` directory - everything resolves `$_HI_HOME/hi.d` |
-| `_HI_TARGETS_TTL`          | `5`             | seconds `hi <TAB>` reuses its target list for; `0` disables the cache          |
-| `_HI_TARGETS_TIMEOUT`      | `2`             | seconds any one backend CLI gets during completion                             |
-| `_HI_HEADER_PROBE_TIMEOUT` | `2`             | seconds the header's docker/nomad probes get before they're given up on        |
-| `_HI_SSH_CONFIG`           | `~/.ssh/config` | where ssh hosts and their `# Tags:` comments are read from                     |
+| variable            | default         | what it does                                                                   |
+| ------------------- | --------------- | ------------------------------------------------------------------------------ |
+| `_HI_MAX_WIDTH`     | `80`            | terminal columns the header and banner are drawn to                            |
+| `_HI_HOME`          | `$HOME`         | the **parent** of your `hi.d` directory - everything resolves `$_HI_HOME/hi.d` |
+| `_HI_TARGETS_TTL`   | `5`             | seconds `hi <TAB>` reuses its target list for; `0` disables the cache          |
+| `_HI_PROBE_TIMEOUT` | `2`             | seconds any one backend CLI gets, during completion and in the header          |
+| `_HI_SSH_CONFIG`    | `~/.ssh/config` | where ssh hosts and their `# Tags:` comments are read from                     |
 
-The last three exist because completion runs on **every TAB** and the header runs **before you get a shell**: a
+The last two exist because completion runs on **every TAB** and the header runs **before you get a shell**: a
 docker daemon that's down or a `kubectl` pointed at a dead cluster would otherwise hang there with no upper bound.
-Run `hi_bench` to see what those paths currently cost.
 
 ### Testing
 
@@ -145,7 +146,7 @@ executable on its own, e.g. `tests/compat/shellcheck_test.sh`.
 
 The tests are local-only: `tests/` is one of the directories `hi.sh` strips from the payload, so `hi_test` on a
 target tells you so rather than running (the same goes for `hi_install`, `hi_configure`, `hi_check_configs`,
-`hi_color_preview`, `hi_bench` and `hi_update`).
+`hi_color_preview` and `hi_update`).
 
 Any script here needs `_HI_HOME` set before it'll source correctly - point it at the _parent_ of your `hi.d`
 checkout:
@@ -181,7 +182,6 @@ tests/test_runner.sh
 | `scripts/color_preview.sh`                      | preview what every ssh host/user resolves to (`hi_color_preview`)                                          |     |                                               |
 | `tests/test_runner.sh`                          | unified runner - times and summarizes every test below (or a chosen subset) (`hi_test`)                    |     |                                               |
 | `tests/test_lib.sh`                             | the whole suite skeleton: asserts/counters, scratch dir, skip preamble, probe commands, poll/pty helpers   |     |                                               |
-| `tests/bench/bench.sh`                          | times the per-prompt/per-TAB/per-connect paths (`hi_bench`) - not a pass/fail suite, so not in the runner  |     |                                               |
 | `tests/compat/alias_test.sh`                    | check `aliases.sh` still loads in dash/bash/zsh/fish                                                       |     |                                               |
 | `tests/compat/alias_fallthrough_test.sh`        | unit tests for `aliases.sh`'s `command -v a \                                                              | b \ | ...`fallthrough and`_HI_DISABLE_*` flag logic |
 | `tests/compat/check_test.sh`                    | unit tests for `check.sh`'s per-priority found/missing/hide logic and packages-file parsing                |     |                                               |

@@ -13,7 +13,8 @@ _hi_interactive_extras
 export GCC_COLORS='error=01;31:warning=01;35:note=01;36:caret=01;32:locus=01:quote=01'
 
 if [[ "${_HI_DISABLE_PROMPT:-0}" != 1 ]]; then
-  if tput setaf 1 >/dev/null 2>&1; then
+  _hi_prime_identity
+  if _hi_has_color; then
     HI_PS1=" ${debian_chroot:-}$(_hi_user_escape)\u$(_hi_at_color)@$(_hi_host_escape)\h$NC $BRBLUE\w$NC"
   else
     HI_PS1=" ${debian_chroot:-}\u@\h:\w"
@@ -32,9 +33,18 @@ function _hi_complete() {
   mapfile -t COMPREPLY < <(compgen -W "$(sh "$_HI_TARGETS" | cut -f1)" -- "${COMP_WORDS[COMP_CWORD]}")
 }
 complete -F _hi_complete hi
-command -v _completion_loader &>/dev/null && _completion_loader eza &>/dev/null
-_hi_eza_spec=$(complete -p eza 2>/dev/null) && eval "${_hi_eza_spec% eza} exa"
-unset _hi_eza_spec
+
+# Deferred to the first TAB after `exa`: loading eza's completion at startup
+# parses a multi-KB file in every shell for something most sessions never use.
+# Returns 124, bash-completion's "retry with the new spec".
+function _hi_load_exa_completion() {
+  local spec
+  command -v _completion_loader &>/dev/null && _completion_loader eza &>/dev/null
+  spec=$(complete -p eza 2>/dev/null) || return 1
+  eval "${spec% eza} exa"
+  return 124
+}
+complete -F _hi_load_exa_completion exa
 
 # modified from: https://github.com/riobard/bash-powerline/blob/master/bash-powerline.sh
 if [[ "${_HI_DISABLE_PROMPT:-0}" != 1 ]]; then

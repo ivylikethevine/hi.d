@@ -6,20 +6,13 @@ set -euo pipefail
 _HI_FEATURES_ONLY=""
 _HI_CHECK_CONFIGS_ONLY=""
 _HI_ASSUME_YES=0
+# one `shift` after the case, not one per arm: an arm added without its own was
+# an infinite loop
 while [ $# -gt 0 ]; do
   case "$1" in
-  --features-only)
-    _HI_FEATURES_ONLY=1
-    shift
-    ;;
-  --check-configs)
-    _HI_CHECK_CONFIGS_ONLY=1
-    shift
-    ;;
-  -y | --yes)
-    _HI_ASSUME_YES=1
-    shift
-    ;;
+  --features-only) _HI_FEATURES_ONLY=1 ;;
+  --check-configs) _HI_CHECK_CONFIGS_ONLY=1 ;;
+  -y | --yes) _HI_ASSUME_YES=1 ;;
   -h | --help)
     cat <<'EOF'
 Usage: install.sh [--features-only] [--check-configs] [--yes]
@@ -52,6 +45,7 @@ EOF
     exit 1
     ;;
   esac
+  shift
 done
 
 # Locate hi.d relative to this script (resolving symlinks) - hi.d's parent
@@ -72,53 +66,14 @@ source "$_HI_HEADER"
 # shellcheck source=../common/git_prompt.sh
 source "$_HI_GIT_PROMPT"
 
-_HI_MARKER="# added by hi during install"
-_HI_ANCHOR="# hi-settings-anchor"
-_HI_LINK="/usr/bin/hi"
+# $_HI_MARKER/$_HI_LINK (common/paths.sh) and config_shell/strip_marker
+# (common/rcfile.sh) are shared with scripts/uninstall.sh, which has to
+# recognise exactly what this writes.
+# shellcheck source=../common/rcfile.sh
+source "$_HI_ROOT/common/rcfile.sh"
 
-# Rewrite the block of hi-managed lines (tagged with $_HI_MARKER) in $target to
-# be exactly $@, leaving any other user content untouched. This both installs
-# the sourcing on a fresh machine and repairs it if hi.d has since moved -
-# stale lines pointing at an old location are replaced, not left dangling
-# alongside new ones. Empty arguments are skipped.
-#
-# The block goes in directly above $_HI_ANCHOR when the target carries one, and
-# at the end of the file otherwise. common/paths.sh carries one because its
-# local-only gate reads the _HI_DISABLE_* settings written here - appended
-# after that gate, they would be set too late to do anything.
-function config_shell() {
-  local name="$1" target="$2" line existing desired="" tmpfile
-  shift 2
-  _hi_h2 "Checking $name"
-
-  mkdir -p "$(dirname "$target")"
-  touch "$target"
-  for line in "$@"; do
-    [ -n "$line" ] && desired+="$(printf '%-45s %s' "$line" "$_HI_MARKER")"$'\n'
-  done
-
-  existing="$(grep -F "$_HI_MARKER" "$target" || true)"
-  if [ "$existing" = "${desired%$'\n'}" ]; then
-    _hi_cecho " local $name up to date :)" "$GREEN"
-    return 0
-  fi
-
-  _hi_cecho " local $name out of date, updating..." "$YELLOW"
-  tmpfile="$(mktemp -t hi.append.XXXXXX)"
-  if grep -qF "$_HI_ANCHOR" "$target"; then
-    { grep -vF "$_HI_MARKER" "$target" || true; } |
-      awk -v block="$desired" -v anchor="$_HI_ANCHOR" \
-        'index($0, anchor) && !spliced { printf "%s", block; spliced = 1 } { print }' >"$tmpfile"
-  else
-    grep -vF "$_HI_MARKER" "$target" >"$tmpfile" || true
-    printf '%s' "$desired" >>"$tmpfile"
-  fi
-  mv "$tmpfile" "$target"
-  _hi_cecho " local $name updated :)" "$GREEN"
-}
-
-# Only emit an _HI_HOME export when hi.d isn't at $HOME/hi.d - every consumer
-# already defaults _HI_HOME to $HOME, so the common case stays free of it.
+# Only emit an _HI_HOME export when hi.d isn't at $HOME/hi.d; every consumer
+# already defaults it to $HOME.
 function tmpdir_line() {
   [ "$_HI_HOME" = "$HOME" ] && return 0
   case "$1" in
@@ -127,25 +82,35 @@ function tmpdir_line() {
   esac
 }
 
-# true if "export $1=$3" (default off-value: 1) isn't currently present in
-# $2 - i.e. the setting is at its enabled default. Used to default each
-# prompt below to whatever was chosen last time this ran. hi's own
-# _HI_DISABLE_* vars use 1 for "off"; common/header.sh's older per-line
-# toggles use 0 instead, hence the third argument.
-function setting_enabled() {
+# Answers this run has already taken, keyed by variable name - fresher than
+# $_HI_SETTINGS, which still holds the previous run's. Both they and the
+# file-backed default are read through setting_off below, so there is one
+# accessor rather than three readers of the same store.
+declare -A _HI_SETTING_PENDING=()
+
+# true if $1 is turned off - this run's answer if it has one, otherwise
+# "export $1=$3" being present in $2. hi's own _HI_DISABLE_* vars use 1 for
+# "off"; common/header.sh's older per-line toggles use 0, hence the third
+# argument.
+function setting_off() {
   local var="$1" target="$2" off="${3:-1}"
-  ! grep -qE "^export $var=$off" "$target" 2>/dev/null
+  if [ -n "${_HI_SETTING_PENDING[$var]+x}" ]; then
+    [ "${_HI_SETTING_PENDING[$var]}" = "$off" ]
+    return
+  fi
+  grep -qE "^export $var=$off" "$target" 2>/dev/null
 }
 
-# Ask a yes/no question about one setting, defaulting to its current state in
-# $3 (target file, checked via setting_enabled with off-value $4). $5, if
-# given, is a zero-arg function whose output is boxed as a live preview,
-# printed after the question text (see show_preview) - so the question reads
-# first and the preview illustrates the answer, not the other way round.
-# Non-interactive runs (no tty - piped into bash, run from a script, etc.)
-# silently keep whatever is already configured instead of hanging on a
-# prompt nobody can answer, and skip the preview entirely since nothing will
-# be shown before the question is auto-answered anyway.
+function setting_enabled() {
+  ! setting_off "$@"
+}
+
+# Ask a yes/no question about one setting, defaulting to its current state.
+# $5, if given, is a zero-arg function whose output is boxed as a live preview
+# after the question text, so the question reads first and the preview
+# illustrates the answer. Non-interactive runs (no tty) keep whatever is
+# already configured rather than hanging on a prompt nobody can answer, and
+# skip the preview since the question is auto-answered.
 function ask_setting() {
   local var="$1" question="$2" target="$3" off="${4:-1}" preview="${5:-}" default hint reply=""
   setting_enabled "$var" "$target" "$off" && default=y || default=n
@@ -162,12 +127,10 @@ function ask_setting() {
   [[ "$reply" =~ ^[Yy] ]]
 }
 
-# visible width of $1 - the printable character count once ANSI SGR color
-# codes are stripped out, needed to size/pad show_preview's box since the
-# raw string length color escapes inflate is meaningless for alignment.
-# extglob is needed for the +(...) pattern below; toggled on just for this
-# substitution and restored to whatever it was before, rather than left on
-# for the rest of the script.
+# visible width of $1: printable characters once ANSI SGR codes are stripped,
+# since the raw length color escapes inflate is meaningless for alignment.
+# extglob is needed for the +(...) pattern and restored to whatever it was,
+# rather than left on for the rest of the script.
 function _hi_visible_len() {
   local stripped restore=0
   shopt -q extglob || { shopt -s extglob; restore=1; }
@@ -176,10 +139,9 @@ function _hi_visible_len() {
   printf '%s' "${#stripped}"
 }
 
-# Run $@ and box whatever it writes to stdout, labeled "preview" - a live
-# render using hi's own real functions (not a hypothetical example), sized to
-# its own longest line rather than the terminal width, since previews range
-# from one short colored line to full_check's wrapped multi-line block.
+# Run $@ and box what it writes to stdout - a live render using hi's own
+# functions, sized to its longest line rather than the terminal width, since
+# previews range from one short colored line to full_check's wrapped block.
 function show_preview() {
   [ -t 0 ] || return 0
   local out label="─ preview " content_w=0 len line pad top bottom fill_top fill_bottom
@@ -204,24 +166,22 @@ function show_preview() {
   _hi_cecho "   $bottom" "$NC"
 }
 
-# banner() needs an arg, so wrap it to match every other preview function's
-# zero-arg signature that ask_setting's $5 expects; _HI_HEADER_BANNER is unset
-# for the call (in a subshell) since a previously-disabled toggle would
-# otherwise render an empty preview of the thing being asked about
+# banner() takes an arg, so wrap it to the zero-arg signature ask_setting's $5
+# expects. _HI_HEADER_BANNER is unset for the call (in a subshell), or a
+# previously-disabled toggle would render an empty preview of the very thing
+# being asked about.
 function _hi_banner_preview() { (unset _HI_HEADER_BANNER && banner Connected); }
 
-# sample "user@host cwd" line, colored exactly like shells/bash.sh's real
-# HI_PS1 (see _hi_user_escape/_hi_host_escape/_hi_at_color), just with the
-# literal current user/host/cwd instead of \u/\h/\w
+# sample "user@host cwd" line, colored like shells/bash.sh's real HI_PS1, with
+# the literal current user/host/cwd instead of \u/\h/\w
 function _hi_prompt_preview() {
   local cwd="${PWD/#$HOME/\~}"
   printf '%b\n' " $(_hi_user_escape)$(whoami)$(_hi_at_color)@$(_hi_host_escape)$(_hi_hostname)$NC $BRBLUE$cwd$NC"
 }
 
-# the real git prompt segment, rendered against hi.d's own checkout (always a
-# git repo) so the preview reflects this machine's actual git status instead
-# of a made-up example; _HI_DISABLE_GIT_STATUS is unset for the call since a
-# previously-disabled toggle would otherwise make _hi_git_prompt return empty
+# the real git prompt segment against hi.d's own checkout (always a git repo),
+# so the preview shows this machine's actual status. _HI_DISABLE_GIT_STATUS is
+# unset for the call, or a previously-disabled toggle makes it return empty.
 function _hi_git_status_preview() {
   (cd "$_HI_ROOT" 2>/dev/null && unset _HI_DISABLE_GIT_STATUS && _hi_git_prompt)
 }
@@ -241,82 +201,63 @@ function _hi_aliases_preview() {
   printf '%s personal aliases, e.g.: %s, ...\n' "$count" "$(printf '%s\n' "$names" | head -6 | paste -sd, -)"
 }
 
-# Every setting the three config_* groups below decide on, collected here and
-# written to $_HI_SETTINGS in one go by config_settings. They used to go into
-# common/paths.sh, common/header.sh and common/shared.sh, one config_shell
-# call each - but config_shell rewrites the *whole* marker block in its
-# target, so three calls against one file would each wipe the other two.
+# Every setting the config_* groups decide on, written to $_HI_SETTINGS in one
+# go at the bottom of this file: config_shell rewrites the *whole* marker block
+# in its target, so one call per group against one file would each wipe the
+# others. An ordered array rather than the map above, because config_shell
+# compares what it would write against what is there to decide whether the file
+# is up to date - so the write order has to be stable across runs.
 declare -a _HI_SETTING_LINES=()
 
-# true if this run has already decided to write $1 - the answers accumulating
-# in _HI_SETTING_LINES are fresher than $_HI_SETTINGS, which still holds the
-# previous run's, so a group that gates on another group's answer asks here
-function setting_pending() {
-  local line
-  for line in "${_HI_SETTING_LINES[@]}"; do
-    [ "$line" = "$1" ] && return 0
+# The two prompt groups as tables: <var>|<off-value>|<preview-fn>|<question>,
+# in the order they are asked and written. Adding a setting is one row.
+_HI_FEATURE_PROMPTS=(
+  "_HI_DISABLE_HEADER|1|_hi_banner_preview| Enable the connect/disconnect header (system info, git identity, package check)?"
+  "_HI_DISABLE_PROMPT|1|_hi_prompt_preview| Enable the colored user@host prompt?"
+  "_HI_DISABLE_PERSONAL|1|| Enable personal shell settings (history size, keybindings, completion tweaks)?"
+  "_HI_DISABLE_GIT_STATUS|1|_hi_git_status_preview| Enable git status in the prompt?"
+  "_HI_DISABLE_EDITORS|1|_hi_editors_preview| Enable the vim/nano config overrides?"
+  "_HI_DISABLE_ALIASES|1|_hi_aliases_preview| Enable the personal aliases in shells/aliases.sh (sudo, cat/eza, git, docker, pacman/apt, etc)?"
+  "_HI_DISABLE_LOCAL|1|| Enable all of the above on this machine (the one hi.d is installed on), not just when you hi elsewhere?"
+)
+
+_HI_HEADER_PROMPTS=(
+  "_HI_HEADER_BANNER|0|_hi_banner_preview| Show the connect/disconnect banner line?"
+  "_HI_HEADER_TIMESTAMP|0|timestamp| Show the timestamp line?"
+  "_HI_HEADER_SYSINFO|0|system_info| Show the system info line (OS, CPU, RAM)?"
+  "_HI_HEADER_IDENTITY|0|identity| Show the git identity/docker/ssh key line?"
+  "_HI_HEADER_CHECK|0|full_check| Show the installed-packages check?"
+)
+
+# Ask every row of the table named by $1, recording the off-value for whichever
+# ones were turned off.
+function ask_prompt_group() {
+  local -n rows="$1"
+  local row var off preview question target="$_HI_SETTINGS"
+  for row in "${rows[@]}"; do
+    IFS='|' read -r var off preview question <<<"$row"
+    ask_setting "$var" "$question" "$target" "$off" "$preview" && continue
+    _HI_SETTING_PENDING["$var"]="$off"
+    _HI_SETTING_LINES+=("export $var=$off")
   done
-  return 1
 }
 
-# Prompt for the optional pieces of hi's shell config and record _HI_DISABLE_*
-# lines for whichever ones were turned off. $_HI_SETTINGS is sourced by every
-# shell (including fish) ahead of common/paths.sh, so the choice applies
-# locally and on every host hi.d gets copied to.
+# Prompt for the optional pieces of hi's shell config. $_HI_SETTINGS is sourced
+# by every shell (including fish) ahead of common/paths.sh, so the choice
+# applies locally and on every host hi.d gets copied to.
 function config_features() {
-  local target="$_HI_SETTINGS"
-  local dis_header="" dis_prompt="" dis_personal="" dis_git="" dis_editors="" dis_aliases="" dis_local=""
   _hi_h2 "Choosing features"
-  ask_setting _HI_DISABLE_HEADER \
-    " Enable the connect/disconnect header (system info, git identity, package check)?" \
-    "$target" 1 _hi_banner_preview ||
-    dis_header="export _HI_DISABLE_HEADER=1"
-  ask_setting _HI_DISABLE_PROMPT \
-    " Enable the colored user@host prompt?" "$target" 1 _hi_prompt_preview ||
-    dis_prompt="export _HI_DISABLE_PROMPT=1"
-  ask_setting _HI_DISABLE_PERSONAL \
-    " Enable personal shell settings (history size, keybindings, completion tweaks)?" "$target" 1 "" ||
-    dis_personal="export _HI_DISABLE_PERSONAL=1"
-  ask_setting _HI_DISABLE_GIT_STATUS \
-    " Enable git status in the prompt?" "$target" 1 _hi_git_status_preview ||
-    dis_git="export _HI_DISABLE_GIT_STATUS=1"
-  ask_setting _HI_DISABLE_EDITORS \
-    " Enable the vim/nano config overrides?" "$target" 1 _hi_editors_preview ||
-    dis_editors="export _HI_DISABLE_EDITORS=1"
-  ask_setting _HI_DISABLE_ALIASES \
-    " Enable the personal aliases in shells/aliases.sh (sudo, cat/eza, git, docker, pacman/apt, etc)?" \
-    "$target" 1 _hi_aliases_preview ||
-    dis_aliases="export _HI_DISABLE_ALIASES=1"
-  ask_setting _HI_DISABLE_LOCAL \
-    " Enable all of the above on this machine (the one hi.d is installed on), not just when you hi elsewhere?" \
-    "$target" 1 "" ||
-    dis_local="export _HI_DISABLE_LOCAL=1"
-  _HI_SETTING_LINES+=("$dis_header" "$dis_prompt" "$dis_personal" "$dis_git" "$dis_editors"
-    "$dis_aliases" "$dis_local")
+  ask_prompt_group _HI_FEATURE_PROMPTS
 }
 
-# Prompt for the header's optional detail lines and record _HI_HEADER_*=0
-# lines for whichever are turned off. Skipped entirely if the header itself is
-# off, since asking about its pieces would be moot - and that reads the answer
-# config_features just took, not the file, which still holds the old one.
+# Prompt for the header's optional detail lines. Skipped entirely if the header
+# itself is off, since asking about its pieces would be moot - and that reads
+# the answer config_features just took, not the file, which still holds the old
+# one.
 function config_header_details() {
-  local target="$_HI_SETTINGS"
-  local dis_banner="" dis_ts="" dis_sys="" dis_id="" dis_chk=""
-  if setting_pending "export _HI_DISABLE_HEADER=1"; then
-    return 0
-  fi
+  setting_off _HI_DISABLE_HEADER "$_HI_SETTINGS" 1 && return 0
   _hi_h2 "Choosing header details"
-  ask_setting _HI_HEADER_BANNER " Show the connect/disconnect banner line?" "$target" 0 _hi_banner_preview ||
-    dis_banner="export _HI_HEADER_BANNER=0"
-  ask_setting _HI_HEADER_TIMESTAMP " Show the timestamp line?" "$target" 0 timestamp ||
-    dis_ts="export _HI_HEADER_TIMESTAMP=0"
-  ask_setting _HI_HEADER_SYSINFO " Show the system info line (OS, CPU, RAM)?" "$target" 0 system_info ||
-    dis_sys="export _HI_HEADER_SYSINFO=0"
-  ask_setting _HI_HEADER_IDENTITY " Show the git identity/docker/ssh key line?" "$target" 0 identity ||
-    dis_id="export _HI_HEADER_IDENTITY=0"
-  ask_setting _HI_HEADER_CHECK " Show the installed-packages check?" "$target" 0 full_check ||
-    dis_chk="export _HI_HEADER_CHECK=0"
-  _HI_SETTING_LINES+=("$dis_banner" "$dis_ts" "$dis_sys" "$dis_id" "$dis_chk")
+  ask_prompt_group _HI_HEADER_PROMPTS
 }
 
 # Ask for the header/banner's terminal width. Entering nothing keeps whatever's
@@ -324,7 +265,7 @@ function config_header_details() {
 # via ${_HI_MAX_WIDTH:-80}) clears the override instead of writing it out.
 function config_max_width() {
   local target="$_HI_SETTINGS" current value reply=""
-  current=$(grep -oE '^export _HI_MAX_WIDTH=[0-9]+' "$target" 2>/dev/null | cut -d= -f2)
+  current="$(grep -oE '^export _HI_MAX_WIDTH=[0-9]+' "$target" 2>/dev/null | cut -d= -f2)"
   value="${current:-80}"
   if [ -t 0 ]; then
     read -r -p " Terminal width for the header/banner? [$value] " reply || reply=""
@@ -340,53 +281,40 @@ function config_max_width() {
   _HI_SETTING_LINES+=("${value:+export _HI_MAX_WIDTH=$value}")
 }
 
-# Settings used to be written straight into common/paths.sh, common/header.sh
-# and common/shared.sh - all three git-tracked, so configuring hi.d dirtied
-# the checkout and `hi_update`'s git pull then refused to apply. Carry an
-# older install's answers over to $_HI_SETTINGS before anything asks for
-# defaults (otherwise the prompts would silently reset to "everything on"),
-# then strip the tracked files back to how git has them. Quiet and a no-op on
-# every run after the first, since there is then nothing left to find.
-function migrate_legacy_settings() {
-  local target line
-  local -a legacy=() carried=()
-  for target in "$_HI_ROOT/common/paths.sh" "$_HI_ROOT/common/header.sh" "$_HI_ROOT/common/shared.sh"; do
-    grep -qF "$_HI_MARKER" "$target" 2>/dev/null && legacy+=("$target")
-  done
-  [ "${#legacy[@]}" -gt 0 ] || return 0
-
-  _hi_h2 "Moving settings out of the tracked source files"
-  for target in "${legacy[@]}"; do
-    while IFS= read -r line; do
-      line="${line%%"$_HI_MARKER"*}"          # drop the marker config_shell padded on
-      carried+=("${line%"${line##*[![:space:]]}"}") # ...and the padding itself
-    done < <(grep -F "$_HI_MARKER" "$target")
-  done
-  # only seed from the old files when the new one has nothing to lose - a
-  # settings.sh that already carries answers is by definition the newer of
-  # the two, so the legacy lines are stale and only need clearing out
-  if [ "${#carried[@]}" -gt 0 ] && ! grep -qF "$_HI_MARKER" "$_HI_SETTINGS" 2>/dev/null; then
-    config_shell settings "$_HI_SETTINGS" "${carried[@]}"
+# $_HI_SETTINGS is hi's own file, not one of the user's rc files, and it holds
+# nothing but `export NAME=value` lines - so it gets a real `#!/bin/sh` line 1,
+# which every shell that sources it (sh, bash, zsh, fish) reads as a comment
+# and which lets editors, `file` and shellcheck see a POSIX sh script rather
+# than an anonymous fragment. Any other shebang is replaced rather than left
+# alongside: dash and fish both source this, so sh is the only correct one.
+# config_shell rewrites only its own marker-tagged block, so this line stays.
+function ensure_settings_shebang() {
+  local shebang='#!/bin/sh' first="" tmpfile
+  mkdir -p "$(dirname "$_HI_SETTINGS")"
+  if [ -f "$_HI_SETTINGS" ]; then
+    IFS= read -r first <"$_HI_SETTINGS" || first=""
   fi
-  for target in "${legacy[@]}"; do
-    config_shell "${target#"$_HI_ROOT/"}" "$target"
-  done
+  [ "$first" = "$shebang" ] && return 0
+
+  tmpfile="$(mktemp -t hi.settings.XXXXXX)"
+  printf '%s\n' "$shebang" >"$tmpfile"
+  if [ -f "$_HI_SETTINGS" ]; then
+    case "$first" in
+    '#!'*) tail -n +2 "$_HI_SETTINGS" >>"$tmpfile" ;;
+    *) cat "$_HI_SETTINGS" >>"$tmpfile" ;;
+    esac
+  fi
+  mv "$tmpfile" "$_HI_SETTINGS"
 }
 
-# One write for all three groups above, for the reason _HI_SETTING_LINES
-# documents. config_shell skips empty arguments, so every setting left at its
-# default simply contributes nothing.
-function config_settings() {
-  config_shell settings "$_HI_SETTINGS" "${_HI_SETTING_LINES[@]}"
-}
-
-# Runs $shell's syntax-check flag against an existing rc file (without
-# executing it) and reports what it finds. Skipped silently when $shell
-# isn't installed or $target doesn't exist/is empty - nothing to validate.
+# Runs $@'s syntax-check flag against an existing rc file (without executing it)
+# and reports what it finds. Skipped silently when the shell isn't installed or
+# $target is missing/empty. The shell is read off the front of $@ rather than
+# passed twice, which every call site had to keep in agreement.
 function check_one_config() {
-  local label="$1" target="$2" shell="$3" out
-  shift 3
-  command -v "$shell" >/dev/null 2>&1 || return 0
+  local label="$1" target="$2" out
+  shift 2
+  command -v "$1" >/dev/null 2>&1 || return 0
   [ -s "$target" ] || return 0
   if out="$("$@" "$target" 2>&1)"; then
     _hi_cecho " $label ($target) looks valid :)" "$GREEN"
@@ -403,16 +331,15 @@ function check_one_config() {
 function check_shell_configs() {
   _hi_h2 "Checking existing shell configs"
   local bad=0
-  check_one_config bash "$_HI_HOME_BASHRC" bash bash -n || bad=1
-  check_one_config zsh "$_HI_HOME_ZSHRC" zsh zsh -n || bad=1
-  check_one_config "config.fish" "$_HI_HOME_FISH_CONFIG" fish fish --no-execute || bad=1
+  check_one_config bash "$_HI_HOME_BASHRC" bash -n || bad=1
+  check_one_config zsh "$_HI_HOME_ZSHRC" zsh -n || bad=1
+  check_one_config "config.fish" "$_HI_HOME_FISH_CONFIG" fish --no-execute || bad=1
   return $bad
 }
 
-# Gate the install on check_shell_configs: if issues turn up, ask whether to
-# proceed anyway. Unlike ask_setting, a non-interactive run does *not* wave
-# this through - install.sh rewrites the very files that failed to parse, and
-# nobody is watching to notice. Pass --yes to take that decision up front.
+# Gate the install on check_shell_configs. Unlike ask_setting, a
+# non-interactive run does *not* wave this through: install.sh rewrites the
+# very files that failed to parse and nobody is watching. --yes decides up front.
 function config_validate_shells() {
   check_shell_configs && return 0
   _hi_cecho " found issues in your existing shell config(s) above" "$YELLOW"
@@ -450,27 +377,30 @@ function config_hi() {
 
 if [ -n "$_HI_CHECK_CONFIGS_ONLY" ]; then
   _hi_h1 "Checking existing shell configs!"
-  _hi_cecho " | hi_home: $_HI_HOME | hi_root: $_HI_ROOT | login shell: ${SHELL##*/}" "$BLUE"
-  check_shell_configs
-  exit $?
-fi
-
-if [ -n "$_HI_FEATURES_ONLY" ]; then
+elif [ -n "$_HI_FEATURES_ONLY" ]; then
   _hi_h1 "Configuring hi.sh features!"
 else
   _hi_h1 "Installing (or reinstalling) hi.sh!"
 fi
 _hi_cecho " | hi_home: $_HI_HOME | hi_root: $_HI_ROOT | login shell: ${SHELL##*/}" "$BLUE"
 
+if [ -n "$_HI_CHECK_CONFIGS_ONLY" ]; then
+  check_shell_configs
+  exit $?
+fi
+
 if [ -z "$_HI_FEATURES_ONLY" ]; then
   config_validate_shells
 fi
 
-migrate_legacy_settings
 config_features
 config_header_details
 config_max_width
-config_settings
+# One write for all three groups above, for the reason _HI_SETTING_LINES
+# documents: config_shell rewrites the whole marker block in its target, so
+# three separate calls against one file would each wipe the other two.
+ensure_settings_shebang
+config_shell settings "$_HI_SETTINGS" "${_HI_SETTING_LINES[@]}"
 
 if [ -n "$_HI_FEATURES_ONLY" ]; then
   _hi_h1 "Features updated!"

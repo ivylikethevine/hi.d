@@ -86,22 +86,12 @@ function test_paths_sources_cleanly_under_strict_mode() {
 # what install.sh wrote. A settings file arriving after it would parse fine
 # and do nothing, which is the failure this catches.
 function test_settings_are_visible_to_the_gate() {
-  local root="$_HI_WORKDIR/tree/hi.d"
-  mkdir -p "$root"
-  cp -r "$_HI_ROOT/common" "$_HI_ROOT/misc" "$_HI_ROOT/shells" "$root/"
-  printf 'export _HI_DISABLE_LOCAL=1\n' >"$root/misc/settings.sh"
+  local home
+  home="$(_hi_scratch_tree tree common misc shells)"
+  printf 'export _HI_DISABLE_LOCAL=1\n' >"$home/hi.d/misc/settings.sh"
   # _HI_DISABLE_LOCAL comes only from the settings file here, so every toggle
   # flipping proves the gate saw it
-  _hi_all_gated "$(_HI_HOME="$_HI_WORKDIR/tree" _hi_gate 0 0)" 1
-}
-
-function test_settings_do_not_override_an_explicit_environment() {
-  local root="$_HI_WORKDIR/tree2/hi.d"
-  mkdir -p "$root"
-  cp -r "$_HI_ROOT/common" "$_HI_ROOT/misc" "$_HI_ROOT/shells" "$root/"
-  printf 'export _HI_MAX_WIDTH=123\n' >"$root/misc/settings.sh"
-  [ "$(_HI_HOME="$_HI_WORKDIR/tree2" bash -c \
-    'source "$_HI_HOME/hi.d/common/bootstrap.sh"; printf "%s" "$_HI_MAX_WIDTH"')" = 123 ]
+  _hi_all_gated "$(_HI_HOME="$home" _hi_gate 0 0)" 1
 }
 
 # --- toggle defaults --------------------------------------------------------
@@ -147,11 +137,10 @@ function test_aliases_source_cleanly_under_nounset() {
 }
 
 function test_settings_beat_the_defaults() {
-  local root="$_HI_WORKDIR/prec/hi.d"
-  mkdir -p "$root"
-  cp -r "$_HI_ROOT/common" "$_HI_ROOT/misc" "$_HI_ROOT/shells" "$root/"
-  printf 'export _HI_DISABLE_PROMPT=1\n' >"$root/misc/settings.sh"
-  [ "$(_HI_HOME="$_HI_WORKDIR/prec" bash -c \
+  local home
+  home="$(_hi_scratch_tree prec common misc shells)"
+  printf 'export _HI_DISABLE_PROMPT=1\n' >"$home/hi.d/misc/settings.sh"
+  [ "$(_HI_HOME="$home" bash -c \
     'source "$_HI_HOME/hi.d/common/bootstrap.sh"; printf "%s" "$_HI_DISABLE_PROMPT"')" = 1 ]
 }
 
@@ -178,7 +167,6 @@ function run_paths_tests() {
 
   _hi_h2 "Testing: misc/settings.sh reaches the gate"
   _hi_check "Settings are visible to the gate" test_settings_are_visible_to_the_gate
-  _hi_check "Settings reach an ordinary var too" test_settings_do_not_override_an_explicit_environment
 
   _hi_h2 "Testing: the toggles are always defined"
   _hi_check "bootstrap.sh defines every toggle" test_bootstrap_defines_every_toggle

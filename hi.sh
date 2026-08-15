@@ -14,39 +14,50 @@ _HI_EXCLUDE=(--exclude README.md --exclude .git --exclude .gitignore --exclude s
 _HI_ARMOR="openssl enc -base64"
 _HI_UNARMOR="tr -s ' ' '\n' | openssl enc -base64 -d"
 
+# Reads ~/.ssh/config directly rather than through targets.sh, which would fork
+# a shell, an awk and a grep plus the completion cache to answer a question
+# about a static file. Same matching rule targets.sh uses: literal names only,
+# no wildcards, stopping at a trailing comment.
 function _hi_is_ssh_host() {
-  [ -f "$_HI_SSH_CONFIG" ] && sh "$_HI_TARGETS" ssh | grep -qxF "$1"$'\t'ssh
+  [ -f "$_HI_SSH_CONFIG" ] &&
+    awk -v want="$1" '
+      tolower($1) == "host" {
+        for (i = 2; i <= NF; i++) {
+          if ($i ~ /^#/) break
+          if ($i !~ /[*?]/ && $i == want) { found = 1; exit }
+        }
+      }
+      END { exit !found }
+    ' "$_HI_SSH_CONFIG"
 }
 
-function _hi_is_docker_container() {
-  command -v docker >/dev/null 2>&1 &&
-    [ "$(docker container inspect -f '{{.State.Running}}' "$1" 2>/dev/null)" = true ]
+# podman's CLI is a drop-in for docker's here, so only the binary differs. Both
+# named wrappers stay - the dispatcher and hi_test.sh call them by name.
+function _hi_is_container_running() {
+  command -v "$1" >/dev/null 2>&1 &&
+    [ "$("$1" container inspect -f '{{.State.Running}}' "$2" 2>/dev/null)" = true ]
 }
 
-function _hi_is_podman_container() {
-  command -v podman >/dev/null 2>&1 &&
-    [ "$(podman container inspect -f '{{.State.Running}}' "$1" 2>/dev/null)" = true ]
-}
+function _hi_is_docker_container() { _hi_is_container_running docker "$1"; }
+function _hi_is_podman_container() { _hi_is_container_running podman "$1"; }
 
 function _hi_is_nomad_alloc() {
   command -v nomad >/dev/null 2>&1 &&
     [ "$(nomad alloc status -t '{{.ClientStatus}}' "$1" 2>/dev/null)" = running ]
 }
 
-# like nomad's multi-task allocations (see _say_hi_container below), a
-# multi-container pod needs `-c <name>` to pick one - not passed through here,
-# so it needs a single unambiguous container. kubectl defaults to the pod's
-# first container with a warning in that case, rather than failing outright
+# like nomad's multi-task allocations, a multi-container pod needs `-c <name>`
+# to pick one; that isn't passed through, so this wants a single unambiguous
+# container. kubectl warns and uses the first rather than failing outright.
 function _hi_is_k8s_pod() {
   command -v kubectl >/dev/null 2>&1 &&
     [ "$(kubectl get pod "$1" -o jsonpath='{.status.phase}' 2>/dev/null)" = Running ]
 }
 
-# Cheap check for a permanent hi.d already sitting on $DOMAIN (i.e.
-# scripts/install.sh has been run there): prints its path if so. Runs over
-# the ssh ControlMaster passed in "$@" so this costs no extra authentication
-# - _say_hi's real connection right after multiplexes through the same
-# socket instead of asking again.
+# Cheap check for a permanent hi.d already on $DOMAIN (scripts/install.sh has
+# been run there): prints its path if so. Runs over the ssh ControlMaster in
+# "$@", so it costs no extra authentication - _say_hi's real connection
+# multiplexes through the same socket.
 function _hi_remote_root() {
   local out
   out="$(ssh "$@" -o ConnectTimeout=5 "${SSHARGS[@]}" "$DOMAIN" \
@@ -58,14 +69,13 @@ function _hi_copy_time() {
   awk -v now="$(_hi_now)" -v a="$1" -v b="$2" -v c="$3" 'BEGIN { printf "%.3f", (now - a) - (c - b) }'
 }
 
-# load.sh turns `set -euo pipefail` on at source time to protect its own setup,
-# and load() turns it back off again before the header. The $CMDARG shape never
-# calls load() - it replaces it - so without the middle line here a one-off
-# `hi <target> <cmd>` runs the user's command under -e -u pipefail: an unset
-# variable is fatal and any non-zero status ends the session. No interactive
-# shell behaves that way and nothing typed at one expects it to. Concretely, it
-# made `source $_HI_ALIASES` die on _HI_DISABLE_EDITORS whenever the target had
-# no explicit toggles set, which is the default.
+# load.sh turns `set -euo pipefail` on at source time and load() turns it back
+# off before the header. The $CMDARG shape replaces load() rather than calling
+# it, so without the middle line a one-off `hi <target> <cmd>` would run the
+# user's command under -e -u pipefail, where an unset variable is fatal and any
+# non-zero status ends the session.
+# (This made `source $_HI_ALIASES` die on _HI_DISABLE_EDITORS whenever the
+# target had no explicit toggles set - the default.)
 function _hi_bootloader() {
   cat <<EOF
 source \$_HI_ROOT/load.sh
@@ -75,21 +85,20 @@ EOF
 }
 
 # The no-bash target's rc, consumed by sh, zsh *and* fish (see _say_hi's
-# `fish -C` branch), so every line here has to be valid in all three - which
-# plain `export NAME=value` and `[ -f x ] && . x` both are.
+# `fish -C` branch), so every line has to be valid in all three - which plain
+# `export NAME=value` and `[ -f x ] && . x` both are.
 #
-# The toggle defaults come first so the two files after them can still win:
-# aliases.sh reads _HI_DISABLE_EDITORS/_HI_DISABLE_ALIASES bare, and paths.sh's
-# local-only gate reads _HI_DISABLE_LOCAL/_HI_REMOTE_SESSION. _HI_REMOTE_SESSION
-# is 1 rather than 0 because this *is* a remote session: load.sh is what
-# normally exports it, and this path deliberately never reaches load.sh. Left
-# unset, the gate would read a remote target as local and, for anyone who set
-# _HI_DISABLE_LOCAL=1, strip hi from the very session they asked for.
+# Toggle defaults first, so the two files after them can still win: aliases.sh
+# reads _HI_DISABLE_EDITORS/_HI_DISABLE_ALIASES bare, paths.sh's local-only gate
+# reads _HI_DISABLE_LOCAL/_HI_REMOTE_SESSION. _HI_REMOTE_SESSION is 1 because
+# this *is* a remote session and this path deliberately never reaches load.sh,
+# which normally exports it; left unset, the gate reads a remote target as local
+# and strips hi from the session for anyone who set _HI_DISABLE_LOCAL=1.
 #
-# settings.sh is optional (nothing writes it until scripts/install.sh runs) and
-# so needs the `[ -f ]` guard the other two don't: a bare `.` on a missing file
-# doesn't just fail in ash/dash, it abandons the rest of the file - taking
-# paths.sh, aliases.sh and $CMDARG with it and leaving the session sitting there.
+# settings.sh needs the `[ -f ]` guard the other two don't, since nothing writes
+# it until scripts/install.sh runs: a bare `.` on a missing file doesn't just
+# fail in ash/dash, it abandons the rest of the file - taking paths.sh,
+# aliases.sh and $CMDARG with it.
 function _hi_fallback_rc() {
   cat <<EOF
 export _HI_REMOTE_SESSION=1
@@ -127,24 +136,21 @@ REMOTE
 
 # the bit both _say_hi branches need once their own setup is done: report copy
 # time, then hand off to bash if it's there, or the best fallback shell if not.
-# Expects \$_hi_rc_dir to already be set to wherever hi.bashrc/.hi_fallback_rc
+# Expects \$_hi_rc_dir to already point at wherever hi.bashrc/.hi_fallback_rc
 # should live for this branch.
-# `-i` is not redundant next to --rcfile: bash reads an rcfile only when it is
-# interactive, and it decides that from its own stdin, not from the flag. With
-# no local tty `ssh -t` can't allocate one, so the remote bash is
-# non-interactive, silently ignores hi.bashrc - and with it load.sh and
-# $CMDARG - and exits 0. That is `hi <target> <command>` doing nothing at all
-# from a script, a pipe or cron. The flag costs nothing when a tty *is* there,
-# since bash is already interactive in that case.
-# The fallback shells below need no equivalent: they are each started with an
-# explicit -i (or fish's -C), which is why only this arm was affected.
-# The flag has to come *after* --rcfile, not before it: bash reads its GNU long
-# options in a first pass that ends at the first short one, so `bash -i
-# --rcfile f` dies with "--: invalid option" rather than starting a shell.
-# fish's exit only unwinds the source call it's invoked from, not the whole
-# shell, so a sourced .hi_fallback_rc's trailing "; exit" never lands - the
-# fish case below feeds the file's content to -C directly instead of
-# sourcing it, so exit applies to the fish process itself.
+#
+# `bash --rcfile X -i` needs both parts, in that order. -i: bash reads an rcfile
+# only when interactive, decided from its own stdin rather than the flag, so
+# with no local tty for `ssh -t` the remote bash would ignore hi.bashrc - and
+# load.sh and $CMDARG with it - and exit 0. (That was `hi <target> <command>`
+# doing nothing from a script, a pipe or cron; only this arm was affected, since
+# the fallbacks below each get an explicit -i or fish's -C.) After --rcfile:
+# bash's GNU long-option pass ends at the first short option, so `bash -i
+# --rcfile f` dies with "--: invalid option".
+#
+# fish's exit only unwinds the source call it's in, not the shell, so a sourced
+# .hi_fallback_rc's trailing "; exit" never lands - the fish case feeds the
+# file's content to -C directly so exit applies to the fish process itself.
 function _hi_remote_suffix() {
   cat <<REMOTE
       export _HI_COPY_TIME=\$(awk -v a="\$_hi_t0" -v b="\$(_hi_now)" 'BEGIN{printf "%.3f", b-a}')
@@ -168,26 +174,23 @@ REMOTE
 }
 
 # Connect to the target, copy hi.d over, and hand off to load.sh.
-# The payload below is handed to `sh -c` rather than run directly by the login
-# shell, since not all of them handle the same syntax - every line up to the
-# bash/sh branch at the end is plain POSIX, so `sh` alone is enough to land it.
-# Technically, all of hi runs under a single sh sub-process that we start on
-# the target, which chainloads bash for the full experience when it's there.
+# The payload goes to `sh -c` rather than the login shell, which may not parse
+# the same syntax - every line up to the bash/sh branch is plain POSIX. So all
+# of hi runs under one sh sub-process on the target, which chainloads bash when
+# it's there.
 function _say_hi() {
   local size hi_esc nc_esc script middle b64 boot_tmp remote_root tmp_root ctl_path ec=0
   local -a ctl_opts
 
-  # only this path armors its payload ($_HI_ARMOR/$_HI_UNARMOR and the base64
-  # of the bootloader below) - the container backends stream through their own
-  # CLI's `cp`/`exec`, so they must not be blocked on an openssl the client
-  # never uses. The target gets its own check in _hi_remote_preamble.
+  # only this path armors its payload; the container backends stream through
+  # their own CLI's cp/exec. The target is checked in _hi_remote_preamble.
   command -v openssl >/dev/null 2>&1 || {
     _hi_cecho >&2 "hi requires openssl on [$(_hi_hostname)] to reach an ssh target, but it is not installed. Aborting..." "$RED"
     return 1
   }
 
-  hi_esc="$(printf '%b' "$YELLOW")"
-  nc_esc="$(printf '%b' "$NC")"
+  printf -v hi_esc '%b' "$YELLOW"
+  printf -v nc_esc '%b' "$NC"
 
   # multiplex the install-probe and the real session over one ssh connection,
   # so checking for an existing install never costs a second authentication
@@ -196,10 +199,9 @@ function _say_hi() {
   remote_root="$(_hi_remote_root "${ctl_opts[@]}")"
 
   if [ -n "$remote_root" ]; then
-    # scripts/install.sh has already run on the target - load that copy in
-    # place instead of shipping a fresh one over, and never delete it:
-    # deliberately no _HI_CLEANUP here, which is exactly what tells load.sh's
-    # clean_all to leave $_HI_ROOT alone when the session ends
+    # install.sh has already run on the target - load that copy in place
+    # instead of shipping one over, and never delete it. No _HI_CLEANUP here is
+    # what tells load.sh's clean_all to leave $_HI_ROOT alone.
     tmp_root="${remote_root%/hi.d}"
     middle="$(cat <<REMOTE
       export _HI_HOME="$tmp_root"
@@ -249,25 +251,19 @@ $(_hi_remote_suffix)"
   return "$ec"
 }
 
-# four backends share this one function - docker, podman (docker-CLI-compatible,
-# so it reuses docker's exec syntax outright), nomad (its own alloc exec
-# syntax) and kube (kubectl exec, `--` separating its flags from the remote
-# command) - the per-label case below picks the right command shape, then
-# everything past it is identical: copy hi.d in the same way, and source
-# aliases.sh directly if the container/alloc/pod turns out to be (likely) minimal
+# Four backends share this function: docker, podman (docker-CLI-compatible),
+# nomad (its own alloc exec syntax) and kube (kubectl exec, `--` separating its
+# flags from the remote command). The case below picks the command shape;
+# everything past it is identical.
 function _say_hi_container() {
   local label="$1" shell_end root fallback exit_code shell_secs size prefix
   local -a probe cp attach
   case "$label" in
-  docker)
-    probe=(docker exec "$DOMAIN")
-    cp=(docker exec -i "$DOMAIN")
-    attach=(docker exec -it "$DOMAIN")
-    ;;
-  podman)
-    probe=(podman exec "$DOMAIN")
-    cp=(podman exec -i "$DOMAIN")
-    attach=(podman exec -it "$DOMAIN")
+  # one arm, since podman reuses docker's exec syntax outright
+  docker | podman)
+    probe=("$label" exec "$DOMAIN")
+    cp=("$label" exec -i "$DOMAIN")
+    attach=("$label" exec -it "$DOMAIN")
     ;;
   nomad)
     probe=(nomad alloc exec -i=false -t=false "$DOMAIN")
@@ -302,12 +298,11 @@ function _say_hi_container() {
       return $?
     fi
 
-    # aliases.sh, plus CMDARG (already suffixed with "; exit" by _hi_parse) as
-    # its own raw line when running a one-off command instead of a session -
-    # not a quoted CLI arg, so it survives quotes/spaces in the user's command.
-    # The two toggle defaults lead, for the same reason _hi_fallback_rc's do:
-    # aliases.sh reads both bare, and this path copies aliases.sh on its own
-    # without paths.sh or settings.sh, so nothing else would ever define them.
+    # aliases.sh, plus CMDARG (already suffixed with "; exit" by _hi_parse) on
+    # its own raw line rather than as a quoted CLI arg, so it survives
+    # quotes/spaces in the user's command. Toggle defaults lead for the same
+    # reason _hi_fallback_rc's do: aliases.sh reads both bare, and this path
+    # copies it without paths.sh or settings.sh to define them.
     { printf 'export _HI_DISABLE_EDITORS=0\nexport _HI_DISABLE_ALIASES=0\n'
       printf '. %s/aliases.sh 2>/dev/null\n' "$root"
       [ -n "${CMDARG:-}" ] && printf '%s\n' "$CMDARG"; } |
@@ -359,9 +354,9 @@ function _hi_parse() {
   SSHARGS=()
   while [ $# -gt 0 ]; do
     case $1 in
-    # every ssh option that takes a separate value, so the value is never
-    # mistaken for the target. -B/-J especially: without them `hi -J bastion
-    # myhost` would treat "bastion" as the target and connect to the wrong host
+    # every ssh option taking a separate value, so the value is never mistaken
+    # for the target. -B/-J especially: without them `hi -J bastion myhost`
+    # would treat "bastion" as the target and connect to the wrong host
     -B | -b | -c | -D | -E | -e | -F | -I | -i | -J | -L | -l | -m | -O | -o | -p | -Q | -R | -S | -W | -w)
       [ "$#" -ge 2 ] || {
         _hi_cecho "hi: $1 needs a value" "$RED" >&2
@@ -404,23 +399,22 @@ function _hi() {
   # parse the args and determine the target type
   _hi_parse "$@"
   _HI_SHELL_START="$(_hi_now)"
-  if _hi_is_ssh_host "$DOMAIN"; then
-    _say_hi 2>"$tmp"
-  elif _hi_is_docker_container "$DOMAIN"; then
-    _say_hi_container docker 2>"$tmp"
-  elif _hi_is_podman_container "$DOMAIN"; then
-    _say_hi_container podman 2>"$tmp"
-  elif _hi_is_nomad_alloc "$DOMAIN"; then
-    _say_hi_container nomad 2>"$tmp"
-  elif _hi_is_k8s_pod "$DOMAIN"; then
-    _say_hi_container kube 2>"$tmp"
-  else
-    _say_hi 2>"$tmp"
-  fi
+  # one redirect around the whole dispatch, not one per arm a new backend could
+  # be added without. The predicates' stderr lands in $tmp too; each already
+  # sends its probe to /dev/null, and $tmp only prints when the session failed.
+  {
+    if _hi_is_ssh_host "$DOMAIN"; then _say_hi
+    elif _hi_is_docker_container "$DOMAIN"; then _say_hi_container docker
+    elif _hi_is_podman_container "$DOMAIN"; then _say_hi_container podman
+    elif _hi_is_nomad_alloc "$DOMAIN"; then _say_hi_container nomad
+    elif _hi_is_k8s_pod "$DOMAIN"; then _say_hi_container kube
+    else _say_hi
+    fi
+  } 2>"$tmp"
   exit_code="$?"
 
   if [ "$exit_code" -ne 0 ]; then
-    errors="$(cat "$tmp")"
+    errors="$(<"$tmp")"
     echo -ne "\r\r\r\r"
     _hi_cecho "hi failed [code: $exit_code]" "$BRRED"
     _hi_cecho "$errors" "$BRRED"
@@ -430,10 +424,9 @@ function _hi() {
 
 set +euo pipefail # the connection paths below run against unknown hosts, where a probe that fails is normal, not fatal
 
-# Same hatch as scripts/install.sh and scripts/uninstall.sh: sourcing this
-# file defines its functions without connecting to anything, which is what
-# tests/compat/hi_test.sh needs. Executed normally (the only way hi runs -
-# `alias hi` points straight at this script), $0 is this file and we dispatch.
+# Same hatch as scripts/install.sh and scripts/uninstall.sh: sourcing this file
+# defines its functions without connecting to anything, which tests/compat/
+# hi_test.sh needs. Executed normally, $0 is this file and we dispatch.
 [[ "${BASH_SOURCE[0]}" == "$0" ]] || return 0
 
 _hi "$@"

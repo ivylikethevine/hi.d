@@ -172,11 +172,11 @@ function _hi_render_preview() {
 }
 
 function _hi_write_preview_tree() {
-  local root="$_HI_WORKDIR/tree/hi.d"
-  mkdir -p "$root" "$_HI_WORKDIR/tree/.ssh"
-  cp -r "$_HI_ROOT/common" "$_HI_ROOT/misc" "$_HI_ROOT/scripts" "$root/"
-  cp "$_HI_WORKDIR/colors" "$root/misc/colors"
-  cp "$_HI_WORKDIR/ssh_config" "$_HI_WORKDIR/tree/.ssh/config"
+  local home
+  home="$(_hi_scratch_tree tree common misc scripts)"
+  mkdir -p "$home/.ssh"
+  cp "$_HI_WORKDIR/colors" "$home/hi.d/misc/colors"
+  cp "$_HI_WORKDIR/ssh_config" "$home/.ssh/config"
 }
 
 # the tables are wide, colored and layout-heavy; asserting their exact shape

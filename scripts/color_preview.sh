@@ -7,10 +7,9 @@ set -euo pipefail
 # shellcheck source=../common/bootstrap.sh
 source "${_HI_HOME:-$HOME}/hi.d/common/bootstrap.sh"
 
-for _hi_arg in "$@"; do
-  case "$_hi_arg" in
-  -h | --help)
-    cat <<'EOF'
+case "${1:-}" in
+-h | --help)
+  cat <<'EOF'
 Usage: color_preview.sh
 
 Prints two tables - every known user, and every ssh host that resolves to
@@ -26,10 +25,9 @@ Takes no arguments. Reads:
 Hosts with no override and no usable tag are left out: they'd render exactly
 as a bare `hi` does, so there is nothing to preview.
 EOF
-    exit 0
-    ;;
-  esac
-done
+  exit 0
+  ;;
+esac
 
 function _hi_color_source() {
   local type="$1" name="$2" tag
@@ -44,32 +42,20 @@ function _hi_color_source() {
   printf 'default'
 }
 
+# both read misc/colors through common/shared.sh's _hi_colors_names
 function _hi_known_users() {
-  local users=() cur_type cur_name
-  users+=("$(whoami)")
-  if [[ -f "$_HI_COLORS" ]]; then
-    while IFS=',' read -r cur_type cur_name _; do
-      [[ "$cur_type" = "username" && "$cur_name" != "LOCALUSER" ]] || continue
-      users+=("$cur_name")
-    done <"$_HI_COLORS"
-  fi
-  printf '%s\n' "${users[@]}" | awk '!seen[$0]++'
+  { _hi_whoami; _hi_colors_names username LOCALUSER; } | awk '!seen[$0]++'
 }
 
 function _hi_known_usertags() {
-  local cur_type cur_name
-  [[ -f "$_HI_COLORS" ]] || return 0
-  while IFS=',' read -r cur_type cur_name _; do
-    [[ "$cur_type" = "usertag" ]] || continue
-    printf '%s\n' "$cur_name"
-  done <"$_HI_COLORS" | awk '!seen[$0]++'
+  _hi_colors_names usertag
 }
 
 function _hi_preview_users() {
   local tag
   {
     _hi_known_users
-    _hi_override_color username LOCALUSER >/dev/null 2>&1 && printf '%s\n' "$(whoami)"
+    _hi_override_color username LOCALUSER >/dev/null 2>&1 && _hi_whoami
     while IFS= read -r tag; do
       _hi_override_color usertag "$tag" >/dev/null 2>&1 && printf '%s\n' "$tag"
     done < <(_hi_known_usertags)
@@ -83,11 +69,20 @@ function _hi_group_preview_width() {
 }
 
 function _hi_hbar() {
-  local seg="+" w
+  local seg="+" w dashes
   for w in "$@"; do
-    seg+="$(printf '%*s' $((w + 2)) '' | tr ' ' '-')+"
+    _hi_repeat dashes $((w + 2)) '-'
+    seg+="$dashes+"
   done
   printf '%s\n' "$seg"
+}
+
+# _hi_cell <width> <escape> <text> - one padded, colored table cell; an empty
+# escape and text render the blank cell continuation rows use.
+function _hi_cell() {
+  local padded
+  printf -v padded '%-*s' "$1" "$3"
+  printf '| %b ' "$2$padded$NC"
 }
 
 # users table: every known real user with a non-default color, plus LOCALUSER
@@ -127,24 +122,27 @@ function _hi_print_users_table() {
     [[ "$source" = default ]] && continue
     color_name=$(_hi_resolve_color username "$user")
     name_escape=$(_hi_color_escape "$color_name")
-    printf '| %b ' "${name_escape}$(printf '%-*s' "$w_item" "$user")${NC}"
-    printf '| %b ' "${name_escape}$(printf '%-*s' "$w_color" "$color_name")${NC}"
-    printf '| %b |\n' "${name_escape}$(printf '%-*s' "$w_source" "$source")${NC}"
+    _hi_cell "$w_item" "$name_escape" "$user"
+    _hi_cell "$w_color" "$name_escape" "$color_name"
+    _hi_cell "$w_source" "$name_escape" "$source"
+    printf '|\n'
   done
 
   if localuser_color=$(_hi_override_color username LOCALUSER 2>/dev/null); then
     name_escape=$(_hi_color_escape "$localuser_color")
-    printf '| %b ' "${name_escape}$(printf '%-*s' "$w_item" "LOCALUSER")${NC}"
-    printf '| %b ' "${name_escape}$(printf '%-*s' "$w_color" "$localuser_color")${NC}"
-    printf '| %b |\n' "${name_escape}$(printf '%-*s' "$w_source" "local:username")${NC}"
+    _hi_cell "$w_item" "$name_escape" "LOCALUSER"
+    _hi_cell "$w_color" "$name_escape" "$localuser_color"
+    _hi_cell "$w_source" "$name_escape" "local:username"
+    printf '|\n'
   fi
 
   for tag in "${usertags[@]}"; do
     color_name=$(_hi_override_color usertag "$tag") || continue
     name_escape=$(_hi_color_escape "$color_name")
-    printf '| %b ' "${name_escape}$(printf '%-*s' "$w_item" "$tag")${NC}"
-    printf '| %b ' "${name_escape}$(printf '%-*s' "$w_color" "$color_name")${NC}"
-    printf '| %b |\n' "${name_escape}$(printf '%-*s' "$w_source" "usertag:$tag")${NC}"
+    _hi_cell "$w_item" "$name_escape" "$tag"
+    _hi_cell "$w_color" "$name_escape" "$color_name"
+    _hi_cell "$w_source" "$name_escape" "usertag:$tag"
+    printf '|\n'
   done
 
   _hi_hbar "$w_item" "$w_color" "$w_source"
@@ -161,7 +159,7 @@ function _hi_print_hosts_table() {
   local user_width=0 pw pad_preview local_hostname
   local preview_users=() group_order=() group_names=() item_lines=()
   local -A group_hosts group_source group_color group_tag
-  local has_localhostname=false localhostname_color=""
+  local localhostname_color=""
 
   while IFS= read -r name; do preview_users+=("$name"); done < <(_hi_preview_users)
   for user in "${preview_users[@]}"; do
@@ -200,7 +198,6 @@ function _hi_print_hosts_table() {
   # LOCALHOSTNAME gets its own row further down (see below) - measure its
   # SOURCE label here too
   if localhostname_color=$(_hi_override_color hostname LOCALHOSTNAME 2>/dev/null); then
-    has_localhostname=true
     source="local:hostname"
     ((${#source} > w_source)) && w_source=${#source}
     local_hostname=$(_hi_local_hostname)
@@ -222,20 +219,21 @@ function _hi_print_hosts_table() {
     "$w_item" "HOST" "$w_color" "COLOR" "$w_source" "SOURCE" "$w_preview" "PREVIEW"
   _hi_hbar "$w_item" "$w_color" "$w_source" "$w_preview"
 
-  if [[ "$has_localhostname" = true ]]; then
+  if [[ -n "$localhostname_color" ]]; then
     name_escape=$(_hi_color_escape "$localhostname_color")
     total_lines=${#preview_users[@]}
     ((total_lines > 0)) || total_lines=1
+    pad_preview=$((w_preview - $(_hi_group_preview_width "$local_hostname")))
 
     for ((li = 0; li < total_lines; li++)); do
       if ((li == 0)); then
-        printf '| %b ' "${name_escape}$(printf '%-*s' "$w_item" "$local_hostname")${NC}"
-        printf '| %b ' "${name_escape}$(printf '%-*s' "$w_color" "$localhostname_color")${NC}"
-        printf '| %b ' "${name_escape}$(printf '%-*s' "$w_source" "local:hostname")${NC}"
+        _hi_cell "$w_item" "$name_escape" "$local_hostname"
+        _hi_cell "$w_color" "$name_escape" "$localhostname_color"
+        _hi_cell "$w_source" "$name_escape" "local:hostname"
       else
-        printf '| %-*s ' "$w_item" ""
-        printf '| %-*s ' "$w_color" ""
-        printf '| %-*s ' "$w_source" ""
+        _hi_cell "$w_item" "" ""
+        _hi_cell "$w_color" "" ""
+        _hi_cell "$w_source" "" ""
       fi
 
       if ((li < ${#preview_users[@]})); then
@@ -245,7 +243,6 @@ function _hi_print_hosts_table() {
         # pad after the hostname so every row's plain-text width matches
         # pad_preview below, regardless of that user's name length
         previewtext="${user_escape}${user}${NC}${YELLOW}@${NC}${name_escape}${local_hostname}$(printf '%*s' $((user_width - ${#user})) '')${NC}"
-        pad_preview=$((w_preview - $(_hi_group_preview_width "$local_hostname")))
         printf '| %b%*s |\n' "$previewtext" "$pad_preview" ""
       else
         printf '| %*s |\n' "$w_preview" ""
@@ -294,17 +291,17 @@ function _hi_print_hosts_table() {
     for ((li = 0; li < total_lines; li++)); do
       if ((li < ${#item_lines[@]})); then
         itemtext="${item_lines[li]}"
-        printf '| %b ' "${name_escape}$(printf '%-*s' "$w_item" "$itemtext")${NC}"
+        _hi_cell "$w_item" "$name_escape" "$itemtext"
       else
-        printf '| %-*s ' "$w_item" ""
+        _hi_cell "$w_item" "" ""
       fi
 
       if ((li == 0)); then
-        printf '| %b ' "${name_escape}$(printf '%-*s' "$w_color" "$color_name")${NC}"
-        printf '| %b ' "${name_escape}$(printf '%-*s' "$w_source" "$source")${NC}"
+        _hi_cell "$w_color" "$name_escape" "$color_name"
+        _hi_cell "$w_source" "$name_escape" "$source"
       else
-        printf '| %-*s ' "$w_color" ""
-        printf '| %-*s ' "$w_source" ""
+        _hi_cell "$w_color" "" ""
+        _hi_cell "$w_source" "" ""
       fi
 
       if ((li < ${#preview_users[@]})); then

@@ -23,24 +23,35 @@ function system_info() {
   read -r kernel arch <<<"$(uname -sm)"
   kernel=$(_hi_sanitize "$kernel")
   arch=$(_hi_sanitize "$arch")
+  local base_freq_path="/sys/devices/system/cpu/cpu0/cpufreq/base_frequency"
+  local max_freq_path="/sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq"
+  local scaling_freq_path="/sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq"
   if [ -f "$_HI_LINUX_RELEASE" ]; then
     # also covers WSL - it's a real Linux kernel with its own /etc/os-release
     os=$(awk -F= '$1 == "PRETTY_NAME" { gsub(/"/, "", $2); print $2 }' "$_HI_LINUX_RELEASE")
-    # every probe from here down ends in `|| true`: a stripped-down target
-    # (debian-slim has no procps, alpine no lscpu, ...) must fall through to the
-    # "?" placeholders below, not abort the caller under `set -e`/pipefail
+    # every probe below ends in `|| true`: a stripped-down target (debian-slim
+    # has no procps, alpine no lscpu) must fall through to the "?" placeholders
+    # rather than abort the caller under `set -e`/pipefail
     cpus=$(nproc 2>/dev/null || true)
-    ram=$(free -h --giga 2>/dev/null | awk '$1 == "Mem:" { print $2 }' || true)
+    # straight at the file free(1) itself reads, rather than free | awk
+    ram=$(awk '/^MemTotal:/ { printf "%.0fG", $2 / 1048576 }' /proc/meminfo 2>/dev/null || true)
     # base clock: try the model name first (eg "... @ 2.80GHz") - AMD chips (Ryzen/EPYC) don't
     # print one, so fall back to cpufreq's base_frequency (Intel P-State / amd-pstate only)
     base_mhz=$(awk -F'@ *' '/model name/ && NF>1 { gsub(/GHz.*/, "", $2); printf "%.0f", $2 * 1000; exit }' /proc/cpuinfo 2>/dev/null || true)
-    if [ -z "$base_mhz" ]; then
-      base_mhz=$(($(cat /sys/devices/system/cpu/cpu0/cpufreq/base_frequency 2>/dev/null || echo 0) / 1000))
+    # `read < file`, not $(cat file): the redirect fails silently on a missing
+    # file and read is a builtin, so a miss costs no fork
+    local khz
+    if [ -z "$base_mhz" ] && [ -f "$base_freq_path" ]; then
+      read -r khz <"$base_freq_path" 2>/dev/null || khz=0
+      base_mhz=$((khz / 1000))
       ((base_mhz)) || base_mhz=""
     fi
     # boost/max clock: cpufreq first (works for any driver that exposes it), falling back to lscpu
-    boost_mhz=$(($(cat /sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq 2>/dev/null ||
-      cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq 2>/dev/null || echo 0) / 1000))
+    if [ -f "$max_freq_path" ] && [ -f "$scaling_freq_path" ]; then
+      read -r khz <"$max_freq_path" 2>/dev/null || khz=0
+      read -r khz <"$scaling_freq_path" 2>/dev/null || khz=0
+    fi
+    boost_mhz=$((khz / 1000))
     ((boost_mhz)) || boost_mhz=$(lscpu 2>/dev/null | awk -F: '/CPU max MHz/ { gsub(/ /, "", $2); printf "%.0f", $2 }' || true)
   elif [[ "$kernel" == MINGW* || "$kernel" == MSYS* || "$kernel" == CYGWIN* ]]; then
     # git-bash/MSYS2/Cygwin on native Windows - no /etc/os-release, no sysctl
@@ -62,23 +73,11 @@ function system_info() {
     "${CYAN}RAM: ${ram:-?}" "${BRBLUE}CPU: ${base_mhz:-?}/${boost_mhz:-?} MHz"
 }
 
-# Run a backend CLI with an upper bound on how long it gets. identity() is on
-# the connect path - the user is waiting on it before they get a shell - and a
-# docker daemon that is down or a nomad agent behind a dead network otherwise
-# hangs there with no timeout at all. `timeout` is GNU coreutils and absent on
-# a stock macOS, so this degrades to running the command bare rather than
-# making it a requirement. Same shape as common/targets.sh's run_backend.
-function _hi_probe() {
-  if command -v timeout &>/dev/null; then
-    timeout "${_HI_HEADER_PROBE_TIMEOUT:-2}" "$@"
-  else
-    "$@"
-  fi
-}
-
-# git identity (domain masked), running containers, nomad jobs, and ssh key counts
+# git identity (domain masked), running containers, nomad jobs, kube pods and
+# ssh key counts. Probes go through _hi_probe (common/shared.sh): this is on the
+# connect path with the user waiting, so a dead daemon must not hang it.
 function identity() {
-  local email="" domain user_part bullets containers="No docker/podman :(" jobs="" authorized=0 public=0
+  local email="" domain user_part bullets containers="No docker/podman :(" jobs="" pods="" authorized=0 public=0
   local -a lines cells
   local container_bin
   command -v git &>/dev/null && email=$(git config --get user.email 2>/dev/null || true)
@@ -102,10 +101,18 @@ function identity() {
     lines=("${lines[@]:1}") # drop the header row
     jobs="Jobs: ${#lines[@]}"
   fi
+  # kube is a target hi can connect to (hi.sh's _hi_is_k8s_pod), so it belongs
+  # on the same count line as the other three
+  if command -v kubectl &>/dev/null; then
+    mapfile -t lines < <(_hi_probe kubectl get pods --field-selector=status.phase=Running \
+      -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' 2>/dev/null)
+    pods="Pods: ${#lines[@]}"
+  fi
   [ -f "$_HI_SSH_AUTHORIZED_KEYS" ] && mapfile -t lines <"$_HI_SSH_AUTHORIZED_KEYS" && authorized=${#lines[@]}
   [ -d "$_HI_SSH_DIR" ] && mapfile -t lines < <(find "$_HI_SSH_DIR" -type f -name "*.pub") && public=${#lines[@]}
   cells=("$user_part" "$BLUE$containers")
   [ -n "$jobs" ] && cells+=("$CYAN$jobs")
+  [ -n "$pods" ] && cells+=("$CYAN$pods")
   cells+=("${RED}Auth: $authorized" "${PURPLE}Pub: $public")
   header_row "${cells[@]}"
 }
@@ -115,9 +122,9 @@ function identity() {
 function banner() {
   [[ "${_HI_HEADER_BANNER:-1}" == 0 ]] && return 0
   local label="$1" color="${2:-$BRGREEN}" prefix="${3:-}" changes_plain="" changes=""
-  # `git status --short` over the whole checkout costs ~10ms, and banner runs
-  # twice a session - once on connect, once from load.sh on disconnect - for a
-  # number that cannot have changed in between. Compute it once and keep it.
+  # `git status --short` over the checkout costs ~10ms and banner runs twice a
+  # session (connect, then load.sh on disconnect) for a number that cannot have
+  # changed in between. Compute it once and keep it.
   if [ -d "$_HI_ROOT/.git" ]; then
     if [ -z "${_HI_BANNER_CHANGES+x}" ]; then
       local -a lines
@@ -139,8 +146,8 @@ function banner() {
   ((start_len < 1)) && start_len=1
   ((start_len > tildes - 1)) && start_len=$((tildes - 1))
   end_len=$((tildes - start_len))
-  start_tildes=$(printf '%*s' "$start_len" '' | tr ' ' '~')
-  end_tildes=$(printf '%*s' "$end_len" '' | tr ' ' '~')
+  _hi_repeat start_tildes "$start_len" '~'
+  _hi_repeat end_tildes "$end_len" '~'
   printf '%b\n' " $changes$color$start_tildes $label ${NC}[$(_hi_host_escape)$host$NC]$color $end_tildes$NC"
 }
 

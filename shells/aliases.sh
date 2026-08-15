@@ -10,34 +10,23 @@
 # but these are the only patterns that are safe to use, since this file must be
 # POSIX+fish compliant.
 
-# The two toggles this file reads, defaulted here so that reading them is
-# never an error no matter who sourced us. Getting this right needs a trick,
-# because the obvious fix is unavailable: `${_HI_DISABLE_EDITORS-0}` is a
-# parse error in fish ("${ is not a valid variable"), which aborts the whole
-# file, while a bare `$_HI_DISABLE_EDITORS` is fatal in sh/bash/zsh under
-# `set -u`. There is no spelling that satisfies both.
-#
-# So the defaults go inside an `eval` string, which the shell that doesn't run
-# it never parses, gated on a builtin every POSIX shell has and fish
-# deliberately does not. fish skips the line and keeps its own tolerance for
-# unset variables; sh, bash and zsh take it and get real defaults.
-#
-# Assignments use the `-` form, not `:-`, so an intentional empty value is
-# left alone rather than being quietly turned back on. The entry points
-# (common/bootstrap.sh, common/shared.sh, shells/config.fish and the two rcs
-# hi.sh generates) set these as well - this is the backstop for anything that
-# sources this file directly, which is how `hi <target> <command>` broke.
+# The two toggles this file reads, defaulted here so reading them is never an
+# error whoever sourced us. No single spelling works: `${_HI_DISABLE_EDITORS-0}`
+# is a parse error in fish ("${ is not a valid variable") that aborts the whole
+# file, and a bare `$_HI_DISABLE_EDITORS` is fatal in sh/bash/zsh under `set -u`.
+# So the defaults sit inside an `eval` string the other shell never parses,
+# gated on a builtin every POSIX shell has and fish deliberately doesn't.
+# The `-` form, not `:-`, so an intentional empty value isn't quietly turned
+# back on. The entry points set these too; this is the backstop for anything
+# sourcing this file directly - which is how `hi <target> <command>` broke.
 command -v getopts >/dev/null 2>&1 &&
   eval 'export _HI_DISABLE_EDITORS="${_HI_DISABLE_EDITORS-0}" _HI_DISABLE_ALIASES="${_HI_DISABLE_ALIASES-0}"' || true
 
-# nano, vim, cat, ls, exa and eza all get aliased further down for unrelated
-# reasons (rcfile flags, color defaults, options). In zsh, dash and POSIX sh
-# (unlike bash/fish), `command -v` returns an *alias's* definition instead of
-# skipping to the real binary once that alias exists - so any fallthrough
-# chain below that can reach one of those names has to resolve before that
-# alias is defined. Resolving them all here, before anything else in this
-# file sets an alias, keeps every chain below immune to that regardless of
-# where it's used.
+# nano, vim, cat, ls, exa and eza are all aliased further down. In zsh, dash and
+# POSIX sh (unlike bash/fish), `command -v` returns an *alias's* definition
+# rather than the real binary once that alias exists, so every fallthrough chain
+# that can reach one of those names has to resolve first. Doing them all here,
+# before this file sets any alias, keeps the chains below immune.
 export _HI_EDITOR_BIN="$(command -v nano || command -v micro || command -v pico || command -v vim || command -v vi)"
 export _HI_BATCAT_BIN="$(command -v bat || command -v batcat || command -v ccat || command -v cat)"
 # exa and eza intentionally differ in preference order (exa picks exa first,
@@ -46,19 +35,18 @@ export _HI_EXA_BIN="$(command -v exa || command -v eza || command -v ls)"
 export _HI_EZA_BIN="$(command -v eza || command -v exa || command -v ls)"
 
 # skipped when _HI_DISABLE_EDITORS=1, leaving nano/vim at their own defaults.
-# `|| true`: some sourcers run under `set -e`, where a plain failed `[ ]`
-# guard would otherwise abort the whole shell.
+# `|| true` because some sourcers run under `set -e`, where a failed `[ ]` guard
+# would abort the whole shell.
 [ "$_HI_DISABLE_EDITORS" != 1 ] && alias nano="nano --rcfile $_HI_NANORC" || true
 [ "$_HI_DISABLE_EDITORS" != 1 ] && alias vim="$(command -v nvim || command -v vim) -u $_HI_VIMRC" || true
 
-# misc/theme.yml styles eza itself, not any alias hi defines, so it belongs
-# above the early return: turning the personal aliases off shouldn't silently
-# strip the theme from an eza the user runs directly.
+# misc/theme.yml styles eza itself, not any alias hi defines, so it goes above
+# the early return: turning personal aliases off shouldn't strip the theme from
+# an eza the user runs directly.
 export EZA_CONFIG_DIR="$_HI_THEME_DIR"
 
-# everything below this line is purely personal preference, freely editable
-# without touching hi's own functionality (that all lives in
-# common/bootstrap.sh now). Skip it wholesale when _HI_DISABLE_ALIASES=1.
+# everything below is personal preference, freely editable without touching hi's
+# own functionality. Skipped wholesale when _HI_DISABLE_ALIASES=1.
 [ "$_HI_DISABLE_ALIASES" = 1 ] && return || true
 
 alias sudo="command sudo " # works in bash/zsh, fish has a sudo wrapper in config.fish

@@ -3,13 +3,11 @@
 # Runs on the target: prints the header, grafts hi's shell configs onto the
 # host's rc files, hands over to the best shell available, then undoes it all.
 
-# `bash --rcfile` (how hi.sh hands off to us) skips the normal startup file
-# chain, so restore it here before anything else runs - deliberately before
-# `set -euo pipefail` below, since arbitrary profile scripts on the target
-# aren't guaranteed to be safe under -e/-u. It runs at source time rather than
-# from load(), since the bootloader's other shape (hi.sh's $CMDARG, for a
-# one-off `hi <target> <command>`) runs that command instead of load() and
-# still wants the target's real PATH.
+# `bash --rcfile` (how hi.sh hands off) skips the normal startup file chain, so
+# restore it here - before `set -euo pipefail` below, since arbitrary profile
+# scripts on the target aren't guaranteed safe under -e/-u. At source time
+# rather than from load(), because the bootloader's other shape (hi.sh's
+# $CMDARG) replaces load() and still wants the target's real PATH.
 function _hi_restore_profile() {
   if [ -r /etc/profile ]; then source /etc/profile; fi
   # shellcheck disable=SC1090 # target-specific files, no fixed location
@@ -20,19 +18,17 @@ function _hi_restore_profile() {
   export PATH="$PATH:$_HI_ROOT"
 }
 
-# _HI_LOAD_NO_INIT=1 sources this file for its functions alone, without
-# sourcing the target's profile chain - the same "let the tests reach the
-# functions without running the real thing" hatch as the BASH_SOURCE guards at
-# the bottom of scripts/install.sh and scripts/uninstall.sh, spelled as an env
-# var because this file is only ever sourced, never executed.
+# _HI_LOAD_NO_INIT=1 sources this file for its functions alone, skipping the
+# target's profile chain - the same hatch as the BASH_SOURCE guards in
+# scripts/install.sh and scripts/uninstall.sh, spelled as an env var because
+# this file is only ever sourced, never executed.
 [ "${_HI_LOAD_NO_INIT:-0}" = 1 ] || _hi_restore_profile
 
 set -euo pipefail
 
-# every remote/container/alloc path chainloads this file to get here - the
-# local install's own shells never do - so this is what lets common/paths.sh
-# tell "reached via hi" apart from "the machine hi.d lives on", for
-# _HI_DISABLE_LOCAL below.
+# every remote/container/alloc path chainloads this file and the local
+# install's own shells never do, so this is what lets common/paths.sh tell
+# "reached via hi" from "the machine hi.d lives on".
 export _HI_REMOTE_SESSION=1
 
 # shellcheck source=./common/bootstrap.sh
@@ -54,7 +50,7 @@ function configure_files() {
     [ -d "$(dirname "$target")" ] || continue
     touch "$target"
     grep -q "$_HI_CONFIG_START" "$target" && continue
-    block="$_HI_CONFIG_START"$'\n'"$(cat "${pair%:*}")"$'\n'"$_HI_CONFIG_END"
+    block="$_HI_CONFIG_START"$'\n'"$(<"${pair%:*}")"$'\n'"$_HI_CONFIG_END"
     printf '%s\n' "$block" >>"$target"
   done
 }

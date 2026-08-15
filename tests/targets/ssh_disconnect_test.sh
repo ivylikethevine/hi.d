@@ -49,6 +49,34 @@ function _hi_ssh_mux_pids() {
   pgrep -f -- "ssh: $ctl \[mux\]" 2>/dev/null || true
 }
 
+# Every local pid this suite has SIGSTOPped, so the exit trap can undo it.
+# This is the only suite that deliberately freezes processes, and the window
+# between the kill -STOP loop and the kill -9 one is ~30s of polling: an abort
+# in there (^C, a runner timeout, `set -e` upstream) would otherwise leave
+# stopped ssh clients and a mux master holding a socket open indefinitely.
+_HI_FROZEN_PIDS=()
+
+function _hi_freeze() {
+  local pid
+  for pid in "$@"; do
+    _HI_FROZEN_PIDS+=("$pid")
+    kill -STOP "$pid" 2>/dev/null || true
+  done
+}
+
+# CONT before KILL: a SIGSTOPped process can't act on SIGKILL's cleanup path
+# until it is scheduled again, so thawing first is what makes the kill land.
+function _hi_thaw_frozen() {
+  local pid
+  for pid in "${_HI_FROZEN_PIDS[@]:-}"; do
+    [ -n "$pid" ] || continue
+    kill -CONT "$pid" 2>/dev/null || true
+    kill -9 "$pid" 2>/dev/null || true
+  done
+  _HI_FROZEN_PIDS=()
+  return 0
+}
+
 function _hi_ready_dir() {
   grep -oE 'READY:[^[:space:]]*' "$1" 2>/dev/null | sed 's/^READY://' | head -1
 }
@@ -115,14 +143,14 @@ function test_sudden_disconnect_removes_cleanup_dir() {
     return 1
   fi
   pids+=("${mux[@]}")
-  for pid in "${pids[@]}"; do kill -STOP "$pid" 2>/dev/null || true; done
+  _hi_freeze "${pids[@]}"
 
   # sshd's ClientAliveInterval=2/ClientAliveCountMax=1 reaps a frozen client in
   # ~4-6s; the rest is headroom for a loaded runner
   _hi_poll_bool 60 0.5 _hi_cleanup_dir_gone "$cleanup_dir" && ok=1
   [ "$ok" -eq 1 ] || _hi_cecho " | $cleanup_dir survived the disconnect" "$RED"
 
-  for pid in "${pids[@]}"; do kill -9 "$pid" 2>/dev/null || true; done
+  _hi_thaw_frozen
   _hi_wait_pid "$launcher_pid" 5
 
   [ "$ok" -eq 1 ]
@@ -132,7 +160,7 @@ function run_ssh_disconnect_test() {
   _hi_require_backend docker
   _hi_require pgrep
 
-  _hi_workdir sshdisconnecttest
+  _hi_workdir sshdisconnecttest _hi_thaw_frozen
   _hi_h1 "Testing hi's ssh cleanup trap survives an abrupt disconnect"
   _hi_ssh_keypair
 

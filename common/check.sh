@@ -1,5 +1,5 @@
 #!/bin/bash
-# Reads data/packages and prints which of them are installed, sorting by priority.
+# Reads misc/packages and prints which of them are installed, sorting by priority.
 set -euo pipefail
 
 # shellcheck source=./bootstrap.sh

@@ -85,6 +85,45 @@ function test_banner_prints_when_toggle_unset() {
   [[ "$out" == *"TestBanner"* ]]
 }
 
+# banner runs twice a session (connect, then load.sh's disconnect) for a change
+# count that can't have moved in between, and `git status --short` over the
+# checkout is ~10ms a call. The second call has to reuse the first's answer.
+# The output goes to a file rather than through $(...): the caching happens in
+# a variable, and a command substitution would run banner in a subshell where
+# the assignment can't be observed - which is the very thing under test.
+function test_banner_change_count_is_computed_once() {
+  local first second file
+  file="$(mktemp -t hi.banner.XXXXXX)"
+  unset _HI_BANNER_CHANGES
+  banner TestBanner >"$file"
+  first="$(cat "$file")"
+  [ -n "${_HI_BANNER_CHANGES+x}" ] || {
+    rm -f "$file"
+    return 1 # nothing was cached at all
+  }
+  # a value git could never produce, so a second git call would overwrite it
+  _HI_BANNER_CHANGES=4242
+  banner TestBanner >"$file"
+  second="$(cat "$file")"
+  rm -f "$file"
+  unset _HI_BANNER_CHANGES
+  [ -n "$first" ] && [[ "$second" == *4242* ]]
+}
+
+# ...but only when there is a checkout to count. A shipped tree has no .git,
+# and the banner there must simply carry no counter rather than a stale one.
+function test_banner_omits_the_count_without_a_git_dir() {
+  local out dir
+  dir="$(mktemp -d -t hi.nogit.XXXXXX)"
+  out="$(
+    _HI_ROOT="$dir"
+    unset _HI_BANNER_CHANGES
+    banner TestBanner
+  )"
+  rm -rf "$dir"
+  [[ "$out" == *"TestBanner"* ]] && [[ "$out" != *"↑"* ]]
+}
+
 # the regression this toggle exists for: silencing the banner must leave the
 # rest of the header alone, unlike _HI_DISABLE_HEADER which kills all of it
 function test_hi_header_banner_off_keeps_detail_lines() {
@@ -121,6 +160,8 @@ function run_header_tests() {
   _hi_check "Survives a narrow _HI_MAX_WIDTH" test_banner_narrow_width_does_not_error
   _hi_check "No output when _HI_HEADER_BANNER=0" test_banner_disabled_produces_no_output
   _hi_check "Still prints when the toggle is unset" test_banner_prints_when_toggle_unset
+  _hi_check "Change count is computed once per session" test_banner_change_count_is_computed_once
+  _hi_check "No count without a .git dir" test_banner_omits_the_count_without_a_git_dir
 
   _hi_h2 "Testing: timestamp / system_info / identity (smoke tests)"
   _hi_check "Timestamp prints two cells" test_timestamp_runs_and_has_two_cells

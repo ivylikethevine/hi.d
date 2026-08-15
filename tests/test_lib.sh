@@ -97,6 +97,16 @@ function _hi_has_rendered() {
 function _hi_suite_begin() {
   _HI_FAILED=0
   _HI_TOTAL=0
+  _HI_SKIPPED=0
+}
+
+# A single case the suite couldn't run (no python3 to drive a pty, say) - as
+# opposed to _hi_report_skip, which is the whole suite standing down. Counted
+# rather than silently passed, so _hi_suite_end's banner can say how much of
+# what it just reported was actually exercised.
+function _hi_skip() {
+  _HI_SKIPPED=$((${_HI_SKIPPED:-0} + 1))
+  _hi_cecho " | $1: SKIPPED${2:+ ($2)}" "$YELLOW"
 }
 
 # _hi_report_counts <total> <failed> - hand this suite's tally up to
@@ -112,11 +122,22 @@ function _hi_report_counts() {
   printf '%s %s\n' "$1" "$2" >"$_HI_COUNTS_FILE"
 }
 
+# _hi_report_skip <reason> - the same channel, saying "this suite ran nothing"
+# rather than a tally. A skipped suite exits 0, so without this the runner
+# would render it a green PASS and a run could report every suite passing
+# while several of them never executed a case. Same no-op-when-standalone
+# rule as _hi_report_counts.
+function _hi_report_skip() {
+  [ -n "${_HI_COUNTS_FILE:-}" ] || return 0
+  printf 'SKIP %s\n' "$1" >"$_HI_COUNTS_FILE"
+}
+
 function _hi_suite_end() {
-  local subject="$1"
+  local subject="$1" skipped=""
+  [ "${_HI_SKIPPED:-0}" -gt 0 ] && skipped=", ${_HI_SKIPPED} skipped"
   _hi_report_counts "$_HI_TOTAL" "$_HI_FAILED"
   if [ "$_HI_FAILED" -eq 0 ]; then
-    _hi_h1 "${2:-All $subject checks passed ($_HI_TOTAL cases)}"
+    _hi_h1 "${2:-All $subject checks passed ($_HI_TOTAL cases$skipped)}"
   else
     _hi_h1 "${3:-$_HI_FAILED/$_HI_TOTAL $subject checks FAILED}" "$RED"
   fi
@@ -126,6 +147,7 @@ function _hi_suite_end() {
 function _hi_require() {
   command -v "$1" >/dev/null 2>&1 && return 0
   _hi_cecho "$1 ${2:-not installed}, skipping" "$YELLOW"
+  _hi_report_skip "no $1"
   exit 0
 }
 
@@ -133,6 +155,7 @@ function _hi_require_backend() {
   _hi_require "$@"
   "$1" info >/dev/null 2>&1 && return 0
   _hi_cecho "$1 not reachable, skipping" "$YELLOW"
+  _hi_report_skip "$1 unreachable"
   exit 0
 }
 
@@ -238,6 +261,34 @@ function _hi_poll_budget() {
     'BEGIN { b = t * i; b = (b == int(b) ? b : int(b) + 1); printf "%d", (b < 1 ? 1 : b) }'
 }
 
+# _hi_free_port_base [count] - a base port with $count consecutive free ports
+# from it, printed on stdout. A suite that binds a well-known port collides
+# with any real service of the same kind already on the host (and with a
+# second copy of itself), which is a failure that looks exactly like a bug in
+# the code under test. The ssh fixtures avoid this by letting docker map an
+# ephemeral port; anything hi runs directly has to pick its own, so it asks
+# here. Probing is a connect attempt: refused means nothing is listening.
+# Racy in principle, since something could claim the port between the probe
+# and the bind, but bounded - and unlike a hardcoded port it is usually right.
+function _hi_free_port_base() {
+  local count="${1:-1}" base i ok attempt
+  for ((attempt = 0; attempt < 20; attempt++)); do
+    base=$((20000 + RANDOM % 20000))
+    ok=1
+    for ((i = 0; i < count; i++)); do
+      if (exec 3<>"/dev/tcp/127.0.0.1/$((base + i))") 2>/dev/null; then
+        ok=0
+        break
+      fi
+    done
+    if [ "$ok" -eq 1 ]; then
+      printf '%s' "$base"
+      return 0
+    fi
+  done
+  return 1
+}
+
 function _hi_poll_bool() {
   local abort=""
   if [ "$1" = -a ]; then
@@ -274,11 +325,17 @@ function _hi_poll_value() {
   return 1
 }
 
+# Wall-clock, not iteration count: `for ((i = 0; i < timeout_s * 4))` at
+# sleep 0.25 only equals timeout_s when nothing else is competing for the
+# machine, and stretches without bound when something is - which is exactly
+# when an e2e suite is most likely to need the timeout. _hi_poll_bool and
+# _hi_poll_value already use this deadline; this now matches them.
 function _hi_wait_pid() {
-  local pid="$1" timeout_s="$2" i
+  local pid="$1" timeout_s="$2" deadline
   shift 2
   _HI_WAIT_EXIT=0
-  for ((i = 0; i < timeout_s * 4; i++)); do
+  deadline=$((SECONDS + timeout_s))
+  while [ "$SECONDS" -lt "$deadline" ]; do
     kill -0 "$pid" 2>/dev/null || break
     sleep 0.25
   done
@@ -317,6 +374,15 @@ function _hi_exec_case() {
   return 1
 }
 
+# True once the target's session has actually reached a shell, so
+# _hi_interactive_case knows when its input will be read rather than guessing.
+# Both shapes count: load()'s full path announces the shell it picked, and the
+# no-bash fallback says so instead - a readiness check that only knew about
+# the first would hang out the full timeout on any target without bash.
+function _hi_session_ready() {
+  grep -qE 'hi loaded with|aliases only' "$1" 2>/dev/null
+}
+
 # Like _hi_exec_case, but drives a real *interactive* session instead of a
 # one-off command - the only shape that reaches load.sh's load(). hi.sh's
 # $CMDARG replaces `load` outright in the bootloader (see _hi_bootloader), so a
@@ -341,19 +407,30 @@ function _hi_interactive_case() {
   local expected="$marker-INTERACTIVE"
 
   if [ "${#_HI_PTY_FORCED[@]}" -eq 0 ]; then
-    _hi_cecho " | [$label] -- skipped: no python3 to drive an interactive pty" "$YELLOW"
+    _hi_skip "[$label]" "no python3 to drive an interactive pty"
     return 0
   fi
 
   _hi_cecho " | Running (interactive): $*"
   t0="$(_hi_now)"
-  # the leading sleep lets the session get all the way to its shell before the
-  # input lands; the trailing one keeps the pipe open long enough for load()'s
-  # closing lines to make it into the transcript
+  : >"$out_file"
+  # The left side of the pipe runs alongside the session, so it can watch the
+  # transcript the session is writing rather than guessing how long it needs.
+  # A fixed sleep here was the suite's worst flake: on a loaded runner the
+  # input landed before the shell was ready and the marker never appeared.
+  # $_HI_INTERACTIVE_SETTLE is the ceiling now, not the wait itself.
+  #
+  # Reading $out_file on the left while the right writes it is the whole
+  # mechanism, not the accident SC2094 warns about: the two sides are separate
+  # processes and the reader only ever polls, so there is no truncate-then-read
+  # race to hit.
+  # shellcheck disable=SC2094
   {
-    sleep "${_HI_INTERACTIVE_SETTLE:-4}"
+    _hi_poll_bool "$((${_HI_INTERACTIVE_SETTLE:-4} * 4))" 0.25 _hi_session_ready "$out_file" || true
     printf "printf '%%s-%%s\\\\n' %s INTERACTIVE\nexit\n" "$marker"
-    sleep 2
+    # ...and the same on the way out: hold the pipe open until load()'s closing
+    # line lands rather than for a flat two seconds
+    _hi_poll_bool 20 0.25 grep -q "hi closing" "$out_file" || true
   } | "${_HI_PTY_FORCED[@]}" "$@" >"$out_file" 2>&1 &
   function _hi_on_timeout() {
     _hi_h3 " | [$label] -- TIMED OUT after ${timeout_s}s, killing" "$RED"
@@ -503,7 +580,7 @@ function _hi_container_backend_test() {
     mkdir -p "$_HI_WORKDIR/$shell"
     printf 'FROM alpine:3.20\nRUN apk add --no-cache %s\n' "$shell" >"$_HI_WORKDIR/$shell/Dockerfile"
     shell_ok[$shell]=1
-    _hi_build_image "$shell" "hi-${backend}test-$shell" "the $shell fallback" "$_HI_WORKDIR/$shell" ||
+    _hi_build_image "$shell" "hi-${backend}test-$shell-$$" "the $shell fallback" "$_HI_WORKDIR/$shell" ||
       shell_ok[$shell]=0
   done
 
@@ -569,12 +646,14 @@ function _hi_container_backend_test() {
   for spec in zsh:fallback fish:fallback_fish; do
     shell="${spec%%:*}"
     if [ "${shell_ok[$shell]}" -eq 1 ]; then
-      _hi_case _hi_run_case "$shell" "hi-${backend}test-$shell" "$(_hi_probe_cmd "$marker" "${spec#*:}")"
+      _hi_case _hi_run_case "$shell" "hi-${backend}test-$shell-$$" "$(_hi_probe_cmd "$marker" "${spec#*:}")"
     fi
   done
   _hi_case _hi_run_case sh alpine:3.20 "$(_hi_probe_cmd "$marker" fallback)"
 
-  "$backend" image rm -f "hi-${backend}test-zsh" "hi-${backend}test-fish" >/dev/null 2>&1 || true
+  # $$-suffixed like the container names: without it a second run of this
+  # suite on the same host removes the images the first is still running from
+  "$backend" image rm -f "hi-${backend}test-zsh-$$" "hi-${backend}test-fish-$$" >/dev/null 2>&1 || true
 
   _hi_suite_end "$backend" \
     "hi's $backend path survived every shell environment tested ($_HI_TOTAL cases)" \

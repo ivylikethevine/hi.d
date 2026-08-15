@@ -86,6 +86,25 @@ function strip_marker() {
   _hi_cecho " local $name cleaned :)" "$GREEN"
 }
 
+# The other half of being install's inverse: drop the settings file it wrote,
+# plus any marker lines an install from before $_HI_SETTINGS existed left
+# behind in the three tracked source files (install.sh's
+# migrate_legacy_settings sweeps the same three).
+function strip_settings() {
+  local target
+  _hi_h2 "Checking settings"
+  if [ -f "$_HI_SETTINGS" ]; then
+    rm -f "$_HI_SETTINGS"
+    _hi_cecho " removed ${_HI_SETTINGS#"$_HI_ROOT/"} :)" "$GREEN"
+  else
+    _hi_cecho " no ${_HI_SETTINGS#"$_HI_ROOT/"} to remove :)" "$GREEN"
+  fi
+  for target in "$_HI_ROOT/common/paths.sh" "$_HI_ROOT/common/header.sh" "$_HI_ROOT/common/shared.sh"; do
+    grep -qF "$_HI_MARKER" "$target" 2>/dev/null || continue
+    strip_marker "${target#"$_HI_ROOT/"}" "$target"
+  done
+}
+
 function unlink_hi() {
   _hi_h2 "Checking hi.sh"
   if [ "$(readlink "$_HI_LINK" 2>/dev/null)" != "$_HI_LAUNCHER" ]; then
@@ -107,6 +126,8 @@ _hi_cecho " | hi_home: $_HI_HOME | hi_root: $_HI_ROOT" "$BLUE"
 strip_marker bashrc "$_HI_HOME_BASHRC"
 strip_marker zshrc "$_HI_HOME_ZSHRC"
 strip_marker config.fish "$_HI_HOME_FISH_CONFIG"
+
+strip_settings
 
 unlink_hi
 

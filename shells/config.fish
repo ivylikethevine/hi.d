@@ -2,6 +2,20 @@
 
 # === start required configuration ===
 set -q _HI_HOME; or set -gx _HI_HOME ~
+# Every toggle this file, paths.sh's local-only gate and aliases.sh read bare.
+# fish has no ${X:-0}, so the only way for those reads to be safe is for the
+# variables to always exist - defaulted here, never assigned, so the settings
+# file and the gate below can both still override.
+for _hi_toggle in _HI_DISABLE_LOCAL _HI_REMOTE_SESSION _HI_DISABLE_HEADER \
+    _HI_DISABLE_PROMPT _HI_DISABLE_PERSONAL _HI_DISABLE_GIT_STATUS \
+    _HI_DISABLE_EDITORS _HI_DISABLE_ALIASES
+  set -q $_hi_toggle; or set -gx $_hi_toggle 0
+end
+set -e _hi_toggle
+# the settings scripts/install.sh writes, ahead of paths.sh because paths.sh's
+# local-only gate reads them (see the note by that gate). They are plain
+# `export NAME=value` lines, which fish understands natively.
+test -f $_HI_HOME/hi.d/misc/settings.sh; and source $_HI_HOME/hi.d/misc/settings.sh
 source $_HI_HOME/hi.d/common/paths.sh
 source $_HI_ALIASES
 

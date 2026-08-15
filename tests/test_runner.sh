@@ -25,6 +25,8 @@ if ! declare -p _HI_TESTS >/dev/null 2>&1; then
     "shared:compat/shared_test.sh"
     "git_prompt:compat/git_prompt_test.sh"
     "targets:compat/targets_test.sh"
+    "paths:compat/paths_test.sh"
+    "color_preview:compat/color_preview_test.sh"
     "load:compat/load_test.sh"
     "test_lib:harness/lib_test.sh"
     "test_runner:harness/runner_test.sh"
@@ -38,6 +40,35 @@ if ! declare -p _HI_TESTS >/dev/null 2>&1; then
 fi
 
 _HI_TESTS_DIR="${_HI_TESTS_DIR:-$_HI_ROOT/tests}"
+
+# Checked before suite matching so `--help` can't be mistaken for a suite name
+# and rejected as unknown. The suite list comes from $_HI_TESTS rather than
+# being spelled out again, so it can't drift.
+for _hi_arg in "$@"; do
+  case "$_hi_arg" in
+  -h | --help)
+    cat <<EOF
+Usage: test_runner.sh [suite ...]
+
+Runs every test suite, or just the named ones, timing each and printing a
+pass/fail summary table at the end. Exits with the number of failed suites.
+
+A suite that stands down because its backend isn't installed reports SKIPPED
+rather than PASS, so a green run can't overstate what actually ran.
+
+  suite ...     one or more of the names below (default: all of them)
+  -h, --help    this text
+
+Suites, in the order they run:
+$(printf '  %s\n' "${_HI_TESTS[@]%%:*}")
+
+Needs \$_HI_HOME pointing at the parent of your hi.d checkout.
+Benchmarks live separately, in tests/bench/bench.sh (\`hi_bench\`).
+EOF
+    exit 0
+    ;;
+  esac
+done
 
 declare -a _HI_SELECTED=()
 if [ "$#" -eq 0 ]; then
@@ -84,6 +115,7 @@ trap "_hi_restore_tty; rm -f '$_HI_COUNTS_FILE'" EXIT
 
 declare -a _HI_NAMES=() _HI_STATUSES=() _HI_DURATIONS=() _HI_PASSED=() _HI_FAILED_CASES=()
 _HI_SUITE_FAILED=0
+_HI_SUITE_SKIPPED=0
 _HI_CASES_PASSED=0
 _HI_CASES_FAILED=0
 _HI_RUN_T0="$(_hi_now)"
@@ -114,23 +146,33 @@ for _hi_t in "${_HI_SELECTED[@]}"; do
   _hi_dur="$(_hi_elapsed "$_hi_t0" "$(_hi_now)")s"
   _hi_restore_tty
 
-  # empty unless the suite reached _hi_suite_end - a suite that skipped on a
-  # missing backend, or one that reports its own way, contributes no cases
+  # empty unless the suite reached _hi_suite_end - a suite that reports its own
+  # way contributes no cases. A leading SKIP instead of a tally is _hi_require's
+  # doing: the suite stood down (no backend, no binary) without running a case,
+  # and exits 0 doing it, so only this tells the two apart from a real pass.
   _hi_pass="-"
   _hi_fail="-"
+  _hi_skip=""
   if [ -s "$_HI_COUNTS_FILE" ]; then
     read -r _hi_cases _hi_bad <"$_HI_COUNTS_FILE"
-    _hi_pass=$((_hi_cases - _hi_bad))
-    _hi_fail="$_hi_bad"
-    _HI_CASES_PASSED=$((_HI_CASES_PASSED + _hi_pass))
-    _HI_CASES_FAILED=$((_HI_CASES_FAILED + _hi_bad))
+    if [ "$_hi_cases" = SKIP ]; then
+      _hi_skip="${_hi_bad:-skipped}"
+    else
+      _hi_pass=$((_hi_cases - _hi_bad))
+      _hi_fail="$_hi_bad"
+      _HI_CASES_PASSED=$((_HI_CASES_PASSED + _hi_pass))
+      _HI_CASES_FAILED=$((_HI_CASES_FAILED + _hi_bad))
+    fi
   fi
 
   _HI_NAMES+=("$_hi_name")
   _HI_DURATIONS+=("$_hi_dur")
   _HI_PASSED+=("$_hi_pass")
   _HI_FAILED_CASES+=("$_hi_fail")
-  if [ "$_hi_code" -eq 0 ]; then
+  if [ -n "$_hi_skip" ]; then
+    _HI_STATUSES+=("SKIPPED")
+    _HI_SUITE_SKIPPED=$((_HI_SUITE_SKIPPED + 1))
+  elif [ "$_hi_code" -eq 0 ]; then
     _HI_STATUSES+=("PASS")
   else
     _HI_STATUSES+=("FAILED ($_hi_code)")
@@ -164,8 +206,11 @@ function _hi_summary_row() {
 _hi_cecho "$(_hi_summary_row SUITE STATUS PASS FAIL TIME)" "$BRBLUE"
 
 for _hi_i in "${!_HI_NAMES[@]}"; do
-  _hi_color="$GREEN"
-  [ "${_HI_STATUSES[_hi_i]}" = PASS ] || _hi_color="$RED"
+  case "${_HI_STATUSES[_hi_i]}" in
+  PASS) _hi_color="$GREEN" ;;
+  SKIPPED) _hi_color="$YELLOW" ;; # ran nothing: neither a pass nor a failure
+  *) _hi_color="$RED" ;;
+  esac
   _hi_cecho "$(_hi_summary_row "${_HI_NAMES[_hi_i]}" "${_HI_STATUSES[_hi_i]}" \
     "${_HI_PASSED[_hi_i]}" "${_HI_FAILED_CASES[_hi_i]}" "${_HI_DURATIONS[_hi_i]}")" "$_hi_color"
 done
@@ -176,10 +221,14 @@ _HI_TOTAL_DUR="$(_hi_elapsed "$_HI_RUN_T0" "$(_hi_now)")s"
 _hi_cecho "$(_hi_summary_row TOTAL "${#_HI_SELECTED[@]} suite(s)" \
   "$_HI_CASES_PASSED" "$_HI_CASES_FAILED" "$_HI_TOTAL_DUR")" "$BRBLUE"
 
+_HI_SKIP_NOTE=""
+[ "$_HI_SUITE_SKIPPED" -gt 0 ] && _HI_SKIP_NOTE=", $_HI_SUITE_SKIPPED skipped"
+
 if [ "$_HI_SUITE_FAILED" -eq 0 ]; then
-  _hi_h1 "All ${#_HI_SELECTED[@]} test suites passed ($_HI_TOTAL_DUR)"
+  # never claim the skipped ones passed - that's the whole point of the status
+  _hi_h1 "$((${#_HI_SELECTED[@]} - _HI_SUITE_SKIPPED))/${#_HI_SELECTED[@]} test suites passed ($_HI_TOTAL_DUR$_HI_SKIP_NOTE)"
 else
-  _hi_h1 "$_HI_SUITE_FAILED/${#_HI_SELECTED[@]} test suites FAILED ($_HI_TOTAL_DUR)" "$RED"
+  _hi_h1 "$_HI_SUITE_FAILED/${#_HI_SELECTED[@]} test suites FAILED ($_HI_TOTAL_DUR$_HI_SKIP_NOTE)" "$RED"
 fi
 
 exit "$_HI_SUITE_FAILED"

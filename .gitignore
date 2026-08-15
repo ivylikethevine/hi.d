@@ -1,3 +1,15 @@
+# scripts/install.sh writes every _HI_DISABLE_*/_HI_HEADER_*/_HI_MAX_WIDTH
+# choice here. Ignored on purpose: configuring hi.d must not dirty the
+# checkout, or `hi_update`'s git pull stops applying cleanly.
+misc/settings.sh
+
+# NOTE: the rules below are deliberately broad (personal-config hygiene), and
+# they will silently swallow files you would expect `git add` to take -
+# anything matching **local**, **key**, **personal**, *.json, *.yml, *docker*
+# and so on. `git add` no-ops rather than erroring when that happens. Check
+# with `git check-ignore -v <path>` if a new file won't stage, and add a `!`
+# exception here rather than loosening the blanket rule.
+
 **output**
 **build**
 **tmp**
@@ -42,6 +54,7 @@
 *.sql
 *.json
 !.zed/settings.json
+!tests/bench/baseline.json
 *.toml
 *.yaml
 *.yml

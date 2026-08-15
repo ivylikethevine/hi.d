@@ -58,15 +58,49 @@ function _hi_copy_time() {
   awk -v now="$(_hi_now)" -v a="$1" -v b="$2" -v c="$3" 'BEGIN { printf "%.3f", (now - a) - (c - b) }'
 }
 
+# load.sh turns `set -euo pipefail` on at source time to protect its own setup,
+# and load() turns it back off again before the header. The $CMDARG shape never
+# calls load() - it replaces it - so without the middle line here a one-off
+# `hi <target> <cmd>` runs the user's command under -e -u pipefail: an unset
+# variable is fatal and any non-zero status ends the session. No interactive
+# shell behaves that way and nothing typed at one expects it to. Concretely, it
+# made `source $_HI_ALIASES` die on _HI_DISABLE_EDITORS whenever the target had
+# no explicit toggles set, which is the default.
 function _hi_bootloader() {
   cat <<EOF
 source \$_HI_ROOT/load.sh
+set +euo pipefail
 ${CMDARG:-load}
 EOF
 }
 
+# The no-bash target's rc, consumed by sh, zsh *and* fish (see _say_hi's
+# `fish -C` branch), so every line here has to be valid in all three - which
+# plain `export NAME=value` and `[ -f x ] && . x` both are.
+#
+# The toggle defaults come first so the two files after them can still win:
+# aliases.sh reads _HI_DISABLE_EDITORS/_HI_DISABLE_ALIASES bare, and paths.sh's
+# local-only gate reads _HI_DISABLE_LOCAL/_HI_REMOTE_SESSION. _HI_REMOTE_SESSION
+# is 1 rather than 0 because this *is* a remote session: load.sh is what
+# normally exports it, and this path deliberately never reaches load.sh. Left
+# unset, the gate would read a remote target as local and, for anyone who set
+# _HI_DISABLE_LOCAL=1, strip hi from the very session they asked for.
+#
+# settings.sh is optional (nothing writes it until scripts/install.sh runs) and
+# so needs the `[ -f ]` guard the other two don't: a bare `.` on a missing file
+# doesn't just fail in ash/dash, it abandons the rest of the file - taking
+# paths.sh, aliases.sh and $CMDARG with it and leaving the session sitting there.
 function _hi_fallback_rc() {
   cat <<EOF
+export _HI_REMOTE_SESSION=1
+export _HI_DISABLE_LOCAL=0
+export _HI_DISABLE_HEADER=0
+export _HI_DISABLE_PROMPT=0
+export _HI_DISABLE_PERSONAL=0
+export _HI_DISABLE_GIT_STATUS=0
+export _HI_DISABLE_EDITORS=0
+export _HI_DISABLE_ALIASES=0
+[ -f \$_HI_ROOT/misc/settings.sh ] && . \$_HI_ROOT/misc/settings.sh
 . \$_HI_ROOT/common/paths.sh 2>/dev/null
 . \$_HI_ROOT/shells/aliases.sh 2>/dev/null
 ${CMDARG:-}
@@ -95,6 +129,18 @@ REMOTE
 # time, then hand off to bash if it's there, or the best fallback shell if not.
 # Expects \$_hi_rc_dir to already be set to wherever hi.bashrc/.hi_fallback_rc
 # should live for this branch.
+# `-i` is not redundant next to --rcfile: bash reads an rcfile only when it is
+# interactive, and it decides that from its own stdin, not from the flag. With
+# no local tty `ssh -t` can't allocate one, so the remote bash is
+# non-interactive, silently ignores hi.bashrc - and with it load.sh and
+# $CMDARG - and exits 0. That is `hi <target> <command>` doing nothing at all
+# from a script, a pipe or cron. The flag costs nothing when a tty *is* there,
+# since bash is already interactive in that case.
+# The fallback shells below need no equivalent: they are each started with an
+# explicit -i (or fish's -C), which is why only this arm was affected.
+# The flag has to come *after* --rcfile, not before it: bash reads its GNU long
+# options in a first pass that ends at the first short one, so `bash -i
+# --rcfile f` dies with "--: invalid option" rather than starting a shell.
 # fish's exit only unwinds the source call it's invoked from, not the whole
 # shell, so a sourced .hi_fallback_rc's trailing "; exit" never lands - the
 # fish case below feeds the file's content to -C directly instead of
@@ -103,7 +149,7 @@ function _hi_remote_suffix() {
   cat <<REMOTE
       export _HI_COPY_TIME=\$(awk -v a="\$_hi_t0" -v b="\$(_hi_now)" 'BEGIN{printf "%.3f", b-a}')
       if command -v bash >/dev/null 2>&1; then
-        bash --rcfile "\$_hi_rc_dir/hi.bashrc"
+        bash --rcfile "\$_hi_rc_dir/hi.bashrc" -i
       else
         _hi_fallback=sh
         for _hi_s in zsh fish sh; do command -v "\$_hi_s" >/dev/null 2>&1 && { _hi_fallback="\$_hi_s"; break; }; done
@@ -258,8 +304,12 @@ function _say_hi_container() {
 
     # aliases.sh, plus CMDARG (already suffixed with "; exit" by _hi_parse) as
     # its own raw line when running a one-off command instead of a session -
-    # not a quoted CLI arg, so it survives quotes/spaces in the user's command
-    { printf '. %s/aliases.sh 2>/dev/null\n' "$root"
+    # not a quoted CLI arg, so it survives quotes/spaces in the user's command.
+    # The two toggle defaults lead, for the same reason _hi_fallback_rc's do:
+    # aliases.sh reads both bare, and this path copies aliases.sh on its own
+    # without paths.sh or settings.sh, so nothing else would ever define them.
+    { printf 'export _HI_DISABLE_EDITORS=0\nexport _HI_DISABLE_ALIASES=0\n'
+      printf '. %s/aliases.sh 2>/dev/null\n' "$root"
       [ -n "${CMDARG:-}" ] && printf '%s\n' "$CMDARG"; } |
       "${cp[@]}" sh -c "cat > '$root/.hi_fallback_rc'" 2>"$tmp"
 

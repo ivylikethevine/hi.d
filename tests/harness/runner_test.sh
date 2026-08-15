@@ -26,6 +26,16 @@ function _hi_counting_fixture() {
   chmod +x "$_HI_FIXTURES/$1.sh"
 }
 
+# a suite that stood down without running anything - what _hi_require does
+# when its backend is missing. Exits 0 like a passing suite, so only the SKIP
+# line in $_HI_COUNTS_FILE tells the runner the two apart.
+function _hi_skipping_fixture() {
+  # shellcheck disable=SC2016 # $_HI_COUNTS_FILE is resolved when the fixture runs
+  printf '#!/bin/bash\nprintf "ran:%s\\n"\nprintf "SKIP %s\\n" >"$_HI_COUNTS_FILE"\nexit 0\n' \
+    "$1" "${2:-no backend}" >"$_HI_FIXTURES/$1.sh"
+  chmod +x "$_HI_FIXTURES/$1.sh"
+}
+
 function _hi_run_runner() {
   local table="$1" line
   shift
@@ -75,7 +85,7 @@ function test_unknown_suite_name_lists_the_known_ones() {
 
 function test_all_passing_exits_zero_with_a_green_summary() {
   _hi_run_runner $'a:green.sh\nb:green.sh'
-  [ "$_HI_RUN_EXIT" -eq 0 ] && [[ "$_HI_RUN_OUT" == *"All 2 test suites passed"* ]]
+  [ "$_HI_RUN_EXIT" -eq 0 ] && [[ "$_HI_RUN_OUT" == *"2/2 test suites passed"* ]]
 }
 
 function test_a_failing_suite_is_reported_with_its_exit_code() {
@@ -205,6 +215,36 @@ function test_summary_totals_ignore_suites_without_counts() {
   printf '%s\n' "$_HI_RUN_OUT" | grep -qE 'TOTAL +2 suite\(s\) +3 +0 '
 }
 
+# The honest half of the summary: a suite that ran nothing exits 0, so
+# without a status of its own it would render as a green PASS and a run could
+# report every suite passing while several never executed a case.
+function test_a_skipping_suite_is_reported_as_skipped() {
+  _hi_skipping_fixture stood_down "no docker"
+  _hi_run_runner $'stood_down:stood_down.sh'
+  printf '%s\n' "$_HI_RUN_OUT" | grep -qE 'stood_down +SKIPPED'
+}
+
+function test_a_skipping_suite_is_not_a_failure() {
+  _hi_skipping_fixture stood_down2
+  _hi_run_runner $'stood_down2:stood_down2.sh'
+  [ "$_HI_RUN_EXIT" -eq 0 ]
+}
+
+function test_a_skipping_suite_is_not_counted_as_passed() {
+  _hi_skipping_fixture stood_down3
+  _hi_run_runner $'stood_down3:stood_down3.sh\nok:green.sh'
+  [[ "$_HI_RUN_OUT" == *"1/2 test suites passed"* ]] && [[ "$_HI_RUN_OUT" == *"1 skipped"* ]]
+}
+
+# a skip contributes no cases, so it must not add a 0 to the totals either
+function test_a_skipping_suite_contributes_no_cases() {
+  _hi_counting_fixture five 5 0
+  _hi_skipping_fixture stood_down4
+  _hi_run_runner $'five:five.sh\nstood_down4:stood_down4.sh'
+  printf '%s\n' "$_HI_RUN_OUT" | grep -qE 'TOTAL +2 suite\(s\) +5 +0 ' &&
+    printf '%s\n' "$_HI_RUN_OUT" | grep -qE 'stood_down4 +SKIPPED +- +- '
+}
+
 function test_each_suites_own_output_still_streams() {
   _hi_run_runner $'a:green.sh'
   [[ "$_HI_RUN_OUT" == *"ran:green"* ]]
@@ -220,6 +260,42 @@ function test_shipped_table_still_has_every_suite_name() {
       return 1
     }
   done
+}
+
+# A suite registered in _HI_TESTS but missing from ci.yml never runs on a push,
+# and nothing says so - which is exactly what happened to the `hi` suite: added
+# to the table, left out of the workflow, silently unexercised. The workflow's
+# fast-suite line has to name every non-e2e suite in the table.
+function test_ci_runs_every_fast_suite() {
+  local workflow="$_HI_ROOT/.github/workflows/ci.yml" line known name missing=""
+  local -a names=()
+  [ -f "$workflow" ] || return 0 # a shipped tree has no .github
+  # the closing quote goes, or the last name on the line reads as `name"` and
+  # is reported missing even when it is right there
+  line="$(grep -o 'test_runner\.sh [a-z_ ]*"' "$workflow" | head -1 | tr -d '"')"
+  [ -n "$line" ] || {
+    _hi_cecho " | no fast-suite line found in ci.yml" "$RED"
+    return 1
+  }
+  # the real table, read back out of the runner's own error message - the same
+  # source test_shipped_table_still_has_every_suite_name uses, and the only one
+  # available here since $_HI_TESTS lives inside the runner, not this suite
+  known="$("$_HI_TEST_RUN" definitely-not-a-suite 2>&1)" || true
+  read -r -a names <<<"$(sed 's/.*(known: //; s/).*//' <<<"$known")"
+  [ "${#names[@]}" -gt 0 ] || {
+    _hi_cecho " | couldn't read the suite table back out of the runner" "$RED"
+    return 1
+  }
+  for name in "${names[@]}"; do
+    case "$name" in
+    ssh | ssh_disconnect | docker | podman | nomad | kube) continue ;; # e2e, own jobs
+    esac
+    [[ " $line " == *" $name "* ]] || missing+=" $name"
+  done
+  [ -z "$missing" ] || {
+    _hi_cecho " | registered in the runner but not run by CI:$missing" "$RED"
+    return 1
+  }
 }
 
 function test_every_shipped_suite_script_exists_and_is_executable() {
@@ -291,9 +367,16 @@ function run_runner_tests() {
   _hi_check "Totals sum every suite's cases" test_summary_totals_sum_every_suites_cases
   _hi_check "Totals ignore suites without counts" test_summary_totals_ignore_suites_without_counts
 
+  _hi_h2 "Testing: skipped suites"
+  _hi_check "Reported as SKIPPED, not PASS" test_a_skipping_suite_is_reported_as_skipped
+  _hi_check "Not a failure" test_a_skipping_suite_is_not_a_failure
+  _hi_check "Not counted as passed" test_a_skipping_suite_is_not_counted_as_passed
+  _hi_check "Contributes no cases" test_a_skipping_suite_contributes_no_cases
+
   _hi_h2 "Testing: the shipped table"
   _hi_check "Still has every CI and backend suite name" test_shipped_table_still_has_every_suite_name
   _hi_check "Every shipped path exists and is executable" test_every_shipped_suite_script_exists_and_is_executable
+  _hi_check "CI runs every fast suite in the table" test_ci_runs_every_fast_suite
 
   _hi_suite_end "test_runner.sh"
 }

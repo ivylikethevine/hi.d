@@ -10,6 +10,26 @@
 # but these are the only patterns that are safe to use, since this file must be
 # POSIX+fish compliant.
 
+# The two toggles this file reads, defaulted here so that reading them is
+# never an error no matter who sourced us. Getting this right needs a trick,
+# because the obvious fix is unavailable: `${_HI_DISABLE_EDITORS-0}` is a
+# parse error in fish ("${ is not a valid variable"), which aborts the whole
+# file, while a bare `$_HI_DISABLE_EDITORS` is fatal in sh/bash/zsh under
+# `set -u`. There is no spelling that satisfies both.
+#
+# So the defaults go inside an `eval` string, which the shell that doesn't run
+# it never parses, gated on a builtin every POSIX shell has and fish
+# deliberately does not. fish skips the line and keeps its own tolerance for
+# unset variables; sh, bash and zsh take it and get real defaults.
+#
+# Assignments use the `-` form, not `:-`, so an intentional empty value is
+# left alone rather than being quietly turned back on. The entry points
+# (common/bootstrap.sh, common/shared.sh, shells/config.fish and the two rcs
+# hi.sh generates) set these as well - this is the backstop for anything that
+# sources this file directly, which is how `hi <target> <command>` broke.
+command -v getopts >/dev/null 2>&1 &&
+  eval 'export _HI_DISABLE_EDITORS="${_HI_DISABLE_EDITORS-0}" _HI_DISABLE_ALIASES="${_HI_DISABLE_ALIASES-0}"' || true
+
 # nano, vim, cat, ls, exa and eza all get aliased further down for unrelated
 # reasons (rcfile flags, color defaults, options). In zsh, dash and POSIX sh
 # (unlike bash/fish), `command -v` returns an *alias's* definition instead of

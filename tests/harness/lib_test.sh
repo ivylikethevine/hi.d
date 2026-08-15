@@ -172,6 +172,68 @@ function test_report_counts_is_a_noop_without_a_counts_file() {
   )
 }
 
+function test_report_skip_marks_the_suite_as_skipped() {
+  local file
+  file="$_HI_WORKDIR/counts.skipped"
+  (
+    _HI_COUNTS_FILE="$file"
+    _hi_report_skip "no docker"
+  )
+  [ "$(cat "$file")" = "SKIP no docker" ]
+}
+
+function test_report_skip_is_a_noop_without_a_counts_file() {
+  (
+    unset _HI_COUNTS_FILE
+    _hi_report_skip "no docker"
+  )
+}
+
+# _hi_require's skip path has to reach the runner, or a suite that never ran
+# a case still renders as a green PASS - the whole point of the status
+function test_require_reports_a_skip_for_a_missing_binary() {
+  local file
+  file="$_HI_WORKDIR/counts.require"
+  (
+    _HI_COUNTS_FILE="$file"
+    _hi_require definitely-not-a-real-binary >/dev/null 2>&1
+  ) || true
+  [[ "$(cat "$file")" == SKIP* ]]
+}
+
+# the counter has to be bumped in the *caller's* shell, so the output goes to
+# a file rather than through $(...) - a command substitution would run
+# _hi_skip in a subshell and lose the increment it is meant to prove
+function test_skip_counts_the_case_without_passing_it() {
+  local out file="$_HI_WORKDIR/skip.out"
+  local _HI_SKIPPED=0
+  _hi_skip "[case]" "no python3" >"$file"
+  out="$(cat "$file")"
+  [ "$_HI_SKIPPED" -eq 1 ] && [[ "$out" == *SKIPPED* ]] && [[ "$out" == *"no python3"* ]]
+}
+
+function test_suite_end_names_the_skipped_cases() {
+  local out
+  out="$(
+    _HI_TOTAL=3
+    _HI_FAILED=0
+    _HI_SKIPPED=2
+    _hi_suite_end demo
+  )" || true
+  [[ "$out" == *"3 cases, 2 skipped"* ]]
+}
+
+function test_suite_end_stays_quiet_with_nothing_skipped() {
+  local out
+  out="$(
+    _HI_TOTAL=3
+    _HI_FAILED=0
+    _HI_SKIPPED=0
+    _hi_suite_end demo
+  )" || true
+  [[ "$out" == *"3 cases)"* ]] && [[ "$out" != *skipped* ]]
+}
+
 function test_suite_end_reports_its_counts() {
   local file
   file="$_HI_WORKDIR/counts.suite_end"
@@ -528,6 +590,14 @@ function run_test_lib_tests() {
   _hi_check "Writes total and failed" test_report_counts_writes_total_and_failed
   _hi_check "No-op without a counts file" test_report_counts_is_a_noop_without_a_counts_file
   _hi_check "End reports its counts" test_suite_end_reports_its_counts
+
+  _hi_h2 "Testing: _hi_report_skip / _hi_skip"
+  _hi_check "Report_skip marks the suite skipped" test_report_skip_marks_the_suite_as_skipped
+  _hi_check "Report_skip is a no-op without a counts file" test_report_skip_is_a_noop_without_a_counts_file
+  _hi_check "Require reports a skip for a missing binary" test_require_reports_a_skip_for_a_missing_binary
+  _hi_check "Skip counts a case without passing it" test_skip_counts_the_case_without_passing_it
+  _hi_check "End names the skipped cases" test_suite_end_names_the_skipped_cases
+  _hi_check "End stays quiet with nothing skipped" test_suite_end_stays_quiet_with_nothing_skipped
 
   _hi_h2 "Testing: _hi_workdir / _hi_track_container / _hi_test_cleanup"
   _hi_check "Workdir creates a scratch dir" test_workdir_creates_a_scratch_dir

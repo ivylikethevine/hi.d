@@ -187,6 +187,29 @@ function test_bootloader_replaces_load_with_the_command() {
   [[ "$out" == *'echo hi; exit'* && "$out" != *$'\nload\n'* ]]
 }
 
+# load.sh sets `-euo pipefail` at source time and only load() clears it, but
+# the $CMDARG shape replaces load() outright - so the bootloader has to clear
+# it itself or the user's command runs with an unset variable being fatal and
+# any non-zero status ending the session. That killed `source $_HI_ALIASES` on
+# any target without explicit toggles, which is the default.
+function test_bootloader_drops_strict_mode_before_the_command() {
+  local out strict cmd
+  out="$(CMDARG='echo hi' _hi_bootloader)"
+  strict="$(printf '%s\n' "$out" | grep -n 'set +euo pipefail' | head -1 | cut -d: -f1)"
+  cmd="$(printf '%s\n' "$out" | grep -n 'echo hi' | head -1 | cut -d: -f1)"
+  [ -n "$strict" ] && [ -n "$cmd" ] && [ "$strict" -lt "$cmd" ]
+}
+
+# ...and the strict-mode reset must land after load.sh is sourced, not before,
+# or it's simply overwritten by load.sh's own `set -euo pipefail`
+function test_bootloader_drops_strict_mode_after_sourcing_load() {
+  local out src strict
+  out="$(CMDARG='echo hi' _hi_bootloader)"
+  src="$(printf '%s\n' "$out" | grep -n 'load\.sh' | head -1 | cut -d: -f1)"
+  strict="$(printf '%s\n' "$out" | grep -n 'set +euo pipefail' | head -1 | cut -d: -f1)"
+  [ -n "$src" ] && [ -n "$strict" ] && [ "$src" -lt "$strict" ]
+}
+
 function test_fallback_rc_sources_paths_and_aliases() {
   local out
   out="$(CMDARG="" _hi_fallback_rc)"
@@ -196,6 +219,40 @@ function test_fallback_rc_sources_paths_and_aliases() {
 
 function test_fallback_rc_appends_the_command() {
   [[ "$(CMDARG='echo hi; exit' _hi_fallback_rc)" == *'echo hi; exit'* ]]
+}
+
+# the no-bash target is one of the four entry points that has to source the
+# settings ahead of paths.sh - paths.sh's local-only gate reads them, so lines
+# arriving after it would be set too late to have any effect
+function test_fallback_rc_sources_settings_before_paths() {
+  local out settings_line paths_line
+  out="$(CMDARG="" _hi_fallback_rc)"
+  settings_line="$(printf '%s\n' "$out" | grep -n 'misc/settings\.sh' | head -1 | cut -d: -f1)"
+  paths_line="$(printf '%s\n' "$out" | grep -n 'common/paths\.sh' | head -1 | cut -d: -f1)"
+  [ -n "$settings_line" ] && [ -n "$paths_line" ] && [ "$settings_line" -lt "$paths_line" ]
+}
+
+# bash reads an --rcfile only when it is interactive, and decides that from its
+# own stdin rather than the flag - so without the explicit -i, a target reached
+# with no local tty (`ssh -t` can't allocate one then) silently ignores
+# hi.bashrc, taking load.sh and $CMDARG with it, and `hi <target> <command>`
+# from a script or a pipe does nothing at all while still exiting 0.
+# The flag order is part of the assertion, not incidental: bash parses its GNU
+# long options in a pass that ends at the first short one, so `bash -i --rcfile
+# f` exits with "--: invalid option" and no shell at all.
+# $hi_esc/$nc_esc/$DOMAIN are _say_hi's locals, supplied here because this file
+# runs under `set -u`.
+function test_remote_suffix_forces_an_interactive_bash() {
+  # shellcheck disable=SC2016 # $_hi_rc_dir is the target's to expand, not ours
+  [[ "$(hi_esc="" nc_esc="" DOMAIN=host _hi_remote_suffix)" == *'bash --rcfile "$_hi_rc_dir/hi.bashrc" -i'* ]]
+}
+
+# the mirror of the above: every fallback shell already starts explicitly
+# interactive, which is why they kept working when the bash arm didn't
+function test_remote_suffix_fallbacks_are_interactive() {
+  local out
+  out="$(hi_esc="" nc_esc="" DOMAIN=host _hi_remote_suffix)"
+  [[ "$out" == *'zsh -i'* && "$out" == *'sh -i'* && "$out" == *'fish -C'* ]]
 }
 
 # the payload excludes must keep stripping the things that make a shipped tree
@@ -245,8 +302,15 @@ function run_hi_tests() {
   _hi_h2 "Testing: bootloader / fallback rc"
   _hi_check "A session calls load" test_bootloader_calls_load_for_a_session
   _hi_check "A command replaces load" test_bootloader_replaces_load_with_the_command
+  _hi_check "Bootloader drops strict mode before the command" test_bootloader_drops_strict_mode_before_the_command
+  _hi_check "Bootloader drops strict mode after sourcing load.sh" test_bootloader_drops_strict_mode_after_sourcing_load
   _hi_check "Fallback rc sources paths and aliases" test_fallback_rc_sources_paths_and_aliases
   _hi_check "Fallback rc appends the command" test_fallback_rc_appends_the_command
+  _hi_check "Fallback rc sources settings before paths" test_fallback_rc_sources_settings_before_paths
+
+  _hi_h2 "Testing: remote shell handoff"
+  _hi_check "The bash handoff is explicitly interactive" test_remote_suffix_forces_an_interactive_bash
+  _hi_check "So is every no-bash fallback" test_remote_suffix_fallbacks_are_interactive
 
   _hi_h2 "Testing: payload excludes"
   _hi_check "Still strips .git/scripts/tests/hi.sh" test_exclude_list_covers_the_untravelled_paths

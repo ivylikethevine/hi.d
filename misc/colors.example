@@ -19,4 +19,4 @@ hostname,LOCALHOSTNAME,brmagenta
 # even after ssh'ing into a machine where you're logged in under that same
 # name, without hardcoding the name itself. an exact "username,jeff,..." or
 # "hostname,jeff-desktop,..." override still takes priority over these.
-# run `hi_preview_colors` to preview what everything currently resolves to.
+# run `hi_color_preview` to preview what everything currently resolves to.

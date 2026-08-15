@@ -20,8 +20,16 @@ export _HI_COLOR_PREVIEW="$_HI_ROOT/scripts/color_preview.sh"
 # tests - only the two entry points every session needs
 export _HI_TEST_LIB="$_HI_ROOT/tests/test_lib.sh"
 export _HI_TEST_RUN="$_HI_ROOT/tests/test_runner.sh"
+export _HI_BENCH_RUN="$_HI_ROOT/tests/bench/bench.sh"
 
 # user configurable
+# settings.sh is where scripts/install.sh writes every _HI_DISABLE_*/
+# _HI_HEADER_*/_HI_MAX_WIDTH choice. It is gitignored, so configuring hi.d
+# no longer dirties the checkout and `hi_update`'s git pull still applies
+# cleanly. It is *not* in hi.sh's $_HI_EXCLUDE, so the choices ride along to
+# every target. See the note by the local-only gate at the bottom of this
+# file for why it is sourced before this one, not from it.
+export _HI_SETTINGS="$_HI_ROOT/misc/settings.sh"
 export _HI_COLORS="$_HI_ROOT/misc/colors"
 export _HI_PACKAGES="$_HI_ROOT/misc/packages"
 export _HI_VIMRC="$_HI_ROOT/misc/vim.rc"
@@ -63,14 +71,17 @@ alias hi_info="echo ' | hi_home: $_HI_HOME | hi_root: $_HI_ROOT | script: $_HI_L
 alias hi_color_preview="[ ! -f $_HI_COLOR_PREVIEW ] && echo 'hi_color_preview needs the full hi.d checkout - not available in a hi session' || $_HI_COLOR_PREVIEW"
 alias hi_packages_preview="bash -c 'source \"$_HI_CHECK\" && full_check'"
 alias hi_test="[ ! -f $_HI_TEST_RUN ] && echo 'hi_test needs the full hi.d checkout - not available in a hi session' || $_HI_TEST_RUN"
+alias hi_bench="[ ! -f $_HI_BENCH_RUN ] && echo 'hi_bench needs the full hi.d checkout - not available in a hi session' || $_HI_BENCH_RUN"
 
-# scripts/install.sh splices the "export _HI_DISABLE_*=1" lines it writes in
-# directly above this anchor, never at the end of the file: the local-only
-# gate below *reads* those settings, so anything appended after it would be
-# set too late to have any effect. Keep the anchor text in sync with
-# $_HI_ANCHOR in scripts/install.sh.
-# hi-settings-anchor
-
+# The gate below *reads* the settings scripts/install.sh writes, so they have
+# to be set before this file runs - which is why $_HI_SETTINGS is sourced
+# ahead of this file rather than from it. There is no single include line
+# valid in all four shells that source paths.sh: `.` is not fish syntax and
+# `source` is not dash's. So each entry point, which already knows its own
+# shell, does it instead - common/bootstrap.sh (bash/zsh), common/shared.sh
+# (reached directly by fish's `bash -c`), shells/config.fish, and hi.sh's
+# _hi_fallback_rc (the no-bash target). Add a fifth here if a new one appears.
+#
 # local-only disable logic. _HI_REMOTE_SESSION is exported by load.sh, the
 # chainload entry point every remote path goes through and the local
 # install's own shells never do, so it's what tells the two apart.

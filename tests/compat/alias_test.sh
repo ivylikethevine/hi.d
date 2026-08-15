@@ -56,6 +56,34 @@ function _hi_test_shell() {
   return "$exit_code"
 }
 
+# aliases.sh reads _HI_DISABLE_EDITORS/_HI_DISABLE_ALIASES, and neither can be
+# written as ${X:-0} because fish sources this file and cannot parse that. So
+# the file defaults them itself, and this is what proves it: source it with
+# both scrubbed from the environment, under `set -u` where an unset variable is
+# fatal rather than empty. That is the shape `hi <target> <command>` runs in,
+# and it is how the ssh suite broke.
+function _hi_test_shell_strict() {
+  local shell="$1" script="$2/$1.strict" output exit_code=0
+  _hi_h2 "Starting: [$shell] (toggles unset, strict mode)"
+  _hi_test_script "$shell" >"$script"
+
+  if [ "$shell" = fish ]; then
+    # fish has no `set -u` - unset is always empty there - so what matters is
+    # that the defaulting line doesn't break parsing
+    output=$(env -u _HI_DISABLE_EDITORS -u _HI_DISABLE_ALIASES "$shell" "$script" 2>&1) || exit_code=$?
+  else
+    output=$(env -u _HI_DISABLE_EDITORS -u _HI_DISABLE_ALIASES "$shell" -u "$script" 2>&1) || exit_code=$?
+  fi
+
+  if [ "$exit_code" -eq 0 ]; then
+    _hi_h3 "[$shell] -- Loaded with the toggles unset OK" "$GREEN"
+  else
+    _hi_h3 "[$shell] -- FAILED with the toggles unset" "$RED"
+    [ -n "$output" ] && printf '%s\n' "$output" | sed 's/^/      /'
+  fi
+  return "$exit_code"
+}
+
 function run_alias_test() {
   _hi_h1 "Testing aliases.sh across shells"
   _hi_h2 "Sampled $(wc -w <<<"$_HI_SAMPLE_ALIASES") aliases and $(wc -w <<<"$_HI_SAMPLE_VARS") variables"
@@ -69,6 +97,7 @@ function run_alias_test() {
       continue
     fi
     _hi_case _hi_test_shell "$_hi_shell" "$_HI_WORKDIR"
+    _hi_case _hi_test_shell_strict "$_hi_shell" "$_HI_WORKDIR"
   done
 
   _hi_suite_end "" \

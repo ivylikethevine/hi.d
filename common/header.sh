@@ -62,6 +62,20 @@ function system_info() {
     "${CYAN}RAM: ${ram:-?}" "${BRBLUE}CPU: ${base_mhz:-?}/${boost_mhz:-?} MHz"
 }
 
+# Run a backend CLI with an upper bound on how long it gets. identity() is on
+# the connect path - the user is waiting on it before they get a shell - and a
+# docker daemon that is down or a nomad agent behind a dead network otherwise
+# hangs there with no timeout at all. `timeout` is GNU coreutils and absent on
+# a stock macOS, so this degrades to running the command bare rather than
+# making it a requirement. Same shape as common/targets.sh's run_backend.
+function _hi_probe() {
+  if command -v timeout &>/dev/null; then
+    timeout "${_HI_HEADER_PROBE_TIMEOUT:-2}" "$@"
+  else
+    "$@"
+  fi
+}
+
 # git identity (domain masked), running containers, nomad jobs, and ssh key counts
 function identity() {
   local email="" domain user_part bullets containers="No docker/podman :(" jobs="" authorized=0 public=0
@@ -78,11 +92,13 @@ function identity() {
   fi
   container_bin="$(command -v docker || command -v podman || true)"
   if [ -n "$container_bin" ]; then
-    mapfile -t lines < <("$container_bin" container ls -q)
+    # 2>/dev/null so a daemon that's down reports its error to itself rather
+    # than into the middle of the header
+    mapfile -t lines < <(_hi_probe "$container_bin" container ls -q 2>/dev/null)
     containers="Containers: ${#lines[@]}"
   fi
   if command -v nomad &>/dev/null; then
-    mapfile -t lines < <(nomad job status 2>/dev/null)
+    mapfile -t lines < <(_hi_probe nomad job status 2>/dev/null)
     lines=("${lines[@]:1}") # drop the header row
     jobs="Jobs: ${#lines[@]}"
   fi
@@ -99,10 +115,16 @@ function identity() {
 function banner() {
   [[ "${_HI_HEADER_BANNER:-1}" == 0 ]] && return 0
   local label="$1" color="${2:-$BRGREEN}" prefix="${3:-}" changes_plain="" changes=""
+  # `git status --short` over the whole checkout costs ~10ms, and banner runs
+  # twice a session - once on connect, once from load.sh on disconnect - for a
+  # number that cannot have changed in between. Compute it once and keep it.
   if [ -d "$_HI_ROOT/.git" ]; then
-    local -a lines
-    mapfile -t lines < <(git -C "$_HI_ROOT" status --short)
-    changes_plain="${#lines[@]} ↑ "
+    if [ -z "${_HI_BANNER_CHANGES+x}" ]; then
+      local -a lines
+      mapfile -t lines < <(git -C "$_HI_ROOT" status --short 2>/dev/null)
+      _HI_BANNER_CHANGES="${#lines[@]}"
+    fi
+    changes_plain="$_HI_BANNER_CHANGES ↑ "
     changes="$BRYELLOW$changes_plain"
   fi
   local host tildes start_len end_len start_tildes end_tildes width left core

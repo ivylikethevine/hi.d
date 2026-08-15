@@ -101,7 +101,11 @@ EOF
 function _hi_targets() {
   local config="$1"
   shift
-  PATH="$_HI_SHIM_PATH" _HI_SSH_CONFIG="$config" sh "$_HI_TARGETS" "$@"
+  # _HI_TARGETS_TTL=0 disables the result cache. Every case below changes what
+  # the fake CLIs answer between runs, so a cached "all" would be handed
+  # straight back to the next case and the shims it is meant to be exercising
+  # would never run. The cache gets its own cases instead, further down.
+  PATH="$_HI_SHIM_PATH" _HI_SSH_CONFIG="$config" _HI_TARGETS_TTL=0 sh "$_HI_TARGETS" "$@"
 }
 
 function _hi_has_row() {
@@ -183,11 +187,120 @@ function test_unknown_kind_is_empty_and_succeeds() {
   [ -z "$out" ]
 }
 
+# --- the result cache -------------------------------------------------------
+#
+# 110ms of backend CLIs on every TAB is what this exists to avoid, so what
+# matters is that a hit really does skip the backends. Each case gets its own
+# XDG_RUNTIME_DIR so it starts from a cold cache and can't see another's.
+
+function _hi_targets_cached() {
+  local dir="$1" ttl="$2"
+  shift 2
+  PATH="$_HI_SHIM_PATH" _HI_SSH_CONFIG="$_HI_CONFIG" \
+    XDG_RUNTIME_DIR="$dir" _HI_TARGETS_TTL="$ttl" sh "$_HI_TARGETS" "$@"
+}
+
+function test_cache_reuses_the_first_answer() {
+  local dir="$_HI_WORKDIR/cache-hit" shim="$_HI_WORKDIR/shims/docker" first second ok=0
+  mkdir -p "$dir"
+  first="$(_hi_targets_cached "$dir" 60 docker)"
+  # take the shim away: a miss now produces nothing, a hit still has the rows,
+  # which is the only way to prove the backend really wasn't run again
+  mv "$shim" "$shim.aside"
+  second="$(_hi_targets_cached "$dir" 60 docker)"
+  mv "$shim.aside" "$shim"
+  [ -n "$first" ] && [ "$first" = "$second" ] && ok=1
+  [ "$ok" -eq 1 ]
+}
+
+function test_cache_is_bypassed_at_ttl_zero() {
+  local dir="$_HI_WORKDIR/cache-off" out
+  mkdir -p "$dir"
+  printf '%s\nstale\tdocker\n' "$(date +%s)" >"$dir/hi.targets.docker"
+  out="$(_hi_targets_cached "$dir" 0 docker)"
+  ! printf '%s\n' "$out" | grep -qxF "stale"$'\t'"docker"
+}
+
+function test_cache_expires_with_its_ttl() {
+  local dir="$_HI_WORKDIR/cache-stale" out
+  mkdir -p "$dir"
+  # stamped an hour ago, so any sane ttl has to treat it as a miss
+  printf '%s\nstale\tdocker\n' "$(($(date +%s) - 3600))" >"$dir/hi.targets.docker"
+  out="$(_hi_targets_cached "$dir" 5 docker)"
+  ! printf '%s\n' "$out" | grep -qxF "stale"$'\t'"docker"
+}
+
+# a hand-edited or truncated cache file must be re-derived, not printed
+function test_cache_ignores_a_file_with_no_timestamp() {
+  local dir="$_HI_WORKDIR/cache-junk" out
+  mkdir -p "$dir"
+  printf 'not-a-timestamp\nstale\tdocker\n' >"$dir/hi.targets.docker"
+  out="$(_hi_targets_cached "$dir" 60 docker)"
+  _hi_has_row "$out" alpha docker && ! printf '%s\n' "$out" | grep -qxF "stale"$'\t'"docker"
+}
+
+# the timestamp is bookkeeping, not a target - it must never reach completion
+function test_cache_does_not_leak_its_timestamp() {
+  local dir="$_HI_WORKDIR/cache-stamp" out
+  mkdir -p "$dir"
+  _hi_targets_cached "$dir" 60 docker >/dev/null
+  out="$(_hi_targets_cached "$dir" 60 docker)"
+  ! printf '%s\n' "$out" | grep -qE '^[0-9]+$'
+}
+
 function test_absent_backends_leave_only_ssh_rows() {
   local out
   out="$(PATH="$_HI_TOOLBOX_PATH" _HI_SSH_CONFIG="$_HI_CONFIG" sh "$_HI_TARGETS")" || return 1
   _hi_has_row "$out" alpha ssh || return 1
   ! printf '%s\n' "$out" | grep -qv $'\tssh$'
+}
+
+# shells/bash.sh's completion function, the other half of this file's subject:
+# the cases above prove targets.sh produces the right rows, these prove
+# _hi_complete turns them into the right COMPREPLY. It reads $_HI_TARGETS,
+# $COMP_WORDS and $COMP_CWORD, so all three are set here and the shimmed PATH
+# gives it the same fixed backend list every other case sees.
+# A child bash rather than a source into this one: shells/bash.sh is an
+# interactive rc, and sourcing it here would drop its aliases (rm -iv, cp -rv)
+# and readline binds on every case that runs after. The three toggles switch
+# off everything except the completion itself, which sits outside all of them.
+function _hi_completions_for() {
+  PATH="$_HI_SHIM_PATH" _HI_SSH_CONFIG="$_HI_CONFIG" \
+    _HI_DISABLE_ALIASES=1 _HI_DISABLE_PERSONAL=1 _HI_DISABLE_PROMPT=1 \
+    bash -c '
+      # shellcheck source=../../shells/bash.sh
+      source "$_HI_BASHRC"
+      COMP_WORDS=(hi "$1")
+      COMP_CWORD=1
+      COMPREPLY=()
+      _hi_complete
+      printf "%s\n" "${COMPREPLY[@]}"
+    ' _ "$1"
+}
+
+function test_complete_offers_every_target() {
+  local out
+  out="$(_hi_completions_for "")"
+  printf '%s\n' "$out" | grep -qx alpha &&
+    printf '%s\n' "$out" | grep -qx pod-one &&
+    printf '%s\n' "$out" | grep -qx abc12345
+}
+
+function test_complete_filters_by_the_typed_prefix() {
+  local out
+  out="$(_hi_completions_for pod-)"
+  printf '%s\n' "$out" | grep -qx pod-one || return 1
+  ! printf '%s\n' "$out" | grep -qx alpha
+}
+
+# targets.sh emits "<name>\t<kind>"; only the name is a completion, or every
+# suggestion would arrive with a literal tab and its backend glued on
+function test_complete_drops_the_kind_column() {
+  ! _hi_completions_for "" | grep -q $'\t'
+}
+
+function test_complete_is_empty_for_an_unmatched_prefix() {
+  [ -z "$(_hi_completions_for zzz-no-such-target)" ]
 }
 
 function run_targets_tests() {
@@ -219,6 +332,19 @@ function run_targets_tests() {
   _hi_check "No argument -> every kind" test_no_argument_lists_every_kind
   _hi_check "Unknown argument -> empty, exit 0" test_unknown_kind_is_empty_and_succeeds
   _hi_check "No backends installed -> ssh rows only" test_absent_backends_leave_only_ssh_rows
+
+  _hi_h2 "Testing: the result cache"
+  _hi_check "A hit skips the backend entirely" test_cache_reuses_the_first_answer
+  _hi_check "TTL 0 bypasses it" test_cache_is_bypassed_at_ttl_zero
+  _hi_check "An expired entry is re-derived" test_cache_expires_with_its_ttl
+  _hi_check "A file with no timestamp is re-derived" test_cache_ignores_a_file_with_no_timestamp
+  _hi_check "The timestamp never reaches completion" test_cache_does_not_leak_its_timestamp
+
+  _hi_h2 "Testing: shells/bash.sh's _hi_complete"
+  _hi_check "Offers every target" test_complete_offers_every_target
+  _hi_check "Filters by the typed prefix" test_complete_filters_by_the_typed_prefix
+  _hi_check "Drops the kind column" test_complete_drops_the_kind_column
+  _hi_check "Empty for an unmatched prefix" test_complete_is_empty_for_an_unmatched_prefix
 
   _hi_suite_end "targets.sh"
 }

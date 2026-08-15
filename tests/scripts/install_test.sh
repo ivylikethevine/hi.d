@@ -82,8 +82,107 @@ function test_config_shell_appends_when_there_is_no_anchor() {
   [[ "$(tail -1 "$target")" == *"hi line"* ]]
 }
 
-function test_paths_sh_still_carries_the_anchor() {
-  grep -qF "$_HI_ANCHOR" "$_HI_ROOT/common/paths.sh"
+# Nothing is spliced into common/paths.sh any more - the settings live in
+# $_HI_SETTINGS, which every entry point sources *ahead* of paths.sh so that
+# paths.sh's local-only gate can read them. That ordering is the load-bearing
+# property now, and it's spread across four files (no single include line is
+# valid in sh, bash, zsh and fish alike), so assert it in all four.
+function _hi_sources_settings_before_paths() {
+  local target="$1" settings_line paths_line
+  settings_line="$(grep -n 'misc/settings\.sh' "$target" | head -1 | cut -d: -f1)"
+  paths_line="$(grep -n 'common/paths\.sh' "$target" | head -1 | cut -d: -f1)"
+  [ -n "$settings_line" ] && [ -n "$paths_line" ] && [ "$settings_line" -lt "$paths_line" ]
+}
+
+function test_bootstrap_sources_settings_first() {
+  _hi_sources_settings_before_paths "$_HI_ROOT/common/bootstrap.sh"
+}
+
+function test_shared_sources_settings_first() {
+  _hi_sources_settings_before_paths "$_HI_ROOT/common/shared.sh"
+}
+
+function test_fish_config_sources_settings_first() {
+  _hi_sources_settings_before_paths "$_HI_ROOT/shells/config.fish"
+}
+
+# hi.sh's fallback rc is the fourth entry point, but it's *generated* rather
+# than sourced, so it's asserted against _hi_fallback_rc's real output over in
+# tests/compat/hi_test.sh instead of by grepping the file.
+
+# migrate_legacy_settings and config_settings both write into $_HI_ROOT and
+# $_HI_SETTINGS - which for a real run are this very checkout. Shadow both
+# with scratch paths first, the same way load_test.sh's _hi_clean_all wrapper
+# shadows $_HI_ROOT before letting clean_all near it.
+function _hi_settings_fixture() {
+  local dir="$_HI_WORKDIR/$1"
+  local _HI_ROOT="$dir" _HI_SETTINGS="$dir/misc/settings.sh"
+  mkdir -p "$dir/common" "$dir/misc"
+  : >"$dir/common/paths.sh"
+  : >"$dir/common/header.sh"
+  : >"$dir/common/shared.sh"
+  shift
+  "$@" >/dev/null
+}
+
+function _hi_legacy_carry() {
+  config_shell paths.sh "$_HI_ROOT/common/paths.sh" "export _HI_DISABLE_PROMPT=1"
+  config_shell shared.sh "$_HI_ROOT/common/shared.sh" "export _HI_MAX_WIDTH=120"
+  migrate_legacy_settings
+}
+
+function test_migrate_carries_legacy_values_into_settings() {
+  _hi_settings_fixture carry _hi_legacy_carry
+  grep -qF "export _HI_DISABLE_PROMPT=1" "$_HI_WORKDIR/carry/misc/settings.sh" &&
+    grep -qF "export _HI_MAX_WIDTH=120" "$_HI_WORKDIR/carry/misc/settings.sh"
+}
+
+function test_migrate_strips_the_tracked_files() {
+  _hi_settings_fixture strip _hi_legacy_carry
+  ! grep -qF "$_HI_MARKER" "$_HI_WORKDIR/strip/common/paths.sh" &&
+    ! grep -qF "$_HI_MARKER" "$_HI_WORKDIR/strip/common/shared.sh"
+}
+
+function _hi_legacy_noop() { migrate_legacy_settings; }
+
+function test_migrate_is_a_noop_without_legacy_lines() {
+  _hi_settings_fixture noop _hi_legacy_noop
+  [ ! -e "$_HI_WORKDIR/noop/misc/settings.sh" ]
+}
+
+# a settings.sh that already has answers is newer than whatever the tracked
+# files still hold, so the stale lines get cleared without overwriting it
+function _hi_legacy_stale() {
+  config_shell settings "$_HI_SETTINGS" "export _HI_DISABLE_HEADER=1"
+  config_shell paths.sh "$_HI_ROOT/common/paths.sh" "export _HI_DISABLE_PROMPT=1"
+  migrate_legacy_settings
+}
+
+function test_migrate_does_not_clobber_newer_settings() {
+  _hi_settings_fixture stale _hi_legacy_stale
+  grep -qF "export _HI_DISABLE_HEADER=1" "$_HI_WORKDIR/stale/misc/settings.sh" &&
+    ! grep -qF "export _HI_DISABLE_PROMPT=1" "$_HI_WORKDIR/stale/misc/settings.sh" &&
+    ! grep -qF "$_HI_MARKER" "$_HI_WORKDIR/stale/common/paths.sh"
+}
+
+# the three config_* groups accumulate rather than each calling config_shell,
+# because one config_shell call per group against one file would have each
+# wipe the other two's lines
+function _hi_settings_one_write() {
+  local -a _HI_SETTING_LINES=("export _HI_DISABLE_PROMPT=1" "" "export _HI_HEADER_CHECK=0")
+  config_settings
+}
+
+function test_config_settings_writes_every_group_at_once() {
+  _hi_settings_fixture onewrite _hi_settings_one_write
+  grep -qF "export _HI_DISABLE_PROMPT=1" "$_HI_WORKDIR/onewrite/misc/settings.sh" &&
+    grep -qF "export _HI_HEADER_CHECK=0" "$_HI_WORKDIR/onewrite/misc/settings.sh"
+}
+
+function test_setting_pending_sees_this_runs_answer() {
+  local -a _HI_SETTING_LINES=("export _HI_DISABLE_HEADER=1")
+  setting_pending "export _HI_DISABLE_HEADER=1" &&
+    ! setting_pending "export _HI_DISABLE_PROMPT=1"
 }
 
 function test_setting_enabled_default_true_when_absent() {
@@ -196,7 +295,21 @@ function run_install_tests() {
   _hi_check "Splices the block above the anchor" test_config_shell_splices_above_the_anchor
   _hi_check "Rewrites an anchored block in place" test_config_shell_rewrites_in_place_above_the_anchor
   _hi_check "Appends when there's no anchor" test_config_shell_appends_when_there_is_no_anchor
-  _hi_check "common/paths.sh still carries the anchor" test_paths_sh_still_carries_the_anchor
+
+  _hi_h2 "Testing: settings are sourced ahead of paths.sh"
+  _hi_check "common/bootstrap.sh" test_bootstrap_sources_settings_first
+  _hi_check "common/shared.sh" test_shared_sources_settings_first
+  _hi_check "shells/config.fish" test_fish_config_sources_settings_first
+
+  _hi_h2 "Testing: migrate_legacy_settings"
+  _hi_check "Carries legacy values into settings.sh" test_migrate_carries_legacy_values_into_settings
+  _hi_check "Strips the tracked files" test_migrate_strips_the_tracked_files
+  _hi_check "No-op without legacy lines" test_migrate_is_a_noop_without_legacy_lines
+  _hi_check "Doesn't clobber newer settings" test_migrate_does_not_clobber_newer_settings
+
+  _hi_h2 "Testing: config_settings"
+  _hi_check "Writes every group at once" test_config_settings_writes_every_group_at_once
+  _hi_check "setting_pending sees this run's answer" test_setting_pending_sees_this_runs_answer
 
   _hi_h2 "Testing: setting_enabled"
   _hi_check "Defaults to enabled when absent" test_setting_enabled_default_true_when_absent

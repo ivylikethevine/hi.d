@@ -7,6 +7,30 @@ set -euo pipefail
 # shellcheck source=../common/bootstrap.sh
 source "${_HI_HOME:-$HOME}/hi.d/common/bootstrap.sh"
 
+for _hi_arg in "$@"; do
+  case "$_hi_arg" in
+  -h | --help)
+    cat <<'EOF'
+Usage: color_preview.sh
+
+Prints two tables - every known user, and every ssh host that resolves to
+something other than the default - rendered in the color they'd actually
+appear in, alongside *why* they resolve that way (an exact override, an
+ssh-config tag, or the hash of the name).
+
+Takes no arguments. Reads:
+  misc/colors        the type,name,color pins (see misc/colors.example)
+  ~/.ssh/config      hosts, and the "# Tags: ..." comments above them
+                     (override with $_HI_SSH_CONFIG)
+
+Hosts with no override and no usable tag are left out: they'd render exactly
+as a bare `hi` does, so there is nothing to preview.
+EOF
+    exit 0
+    ;;
+  esac
+done
+
 function _hi_color_source() {
   local type="$1" name="$2" tag
   if _hi_override_color "$type" "$name" >/dev/null 2>&1; then
@@ -306,6 +330,11 @@ function _hi_print_hosts_table() {
     _hi_hbar "$w_item" "$w_color" "$w_source" "$w_preview"
   done
 }
+
+# same hatch as scripts/install.sh and scripts/uninstall.sh: sourcing this
+# file defines its functions without rendering anything, which is what
+# tests/compat/color_preview_test.sh needs
+[[ "${BASH_SOURCE[0]}" == "$0" ]] || return 0
 
 _hi_print_users_table
 printf '\n'

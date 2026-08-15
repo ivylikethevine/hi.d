@@ -241,12 +241,30 @@ function _hi_aliases_preview() {
   printf '%s personal aliases, e.g.: %s, ...\n' "$count" "$(printf '%s\n' "$names" | head -6 | paste -sd, -)"
 }
 
-# Prompt for the optional pieces of hi's shell config and write _HI_DISABLE_*
-# lines for whichever ones were turned off into common/paths.sh - the one
-# file every shell (including fish) sources, so the choice applies locally
-# and on every host hi.d gets copied to.
+# Every setting the three config_* groups below decide on, collected here and
+# written to $_HI_SETTINGS in one go by config_settings. They used to go into
+# common/paths.sh, common/header.sh and common/shared.sh, one config_shell
+# call each - but config_shell rewrites the *whole* marker block in its
+# target, so three calls against one file would each wipe the other two.
+declare -a _HI_SETTING_LINES=()
+
+# true if this run has already decided to write $1 - the answers accumulating
+# in _HI_SETTING_LINES are fresher than $_HI_SETTINGS, which still holds the
+# previous run's, so a group that gates on another group's answer asks here
+function setting_pending() {
+  local line
+  for line in "${_HI_SETTING_LINES[@]}"; do
+    [ "$line" = "$1" ] && return 0
+  done
+  return 1
+}
+
+# Prompt for the optional pieces of hi's shell config and record _HI_DISABLE_*
+# lines for whichever ones were turned off. $_HI_SETTINGS is sourced by every
+# shell (including fish) ahead of common/paths.sh, so the choice applies
+# locally and on every host hi.d gets copied to.
 function config_features() {
-  local target="$_HI_ROOT/common/paths.sh"
+  local target="$_HI_SETTINGS"
   local dis_header="" dis_prompt="" dis_personal="" dis_git="" dis_editors="" dis_aliases="" dis_local=""
   _hi_h2 "Choosing features"
   ask_setting _HI_DISABLE_HEADER \
@@ -273,18 +291,18 @@ function config_features() {
     " Enable all of the above on this machine (the one hi.d is installed on), not just when you hi elsewhere?" \
     "$target" 1 "" ||
     dis_local="export _HI_DISABLE_LOCAL=1"
-  config_shell "feature toggles" "$target" \
-    "$dis_header" "$dis_prompt" "$dis_personal" "$dis_git" "$dis_editors" "$dis_aliases" "$dis_local"
+  _HI_SETTING_LINES+=("$dis_header" "$dis_prompt" "$dis_personal" "$dis_git" "$dis_editors"
+    "$dis_aliases" "$dis_local")
 }
 
-# Prompt for the header's optional detail lines and write _HI_HEADER_*=0
-# lines for whichever are turned off into common/header.sh, where they're
-# already documented and checked. Skipped entirely if the header itself is
-# off, since asking about its pieces would be moot.
+# Prompt for the header's optional detail lines and record _HI_HEADER_*=0
+# lines for whichever are turned off. Skipped entirely if the header itself is
+# off, since asking about its pieces would be moot - and that reads the answer
+# config_features just took, not the file, which still holds the old one.
 function config_header_details() {
-  local target="$_HI_ROOT/common/header.sh"
+  local target="$_HI_SETTINGS"
   local dis_banner="" dis_ts="" dis_sys="" dis_id="" dis_chk=""
-  if ! setting_enabled _HI_DISABLE_HEADER "$_HI_ROOT/common/paths.sh" 1; then
+  if setting_pending "export _HI_DISABLE_HEADER=1"; then
     return 0
   fi
   _hi_h2 "Choosing header details"
@@ -298,15 +316,14 @@ function config_header_details() {
     dis_id="export _HI_HEADER_IDENTITY=0"
   ask_setting _HI_HEADER_CHECK " Show the installed-packages check?" "$target" 0 full_check ||
     dis_chk="export _HI_HEADER_CHECK=0"
-  config_shell "header details" "$target" "$dis_banner" "$dis_ts" "$dis_sys" "$dis_id" "$dis_chk"
+  _HI_SETTING_LINES+=("$dis_banner" "$dis_ts" "$dis_sys" "$dis_id" "$dis_chk")
 }
 
-# Ask for the header/banner's terminal width and write it into
-# common/shared.sh, where _HI_MAX_WIDTH is already documented and read.
-# Entering nothing keeps whatever's already configured; entering 80 (shared.
-# sh's own built-in default) clears the override instead of writing it out.
+# Ask for the header/banner's terminal width. Entering nothing keeps whatever's
+# already configured; entering 80 (common/shared.sh's own built-in default,
+# via ${_HI_MAX_WIDTH:-80}) clears the override instead of writing it out.
 function config_max_width() {
-  local target="$_HI_ROOT/common/shared.sh" current value reply=""
+  local target="$_HI_SETTINGS" current value reply=""
   current=$(grep -oE '^export _HI_MAX_WIDTH=[0-9]+' "$target" 2>/dev/null | cut -d= -f2)
   value="${current:-80}"
   if [ -t 0 ]; then
@@ -320,7 +337,47 @@ function config_max_width() {
     fi
   fi
   [ "$value" = 80 ] && value=""
-  config_shell "terminal width" "$target" "${value:+export _HI_MAX_WIDTH=$value}"
+  _HI_SETTING_LINES+=("${value:+export _HI_MAX_WIDTH=$value}")
+}
+
+# Settings used to be written straight into common/paths.sh, common/header.sh
+# and common/shared.sh - all three git-tracked, so configuring hi.d dirtied
+# the checkout and `hi_update`'s git pull then refused to apply. Carry an
+# older install's answers over to $_HI_SETTINGS before anything asks for
+# defaults (otherwise the prompts would silently reset to "everything on"),
+# then strip the tracked files back to how git has them. Quiet and a no-op on
+# every run after the first, since there is then nothing left to find.
+function migrate_legacy_settings() {
+  local target line
+  local -a legacy=() carried=()
+  for target in "$_HI_ROOT/common/paths.sh" "$_HI_ROOT/common/header.sh" "$_HI_ROOT/common/shared.sh"; do
+    grep -qF "$_HI_MARKER" "$target" 2>/dev/null && legacy+=("$target")
+  done
+  [ "${#legacy[@]}" -gt 0 ] || return 0
+
+  _hi_h2 "Moving settings out of the tracked source files"
+  for target in "${legacy[@]}"; do
+    while IFS= read -r line; do
+      line="${line%%"$_HI_MARKER"*}"          # drop the marker config_shell padded on
+      carried+=("${line%"${line##*[![:space:]]}"}") # ...and the padding itself
+    done < <(grep -F "$_HI_MARKER" "$target")
+  done
+  # only seed from the old files when the new one has nothing to lose - a
+  # settings.sh that already carries answers is by definition the newer of
+  # the two, so the legacy lines are stale and only need clearing out
+  if [ "${#carried[@]}" -gt 0 ] && ! grep -qF "$_HI_MARKER" "$_HI_SETTINGS" 2>/dev/null; then
+    config_shell settings "$_HI_SETTINGS" "${carried[@]}"
+  fi
+  for target in "${legacy[@]}"; do
+    config_shell "${target#"$_HI_ROOT/"}" "$target"
+  done
+}
+
+# One write for all three groups above, for the reason _HI_SETTING_LINES
+# documents. config_shell skips empty arguments, so every setting left at its
+# default simply contributes nothing.
+function config_settings() {
+  config_shell settings "$_HI_SETTINGS" "${_HI_SETTING_LINES[@]}"
 }
 
 # Runs $shell's syntax-check flag against an existing rc file (without
@@ -409,9 +466,11 @@ if [ -z "$_HI_FEATURES_ONLY" ]; then
   config_validate_shells
 fi
 
+migrate_legacy_settings
 config_features
 config_header_details
 config_max_width
+config_settings
 
 if [ -n "$_HI_FEATURES_ONLY" ]; then
   _hi_h1 "Features updated!"

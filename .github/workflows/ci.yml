@@ -6,17 +6,34 @@ on:
   pull_request:
 
 jobs:
+  # The fast, dependency-free suites. macOS is here because hi.d explicitly
+  # targets it (common/header.sh has a whole macOS branch) and nothing ever
+  # exercised that: it runs advisory-only for now, since macOS ships bash 3.2
+  # and the suites use bash-4 builtins - see the portability findings. It
+  # reports without blocking rather than being left out and never looked at.
   test:
-    runs-on: ubuntu-latest
+    name: fast suites (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    continue-on-error: ${{ matrix.advisory }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            advisory: false
+          - os: macos-latest
+            advisory: true
     steps:
       - uses: actions/checkout@v4
 
       - name: Install zsh and fish
+        if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y zsh fish
 
       # ubuntu-latest's apt package lags upstream badly so we install
       # the latest upstream binary
       - name: Install shellcheck
+        if: runner.os == 'Linux'
         env:
           SHELLCHECK_VERSION: 0.11.0
         run: |
@@ -28,15 +45,33 @@ jobs:
           rm -rf /tmp/shellcheck.tar.xz "/tmp/shellcheck-v${SHELLCHECK_VERSION}"
           shellcheck --version
 
+      # zsh is macOS's own login shell, so only fish and shellcheck are missing
+      - name: Install fish and shellcheck
+        if: runner.os == 'macOS'
+        run: brew install fish shellcheck
+
       - name: Run fast test suites
         env:
           _HI_HOME: ${{ github.workspace }}/..
-        run: "${{ github.workspace }}/tests/test_runner.sh aliases alias_fallthrough shellcheck install uninstall check header shared git_prompt targets load test_lib test_runner"
+        run: "${{ github.workspace }}/tests/test_runner.sh aliases alias_fallthrough shellcheck install uninstall hi check header shared git_prompt targets paths color_preview load test_lib test_runner"
 
-  # e2e tests, excluding podman/nomad/kube.
-  # they'd need extra tooling to cover code paths docker and ssh already reach
-  # (_say_hi_container is one function behind four command shapes).
+  # .markdownlint.yaml has been in the repo unenforced; this is what makes it
+  # mean something. Its own job so a prose-only failure is obvious at a glance
+  # rather than buried in a suite run.
+  markdownlint:
+    name: markdownlint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: DavidAnson/markdownlint-cli2-action@v20
+        with:
+          globs: "**/*.md"
+          config: ".markdownlint.yaml"
+
+  # The two backends that between them cover both halves of hi.sh - _say_hi
+  # (ssh) and _say_hi_container (docker).
   e2e:
+    name: e2e (ssh, docker)
     runs-on: ubuntu-latest
     needs: test
     timeout-minutes: 25
@@ -47,3 +82,41 @@ jobs:
         env:
           _HI_HOME: ${{ github.workspace }}/..
         run: "${{ github.workspace }}/tests/test_runner.sh ssh ssh_disconnect docker"
+
+  # podman/nomad/kube used to be left out on the grounds that ssh and docker
+  # already reach both halves of hi.sh. They don't reach everything, though:
+  # nomad and kube each carry their own probe/cp/attach command arrays (see
+  # _say_hi_container), and nomad's -task / kube's -c handling appears nowhere
+  # else - so a change to either shape was landing unverified on every push.
+  # Separate job: these boot a cluster and an agent, and are much slower than
+  # the ssh/docker pair above.
+  e2e-backends:
+    name: e2e (podman, nomad, kube)
+    runs-on: ubuntu-latest
+    needs: test
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install podman
+        run: sudo apt-get update && sudo apt-get install -y podman
+
+      - name: Install nomad
+        run: |
+          set -euo pipefail
+          curl -sSfL https://apt.releases.hashicorp.com/gpg |
+            sudo gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
+          echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" |
+            sudo tee /etc/apt/sources.list.d/hashicorp.list >/dev/null
+          sudo apt-get update && sudo apt-get install -y nomad
+          nomad version
+
+      - name: Install kind
+        uses: helm/kind-action@v1
+        with:
+          install_only: true
+
+      - name: Run backend end-to-end suites
+        env:
+          _HI_HOME: ${{ github.workspace }}/..
+        run: "${{ github.workspace }}/tests/test_runner.sh podman nomad kube"

@@ -8,6 +8,29 @@ export _HI_HOME
 export _HI_DISABLE_LOCAL
 : "${_HI_REMOTE_SESSION:=0}"
 export _HI_REMOTE_SESSION
+# The six feature toggles, defaulted so that reading one is never an error.
+# shells/aliases.sh and shells/config.fish read them bare - they can't use
+# ${X:-0}, since fish has no such expansion and sources both files - so an
+# unset toggle is fatal to anything running under `set -u`. That is not
+# hypothetical: it is what broke `hi <target> <command>` until hi.sh's
+# bootloader stopped leaving strict mode on.
+#
+# Defaulted, never assigned: $_HI_SETTINGS is sourced next and paths.sh's
+# local-only gate right after, and both still have to be able to win.
+: "${_HI_DISABLE_HEADER:=0}"
+: "${_HI_DISABLE_PROMPT:=0}"
+: "${_HI_DISABLE_PERSONAL:=0}"
+: "${_HI_DISABLE_GIT_STATUS:=0}"
+: "${_HI_DISABLE_EDITORS:=0}"
+: "${_HI_DISABLE_ALIASES:=0}"
+export _HI_DISABLE_HEADER _HI_DISABLE_PROMPT _HI_DISABLE_PERSONAL
+export _HI_DISABLE_GIT_STATUS _HI_DISABLE_EDITORS _HI_DISABLE_ALIASES
+# the settings scripts/install.sh writes, ahead of paths.sh because paths.sh's
+# local-only gate reads them (see the note above that gate for why paths.sh
+# can't source this itself). $_HI_SETTINGS isn't defined yet - it comes *from*
+# paths.sh - so the path is spelled out here.
+# shellcheck source=../misc/settings.sh disable=SC1091 # gitignored, may not exist
+[ -f "$_HI_HOME/hi.d/misc/settings.sh" ] && . "$_HI_HOME/hi.d/misc/settings.sh" || true
 # shellcheck source=./paths.sh
 source "$_HI_HOME/hi.d/common/paths.sh"
 # shellcheck source=./shared.sh

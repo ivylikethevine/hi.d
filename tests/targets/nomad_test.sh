@@ -27,7 +27,6 @@ declare -a _HI_JOBS=()
 
 function _hi_nomad_cleanup() {
   local j
-  export NOMAD_ADDR="http://127.0.0.1:4646"
   for j in "${_HI_JOBS[@]:-}"; do
     [ -n "$j" ] && nomad job stop -purge "$j" >/dev/null 2>&1 || true
   done
@@ -107,11 +106,32 @@ function run_nomad_test() {
 
   _hi_h1 "Testing hi's nomad path against a throwaway dev agent"
 
-  _hi_h2 "Starting nomad agent -dev"
+  # An agent on the well-known 4646 collides with any real nomad on this
+  # machine, and its cleanup would then purge that agent's jobs rather than
+  # its own. Take three consecutive free ports instead - dev mode needs http,
+  # rpc and serf - the same way the ssh fixtures let docker pick an ephemeral
+  # one. NOMAD_ADDR is exported so every nomad call in this suite, hi.sh's
+  # backend probe included, reaches this agent and not another.
+  local port_base
+  port_base="$(_hi_free_port_base 3)" || {
+    _hi_cecho "couldn't find three free ports for the dev agent, skipping" "$YELLOW"
+    _hi_report_skip "no free ports"
+    exit 0
+  }
+  cat >"$_HI_WORKDIR/agent.hcl" <<EOF
+ports {
+  http = $port_base
+  rpc  = $((port_base + 1))
+  serf = $((port_base + 2))
+}
+EOF
+
+  _hi_h2 "Starting nomad agent -dev on port $port_base"
   nomad agent -dev -data-dir="$_HI_WORKDIR/data" -log-level=WARN \
+    -config="$_HI_WORKDIR/agent.hcl" \
     >"$_HI_WORKDIR/agent.log" 2>&1 &
   _HI_NOMAD_PID=$!
-  export NOMAD_ADDR="http://127.0.0.1:4646"
+  export NOMAD_ADDR="http://127.0.0.1:$port_base"
 
   function _hi_nomad_alive() { kill -0 "$_HI_NOMAD_PID" 2>/dev/null; }
   if ! _hi_poll_bool -a _hi_nomad_alive 60 0.5 nomad node status; then

@@ -3,6 +3,24 @@
 # hostname). Loaded through common/bootstrap.sh.
 set -euo pipefail # must be disabled after our code (this file is part of the interactive shell - any error would close the session)
 
+# The same defaults + settings preamble common/bootstrap.sh runs, because
+# shared.sh is also reached *directly*, without bootstrap, by config.fish's
+# `bash -c "source $_HI_SHARED; ..."` - and that path needs both. It can't
+# just source bootstrap.sh instead: bootstrap sources this file back, and the
+# guard it uses (`command -v _hi_cecho`) can't help while this file is still
+# only part-way through defining it.
+: "${_HI_DISABLE_LOCAL:=0}"
+: "${_HI_REMOTE_SESSION:=0}"
+: "${_HI_DISABLE_HEADER:=0}"
+: "${_HI_DISABLE_PROMPT:=0}"
+: "${_HI_DISABLE_PERSONAL:=0}"
+: "${_HI_DISABLE_GIT_STATUS:=0}"
+: "${_HI_DISABLE_EDITORS:=0}"
+: "${_HI_DISABLE_ALIASES:=0}"
+export _HI_DISABLE_LOCAL _HI_REMOTE_SESSION _HI_DISABLE_HEADER _HI_DISABLE_PROMPT
+export _HI_DISABLE_PERSONAL _HI_DISABLE_GIT_STATUS _HI_DISABLE_EDITORS _HI_DISABLE_ALIASES
+# shellcheck source=../misc/settings.sh disable=SC1091 # gitignored, may not exist
+[ -f "${_HI_HOME:-$HOME}/hi.d/misc/settings.sh" ] && . "${_HI_HOME:-$HOME}/hi.d/misc/settings.sh" || true
 # shellcheck source=./paths.sh
 source "${_HI_HOME:-$HOME}/hi.d/common/paths.sh"
 

@@ -1,12 +1,9 @@
 name: CI
 
 on:
-  push:
-    branches: [main, develop]
   pull_request:
 
 jobs:
-  # The fast, dependency-free suites.
   test:
     name: fast suites (ubuntu-latest)
     runs-on: ubuntu-latest
@@ -43,12 +40,6 @@ jobs:
           _HI_HOME: ${{ github.workspace }}/..
         run: "${{ github.workspace }}/tests/test_runner.sh --group fast"
 
-  # hi.d explicitly targets macOS (common/header.sh has a whole macOS branch)
-  # and nothing ever exercised it. Advisory-only for now: macOS ships bash 3.2
-  # and the suites use bash-4 builtins. Its own job rather than an advisory leg
-  # of `test`, because the e2e jobs below gate on `test` - and waiting on a
-  # runner whose result is explicitly allowed to fail put the macOS queue on
-  # the critical path of every push for nothing.
   test-macos:
     name: fast suites (macos-latest)
     runs-on: macos-latest
@@ -65,9 +56,6 @@ jobs:
           _HI_HOME: ${{ github.workspace }}/..
         run: "${{ github.workspace }}/tests/test_runner.sh --group fast"
 
-  # .markdownlint.yaml has been in the repo unenforced; this is what makes it
-  # mean something. Its own job so a prose-only failure is obvious at a glance
-  # rather than buried in a suite run.
   markdownlint:
     name: markdownlint
     runs-on: ubuntu-latest
@@ -78,8 +66,6 @@ jobs:
           globs: "**/*.md"
           config: ".markdownlint.yaml"
 
-  # The two backends that between them cover both halves of hi.sh - _say_hi
-  # (ssh) and _say_hi_container (docker).
   e2e:
     name: e2e (ssh, docker)
     runs-on: ubuntu-latest
@@ -93,13 +79,6 @@ jobs:
           _HI_HOME: ${{ github.workspace }}/..
         run: "${{ github.workspace }}/tests/test_runner.sh --group e2e"
 
-  # podman/nomad/kube used to be left out on the grounds that ssh and docker
-  # already reach both halves of hi.sh. They don't reach everything, though:
-  # nomad and kube each carry their own probe/cp/attach command arrays (see
-  # _say_hi_container), and nomad's -task / kube's -c handling appears nowhere
-  # else - so a change to either shape was landing unverified on every push.
-  # Separate job: these boot a cluster and an agent, and are much slower than
-  # the ssh/docker pair above.
   e2e-backends:
     name: e2e (podman, nomad, kube)
     runs-on: ubuntu-latest
@@ -108,8 +87,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # podman and nomad install together after the hashicorp repo is added, so
-      # the job pays for one `apt-get update` rather than two
       - name: Install podman and nomad
         run: |
           set -euo pipefail

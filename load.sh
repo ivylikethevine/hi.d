@@ -9,9 +9,12 @@
 function _hi_restore_profile() {
   if [ -r /etc/profile ]; then source /etc/profile; fi
   # shellcheck disable=SC1090 # target-specific files, no fixed location
-  if [ -r ~/.bash_profile ]; then source ~/.bash_profile
-  elif [ -r ~/.bash_login ]; then source ~/.bash_login
-  elif [ -r ~/.profile ]; then source ~/.profile
+  if [ -r ~/.bash_profile ]; then
+    source ~/.bash_profile
+  elif [ -r ~/.bash_login ]; then
+    source ~/.bash_login
+  elif [ -r ~/.profile ]; then
+    source ~/.profile
   fi
   export PATH="$PATH:$_HI_ROOT"
 }

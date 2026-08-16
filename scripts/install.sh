@@ -267,7 +267,10 @@ function ask_setting() {
 # rather than left on for the rest of the script.
 function _hi_visible_len() {
   local stripped restore=0
-  shopt -q extglob || { shopt -s extglob; restore=1; }
+  shopt -q extglob || {
+    shopt -s extglob
+    restore=1
+  }
   stripped="${1//$'\e'\[+([0-9;])m/}"
   ((restore)) && shopt -u extglob
   printf '%s' "${#stripped}"

@@ -145,8 +145,8 @@ EOF
   _hi_case _hi_run_case sh alpine:3.20 "$(_hi_probe_cmd "$_HI_TEST_MARKER" fallback)"
 
   _hi_suite_end "" \
-      "hi's nomad path survived every driver shape tested ($_HI_TOTAL cases)" \
-      "hi's nomad path FAILED: $_HI_FAILED/$_HI_TOTAL cases"
+    "hi's nomad path survived every driver shape tested ($_HI_TOTAL cases)" \
+    "hi's nomad path FAILED: $_HI_FAILED/$_HI_TOTAL cases"
 }
 
 run_nomad_test

@@ -44,7 +44,10 @@ function _hi_color_source() {
 
 # both read misc/colors through common/core.sh's _hi_colors_names
 function _hi_known_users() {
-  { _hi_whoami; _hi_colors_names username LOCALUSER; } | awk '!seen[$0]++'
+  {
+    _hi_whoami
+    _hi_colors_names username LOCALUSER
+  } | awk '!seen[$0]++'
 }
 
 function _hi_known_usertags() {
@@ -240,7 +243,7 @@ function _hi_print_hosts_table() {
 
   for gidx in "${!group_order[@]}"; do
     _hi_widen w_source "${group_source[gidx]}"
-    read -ra group_names <<< "${group_hosts[gidx]}"
+    read -ra group_names <<<"${group_hosts[gidx]}"
     _hi_widen w_preview "$(_hi_group_preview_width "${group_names[@]}")"
   done
 
@@ -253,7 +256,7 @@ function _hi_print_hosts_table() {
     source="${group_source[gidx]}"
     color_name="${group_color[gidx]}"
     name_escape=$(_hi_color_escape "$color_name")
-    read -ra group_names <<< "${group_hosts[gidx]}"
+    read -ra group_names <<<"${group_hosts[gidx]}"
 
     # wrap the name list within the ITEM column instead of overflowing it
     item_lines=()

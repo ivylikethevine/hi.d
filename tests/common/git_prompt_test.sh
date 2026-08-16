@@ -57,7 +57,6 @@ function _hi_git_diverge() {
   git -C "$dir" commit -qam main-change
 }
 
-
 function test_outside_a_repo_produces_no_output() {
   local dir out
   dir="$(mktemp -d "$_HI_WORKDIR/plain.XXXXXX")"

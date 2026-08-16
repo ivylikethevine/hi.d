@@ -21,23 +21,36 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Install zsh and fish
         run: sudo apt-get update && sudo apt-get install -y zsh fish
 
       - uses: ./.github/actions/setup-shellcheck
 
+      # the lint suite's shfmt/checkbashisms halves skip yellow when the tools
+      # are absent - these pinned installs are what make them enforce here
+      - uses: ./.github/actions/setup-shfmt
+
+      - uses: ./.github/actions/setup-checkbashisms
+
       - name: Run fast test suites
         run: "${{ github.workspace }}/tests/test_runner.sh --group fast"
 
   # The same suites on macOS: /bin/bash 3.2, BSD userland. The %e/width/sort
   # fixes in common/ came out of this job, so it gates for real now.
+  # (shfmt/checkbashisms aren't installed here on purpose: the ubuntu job
+  # already enforces both against pinned versions, and a second, brew-floating
+  # shfmt could disagree with the pinned one about formatting.)
   test-macos:
     name: fast suites (macos-latest)
     runs-on: macos-latest
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Install fish and shellcheck
         run: brew install fish shellcheck
@@ -45,12 +58,34 @@ jobs:
       - name: Run fast test suites
         run: "${{ github.workspace }}/tests/test_runner.sh --group fast"
 
+  # bad `needs`, invalid contexts, shellcheck over every run: block - the
+  # workflows and composite actions are code too, so they get a linter
+  actionlint:
+    name: actionlint
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      # actionlint shells out to shellcheck for run: blocks when it is on
+      # PATH - pin it so both jobs lint shell with the same version
+      - uses: ./.github/actions/setup-shellcheck
+
+      - uses: ./.github/actions/setup-actionlint
+
+      - name: Lint the workflows
+        run: actionlint -color
+
   markdownlint:
     name: markdownlint
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: DavidAnson/markdownlint-cli2-action@v20
         with:
           globs: "**/*.md"
@@ -65,6 +100,8 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Install zsh and fish
         run: sudo apt-get update && sudo apt-get install -y zsh fish
@@ -80,6 +117,8 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - uses: ./.github/actions/setup-nfpm
 
@@ -94,6 +133,8 @@ jobs:
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       # --require-run: here a skip is a broken runner, not an optional backend
       - name: Run end-to-end suites
@@ -106,6 +147,8 @@ jobs:
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Install podman and nomad
         run: |

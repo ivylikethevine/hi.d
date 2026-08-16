@@ -21,6 +21,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Install zsh and fish
         run: sudo apt-get update && sudo apt-get install -y zsh fish
@@ -86,6 +87,8 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - uses: actions/download-artifact@v4
         with:
@@ -107,7 +110,9 @@ jobs:
       # Committing the regenerated manifests here - after the human gate - is
       # what lets the tag stay put: they are consumed from the AUR/tap repos,
       # not from inside the tarball, so they needn't be in the tagged tree.
-      - uses: actions/checkout@v4
+      # the one checkout that keeps its credentials: the step below pushes to
+      # main with them (every other checkout sets persist-credentials: false)
+      - uses: actions/checkout@v4 # zizmor: ignore[artipacked]
         with:
           ref: main
           path: main

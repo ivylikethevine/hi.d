@@ -1,0 +1,34 @@
+name: Setup checkbashisms
+# checkbashisms is one standalone perl script inside Debian's devscripts;
+# apt-get install devscripts drags in a pile of packaging tooling for it, so
+# fetch just the script from the devscripts repo at a pinned release tag.
+description: Install a pinned checkbashisms script, with caching
+
+inputs:
+  version:
+    description: devscripts release tag to fetch checkbashisms from
+    required: false
+    default: "v2.25.10"
+
+runs:
+  using: composite
+  steps:
+    - name: Cache checkbashisms
+      id: checkbashisms-cache
+      uses: actions/cache@v4
+      with:
+        path: /usr/local/bin/checkbashisms
+        key: checkbashisms-${{ inputs.version }}
+
+    - name: Install checkbashisms
+      if: steps.checkbashisms-cache.outputs.cache-hit != 'true'
+      shell: bash
+      env:
+        DEVSCRIPTS_TAG: ${{ inputs.version }}
+      run: |
+        set -euo pipefail
+        curl -sSfL -o /tmp/checkbashisms \
+          "https://salsa.debian.org/debian/devscripts/-/raw/${DEVSCRIPTS_TAG}/scripts/checkbashisms.pl"
+        chmod +x /tmp/checkbashisms
+        sudo mv /tmp/checkbashisms /usr/local/bin/checkbashisms
+        checkbashisms --version

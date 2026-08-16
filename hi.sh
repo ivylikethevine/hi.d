@@ -240,7 +240,8 @@ function _say_hi() {
     # instead of shipping one over, and never delete it. No _HI_CLEANUP here is
     # what tells load.sh's clean_all to leave $_HI_ROOT alone.
     tmp_root="${remote_root%/hi.d}"
-    middle="$(cat <<REMOTE
+    middle="$(
+      cat <<REMOTE
       export _HI_HOME="$tmp_root"
       export _HI_ROOT="$remote_root"
       _hi_rc_dir="\$(dirname "\$0")"
@@ -261,7 +262,8 @@ REMOTE
       overlay="$(_hi_overlay_tar | $_HI_ARMOR)"
       overlay_line="echo \"$overlay\" | $_HI_UNARMOR | tar mxzf - -C \"\$_HI_ROOT/misc\""
     fi
-    middle="$(cat <<REMOTE
+    middle="$(
+      cat <<REMOTE
       export _HI_HOME=\$(mktemp -d -t $(whoami).hi.XXXXXX) # busybox mktemp needs exactly six X
       export _HI_ROOT=\$_HI_HOME/hi.d
       export _HI_CONFIG_DIR=\$_HI_ROOT/misc
@@ -354,9 +356,11 @@ function _say_hi_container() {
     # copies it without paths.sh or settings.sh to define them.
     # No config overlay here either, for the same reason - nothing on this path
     # reads $_HI_COLORS or $_HI_PACKAGES, so there is nothing for it to affect.
-    { printf 'export _HI_DISABLE_EDITORS=0\nexport _HI_DISABLE_ALIASES=0\n'
+    {
+      printf 'export _HI_DISABLE_EDITORS=0\nexport _HI_DISABLE_ALIASES=0\n'
       printf '. %s/aliases.sh 2>/dev/null\n' "$root"
-      [ -n "${CMDARG:-}" ] && printf '%s\n' "$CMDARG"; } |
+      [ -n "${CMDARG:-}" ] && printf '%s\n' "$CMDARG"
+    } |
       "${cp[@]}" sh -c "cat > '$root/.hi_fallback_rc'" 2>"$tmp"
 
     case "$fallback" in
@@ -463,12 +467,18 @@ function _hi() {
   # be added without. The predicates' stderr lands in $tmp too; each already
   # sends its probe to /dev/null, and $tmp only prints when the session failed.
   {
-    if _hi_is_ssh_host "$DOMAIN"; then _say_hi
-    elif _hi_is_docker_container "$DOMAIN"; then _say_hi_container docker
-    elif _hi_is_podman_container "$DOMAIN"; then _say_hi_container podman
-    elif _hi_is_nomad_alloc "$DOMAIN"; then _say_hi_container nomad
-    elif _hi_is_k8s_pod "$DOMAIN"; then _say_hi_container kube
-    else _say_hi
+    if _hi_is_ssh_host "$DOMAIN"; then
+      _say_hi
+    elif _hi_is_docker_container "$DOMAIN"; then
+      _say_hi_container docker
+    elif _hi_is_podman_container "$DOMAIN"; then
+      _say_hi_container podman
+    elif _hi_is_nomad_alloc "$DOMAIN"; then
+      _say_hi_container nomad
+    elif _hi_is_k8s_pod "$DOMAIN"; then
+      _say_hi_container kube
+    else
+      _say_hi
     fi
   } 2>"$tmp"
   exit_code="$?"

@@ -64,12 +64,18 @@ function _hi_test_path() { printf '%s' "${1##*:}"; }
 
 function _hi_test_names() {
   local t
-  for t in "${_HI_TESTS[@]}"; do _hi_test_name "$t"; printf ' '; done
+  for t in "${_HI_TESTS[@]}"; do
+    _hi_test_name "$t"
+    printf ' '
+  done
 }
 
 function _hi_test_groups() {
   local t
-  for t in "${_HI_TESTS[@]}"; do _hi_test_group "$t"; printf '\n'; done | awk '!seen[$0]++' | tr '\n' ' '
+  for t in "${_HI_TESTS[@]}"; do
+    _hi_test_group "$t"
+    printf '\n'
+  done | awk '!seen[$0]++' | tr '\n' ' '
 }
 
 # "  <group>  <name>" per suite, for --help

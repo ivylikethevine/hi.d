@@ -18,7 +18,6 @@ set -- # install.sh reads "$@" for its own args; make sure it sees none
 # shellcheck source=../../scripts/install.sh
 source "$_HI_INSTALL"
 
-
 function test_config_shell_fresh_insert() {
   local target="$_HI_WORKDIR/fresh"
   : >"$target"

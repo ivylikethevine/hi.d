@@ -15,7 +15,7 @@ payload is `$_HI_PAYLOAD` in `hi.sh`; `docs/` isn't in it).
 ## empty-array guard
 
 `${a[@]+"${a[@]}"}` wherever an array may be empty under `set -u`: bash 3.2
-treats expanding an *empty* array as a fatal "unbound variable". Plain
+treats expanding an _empty_ array as a fatal "unbound variable". Plain
 `"${a[@]}"` is only safe when at least one element is guaranteed.
 
 **Exception - the index form.** `"${!a[@]}"` is already empty-safe and must
@@ -35,7 +35,7 @@ newline the way `mapfile -t` does. Use it exactly like
 ## parallel arrays
 
 Associative arrays (`declare -A`/`local -A`) are bash 4 - on 3.2 the
-*declaration alone* is a fatal "invalid option". Where a map is needed,
+_declaration alone_ is a fatal "invalid option". Where a map is needed,
 either parallel indexed arrays sharing one index with a keys array as the
 lookup table (`_hi_group_index` in `scripts/color_preview.sh`), or
 `"<key>=<value>"` strings via `_hi_kv_get`/`_hi_kv_set` (`tests/test_lib.sh`).
@@ -53,8 +53,9 @@ array as an argument.
 
 `out="$(fn)"` forks a subshell per call; `fn outvar` with `printf -v "$outvar"`
 doesn't. Used on hot paths (`_hi_git_prompt`'s optional out-var, `_hi_repeat`)
+
 - but only in bash: zsh's `printf` has no `-v`, so zsh callers keep the
-stdout form.
+  stdout form.
 
 ## source guard
 
@@ -67,7 +68,7 @@ the test suites reach the functions without running an install/bump/render.
 ## toggle defaulting
 
 fish has no `${X:-0}`, and it sources `aliases.sh`/`paths.sh`/`settings.sh`
-natively - so every `_HI_DISABLE_*` toggle is read *bare*, and a bare read of
+natively - so every `_HI_DISABLE_*` toggle is read _bare_, and a bare read of
 an unset variable is fatal under bash's `set -u`. Therefore the toggles must
 always exist: `common/core.sh` defaults the `_HI_TOGGLES` list (defaulted,
 never assigned, so settings.sh and paths.sh's gate still win),
@@ -112,7 +113,7 @@ math around user-visible strings computes column counts explicitly (see
 ## command -v fallthrough
 
 `alias x="$(command -v tool-a || command -v tool-b || command -v fallback)"`
-in `shells/aliases.sh`: resolved at source time, valid in sh, bash, zsh *and*
+in `shells/aliases.sh`: resolved at source time, valid in sh, bash, zsh _and_
 fish (modern fish parses `$(...)`), and never leaves the alias pointing at a
 missing binary. The `|| command -v echo` tail keeps `set -u`/`set -e` shells
 alive when nothing matches.
@@ -127,7 +128,7 @@ traps are registered in shared code.
 
 Files that run inside an interactive shell (`common/core.sh`, `hi.sh`,
 `shells/bash.sh`, `common/git_prompt.sh`, ...) set `set -euo pipefail` at the
-top *and disable it at the end of their own code*: left on, any later
+top _and disable it at the end of their own code_: left on, any later
 non-zero status or unset variable kills the user's session. The bootloader
 and fallback rc do the same on targets - forgetting it there is what once
 broke `hi <target> <command>` outright.

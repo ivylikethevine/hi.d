@@ -1,0 +1,32 @@
+name: Setup actionlint
+# a single upstream Go binary, pinned the same way shellcheck is - bump the
+# default here and every consumer follows
+description: Install a pinned upstream actionlint binary, with caching
+
+inputs:
+  version:
+    description: actionlint version to install
+    required: false
+    default: "1.7.12"
+
+runs:
+  using: composite
+  steps:
+    - name: Cache actionlint
+      id: actionlint-cache
+      uses: actions/cache@v4
+      with:
+        path: /usr/local/bin/actionlint
+        key: actionlint-${{ inputs.version }}-linux-x86_64
+
+    - name: Install actionlint
+      if: steps.actionlint-cache.outputs.cache-hit != 'true'
+      shell: bash
+      env:
+        ACTIONLINT_VERSION: ${{ inputs.version }}
+      run: |
+        set -euo pipefail
+        curl -sSfL "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz" |
+          tar xz -C /tmp actionlint
+        sudo mv /tmp/actionlint /usr/local/bin/actionlint
+        actionlint --version

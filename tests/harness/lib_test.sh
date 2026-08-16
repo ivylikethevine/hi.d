@@ -48,7 +48,6 @@ function _hi_sandboxed() {
 function _hi_true() { return 0; }
 function _hi_false() { return 1; }
 
-
 function test_case_counts_a_pass() {
   _hi_suite_begin
   _hi_case _hi_true
@@ -297,19 +296,19 @@ function test_require_returns_for_an_installed_command() {
 
 function test_require_exits_zero_and_warns_when_missing() {
   local out rc=0
-  out="$( (_hi_require definitely-not-a-real-hi-test-command-xyz) )" || rc=$?
+  out="$( (_hi_require definitely-not-a-real-hi-test-command-xyz))" || rc=$?
   [ "$rc" -eq 0 ] && [[ "$out" == *"not installed, skipping"* ]]
 }
 
 function test_require_uses_a_custom_reason() {
   local out
-  out="$( (_hi_require definitely-not-a-real-hi-test-command-xyz "unavailable here") )"
+  out="$( (_hi_require definitely-not-a-real-hi-test-command-xyz "unavailable here"))"
   [[ "$out" == *"unavailable here, skipping"* ]]
 }
 
 function test_require_backend_skips_when_the_cli_is_missing() {
   local out rc=0
-  out="$( (_hi_require_backend definitely-not-a-real-hi-test-command-xyz) )" || rc=$?
+  out="$( (_hi_require_backend definitely-not-a-real-hi-test-command-xyz))" || rc=$?
   [ "$rc" -eq 0 ] && [[ "$out" == *"skipping"* ]]
 }
 
@@ -318,7 +317,7 @@ function test_require_backend_skips_when_the_backend_is_unreachable() {
   mkdir -p "$fake"
   printf '%s\n' '#!/bin/sh' 'exit 1' >"$fake/hi-fake-backend"
   chmod +x "$fake/hi-fake-backend"
-  out="$( PATH="$fake:$PATH" bash -c 'source "$_HI_TEST_LIB"; _hi_require_backend hi-fake-backend' )" || rc=$?
+  out="$(PATH="$fake:$PATH" bash -c 'source "$_HI_TEST_LIB"; _hi_require_backend hi-fake-backend')" || rc=$?
   [ "$rc" -eq 0 ] && [[ "$out" == *"not reachable, skipping"* ]]
 }
 

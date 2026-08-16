@@ -659,7 +659,7 @@ function _hi_sshd_image() {
   cat >"$ctx/Dockerfile" <<'EOF'
 FROM debian:bookworm-slim
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      openssh-server openssl bash dash zsh fish \
+      openssh-server bash dash zsh fish \
     && rm -rf /var/lib/apt/lists/* \
     && mkdir -p /run/sshd \
     && useradd -m -s /bin/bash hitest

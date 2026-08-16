@@ -13,7 +13,7 @@ url="https://github.com/ivylikethevine/hi.d"
 license=('MIT')
 # tar, coreutils, gawk and sed are used too, but they are in base - namcap
 # flags depending on those explicitly.
-depends=('bash' 'openssh' 'openssl')
+depends=('bash' 'openssh' 'coreutils')
 optdepends=('zsh: zsh support on the client'
   'fish: fish support on the client'
   'docker: container targets'

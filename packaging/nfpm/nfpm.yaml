@@ -27,23 +27,21 @@ description: |
   Copies your shell configuration to ssh hosts, docker/podman containers,
   nomad allocations and kubernetes pods, and takes it back out on exit.
 
-# Debian names. openssl is needed as a *command* (hi armors the ssh bootstrap
-# payload with `openssl enc -base64`), not as a library.
+# Debian names. No base64 dependency needed: hi armors the ssh bootstrap with
+# `base64`, which every base system already carries (coreutils on deb/rpm,
+# busybox on apk).
 depends:
   - bash
   - openssh-client
-  - openssl
 overrides:
   rpm:
     depends:
       - bash
       - openssh-clients
-      - openssl
   apk:
     depends:
       - bash
       - openssh-client
-      - openssl
 
 contents:
   - src: ./dist/staging/usr/share/hi.d

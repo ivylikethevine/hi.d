@@ -311,7 +311,8 @@ function test_bump_sha256_matches_a_known_vector() {
 
 # the two b2 implementations (coreutils b2sum, openssl fallback) must agree,
 # or a bump on a mac writes a sum makepkg then rejects. Guarded on b2sum at
-# the registration; openssl is a hard client requirement already.
+# the registration; openssl is bump.sh's optional mac fallback only - hi
+# itself no longer needs it anywhere (the wire armor is base64 now).
 function test_bump_b2_fallback_agrees_with_b2sum() {
   local f="$_HI_WORKDIR/vector2"
   printf 'hello\n' >"$f"
@@ -414,7 +415,13 @@ function run_packaging_tests() {
   _hi_check "--check catches stale .SRCINFO b2sums" test_bump_check_catches_stale_srcinfo_b2sums
   _hi_check "--check catches a stale .SRCINFO source" test_bump_check_catches_stale_srcinfo_source
   _hi_check "sha256 matches a known vector" test_bump_sha256_matches_a_known_vector
-  _hi_check_requires b2sum "b2 fallback agrees with b2sum" test_bump_b2_fallback_agrees_with_b2sum
+  # needs both halves present to compare them; openssl stopped being implied
+  # when the wire armor moved to base64
+  if command -v openssl >/dev/null 2>&1; then
+    _hi_check_requires b2sum "b2 fallback agrees with b2sum" test_bump_b2_fallback_agrees_with_b2sum
+  else
+    _hi_skip "b2 fallback agrees with b2sum" "no openssl"
+  fi
   _hi_check "rewrite preserves the file mode" test_bump_rewrite_preserves_file_mode
 
   _hi_h2 "Testing: package.sh (offline half)"

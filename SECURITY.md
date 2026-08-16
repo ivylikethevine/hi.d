@@ -20,9 +20,9 @@ trust boundaries sit, and how to report what slipped through.
   docs, tests, CI and editor config never leave the client. Your overlay
   (`settings.sh`, `colors`, `packages` from `~/.config/hi.d/`) is a
   second, smaller allow list.
-- **openssl is armor, not crypto.** `openssl enc -base64` encodes the
-  payload so it survives the target's login shell unmangled; it provides
-  no confidentiality or integrity. Both come entirely from the transport
+- **base64 is armor, not crypto.** The payload is base64-encoded so it
+  survives the target's login shell unmangled; it provides no
+  confidentiality or integrity. Both come entirely from the transport
   (ssh, or the container runtime's exec channel).
 
 ## What runs where

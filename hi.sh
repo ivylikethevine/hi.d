@@ -17,8 +17,16 @@ _HI_PAYLOAD=(common misc shells load.sh)
 # along inside the payload above for free; now they need their own stream.
 _HI_OVERLAY_FILES=(settings.sh colors packages)
 
-_HI_ARMOR="openssl enc -base64"
-_HI_UNARMOR="tr -s ' ' '\n' | openssl enc -base64 -d"
+# base64, not openssl: the armor is pure ASCII transport encoding (no crypto),
+# and base64 ships on strictly more targets - coreutils, busybox, macOS/BSD,
+# Git Bash. Decode tries GNU/busybox -d first, then old BSD/macOS -D; the
+# failed flag parse consumes no stdin, so the fallback still sees the whole
+# stream. tr first, because GNU base64 -d tolerates the armor's newlines but
+# not spaces, and a transport that folds newlines into spaces would otherwise
+# break it. $_HI_UNARMOR only ever runs inside the sh bootloader (the login
+# shell never parses its braces - fish couldn't).
+_HI_ARMOR="base64"
+_HI_UNARMOR="tr -s ' ' '\n' | { base64 -d 2>/dev/null || base64 -D; }"
 
 # true when the user has any overlay at all. Both transports ask first rather
 # than piping an empty archive at `tar mxzf -`, which is an "unexpected EOF"
@@ -166,7 +174,6 @@ function _hi_remote_preamble() {
       export _HI_TARGET_TAG="$(_hi_ssh_host_tag "$DOMAIN" 2>/dev/null || true)"
       export _HI_LOCAL_USER="$(whoami)"
       export _HI_LOCAL_HOSTNAME="$(_hi_hostname)"
-      command -v openssl >/dev/null 2>&1 || { echo >&2 "hi requires openssl on [$DOMAIN], but it is not installed. Aborting."; exit 1; }
 REMOTE
 }
 
@@ -220,9 +227,11 @@ function _say_hi() {
   local -a ctl_opts
 
   # only this path armors its payload; the container backends stream through
-  # their own CLI's cp/exec. The target is checked in _hi_remote_preamble.
-  command -v openssl >/dev/null 2>&1 || {
-    _hi_cecho >&2 "hi requires openssl on [$(_hi_hostname)] to reach an ssh target, but it is not installed. Aborting..." "$RED"
+  # their own CLI's cp/exec. No target-side check: the bootloader itself only
+  # arrives through the target's base64, so a target without one fails the
+  # one-liner loudly before any of our script runs.
+  command -v base64 >/dev/null 2>&1 || {
+    _hi_cecho >&2 "hi requires base64 on [$(_hi_hostname)] to reach an ssh target, but it is not installed. Aborting..." "$RED"
     return 1
   }
 
@@ -286,14 +295,16 @@ REMOTE
 $middle
 $(_hi_remote_suffix)"
 
-  b64="$(printf '%s' "$script" | openssl enc -base64 -A)"
+  # single-line armor portably: GNU spells it -w0, BSD doesn't wrap by
+  # default - piping through tr is the one shape that does both
+  b64="$(printf '%s' "$script" | base64 | tr -d '\n')"
   # -u: a name only, never a local file - the directory it names is created on
   # the *target* by the mkdir below (which fails loudly if the name is taken)
   boot_tmp="$(mktemp -u -t hi.boot.XXXXXX)"
 
   # shellcheck disable=SC2029
   ssh -t "${ctl_opts[@]}" "${SSHARGS[@]}" "$DOMAIN" \
-    "mkdir -m 700 $boot_tmp && echo $b64 | openssl enc -base64 -d -A > $boot_tmp/bootloader && sh $boot_tmp/bootloader; rm -rf $boot_tmp" '||' \
+    "mkdir -m 700 $boot_tmp && echo $b64 | sh -c 'base64 -d 2>/dev/null || base64 -D' > $boot_tmp/bootloader && sh $boot_tmp/bootloader; rm -rf $boot_tmp" '||' \
     powershell -NoLogo -NoExit -Command \
     "Write-Host 'hi from PowerShell - no bash or sh on this host, hi.d colors/aliases are unavailable' -ForegroundColor Yellow" || ec=$?
 

@@ -110,7 +110,7 @@ function run_ssh_tests() {
     _hi_label="${_hi_img%%:*}"
     _hi_ctx="$_HI_WORKDIR/$_hi_label"
     mkdir -p "$_hi_ctx"
-    printf 'FROM alpine:3.20\nRUN apk add --no-cache openssh openssl %s \\\n    && adduser -D -s /bin/ash hitest\nCOPY entrypoint.sh /entrypoint.sh\nRUN chmod +x /entrypoint.sh\nENTRYPOINT ["/entrypoint.sh"]\n' "${_hi_img#*:}" >"$_hi_ctx/Dockerfile"
+    printf 'FROM alpine:3.20\nRUN apk add --no-cache openssh %s \\\n    && adduser -D -s /bin/ash hitest\nCOPY entrypoint.sh /entrypoint.sh\nRUN chmod +x /entrypoint.sh\nENTRYPOINT ["/entrypoint.sh"]\n' "${_hi_img#*:}" >"$_hi_ctx/Dockerfile"
     _hi_sshd_entrypoint "$_hi_ctx" /bin/sh
 
     if _hi_build_image "$_hi_label" "hi-sshtest-$_hi_label-$$" "its fallback case" "$_hi_ctx"; then
@@ -129,7 +129,7 @@ function run_ssh_tests() {
   _HI_BASH32_OK=0
   _hi_ctx="$_HI_WORKDIR/bash32"
   mkdir -p "$_hi_ctx"
-  printf 'FROM bash:3.2\nRUN apk add --no-cache openssh openssl \\\n    && ln -sf /usr/local/bin/bash /bin/bash \\\n    && adduser -D -s /usr/local/bin/bash hitest\nCOPY entrypoint.sh /entrypoint.sh\nRUN chmod +x /entrypoint.sh\nENTRYPOINT ["/entrypoint.sh"]\n' >"$_hi_ctx/Dockerfile"
+  printf 'FROM bash:3.2\nRUN apk add --no-cache openssh \\\n    && ln -sf /usr/local/bin/bash /bin/bash \\\n    && adduser -D -s /usr/local/bin/bash hitest\nCOPY entrypoint.sh /entrypoint.sh\nRUN chmod +x /entrypoint.sh\nENTRYPOINT ["/entrypoint.sh"]\n' >"$_hi_ctx/Dockerfile"
   _hi_sshd_entrypoint "$_hi_ctx" /bin/sh
   _hi_build_image bash32 "hi-sshtest-bash32-$$" "the bash 3.2 case" "$_hi_ctx" && _HI_BASH32_OK=1
 

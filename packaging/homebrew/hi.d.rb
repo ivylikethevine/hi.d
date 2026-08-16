@@ -12,10 +12,9 @@ class HiD < Formula
   head "https://github.com/ivylikethevine/hi.d.git", branch: "main"
 
   uses_from_macos "openssh"
-  # No `depends_on "openssl@3"`. hi calls `openssl` as a command (it armors the
-  # ssh bootstrap payload with `openssl enc -base64`), and openssl@3 is keg-only
-  # - depending on it would not put an `openssl` on PATH. The system one is what
-  # runs, and macOS has always shipped one.
+  # No armor dependency. hi armors the ssh bootstrap payload with `base64`,
+  # which macOS has always shipped (and so does every Linux base system this
+  # formula could land on).
   #
   # No `depends_on "bash"` either: hi is written for bash 3.2 precisely so that
   # macOS's own /bin/bash can run it.

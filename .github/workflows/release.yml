@@ -1,0 +1,123 @@
+name: Release
+
+# Only ever fires on a pushed v* tag. Nothing here runs on a branch push or a
+# PR - ci.yml owns those and publishes nothing.
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  # Everything that can fail, and nothing that can publish. Runs unattended so
+  # that a bad tag is caught before anyone is asked to approve anything.
+  build:
+    name: build packages
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install zsh and fish
+        run: sudo apt-get update && sudo apt-get install -y zsh fish
+
+      # same pinned upstream binary ci.yml uses - the distro package lags badly
+      - name: Cache shellcheck
+        id: shellcheck-cache
+        uses: actions/cache@v4
+        with:
+          path: /usr/local/bin/shellcheck
+          key: shellcheck-0.11.0-linux-x86_64
+
+      - name: Install shellcheck
+        if: steps.shellcheck-cache.outputs.cache-hit != 'true'
+        env:
+          SHELLCHECK_VERSION: 0.11.0
+        run: |
+          set -euo pipefail
+          curl -sSfL -o /tmp/shellcheck.tar.xz \
+            "https://github.com/koalaman/shellcheck/releases/download/v${SHELLCHECK_VERSION}/shellcheck-v${SHELLCHECK_VERSION}.linux.x86_64.tar.xz"
+          tar -xJf /tmp/shellcheck.tar.xz -C /tmp "shellcheck-v${SHELLCHECK_VERSION}/shellcheck"
+          sudo mv "/tmp/shellcheck-v${SHELLCHECK_VERSION}/shellcheck" /usr/local/bin/shellcheck
+          rm -rf /tmp/shellcheck.tar.xz "/tmp/shellcheck-v${SHELLCHECK_VERSION}"
+
+      - name: Run fast test suites
+        env:
+          _HI_HOME: ${{ github.workspace }}/..
+        run: "${{ github.workspace }}/tests/test_runner.sh --group fast"
+
+      # The gate that stops a tag and its manifests drifting apart: bump.sh is
+      # run by hand before tagging, and this only verifies the result. CI never
+      # rewrites a manifest nobody reviewed.
+      - name: Verify the manifests match the tag
+        run: packaging/bump.sh --check "${GITHUB_REF_NAME#v}"
+
+      - name: Install nfpm
+        env:
+          NFPM_VERSION: 2.43.0
+        run: |
+          set -euo pipefail
+          curl -sSfL -o /tmp/nfpm.tar.gz \
+            "https://github.com/goreleaser/nfpm/releases/download/v${NFPM_VERSION}/nfpm_${NFPM_VERSION}_Linux_x86_64.tar.gz"
+          tar -xzf /tmp/nfpm.tar.gz -C /tmp nfpm
+          sudo mv /tmp/nfpm /usr/local/bin/nfpm
+          nfpm --version
+
+      - name: Build the packages
+        run: packaging/package.sh
+
+      - name: Collect the manifests alongside them
+        run: |
+          set -euo pipefail
+          mkdir -p dist/manifests
+          cp packaging/aur/hi.d/PKGBUILD dist/manifests/PKGBUILD
+          cp packaging/aur/hi.d/.SRCINFO dist/manifests/.SRCINFO
+          cp packaging/aur/hi.d-git/PKGBUILD dist/manifests/PKGBUILD.git
+          cp packaging/aur/hi.d-git/.SRCINFO dist/manifests/.SRCINFO.git
+          cp packaging/homebrew/hi.d.rb dist/manifests/hi.d.rb
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: packages
+          path: |
+            dist/*.deb
+            dist/*.rpm
+            dist/*.apk
+            dist/manifests/*
+          if-no-files-found: error
+
+  # The only job that publishes, and it waits for you.
+  #
+  # `environment: release` is what makes GitHub hold this job in a pending state
+  # until a required reviewer approves it in the web UI. THAT REVIEWER IS NOT
+  # CONFIGURED BY THIS FILE - it is a repo setting, and until it exists the
+  # environment imposes no gate at all and this job runs unattended. One-time
+  # setup: Settings -> Environments -> New environment -> "release" -> tick
+  # "Required reviewers" and add yourself. See packaging/README.md.
+  publish:
+    name: publish to the release (manual approval)
+    needs: build
+    runs-on: ubuntu-latest
+    environment: release
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: packages
+          path: dist
+
+      - name: Attach everything to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 ||
+            gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --generate-notes
+          # The manifests ride along with the packages so that updating the AUR
+          # and the tap is a copy rather than a re-derivation of the same sums.
+          gh release upload "$GITHUB_REF_NAME" --clobber \
+            dist/*.deb dist/*.rpm dist/*.apk dist/manifests/*

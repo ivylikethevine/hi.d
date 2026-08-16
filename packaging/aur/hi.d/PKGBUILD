@@ -1,0 +1,46 @@
+# Maintainer: Ivy Duggan <ivylikethevine@gmail.com>
+#
+# The versioned package, cut from a tagged release tarball. packaging/bump.sh
+# rewrites pkgver and b2sums together; do not edit either by hand.
+# hi.d-git/ is the same package built from the branch instead.
+
+pkgname=hi.d
+pkgver=0.0.0
+pkgrel=1
+pkgdesc="sshrc supercharged - your shell config, on every host you say hi to"
+arch=('any')
+url="https://github.com/ivylikethevine/hi.d"
+license=('MIT')
+# tar, coreutils, gawk and sed are used too, but they are in base - namcap
+# flags depending on those explicitly.
+depends=('bash' 'openssh' 'openssl')
+optdepends=('zsh: zsh support on the client'
+  'fish: fish support on the client'
+  'docker: container targets'
+  'podman: container targets'
+  'nomad: allocation targets'
+  'kubectl: pod targets')
+source=("$pkgname-$pkgver.tar.gz::$url/archive/v$pkgver.tar.gz")
+# never submit with SKIP - packaging/bump.sh <version> fills in the real sum
+b2sums=('SKIP')
+
+prepare() {
+  # scripts/install.sh derives $_HI_HOME as <checkout>/.. and then looks for
+  # $_HI_HOME/hi.d, so the checkout has to be named exactly hi.d - and GitHub's
+  # tarball unpacks to hi.d-$pkgver. A symlink rather than a mv: it is
+  # idempotent, so `makepkg -e` over an existing $srcdir stays a no-op.
+  ln -sfn "$srcdir/$pkgname-$pkgver" "$srcdir/hi.d"
+}
+
+package() {
+  # install.sh's packaging mode is the whole of package(): it copies
+  # $_HI_PACKAGE_CONTENTS to $DESTDIR/usr/share/hi.d, links /usr/bin/hi at the
+  # *installed* location (no $pkgdir in the link target), and writes the
+  # /etc/profile.d snippet that exports _HI_HOME=/usr/share. Copying by hand
+  # here instead would be a second copy of that list, free to drift.
+  DESTDIR="$pkgdir" "$srcdir/hi.d/scripts/install.sh" --prefix /usr/share
+
+  # Arch wants the licence here as well; install_tree's copy lives inside the
+  # tree, where it is what `hi` ships to a target rather than what pacman reads.
+  install -Dm644 "$srcdir/hi.d/LICENSE" "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}

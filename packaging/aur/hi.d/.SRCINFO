@@ -1,0 +1,20 @@
+pkgbase = hi.d
+	pkgdesc = sshrc supercharged - your shell config, on every host you say hi to
+	pkgver = 0.0.0
+	pkgrel = 1
+	url = https://github.com/ivylikethevine/hi.d
+	arch = any
+	license = MIT
+	depends = bash
+	depends = openssh
+	depends = openssl
+	optdepends = zsh: zsh support on the client
+	optdepends = fish: fish support on the client
+	optdepends = docker: container targets
+	optdepends = podman: container targets
+	optdepends = nomad: allocation targets
+	optdepends = kubectl: pod targets
+	source = hi.d-0.0.0.tar.gz::https://github.com/ivylikethevine/hi.d/archive/v0.0.0.tar.gz
+	b2sums = SKIP
+
+pkgname = hi.d

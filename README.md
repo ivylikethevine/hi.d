@@ -219,6 +219,8 @@ tests/test_runner.sh
 
 ##### Hostname, username, and group/tag colors
 
+TODO: Add recommendation on git tracking ~/hi.d for easy cloning between devices.
+
 Every username and hostname gets a color automatically, deterministically derived from its name - there's nothing to generate and nothing that can go missing. To pin a specific color instead, add a line to `~/hi.d/misc/colors` (`username,root,red` / `hostname,prod-db,yellow` / `hosttag,desktop,green`); `hosttag` entries match the _leftmost_ tag in a `# Tags: ...` comment placed directly above a `Host` line in `~/.ssh/config`. Run `hi_color_preview` any time to preview what every ssh host and your user currently resolve to, rendered in their actual color.
 
 ###### Built from/with/in mind

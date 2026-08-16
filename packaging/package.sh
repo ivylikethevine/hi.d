@@ -1,0 +1,154 @@
+#!/bin/bash
+# Builds the distributable packages: stage the tree with scripts/install.sh's
+# packaging mode, then hand that staging root to nfpm for .deb/.rpm/.apk.
+#
+# Named package.sh rather than the obvious build.sh because .gitignore's
+# `**build**` rule would have silently swallowed that name - see the note at the
+# top of .gitignore.
+#
+# Arch is deliberately not built here even though nfpm can: packaging/aur/ makes
+# a better Arch package (real optdepends, a -git variant, AUR updates), and two
+# Arch packages for one project would only conflict.
+set -euo pipefail
+
+# Locate hi.d relative to this script (resolving symlinks), the same way
+# scripts/install.sh does - packaging/ is one level down from the tree root.
+_HI_SELF="${BASH_SOURCE[0]}"
+while [ -L "$_HI_SELF" ]; do
+  _HI_SELF_DIR="$(cd -P "$(dirname "$_HI_SELF")" && pwd)"
+  _HI_SELF="$(readlink "$_HI_SELF")"
+  [[ $_HI_SELF == /* ]] || _HI_SELF="$_HI_SELF_DIR/$_HI_SELF"
+done
+_HI_HOME="$(cd -P "$(dirname "$_HI_SELF")/../.." && pwd)"
+export _HI_HOME
+
+# shellcheck source=../common/core.sh
+source "$_HI_HOME/hi.d/common/core.sh"
+
+_HI_PACKAGERS=(deb rpm apk)
+_HI_NFPM_CONFIG="$_HI_ROOT/packaging/nfpm/nfpm.yaml"
+_HI_PKGBUILD="$_HI_ROOT/packaging/aur/hi.d/PKGBUILD"
+_HI_DIST="$_HI_ROOT/dist"
+_HI_STAGE_ONLY=""
+_HI_VERSION=""
+_HI_USAGE="Usage: package.sh [--version <x.y.z>] [--stage-only] [--outdir <dir>]"
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+  --stage-only) _HI_STAGE_ONLY=1 ;;
+  --version)
+    [ $# -ge 2 ] || {
+      echo "package.sh: --version requires a value" >&2
+      exit 1
+    }
+    _HI_VERSION="$2"
+    shift
+    ;;
+  --version=*) _HI_VERSION="${1#--version=}" ;;
+  --outdir)
+    [ $# -ge 2 ] || {
+      echo "package.sh: --outdir requires a path" >&2
+      exit 1
+    }
+    _HI_DIST="$2"
+    shift
+    ;;
+  --outdir=*) _HI_DIST="${1#--outdir=}" ;;
+  -h | --help)
+    cat <<EOF
+$_HI_USAGE
+
+Stages hi.d the way a package manager would (scripts/install.sh --prefix
+/usr/share, into dist/staging) and then builds ${_HI_PACKAGERS[*]} packages
+from that staging root with nfpm.
+
+  --version <x.y.z>  Version to stamp. Defaults to the pkgver in
+                     packaging/aur/hi.d/PKGBUILD, which packaging/bump.sh
+                     owns - that file is the one version of record.
+  --stage-only       Stop after staging. Needs no nfpm, and is the quickest
+                     way to see exactly what a package would contain.
+  --outdir <dir>     Where to stage and write packages. Default: dist/
+EOF
+    exit 0
+    ;;
+  *)
+    echo "package.sh: unrecognized argument: $1" >&2
+    echo "$_HI_USAGE" >&2
+    exit 1
+    ;;
+  esac
+  shift
+done
+
+# The version of record lives in the PKGBUILD (bump.sh writes it there); reading
+# it back rather than keeping a second copy is what stops the two disagreeing.
+function pkgbuild_version() {
+  local v
+  v="$(sed -n 's/^pkgver=//p' "$_HI_PKGBUILD" | head -1)"
+  [ -n "$v" ] || {
+    _hi_cecho " no pkgver= in $_HI_PKGBUILD" "$RED" >&2
+    return 1
+  }
+  printf '%s' "$v"
+}
+
+# install.sh insists on a checkout named exactly hi.d ($_HI_HOME/hi.d is how it
+# finds everything). A clone directory called anything else - hi.d-main, a
+# worktree, a CI checkout path - would otherwise fail here rather than in the
+# packager's build, so give it the name it wants under a scratch parent.
+function staged_launcher() {
+  local shim
+  if [ "$(basename "$_HI_ROOT")" = hi.d ]; then
+    printf '%s' "$_HI_ROOT/scripts/install.sh"
+    return 0
+  fi
+  shim="$_HI_DIST/shim"
+  rm -rf "$shim"
+  mkdir -p "$shim"
+  ln -sfn "$_HI_ROOT" "$shim/hi.d"
+  printf '%s' "$shim/hi.d/scripts/install.sh"
+}
+
+function stage_tree() {
+  local installer
+  installer="$(staged_launcher)"
+  _hi_h2 "Staging the tree"
+  rm -rf "$_HI_DIST/staging"
+  mkdir -p "$_HI_DIST/staging"
+  DESTDIR="$_HI_DIST/staging" "$installer" --prefix /usr/share
+}
+
+function run_nfpm() {
+  local packager
+  if ! command -v nfpm >/dev/null 2>&1; then
+    _hi_cecho " nfpm is not installed - it is a single Go binary:" "$RED" >&2
+    _hi_cecho "   go install github.com/goreleaser/nfpm/v2/cmd/nfpm@latest" "$YELLOW" >&2
+    _hi_cecho "   or grab a release from https://github.com/goreleaser/nfpm/releases" "$YELLOW" >&2
+    return 1
+  fi
+  for packager in "${_HI_PACKAGERS[@]}"; do
+    _hi_h2 "Building $packager"
+    # cd to the tree root: nfpm.yaml's contents are relative to the config's
+    # working directory, and they are written relative to the repo root
+    (cd "$_HI_ROOT" && HI_VERSION="$_HI_VERSION" nfpm package \
+      -f "$_HI_NFPM_CONFIG" -p "$packager" -t "$_HI_DIST")
+  done
+}
+
+: "${_HI_VERSION:=$(pkgbuild_version)}"
+
+_hi_h1 "Packaging hi.d $_HI_VERSION"
+_hi_cecho " | root: $_HI_ROOT | outdir: $_HI_DIST" "$BLUE"
+
+stage_tree
+
+if [ -n "$_HI_STAGE_ONLY" ]; then
+  _hi_h1 "Staged!"
+  _hi_cecho " | $_HI_DIST/staging - nothing built, pass no --stage-only to build" "$BLUE"
+  exit 0
+fi
+
+run_nfpm
+
+_hi_h1 "Packaged!"
+_hi_cecho " | $_HI_DIST" "$BLUE"

@@ -429,6 +429,29 @@ function test_strip_settings_is_quiet_when_there_is_nothing() {
   _hi_settings_fixture nothing strip_settings
 }
 
+# --- config_hi --no-link ------------------------------------------------------
+#
+# The only path through config_hi a test may take: every other one ends in
+# `sudo ln`, which has no business firing from a suite. --no-link returns before
+# that, which is the whole point of it - a Homebrew/distro/Git Bash install has
+# nothing to link and no way to link it.
+
+function test_config_hi_no_link_skips_the_symlink() {
+  local link="$_HI_WORKDIR/no-link-link"
+  (
+    _HI_LINK="$link"
+    _HI_NO_LINK=1
+    config_hi
+  ) | grep -q "leaving $link alone"
+  [ ! -e "$link" ]
+}
+
+# the flag has to be a real flag, not just a variable an internal caller sets
+function test_no_link_flag_is_parsed_and_documented() {
+  grep -qF -- '--no-link) _HI_NO_LINK=1' "$_HI_INSTALL" &&
+    grep -qF -- '--no-link' <("$_HI_INSTALL" --help)
+}
+
 function test_unlink_hi_skips_when_link_missing() {
   local link="$_HI_WORKDIR/no-such-link"
   (
@@ -528,6 +551,10 @@ function run_install_tests() {
   _hi_check "Removes what install wrote" test_strip_settings_removes_what_install_wrote
   _hi_check "Leaves the rest of the overlay" test_strip_settings_leaves_the_rest_of_the_overlay
   _hi_check "Quiet when there is nothing" test_strip_settings_is_quiet_when_there_is_nothing
+
+  _hi_h2 "Testing: config_hi (--no-link only)"
+  _hi_check "Skips the symlink entirely" test_config_hi_no_link_skips_the_symlink
+  _hi_check "Flag is parsed and documented" test_no_link_flag_is_parsed_and_documented
 
   _hi_h2 "Testing: unlink_hi (skip paths only)"
   _hi_check "Skips a missing link" test_unlink_hi_skips_when_link_missing

@@ -16,11 +16,14 @@ _HI_CHECK_CONFIGS_ONLY=""
 # uninstall.
 _HI_UNINSTALL_MODE=""
 _HI_ASSUME_YES=0
+# Skip config_hi's symlink. For installs where something else already owns the
+# `hi` on $PATH - see the note on config_hi itself.
+_HI_NO_LINK=""
 # --prefix, or a non-empty $DESTDIR, puts this script in packaging mode: lay the
 # tree down for someone else's package manager instead of wiring up this user's
 # shells. See install_tree below.
 _HI_PREFIX=""
-_HI_USAGE="Usage: install.sh [--features-only] [--check-configs] [--uninstall] [--yes] [--prefix <dir>]"
+_HI_USAGE="Usage: install.sh [--features-only] [--check-configs] [--uninstall] [--yes] [--no-link] [--prefix <dir>]"
 # one `shift` after the case, not one per arm: an arm added without its own was
 # an infinite loop
 while [ $# -gt 0 ]; do
@@ -28,6 +31,7 @@ while [ $# -gt 0 ]; do
   --features-only) _HI_FEATURES_ONLY=1 ;;
   --check-configs) _HI_CHECK_CONFIGS_ONLY=1 ;;
   --uninstall) _HI_UNINSTALL_MODE=1 ;;
+  --no-link) _HI_NO_LINK=1 ;;
   -y | --yes) _HI_ASSUME_YES=1 ;;
   --prefix)
     [ $# -ge 2 ] || {
@@ -69,6 +73,12 @@ its current setting when there is no tty to answer on.
   -y, --yes        Install even if that validation finds problems. Without
                    it, a non-interactive run stops rather than rewriting
                    shell configs that don't parse.
+  --no-link        Wire up the shells as usual but leave /usr/bin/hi alone.
+                   For an install where something else already put \`hi\` on
+                   your PATH and owns that path: Homebrew, a distro package,
+                   or Git Bash on Windows (no sudo, no real /usr/bin). On
+                   macOS the symlink cannot be made at all - /usr/bin is
+                   read-only under SIP even for root.
   --prefix <dir>   Packaging mode (also entered by setting \$DESTDIR): copy
                    the tree to \$DESTDIR<dir>/hi.d, link <dir>/hi.d/hi.sh in
                    /usr/bin, and drop an /etc/profile.d snippet - then stop.
@@ -474,6 +484,17 @@ function config_validate_shells() {
 
 function config_hi() {
   _hi_h2 "Checking hi.sh"
+  # --no-link. Three installs reach this step with no way to satisfy it and no
+  # need to: Homebrew (its own bin/hi is already on PATH, and /usr/bin is
+  # read-only under SIP on macOS even for root), a distro package (the packager
+  # owns /usr/bin/hi and install_tree already made it), and Git Bash on Windows
+  # (no sudo, no real /usr/bin). Without this, all three fail at the *last* step
+  # of an otherwise complete install, after every rc file has already been
+  # written - the worst place to fail, since it reads as "the install broke".
+  [ -n "$_HI_NO_LINK" ] && {
+    _hi_cecho " --no-link given, leaving $_HI_LINK alone :)" "$GREEN"
+    return 0
+  }
   # Only when it isn't already executable, and never fatally: on a packaged
   # install the tree is root-owned and hi.sh already has its mode set by the
   # packager, so an unconditional chmod would abort the whole run under `set -e`

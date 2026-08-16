@@ -1,0 +1,64 @@
+# nfpm turns this one file into .deb/.rpm/.apk - the "PPA answer": users install
+# a file they downloaded from a GitHub Release rather than subscribing to a
+# repository. Driven by packaging/package.sh, which stages the tree first.
+#
+# Note what is NOT here: any list of what hi.d consists of. package.sh runs
+# `scripts/install.sh --prefix /usr/share` with $DESTDIR pointed at dist/staging
+# first, so install_tree stays the single decider of a packaged install's
+# contents and this file only says where that staged tree lands. The packaging
+# suite fails if the paths below stop matching what install_tree produces.
+#
+# ${HI_VERSION} is expanded by nfpm from the environment; package.sh reads it
+# out of packaging/aur/hi.d/PKGBUILD so there is one version of record.
+
+name: hi.d
+arch: all
+platform: linux
+version: ${HI_VERSION}
+version_schema: semver
+section: utils
+priority: optional
+maintainer: Ivy Duggan <ivylikethevine@gmail.com>
+vendor: Ivy Duggan
+homepage: https://github.com/ivylikethevine/hi.d
+license: MIT
+description: |
+  sshrc supercharged - your shell config, on every host you say hi to.
+  Copies your shell configuration to ssh hosts, docker/podman containers,
+  nomad allocations and kubernetes pods, and takes it back out on exit.
+
+# Debian names. openssl is needed as a *command* (hi armors the ssh bootstrap
+# payload with `openssl enc -base64`), not as a library.
+depends:
+  - bash
+  - openssh-client
+  - openssl
+overrides:
+  rpm:
+    depends:
+      - bash
+      - openssh-clients
+      - openssl
+  apk:
+    depends:
+      - bash
+      - openssh-client
+      - openssl
+
+contents:
+  - src: ./dist/staging/usr/share/hi.d
+    dst: /usr/share/hi.d
+    type: tree
+
+  # Deliberately no staging prefix in src: this is the link target on the
+  # *installed* system, and dist/staging is not there at runtime - the same
+  # reason install_tree leaves $DESTDIR off its own ln.
+  - src: /usr/share/hi.d/hi.sh
+    dst: /usr/bin/hi
+    type: symlink
+
+  # The one thing a package can do that a package cannot ask the user to do:
+  # every login shell needs _HI_HOME=/usr/share before it sources anything, and
+  # the package must not rewrite anyone's rc files to say so.
+  - src: ./dist/staging/etc/profile.d/hi.d.sh
+    dst: /etc/profile.d/hi.d.sh

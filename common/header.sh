@@ -122,7 +122,7 @@ function identity() {
 # this whole line is always _HI_MAX_WIDTH columns, regardless of other factors
 function banner() {
   [[ "${_HI_HEADER_BANNER:-1}" == 0 ]] && return 0
-  local label="$1" color="${2:-$BRGREEN}" prefix="${3:-}" changes_plain="" changes=""
+  local label="$1" color="${2:-$BRGREEN}" changes="" prefix="${3:-}" changes_w=0
   # `git status --short` over the checkout costs ~10ms and banner runs twice a
   # session (connect, then load.sh on disconnect) for a number that cannot have
   # changed in between. Compute it once and keep it.
@@ -132,16 +132,21 @@ function banner() {
       _hi_read_lines lines < <(git -C "$_HI_ROOT" status --short 2>/dev/null)
       _HI_BANNER_CHANGES="${#lines[@]}"
     fi
-    changes_plain="$_HI_BANNER_CHANGES ↑ "
-    changes="$BRYELLOW$changes_plain"
+    changes="$BRYELLOW$_HI_BANNER_CHANGES ↑ "
+    # Columns that prefix occupies, counted rather than measured with ${#...}:
+    # the string holds ↑, and ${#} counts *characters* in a UTF-8 locale but
+    # *bytes* in the C locale, so measuring it made the whole line two columns
+    # narrower on any machine without a UTF-8 locale (macOS CI, cron, docker
+    # exec). The count is the digits plus "␣↑␣", and ↑ is one column wide.
+    changes_w=$((${#_HI_BANNER_CHANGES} + 3))
   fi
   local host tildes start_len end_len start_tildes end_tildes width left core
   host="$(_hi_sanitize "$(_hi_hostname)")"
   width=${_HI_MAX_WIDTH:-80}
-  tildes=$((width - 6 - ${#changes_plain} - ${#label} - ${#host} - ${#prefix}))
+  tildes=$((width - 6 - changes_w - ${#label} - ${#host} - ${#prefix}))
   ((tildes < 4)) && tildes=4
   # split so "label [host]" lands at the center with at least 1 tilde on the left
-  left=$((${#prefix} + 1 + ${#changes_plain}))
+  left=$((${#prefix} + 1 + changes_w))
   core=$((${#label} + ${#host} + 4))
   start_len=$((width / 2 - left - core / 2))
   ((start_len < 1)) && start_len=1
@@ -174,6 +179,14 @@ function hi_header() {
 _HI_YES=("$BRBLUE" "$BRBLUE" hide "$GREEN" "$BRGREEN" "$BRGREEN")
 _HI_NO=(hide "$BRYELLOW" "$YELLOW" hide hide "$BRRED")
 
+# The three states a checked package can be in, named rather than written
+# inline. Two of them are multibyte, and the suite has to look for the very
+# same bytes - a second literal in the test file is a copy that can drift, and
+# (worse) a copy that looks identical in an editor while differing in codepoint.
+_HI_MARK_OK="✓"  # installed, and it was the preferred name
+_HI_MARK_ALT="~" # installed, but via a fallback alternative
+_HI_MARK_NO="✗"  # not installed
+
 # For each "cmd:priority[,...]", pick the installed package with the
 # highest priority (or the first package if none are installed), then apply the
 # proper color and mark it as installed or missing (or hide it as per above)
@@ -202,10 +215,10 @@ function check_line() {
 
   if ((found)); then
     color="${_HI_YES[best_priority]:-$NC}"
-    if ((best_idx == 0)); then symbol="$GREEN✓"; else symbol="$YELLOW~$NC"; fi
+    if ((best_idx == 0)); then symbol="$GREEN$_HI_MARK_OK"; else symbol="$YELLOW$_HI_MARK_ALT$NC"; fi
   else
     color="${_HI_NO[best_priority]:-$NC}"
-    symbol="$RED✗"
+    symbol="$RED$_HI_MARK_NO"
   fi
   rendered="$color $best $symbol"
   [[ "$color" == hide ]] || visible+=("$best_priority"$'\x1f'"$((${#best} + 5))"$'\x1f'"$rendered")
@@ -220,6 +233,14 @@ function full_check() {
   done <"$_HI_PACKAGES"
   ((${#visible[@]})) || return 0
 
+  # The sort feeding this loop is pinned to LC_ALL=C on the merits, not as a
+  # workaround: the key is numeric and the payload is opaque bytes joined by an
+  # ASCII control character, so locale collation has no business in the
+  # comparison - and pinning it makes the column order identical everywhere
+  # rather than varying with the user's locale. BSD sort (macOS) is the one that
+  # cares: under a UTF-8 locale it exits with "Illegal byte sequence" and prints
+  # *nothing*, so this loop ran zero iterations and the whole packages check
+  # rendered empty while still exiting 0.
   while IFS=$'\x1f' read -r priority width_item rendered; do
     if ((count == 0)) || ((width + width_item > ${_HI_MAX_WIDTH:-80})); then # start of a row
       ((count == 0)) || printf '\n'
@@ -229,6 +250,6 @@ function full_check() {
     printf '%b' "$NC|${rendered} $NC"
     width=$((width + width_item))
     ((++count))
-  done < <(printf '%s\n' "${visible[@]}" | sort -t $'\x1f' -k1,1nr -s)
+  done < <(printf '%s\n' "${visible[@]}" | LC_ALL=C sort -t $'\x1f' -k1,1nr -s)
   printf '\n'
 }

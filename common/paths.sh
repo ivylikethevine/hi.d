@@ -76,8 +76,14 @@ export _HI_HOME_ZSHRC="$HOME/.zshrc"
 export _HI_HOME_FISH_DIR="$HOME/.config/fish" # absent unless fish is installed
 export _HI_HOME_FISH_CONFIG="$HOME/.config/fish/config.fish"
 
-export _HI_HUMAN_CENTRIC_DATE="+%a %b %-e %Y %H:%M:%S %Z"
-export _HI_HUMAN_SHORT_DATE="+%b %-e %y %H:%M %Z"
+# %e, not %-e: the `-` (no-padding) flag is a GNU strftime extension, and BSD
+# strftime - macOS, and every *BSD target - has no such flag, so `%-e` renders
+# literally there instead of as the day. %e is POSIX and space-pads instead.
+# The formats have to stay self-contained strings rather than growing a helper:
+# fish sources this file and shells/aliases.sh's `now` alias, and neither can
+# call a bash function.
+export _HI_HUMAN_CENTRIC_DATE="+%a %b %e %Y %H:%M:%S %Z"
+export _HI_HUMAN_SHORT_DATE="+%b %e %y %H:%M %Z"
 
 # required helpers/commands.
 # hi.sh's $_HI_EXCLUDE strips scripts/, tests/ and .git from the tree copied to

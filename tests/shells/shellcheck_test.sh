@@ -130,7 +130,12 @@ function run_shellcheck() {
     exit 1
   fi
 
-  _hi_read_lines _HI_SH_FILES < <(find "$_HI_ROOT" -name '*.sh' -not -path '*/.git/*' | sort)
+  # dist/ alongside .git: packaging/package.sh stages a *copy* of the tree
+  # there, so a run after a local package build would lint every file twice -
+  # inflating the count and reporting each finding against a path that is not
+  # the source of it.
+  _hi_read_lines _HI_SH_FILES < <(find "$_HI_ROOT" -name '*.sh' \
+    -not -path '*/.git/*' -not -path "$_HI_ROOT/dist/*" | sort)
   _HI_LINT_TOTAL="${#_HI_SH_FILES[@]}"
   _HI_SKIPPED=0
 

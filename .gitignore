@@ -55,8 +55,15 @@
 *.yml
 !theme.yml
 !.github/workflows/*.yml
+!packaging/nfpm/nfpm.yaml
 
 *docker*
 !*docker_test.sh
 
 !.markdownlint.yaml
+
+# where packaging/package.sh stages the tree and drops the built packages.
+# Deliberately a name none of the blanket rules above already cover - a
+# "build/" or "output/" would have been swallowed by **build**/**output** and
+# looked like it was working right up until someone cloned the repo.
+dist/

@@ -35,11 +35,27 @@ function test_banner_includes_label_and_host() {
 
 # a longer prefix reserves more of the (already-printed) line, so it should
 # shrink - never grow - the tilde padding banner prints for itself
+#
+# The hostname is pinned rather than taken from the machine. banner budgets a
+# fixed width between the change count, the label, the host and the prefix, and
+# floors the tildes at 4 once that budget is gone - so on a host whose name runs
+# past ~54 characters *both* calls floor, the two lines come out the same length
+# and this reads as a failure of the padding logic when it is really a failure
+# to control the fixture. That is what it did on the macOS CI runner.
 function test_banner_prefix_shrinks_padding() {
-  local plain prefixed
+  local plain prefixed _HI_HOSTNAME_CACHE="pinned-host"
   plain="$(banner TestBanner "$BRGREEN" "")"
   prefixed="$(banner TestBanner "$BRGREEN" "$(printf 'x%.0s' {1..50})")"
   [ "${#prefixed}" -lt "${#plain}" ]
+}
+
+# ...and the floor itself, which the test above used to reach by accident on a
+# long-hostname machine. Here it is on purpose, with the hostname pinned long.
+function test_banner_floors_padding_on_a_long_hostname() {
+  local out _HI_HOSTNAME_CACHE
+  printf -v _HI_HOSTNAME_CACHE 'h%.0s' {1..60}
+  out="$(banner TestBanner)"
+  [[ "$out" == *"$_HI_HOSTNAME_CACHE"* && "$out" == *"~"* ]]
 }
 
 function test_banner_floors_tildes_on_long_label() {
@@ -151,11 +167,34 @@ function test_hi_header_enabled_prints_banner() {
 _HI_REAL_CMD=sh
 _HI_FAKE_CMD=definitely-not-a-real-hi-test-command-xyz
 
+# Does $1 contain the bytes of $2? A byte-exact `grep -F` under LC_ALL=C rather
+# than `[[ $1 == *"$2"* ]]`, because two of the three marks are multibyte and
+# bash's pattern engine consults the locale to decide what a character even is.
+# The macOS runner failed exactly the two cases that looked for ✓ and ✗ while
+# passing the one that looked for the ASCII ~, which is that difference and
+# nothing else. Bytes are bytes in every locale.
+#
+# The needle always comes from header.sh's own $_HI_MARK_* rather than a second
+# literal here, so this compares the shipped glyph against itself.
+function _hi_contains() {
+  printf '%s' "$1" | LC_ALL=C grep -qF -- "$2"
+}
+
+# _hi_contains with the mismatch printed, so a failure on a machine this suite
+# cannot be run on interactively still says what it actually got.
+function _hi_assert_contains() {
+  _hi_contains "$1" "$2" && return 0
+  _hi_cecho "   expected to find: $(printf '%s' "$2" | od -An -tx1 | tr -d ' \n')" "$RED"
+  _hi_cecho "   in: $(printf '%s' "$1" | od -An -tx1 | tr -d ' \n')" "$RED"
+  return 1
+}
+
 function test_check_line_found_primary_is_visible_checked() {
   local -a visible=()
   check_line "$_HI_REAL_CMD:5"
   [ "${#visible[@]}" -eq 1 ] || return 1
-  [[ "${visible[0]}" == *"$_HI_REAL_CMD"* && "${visible[0]}" == *"✓"* ]]
+  _hi_contains "${visible[0]}" "$_HI_REAL_CMD" &&
+    _hi_assert_contains "${visible[0]}" "$_HI_MARK_OK"
 }
 
 function test_check_line_found_priority2_is_hidden() {
@@ -174,21 +213,23 @@ function test_check_line_missing_priority5_is_visible_crossed() {
   local -a visible=()
   check_line "$_HI_FAKE_CMD:5"
   [ "${#visible[@]}" -eq 1 ] || return 1
-  [[ "${visible[0]}" == *"$_HI_FAKE_CMD"* && "${visible[0]}" == *"✗"* ]]
+  _hi_contains "${visible[0]}" "$_HI_FAKE_CMD" &&
+    _hi_assert_contains "${visible[0]}" "$_HI_MARK_NO"
 }
 
 function test_check_line_fallback_uses_second_alternative() {
   local -a visible=()
   check_line "$_HI_FAKE_CMD:0,$_HI_REAL_CMD:5"
   [ "${#visible[@]}" -eq 1 ] || return 1
-  [[ "${visible[0]}" == *"$_HI_REAL_CMD"* && "${visible[0]}" == *"~"* ]]
+  _hi_contains "${visible[0]}" "$_HI_REAL_CMD" &&
+    _hi_assert_contains "${visible[0]}" "$_HI_MARK_ALT"
 }
 
 function test_check_line_picks_highest_priority_installed() {
   command -v bash >/dev/null 2>&1 || return 0 # nothing to assert without bash
   local -a visible=()
   check_line "$_HI_REAL_CMD:1,bash:5"
-  [[ "${visible[0]}" == *"bash"* ]]
+  _hi_contains "${visible[0]}" bash
 }
 
 function test_full_check_skips_comments_and_blanks() {
@@ -227,6 +268,29 @@ function test_full_check_reads_real_packages_file_without_erroring() {
   full_check >/dev/null
 }
 
+# The assertion that would have caught the BSD-sort bug where it happened. That
+# sort ran under the ambient locale, and on macOS it exited with "Illegal byte
+# sequence" and printed nothing - so full_check rendered an empty check while
+# still exiting 0, and only the downstream output assertions noticed. stderr is
+# the direct signal; everything else is a symptom.
+function test_full_check_is_silent_on_stderr() {
+  local err
+  err="$({ full_check >/dev/null; } 2>&1)"
+  [ -z "$err" ]
+}
+
+# ...and the other half of that failure mode: sorting produced no rows at all.
+# A visible package must actually reach the output, not just fail to error.
+function test_full_check_emits_a_row_for_an_installed_package() {
+  local pkgfile="$_HI_WORKDIR/emits" out
+  printf '%s:5\n' "$_HI_REAL_CMD" >"$pkgfile"
+  out="$(
+    _HI_PACKAGES="$pkgfile"
+    full_check
+  )"
+  [[ "$out" == *"$_HI_REAL_CMD"* ]]
+}
+
 function run_header_tests() {
   _hi_workdir headertest
 
@@ -241,6 +305,7 @@ function run_header_tests() {
   _hi_h2 "Testing: banner"
   _hi_check "Includes label and hostname" test_banner_includes_label_and_host
   _hi_check "A longer prefix shrinks the padding" test_banner_prefix_shrinks_padding
+  _hi_check "Floors padding on a long hostname" test_banner_floors_padding_on_a_long_hostname
   _hi_check "Floors tilde padding on a pathologically long label" test_banner_floors_tildes_on_long_label
   _hi_check "Survives a narrow _HI_MAX_WIDTH" test_banner_narrow_width_does_not_error
   _hi_check "No output when _HI_HEADER_BANNER=0" test_banner_disabled_produces_no_output
@@ -271,6 +336,8 @@ function run_header_tests() {
   _hi_check "Empty output when everything is hidden" test_full_check_empty_when_everything_hidden
   _hi_check "Wraps rows at _HI_MAX_WIDTH" test_full_check_wraps_at_max_width
   _hi_check "Real misc/packages file parses cleanly" test_full_check_reads_real_packages_file_without_erroring
+  _hi_check "Writes nothing to stderr" test_full_check_is_silent_on_stderr
+  _hi_check "Emits a row for an installed package" test_full_check_emits_a_row_for_an_installed_package
 
   _hi_suite_end "header.sh"
 }

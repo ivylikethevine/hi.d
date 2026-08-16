@@ -132,6 +132,57 @@ function _hi_settings_fixture() {
 # where _hi_settings_fixture's run writes, as the assertions see it
 function _hi_fixture_settings() { printf '%s' "$_HI_WORKDIR/$1/config/settings.sh"; }
 
+# The suites' small <key> -> <value> maps (which shell image built, where a
+# binary is), as a newline-separated "<key>=<value>" string in a plain variable:
+# associative arrays are bash 4 and macOS still ships bash 3.2, where `local -A`
+# is a fatal "invalid option". _hi_kv_set appends and _hi_kv_get returns the
+# *last* value set for a key, so re-setting one wins with no rewriting.
+_HI_KV_NL=$'\n'
+
+# _hi_kv_set <var> <key> <value> - eval, because bash 3.2 has no namerefs; the
+# caller's `local` is reachable through bash's dynamic scoping either way.
+function _hi_kv_set() {
+  local _hi_kv_var="$1" _hi_kv_key="$2" _hi_kv_value="$3"
+  eval "$_hi_kv_var=\"\${$_hi_kv_var:-}\$_hi_kv_key=\$_hi_kv_value\$_HI_KV_NL\""
+}
+
+# _hi_kv_get <var> <key> - print the value, non-zero if the key was never set
+function _hi_kv_get() {
+  local _hi_kv_var="$1" _hi_kv_key="$2" _hi_kv_store _hi_kv_entry found="" rc=1
+  eval "_hi_kv_store=\${$_hi_kv_var:-}"
+  while IFS= read -r _hi_kv_entry; do
+    [ "${_hi_kv_entry%%=*}" = "$_hi_kv_key" ] || continue
+    found="${_hi_kv_entry#*=}"
+    rc=0
+  done <<<"$_hi_kv_store"
+  printf '%s' "$found"
+  return "$rc"
+}
+
+# _hi_transcript_is_clean <label> <transcript-file> - fail if the session
+# printed shell error noise.
+#
+# The assertion the bash 3.2 cases need, because a bash-4-only builtin on an old
+# bash is rarely *fatal*: `mapfile ... && count=${#lines[@]}` just stops that
+# one AND-list, `shopt -s globstar` complains and carries on, and load() has
+# already turned `set -e` back off by the time the header runs. The session
+# still comes up and every marker still lands - it simply spits
+# "mapfile: command not found" at the user on every connect, which is the actual
+# bug reported from macOS and the thing no other check here would notice.
+_HI_SHELL_ERROR_RE='command not found|invalid option|unbound variable|bad substitution|syntax error|not a valid identifier'
+
+function _hi_transcript_is_clean() {
+  local label="$1" file="$2" hits
+  hits="$(grep -nE "$_HI_SHELL_ERROR_RE" "$file" 2>/dev/null || true)"
+  if [ -z "$hits" ]; then
+    _hi_cecho " | [$label] -- transcript is free of shell errors OK" "$GREEN"
+    return 0
+  fi
+  _hi_h3 " | [$label] -- FAILED: the session printed shell errors" "$RED"
+  printf '%s\n' "$hits" | sed 's/^/      /'
+  return 1
+}
+
 function _hi_rendered() {
   printf '%b' "$1"
 }
@@ -432,7 +483,9 @@ function _hi_exec_case() {
 
   _hi_cecho " | Running: $_HI_LAUNCHER $target $cmd"
   t0="$(_hi_now)"
-  "${_HI_PTY_WRAP[@]}" "$_HI_LAUNCHER" "$target" "$cmd" <&3 >"$out_file" 2>&1 &
+  # ${a[@]+"${a[@]}"}: _HI_PTY_WRAP is empty whenever we already have a real
+  # tty, and on bash 3.2 (macOS) expanding an empty array under `set -u` is fatal
+  ${_HI_PTY_WRAP[@]+"${_HI_PTY_WRAP[@]}"} "$_HI_LAUNCHER" "$target" "$cmd" <&3 >"$out_file" 2>&1 &
   _hi_wait_pid "$!" "$timeout_s" _hi_timed_out "$label" "$timeout_s" "$hook"
   exit_code="$_HI_WAIT_EXIT"
   t1="$(_hi_now)"
@@ -610,7 +663,7 @@ function _hi_sshd_container() {
 function _hi_ssh_launch() {
   _HI_SSH_LAUNCH_BARE=("$_HI_LAUNCHER" -p "$1" -i "$_HI_WORKDIR/id"
     "${_HI_SSH_OPTS[@]}" -o ConnectTimeout=5 hitest@127.0.0.1)
-  _HI_SSH_LAUNCH=("${_HI_PTY_WRAP[@]}" "${_HI_SSH_LAUNCH_BARE[@]}")
+  _HI_SSH_LAUNCH=(${_HI_PTY_WRAP[@]+"${_HI_PTY_WRAP[@]}"} "${_HI_SSH_LAUNCH_BARE[@]}")
 }
 
 # Boots throwaway containers - one per shell environment - and drives hi.sh's
@@ -632,14 +685,17 @@ function _hi_container_backend_test() {
   _hi_h1 "Testing hi's $backend path across container shell environments"
 
   _hi_h2 "Building test images"
-  local shell
-  local -A shell_ok=()
+  # shellcheck disable=SC2034 # read back through _hi_kv_get, which shellcheck
+  # cannot follow (the name is a string there)
+  local shell shell_ok=""
   for shell in zsh fish; do
     mkdir -p "$_HI_WORKDIR/$shell"
     printf 'FROM alpine:3.20\nRUN apk add --no-cache %s\n' "$shell" >"$_HI_WORKDIR/$shell/Dockerfile"
-    shell_ok[$shell]=1
-    _hi_build_image "$shell" "hi-${backend}test-$shell-$$" "the $shell fallback" "$_HI_WORKDIR/$shell" ||
-      shell_ok[$shell]=0
+    if _hi_build_image "$shell" "hi-${backend}test-$shell-$$" "the $shell fallback" "$_HI_WORKDIR/$shell"; then
+      _hi_kv_set shell_ok "$shell" 1
+    else
+      _hi_kv_set shell_ok "$shell" 0
+    fi
   done
 
   marker="HI_$(printf '%s' "$backend" | tr '[:lower:]' '[:upper:]')_TEST_OK"
@@ -703,7 +759,7 @@ function _hi_container_backend_test() {
   local spec
   for spec in zsh:fallback fish:fallback_fish; do
     shell="${spec%%:*}"
-    if [ "${shell_ok[$shell]}" -eq 1 ]; then
+    if [ "$(_hi_kv_get shell_ok "$shell")" = 1 ]; then
       _hi_case _hi_run_case "$shell" "hi-${backend}test-$shell-$$" "$(_hi_probe_cmd "$marker" "${spec#*:}")"
     fi
   done

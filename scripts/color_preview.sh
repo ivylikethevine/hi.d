@@ -77,6 +77,23 @@ function _hi_hbar() {
   printf '%s\n' "$seg"
 }
 
+# _hi_group_index <key> - where $key sits in $group_order, or 1 if it isn't
+# there yet. The bash 3.2 stand-in for `${group_hosts[$key]+x}`: it reads
+# _hi_print_hosts_table's own local through bash's dynamic scoping, which is why
+# it lives beside it rather than taking the array as an argument (bash 3.2 has
+# no namerefs to pass one with).
+function _hi_group_index() {
+  local i=0 existing
+  for existing in ${group_order[@]+"${group_order[@]}"}; do
+    [[ "$existing" = "$1" ]] && {
+      printf '%s' "$i"
+      return 0
+    }
+    i=$((i + 1))
+  done
+  return 1
+}
+
 # _hi_cell <width> <escape> <text> - one padded, colored table cell; an empty
 # escape and text render the blank cell continuation rows use.
 function _hi_cell() {
@@ -99,7 +116,14 @@ function _hi_print_users_table() {
   for color_name in "${_HI_COLOR_NAMES[@]}"; do
     ((${#color_name} > w_color)) && w_color=${#color_name}
   done
-  for user in "${users[@]}" LOCALUSER "${usertags[@]}"; do
+  # ${a[@]+"${a[@]}"} throughout this file, not a plain "${a[@]}": on bash 3.2
+  # (macOS) expanding an *empty* array under `set -u` is a fatal "unbound
+  # variable", and a colors file with no usertag pins - or an ssh config with no
+  # interesting hosts - leaves exactly that. The *index* form "${!a[@]}" needs no
+  # such guard (it is already empty-safe), and must not be given one: bash 3.2
+  # reads ${!a[@]+...} as expanding to nothing whatever the array holds, and
+  # bash 5 reads it as an indirect reference and errors outright.
+  for user in "${users[@]}" LOCALUSER ${usertags[@]+"${usertags[@]}"}; do
     ((${#user} > w_item)) && w_item=${#user}
   done
   for user in "${users[@]}"; do
@@ -108,7 +132,7 @@ function _hi_print_users_table() {
   done
   source="local:username"
   ((${#source} > w_source)) && w_source=${#source}
-  for tag in "${usertags[@]}"; do
+  for tag in ${usertags[@]+"${usertags[@]}"}; do
     source="usertag:$tag"
     ((${#source} > w_source)) && w_source=${#source}
   done
@@ -136,7 +160,7 @@ function _hi_print_users_table() {
     printf '|\n'
   fi
 
-  for tag in "${usertags[@]}"; do
+  for tag in ${usertags[@]+"${usertags[@]}"}; do
     color_name=$(_hi_override_color usertag "$tag") || continue
     name_escape=$(_hi_color_escape "$color_name")
     _hi_cell "$w_item" "$name_escape" "$tag"
@@ -158,8 +182,12 @@ function _hi_print_hosts_table() {
   local tag has_usertag
   local user_width=0 pw pad_preview local_hostname
   local preview_users=() group_order=() group_names=() item_lines=()
-  local -A group_hosts group_source group_color group_tag
-  local localhostname_color=""
+  # Five *parallel* indexed arrays sharing one index, rather than the four
+  # associative arrays this used to key by $key: `local -A` is bash 4 and macOS
+  # ships bash 3.2, where the declaration alone is a fatal "invalid option".
+  # group_order holds the keys, so it doubles as the lookup table below.
+  local group_hosts=() group_source=() group_color=() group_tag=()
+  local gidx localhostname_color=""
 
   while IFS= read -r name; do preview_users+=("$name"); done < <(_hi_preview_users)
   for user in "${preview_users[@]}"; do
@@ -180,13 +208,15 @@ function _hi_print_hosts_table() {
       # tag is part of the key (not just source/color) since it changes which
       # users get colored via usertag, even when the hostname cell looks identical
       key="$source"$'\x1f'"$color_name"$'\x1f'"$tag"
-      if [[ -z "${group_hosts[$key]+x}" ]]; then
+      if gidx="$(_hi_group_index "$key")"; then
+        group_hosts[gidx]="${group_hosts[gidx]} $name"
+      else
         group_order+=("$key")
-        group_source[$key]="$source"
-        group_color[$key]="$color_name"
-        group_tag[$key]="$tag"
+        group_source+=("$source")
+        group_color+=("$color_name")
+        group_tag+=("$tag")
+        group_hosts+=("$name")
       fi
-      group_hosts[$key]+="${group_hosts[$key]:+ }$name"
     done < <(sh "$_HI_TARGETS" ssh)
   fi
 
@@ -206,10 +236,10 @@ function _hi_print_hosts_table() {
     ((pw > w_preview)) && w_preview=$pw
   fi
 
-  for key in "${group_order[@]}"; do
-    source="${group_source[$key]}"
+  for gidx in "${!group_order[@]}"; do
+    source="${group_source[gidx]}"
     ((${#source} > w_source)) && w_source=${#source}
-    read -ra group_names <<< "${group_hosts[$key]}"
+    read -ra group_names <<< "${group_hosts[gidx]}"
     pw=$(_hi_group_preview_width "${group_names[@]}")
     ((pw > w_preview)) && w_preview=$pw
   done
@@ -257,11 +287,11 @@ function _hi_print_hosts_table() {
     return
   fi
 
-  for key in "${group_order[@]}"; do
-    source="${group_source[$key]}"
-    color_name="${group_color[$key]}"
+  for gidx in "${!group_order[@]}"; do
+    source="${group_source[gidx]}"
+    color_name="${group_color[gidx]}"
     name_escape=$(_hi_color_escape "$color_name")
-    read -ra group_names <<< "${group_hosts[$key]}"
+    read -ra group_names <<< "${group_hosts[gidx]}"
 
     # wrap the name list within the ITEM column instead of overflowing it
     item_lines=()
@@ -306,7 +336,7 @@ function _hi_print_hosts_table() {
 
       if ((li < ${#preview_users[@]})); then
         user="${preview_users[li]}"
-        user_color=$(_hi_resolve_color username "$user" "${group_tag[$key]}")
+        user_color=$(_hi_resolve_color username "$user" "${group_tag[gidx]}")
         user_escape=$(_hi_color_escape "$user_color")
         previewtext=""
         for idx2 in "${!group_names[@]}"; do

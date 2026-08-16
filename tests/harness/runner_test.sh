@@ -328,7 +328,7 @@ function test_every_group_selects_only_its_own_suites() {
 function test_every_shipped_suite_script_exists_and_is_executable() {
   local entry path count=0
   local -a entries=()
-  mapfile -t entries < <(grep -oE '^[[:space:]]*"[^":]+:[^":]+:[^"]+\.sh"$' "$_HI_TEST_RUN" | tr -d '" ')
+  _hi_read_lines entries < <(grep -oE '^[[:space:]]*"[^":]+:[^":]+:[^"]+\.sh"$' "$_HI_TEST_RUN" | tr -d '" ')
   while read -r _ _; do count=$((count + 1)); done < <(_hi_runner_list)
 
   if [ "${#entries[@]}" -eq 0 ] || [ "${#entries[@]}" -ne "$count" ]; then

@@ -40,6 +40,13 @@ jobs:
           _HI_HOME: ${{ github.workspace }}/..
         run: "${{ github.workspace }}/tests/test_runner.sh --group fast"
 
+  # The same suites on macOS, where /bin/bash is 3.2. hi is written to run there
+  # (no mapfile, no associative arrays, no namerefs - see the bash-4 lint in
+  # tests/shells/shellcheck_test.sh, and the real bash 3.2 target
+  # tests/targets/ssh_test.sh boots), and the whole fast group passes under 3.2
+  # in a container. What is still unproven from Linux is the BSD userland this
+  # runner brings with it - sed/awk/du/stat/mktemp flags - so the job stays
+  # advisory. Flip continue-on-error off once a run here comes back green.
   test-macos:
     name: fast suites (macos-latest)
     runs-on: macos-latest

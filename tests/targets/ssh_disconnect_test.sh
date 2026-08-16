@@ -126,14 +126,14 @@ function test_sudden_disconnect_removes_cleanup_dir() {
     return 1
   fi
 
-  mapfile -t pids < <(_hi_ssh_client_pids)
+  _hi_read_lines pids < <(_hi_ssh_client_pids)
   if [ "${#pids[@]}" -eq 0 ]; then
     _hi_cecho " | no local ssh process found to freeze" "$RED"
     kill -9 "$launcher_pid" 2>/dev/null || true
     return 1
   fi
   ctl="$(_hi_ssh_ctl_path "${pids[0]}")"
-  [ -n "$ctl" ] && mapfile -t mux < <(_hi_ssh_mux_pids "$ctl")
+  [ -n "$ctl" ] && _hi_read_lines mux < <(_hi_ssh_mux_pids "$ctl")
   # if hi.sh ever stops multiplexing, this is the check that says so - delete
   # it deliberately rather than letting the suite quietly go back to freezing a
   # client whose connection someone else is keeping alive
@@ -142,8 +142,8 @@ function test_sudden_disconnect_removes_cleanup_dir() {
     kill -9 "$launcher_pid" 2>/dev/null || true
     return 1
   fi
-  pids+=("${mux[@]}")
-  _hi_freeze "${pids[@]}"
+  pids+=(${mux[@]+"${mux[@]}"})
+  _hi_freeze ${pids[@]+"${pids[@]}"}
 
   # sshd's ClientAliveInterval=2/ClientAliveCountMax=1 reaps a frozen client in
   # ~4-6s; the rest is headroom for a loaded runner

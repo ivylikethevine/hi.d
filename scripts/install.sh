@@ -176,20 +176,35 @@ function tmpdir_line() {
   esac
 }
 
-# Answers this run has already taken, keyed by variable name - fresher than
-# $_HI_SETTINGS, which still holds the previous run's. Both they and the
-# file-backed default are read through setting_off below, so there is one
-# accessor rather than three readers of the same store.
-declare -A _HI_SETTING_PENDING=()
+# Answers this run has already taken - fresher than $_HI_SETTINGS, which still
+# holds the previous run's. Both they and the file-backed default are read
+# through setting_off below, so there is one accessor rather than three readers
+# of the same store.
+#
+# An indexed array of "<var>=<value>" rather than the obvious `declare -A`:
+# associative arrays are bash 4 and macOS ships bash 3.2, where the declaration
+# alone is a fatal "declare: -A: invalid option". A linear scan over a handful
+# of answers costs nothing.
+_HI_SETTING_PENDING=()
+
+function pending_answer() {
+  local entry
+  for entry in ${_HI_SETTING_PENDING[@]+"${_HI_SETTING_PENDING[@]}"}; do
+    [ "${entry%%=*}" = "$1" ] || continue
+    printf '%s' "${entry#*=}"
+    return 0
+  done
+  return 1
+}
 
 # true if $1 is turned off - this run's answer if it has one, otherwise
 # "export $1=$3" being present in $2. hi's own _HI_DISABLE_* vars use 1 for
 # "off"; common/header.sh's older per-line toggles use 0, hence the third
 # argument.
 function setting_off() {
-  local var="$1" target="$2" off="${3:-1}"
-  if [ -n "${_HI_SETTING_PENDING[$var]+x}" ]; then
-    [ "${_HI_SETTING_PENDING[$var]}" = "$off" ]
+  local var="$1" target="$2" off="${3:-1}" answer
+  if answer="$(pending_answer "$var")"; then
+    [ "$answer" = "$off" ]
     return
   fi
   grep -qE "^export $var=$off" "$target" 2>/dev/null
@@ -242,7 +257,7 @@ function show_preview() {
   local -a lines
   out="$("$@" 2>/dev/null)" || true
   [ -n "$out" ] || return 0
-  mapfile -t lines <<<"$out"
+  _hi_read_lines lines <<<"$out"
   for line in "${lines[@]}"; do
     len="$(_hi_visible_len "$line")"
     ((len > content_w)) && content_w=$len
@@ -324,14 +339,18 @@ _HI_HEADER_PROMPTS=(
 )
 
 # Ask every row of the table named by $1, recording the off-value for whichever
-# ones were turned off.
+# ones were turned off. The table is copied out by name through eval rather than
+# `local -n rows="$1"`: namerefs are bash 4.3 and macOS ships bash 3.2.
 function ask_prompt_group() {
-  local -n rows="$1"
   local row var off preview question target="$_HI_SETTINGS"
+  local -a rows=()
+  # the ${a[@]+"${a[@]}"} guard again, one eval deeper: an empty table would
+  # otherwise be an "unbound variable" on bash 3.2 rather than nothing to ask
+  eval "rows=(\${$1[@]+\"\${$1[@]}\"})"
   for row in "${rows[@]}"; do
     IFS='|' read -r var off preview question <<<"$row"
     ask_setting "$var" "$question" "$target" "$off" "$preview" && continue
-    _HI_SETTING_PENDING["$var"]="$off"
+    _HI_SETTING_PENDING+=("$var=$off")
     _HI_SETTING_LINES+=("export $var=$off")
   done
 }
@@ -605,7 +624,10 @@ config_max_width
 # documents: config_shell rewrites the whole marker block in its target, so
 # three separate calls against one file would each wipe the other two.
 ensure_settings_shebang
-config_shell settings "$_HI_SETTINGS" "${_HI_SETTING_LINES[@]}"
+# ${a[@]+"${a[@]}"}, not a plain "${a[@]}": on bash 3.2 (macOS) expanding an
+# *empty* array under `set -u` is a fatal "unbound variable", and answering yes
+# to every prompt leaves exactly that - no lines to write.
+config_shell settings "$_HI_SETTINGS" ${_HI_SETTING_LINES[@]+"${_HI_SETTING_LINES[@]}"}
 
 if [ -n "$_HI_FEATURES_ONLY" ]; then
   _hi_h1 "Features updated!"

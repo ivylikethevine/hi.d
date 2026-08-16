@@ -35,7 +35,9 @@ source "${_HI_HOME:-$HOME}/hi.d/common/core.sh"
 source "$_HI_TEST_LIB"
 
 _HI_SHELLS="zsh sh bash fish"
-declare -A _HI_SHELL_BIN=()
+# "<shell>=<path>" through test_lib.sh's _hi_kv_get/_hi_kv_set rather than an
+# associative array, which is bash 4 (macOS ships 3.2)
+_HI_SHELL_BIN=""
 
 function _hi_fake_bin() {
   printf '%s\n' '#!/bin/sh' 'exit 0' >"$1/$2"
@@ -151,7 +153,7 @@ function _hi_run_scenario() {
   # resolved against the real (unrestricted) PATH by the caller's one-time
   # probe, since $fakepath below is deliberately too narrow to contain the
   # shell binary itself; only installed shells ever reach here
-  shell_bin="${_HI_SHELL_BIN[$shell]}"
+  shell_bin="$(_hi_kv_get _HI_SHELL_BIN "$shell")"
 
   if [ "$shell" = fish ]; then
     script="$_HI_FISH_CHECK"
@@ -228,10 +230,11 @@ function run_alias_fallthrough_test() {
   # ask the same question 64 times over. The resolved *path* is what gets
   # kept, not just the name: $fakepath is deliberately too narrow to contain
   # the shell binary, so every scenario needs the real path anyway.
-  local missing="" shell
+  local missing="" shell shell_path
   _HI_INSTALLED_SHELLS=""
   for shell in $_HI_SHELLS; do
-    if _HI_SHELL_BIN[$shell]="$(command -v "$shell" 2>/dev/null)"; then
+    if shell_path="$(command -v "$shell" 2>/dev/null)"; then
+      _hi_kv_set _HI_SHELL_BIN "$shell" "$shell_path"
       _HI_INSTALLED_SHELLS="$_HI_INSTALLED_SHELLS $shell"
     else
       missing="$missing $shell"

@@ -30,7 +30,7 @@ fi
 # complete `hi` from the same target list zsh/fish use, and make `exa` complete
 # exactly the way `eza` does, whatever bash-completion bound to it
 function _hi_complete() {
-  mapfile -t COMPREPLY < <(compgen -W "$(sh "$_HI_TARGETS" | cut -f1)" -- "${COMP_WORDS[COMP_CWORD]}")
+  _hi_read_lines COMPREPLY < <(compgen -W "$(sh "$_HI_TARGETS" | cut -f1)" -- "${COMP_WORDS[COMP_CWORD]}")
 }
 complete -F _hi_complete hi
 
@@ -70,7 +70,10 @@ if [[ "${_HI_DISABLE_PERSONAL:-0}" != 1 ]]; then
   export HISTIGNORE="&:[ ]*:exit:ls:bg:fg:history:clear"
   PROMPT_DIRTRIM=2
 
-  shopt -s histappend checkwinsize globstar cmdhist
+  shopt -s histappend checkwinsize cmdhist
+  # globstar is bash 4; on bash 3.2 (macOS) `shopt -s` on an unknown option is an
+  # error, which under an rc file that keeps going is just noise on every prompt
+  shopt -s globstar 2>/dev/null || true
 
   bind "set completion-ignore-case on"
   bind "set completion-map-case on"

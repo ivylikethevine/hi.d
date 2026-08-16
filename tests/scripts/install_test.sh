@@ -174,7 +174,7 @@ function test_config_settings_writes_every_group_at_once() {
 function test_setting_off_sees_this_runs_answer() {
   local target="$_HI_WORKDIR/pending"
   : >"$target"
-  local -A _HI_SETTING_PENDING=([_HI_DISABLE_HEADER]=1)
+  local _HI_SETTING_PENDING=("_HI_DISABLE_HEADER=1")
   setting_off _HI_DISABLE_HEADER "$target" 1 &&
     ! setting_off _HI_DISABLE_PROMPT "$target" 1
 }

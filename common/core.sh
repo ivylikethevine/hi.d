@@ -76,6 +76,25 @@ function _hi_cecho() {
   [ $# -ge 3 ] && printf '%b' "$out" || printf '%b\n' "$out"
 }
 
+# _hi_read_lines <array-name> - stdin into that array, one element per line.
+#
+# What `mapfile -t <name>` does, except mapfile is bash 4 and macOS still ships
+# bash 3.2 - where the builtin is simply missing, so every call site would die
+# with "mapfile: command not found". Assignment goes through eval because 3.2
+# has no namerefs either; bash's dynamic scoping is what lets it reach a
+# `local -a` the caller declared. Use it exactly the way mapfile was used:
+#
+#   _hi_read_lines lines < <(some command)
+#
+# A last line with no trailing newline is kept, which is mapfile's behaviour too.
+function _hi_read_lines() {
+  local _hi_rl_var="$1" _hi_rl_line
+  eval "$_hi_rl_var=()"
+  while IFS= read -r _hi_rl_line || [ -n "$_hi_rl_line" ]; do
+    eval "$_hi_rl_var+=(\"\$_hi_rl_line\")"
+  done
+}
+
 # _hi_repeat <var> <count> <char> - $count copies of $char into $var, without
 # the subshell and `tr` a `printf | tr` costs per call.
 function _hi_repeat() {

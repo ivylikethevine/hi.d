@@ -3,6 +3,8 @@
 # hi.sh's real ssh path (_say_hi) against each of them over actual ssh. This
 # proves the base64 armor/quoting in _say_hi survives whichever shell sshd
 # hands the incoming "sh -c '...'" command to server-side, not just bash/dash.
+# One of those containers runs bash 3.2 (what macOS ships) rather than a
+# current bash, which is what keeps hi free of bash-4-only builtins.
 # Also boots one extra debian container with hi.d pre-installed (as
 # scripts/install.sh would leave it) to prove _say_hi detects it and loads it
 # in place instead of copying a fresh one over, plus two bash-less alpine
@@ -24,7 +26,9 @@ source "${_HI_HOME:-$HOME}/hi.d/common/core.sh"
 # shellcheck source=../test_lib.sh
 source "$_HI_TEST_LIB"
 
-declare -A _HI_ALPINE_OK=()
+# "<label>=<0|1>" through test_lib.sh's _hi_kv_get/_hi_kv_set rather than an
+# associative array, which is bash 4 (macOS ships 3.2)
+_HI_ALPINE_OK=""
 
 function _hi_run_case() {
   local label="$1" image="$2" login_shell="$3" cmd="$4" post="${5:-}" name out exit_code=0 t0 t1 ok=1
@@ -117,10 +121,28 @@ function run_ssh_tests() {
       printf '%s\n' "$_HI_SSHD_ENTRYPOINT_BODY"
     } >"$_hi_ctx/entrypoint.sh"
 
-    _HI_ALPINE_OK[$_hi_label]=1
-    _hi_build_image "$_hi_label" "hi-sshtest-$_hi_label-$$" "its fallback case" "$_hi_ctx" ||
-      _HI_ALPINE_OK[$_hi_label]=0
+    if _hi_build_image "$_hi_label" "hi-sshtest-$_hi_label-$$" "its fallback case" "$_hi_ctx"; then
+      _hi_kv_set _HI_ALPINE_OK "$_hi_label" 1
+    else
+      _hi_kv_set _HI_ALPINE_OK "$_hi_label" 0
+    fi
   done
+
+  # A bash 3.2 target - the version macOS still ships, and the one every bash 4
+  # builtin hi might reach for (mapfile, `declare -A`, namerefs, globstar) is
+  # missing from. Built on the official bash:3.2 image with sshd on top, and
+  # bash 3.2 as hitest's login shell, so both halves of a session run under it:
+  # the payload sshd hands the login shell, and the interactive `bash --rcfile`
+  # load.sh chainloads into.
+  _HI_BASH32_OK=0
+  _hi_ctx="$_HI_WORKDIR/bash32"
+  mkdir -p "$_hi_ctx"
+  printf 'FROM bash:3.2\nRUN apk add --no-cache openssh openssl \\\n    && ln -sf /usr/local/bin/bash /bin/bash \\\n    && adduser -D -s /usr/local/bin/bash hitest\nCOPY entrypoint.sh /entrypoint.sh\nRUN chmod +x /entrypoint.sh\nENTRYPOINT ["/entrypoint.sh"]\n' >"$_hi_ctx/Dockerfile"
+  {
+    printf '#!/bin/sh\nset -e\n'
+    printf '%s\n' "$_HI_SSHD_ENTRYPOINT_BODY"
+  } >"$_hi_ctx/entrypoint.sh"
+  _hi_build_image bash32 "hi-sshtest-bash32-$$" "the bash 3.2 case" "$_hi_ctx" && _HI_BASH32_OK=1
 
   _HI_INSTALLED_OK=0
   if [ "$_HI_DEBIAN_OK" -eq 1 ]; then
@@ -151,10 +173,26 @@ EOF
 
   for _hi_case_spec in nobash:alpine:ssh_fallback nobash-zsh:alpine-zsh:ssh_fallback nobash-fish:alpine-fish:ssh_fallback_fish; do
     IFS=: read -r _hi_label _hi_image _hi_shape <<<"$_hi_case_spec"
-    if [ "${_HI_ALPINE_OK[$_hi_image]}" -eq 1 ]; then
+    if [ "$(_hi_kv_get _HI_ALPINE_OK "$_hi_image")" = 1 ]; then
       _hi_case _hi_run_case "$_hi_label" "hi-sshtest-$_hi_image-$$" /bin/ash "$(_hi_probe_cmd "$_HI_MARKER" "$_hi_shape")"
     fi
   done
+
+  if [ "$_HI_BASH32_OK" -eq 1 ]; then
+    _hi_case _hi_run_case bash32 "hi-sshtest-bash32-$$" /usr/local/bin/bash "$(_hi_probe_cmd "$_HI_MARKER" bash)"
+    # The shape that matters for bash 3.2: $CMDARG replaces load() outright in
+    # the bootloader, so a command-shaped case never reaches the header, the rc
+    # graft, the shell handoff or clean_all - which is where every bash-4-only
+    # builtin hi could reach for actually gets used.
+    _hi_case _hi_run_interactive_case bash32-interactive "hi-sshtest-bash32-$$" /usr/local/bin/bash \
+      '! ls -d /tmp/*.hi.* >/dev/null 2>&1'
+    # ...and the assertion that gives those two teeth. A bash-4-ism on bash 3.2
+    # mostly *doesn't* break the session - it prints "mapfile: command not
+    # found" and carries on with a wrong count - so a marker-and-cleanup check
+    # passes right through it. Both transcripts have to be clean instead.
+    _hi_case _hi_transcript_is_clean bash32 "$_HI_WORKDIR/bash32.ssh.out"
+    _hi_case _hi_transcript_is_clean bash32-interactive "$_HI_WORKDIR/bash32-interactive.interactive.out"
+  fi
 
   if [ "$_HI_INSTALLED_OK" -eq 1 ]; then
     _hi_case _hi_run_case installed "hi-sshtest-debian-installed-$$" /bin/bash "$(_hi_probe_cmd "$_HI_MARKER" installed)" \
@@ -179,7 +217,7 @@ EOF
   # *not* removed - it's shared with ssh_disconnect_test.sh so a full run
   # builds it once rather than twice.
   docker image rm -f "hi-sshtest-alpine-$$" "hi-sshtest-alpine-zsh-$$" "hi-sshtest-alpine-fish-$$" \
-    "hi-sshtest-debian-installed-$$" >/dev/null 2>&1 || true
+    "hi-sshtest-bash32-$$" "hi-sshtest-debian-installed-$$" >/dev/null 2>&1 || true
 
   _hi_suite_end "" \
     "hi's ssh path survived every login shell tested ($_HI_TOTAL cases)" \

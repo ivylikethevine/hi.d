@@ -274,7 +274,7 @@ function _hi_completions_for() {
       COMP_CWORD=1
       COMPREPLY=()
       _hi_complete
-      printf "%s\n" "${COMPREPLY[@]}"
+      printf "%s\n" ${COMPREPLY[@]+"${COMPREPLY[@]}"}
     ' _ "$1"
 }
 

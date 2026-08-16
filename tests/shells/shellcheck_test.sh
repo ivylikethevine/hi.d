@@ -66,6 +66,61 @@ function lint_native() {
   return "$bad"
 }
 
+# The bash-4-only constructs, as "<pattern>|<what it is>". macOS still ships
+# bash 3.2 and hi has to run there, but shellcheck can't help: every one of
+# these is valid bash, just not valid *old* bash, and most of them fail loudly
+# at runtime rather than at parse time (see tests/targets/ssh_test.sh's bash32
+# cases for the same rule enforced end-to-end against a real 3.2).
+#
+# The last entry isn't a version issue at all - ${!a[@]+...} is a trap in both
+# directions: bash 3.2 quietly expands it to nothing whatever the array holds,
+# and bash 5 reads it as an indirect reference and dies. Plain "${!a[@]}" is
+# already empty-safe and is what to write instead.
+# shellcheck disable=SC2016 # these are regexes and prose, not expansions
+_HI_BASH32_LINT=(
+  '\bmapfile\b|\breadarray\b|mapfile/readarray (bash 4) - use _hi_read_lines'
+  '\b(declare|local|typeset)[[:space:]]+-[a-zA-Z]*A\b|associative arrays (bash 4)'
+  '\b(declare|local|typeset)[[:space:]]+-[a-zA-Z]*n\b|namerefs (bash 4.3)'
+  '\$\{[A-Za-z_][A-Za-z_0-9]*(\[[^]]*\])?(,,?|\^\^?)\}|case conversion (bash 4)'
+  '\bwait[[:space:]]+-n\b|wait -n (bash 4.3)'
+  '\$\{![A-Za-z_][A-Za-z_0-9]*\[[@*]\][+:-]|${!a[@]+...} - use a plain "${!a[@]}"'
+)
+
+# One file's text with the $_HI_BASH32_LINT table above blanked out - the
+# patterns and their descriptions name the very constructs they look for, so
+# this file would otherwise report itself. Blanked rather than deleted so the
+# line numbers in a real hit still point at the right line.
+function _hi_lint_source_lines() {
+  awk '/^_HI_BASH32_LINT=\(/ { inside = 1 }
+       inside { print ""; if (/^\)/) inside = 0; next }
+       { print }' "$1"
+}
+
+# Flag every match outside a comment. Comments are excluded on purpose: half of
+# these constructs are *named* in the notes explaining why they aren't used.
+function lint_bash32() {
+  local entry pattern what file hits bad=0
+  _hi_h2 "Checking for bash-4-only constructs (macOS ships bash 3.2)"
+  for entry in "${_HI_BASH32_LINT[@]}"; do
+    pattern="${entry%|*}"
+    what="${entry##*|}"
+    _HI_LINT_TOTAL=$((_HI_LINT_TOTAL + 1))
+    hits=""
+    for file in "${_HI_SH_FILES[@]}"; do
+      hits+="$(_hi_lint_source_lines "$file" | grep -nE "$pattern" | grep -v ':[[:space:]]*#' |
+        sed "s|^|${file#"$_HI_ROOT/"}:|" || true)"
+    done
+    if [ -z "$hits" ]; then
+      _hi_cecho " | no $what: OK" "$GREEN"
+      continue
+    fi
+    _hi_cecho " | $what: FOUND" "$RED"
+    printf '%s\n' "$hits" | sed 's/^/      /'
+    bad=$((bad + 1))
+  done
+  return "$bad"
+}
+
 function run_shellcheck() {
   # deliberately *not* _hi_require: every other suite skips cleanly when its
   # backend is missing, but this one is the lint gate - a missing shellcheck
@@ -75,7 +130,7 @@ function run_shellcheck() {
     exit 1
   fi
 
-  mapfile -t _HI_SH_FILES < <(find "$_HI_ROOT" -name '*.sh' -not -path '*/.git/*' | sort)
+  _hi_read_lines _HI_SH_FILES < <(find "$_HI_ROOT" -name '*.sh' -not -path '*/.git/*' | sort)
   _HI_LINT_TOTAL="${#_HI_SH_FILES[@]}"
   _HI_SKIPPED=0
 
@@ -101,7 +156,10 @@ function run_shellcheck() {
   _HI_NATIVE_FAILED=0
   lint_native || _HI_NATIVE_FAILED=$?
 
-  _HI_LINT_FAILED=$((_HI_SC_FAILED + _HI_NATIVE_FAILED))
+  _HI_BASH32_FAILED=0
+  lint_bash32 || _HI_BASH32_FAILED=$?
+
+  _HI_LINT_FAILED=$((_HI_SC_FAILED + _HI_NATIVE_FAILED + _HI_BASH32_FAILED))
   _hi_report_counts "$_HI_LINT_TOTAL" "$_HI_LINT_FAILED"
 
   local skipped=""

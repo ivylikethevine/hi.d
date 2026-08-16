@@ -94,23 +94,23 @@ function identity() {
   if [ -n "$container_bin" ]; then
     # 2>/dev/null so a daemon that's down reports its error to itself rather
     # than into the middle of the header
-    mapfile -t lines < <(_hi_probe "$container_bin" container ls -q 2>/dev/null)
+    _hi_read_lines lines < <(_hi_probe "$container_bin" container ls -q 2>/dev/null)
     containers="Containers: ${#lines[@]}"
   fi
   if command -v nomad &>/dev/null; then
-    mapfile -t lines < <(_hi_probe nomad job status 2>/dev/null)
+    _hi_read_lines lines < <(_hi_probe nomad job status 2>/dev/null)
     lines=("${lines[@]:1}") # drop the header row
     jobs="Jobs: ${#lines[@]}"
   fi
   # kube is a target hi can connect to (hi.sh's _hi_is_k8s_pod), so it belongs
   # on the same count line as the other three
   if command -v kubectl &>/dev/null; then
-    mapfile -t lines < <(_hi_probe kubectl get pods --field-selector=status.phase=Running \
+    _hi_read_lines lines < <(_hi_probe kubectl get pods --field-selector=status.phase=Running \
       -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' 2>/dev/null)
     pods="Pods: ${#lines[@]}"
   fi
-  [ -f "$_HI_SSH_AUTHORIZED_KEYS" ] && mapfile -t lines <"$_HI_SSH_AUTHORIZED_KEYS" && authorized=${#lines[@]}
-  [ -d "$_HI_SSH_DIR" ] && mapfile -t lines < <(find "$_HI_SSH_DIR" -type f -name "*.pub") && public=${#lines[@]}
+  [ -f "$_HI_SSH_AUTHORIZED_KEYS" ] && _hi_read_lines lines <"$_HI_SSH_AUTHORIZED_KEYS" && authorized=${#lines[@]}
+  [ -d "$_HI_SSH_DIR" ] && _hi_read_lines lines < <(find "$_HI_SSH_DIR" -type f -name "*.pub") && public=${#lines[@]}
   cells=("$user_part" "$BLUE$containers")
   [ -n "$jobs" ] && cells+=("$CYAN$jobs")
   [ -n "$pods" ] && cells+=("$CYAN$pods")
@@ -129,7 +129,7 @@ function banner() {
   if [ -d "$_HI_ROOT/.git" ]; then
     if [ -z "${_HI_BANNER_CHANGES+x}" ]; then
       local -a lines
-      mapfile -t lines < <(git -C "$_HI_ROOT" status --short 2>/dev/null)
+      _hi_read_lines lines < <(git -C "$_HI_ROOT" status --short 2>/dev/null)
       _HI_BANNER_CHANGES="${#lines[@]}"
     fi
     changes_plain="$_HI_BANNER_CHANGES ↑ "

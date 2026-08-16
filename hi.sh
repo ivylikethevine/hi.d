@@ -15,6 +15,10 @@ source "${_HI_HOME:-$HOME}/hi.d/common/core.sh"
 # too. Once a packager stamps a literal, the file wins and env stops mattering.
 _HI_RELEASE="${_HI_RELEASE:-}"
 
+# The synopsis, kept identical to docs/hi.1's .SH SYNOPSIS. Named the way
+# scripts/install.sh names its own, so both entry points answer -h in one shape.
+_HI_USAGE="Usage: hi [ssh-options] <target> [command ...]"
+
 # What ships to a target, by name. An allow list, not excludes: anything new in
 # the tree (docs, CI, editor config) stays off the wire until it earns a place
 # here. install.sh's _HI_PACKAGE_CONTENTS answers the different question of
@@ -301,16 +305,27 @@ EOF
 # prompt, and the only thing left for the shell to expand is the separator -
 # `\$` by default, which every POSIX shell renders as $ for a user and # for
 # root. No command substitution inside PS1: busybox ash does not do it there.
-# shellcheck disable=SC2016 # $_hi_u and the separator are the target's to expand
+# With $1 = "git" the prompt carries a live git segment as well - the ksh/mksh
+# arm of _hi_remote_suffix asks for it, nothing else does. The call is emitted
+# inside a *single-quoted* run of the assignment so the shell stores `$(...)`
+# literally and expands it when the prompt is printed; a double-quoted one would
+# be expanded once, here, and the branch would be frozen for the session. That
+# split-quoting is the whole trick, and it is why this stays an opt-in argument:
+# busybox ash would print the text of the command substitution instead of
+# running it.
+# shellcheck disable=SC2016 # $_hi_u, the segment and the separator are the target's to expand
 function _hi_fallback_prompt() {
-  local host="${DOMAIN##*@}" nc
+  local host="${DOMAIN##*@}" nc git=""
   [ "${_HI_DISABLE_PROMPT:-0}" = 1 ] && return 0
+  # the fragment closes the double-quoted run, adds a single-quoted one, and
+  # reopens it - "…"'$(_hi_ksh_git)'" …" is one word to the shell
+  [ "${1:-}" = git ] && git="\"'\$(_hi_ksh_git)'\""
   # _hi_color_escape already emits real escapes; only $NC is a literal to expand
   printf -v nc '%b' "$NC"
   printf '_hi_u=$(id -un 2>/dev/null || echo "${USER:-?}")\n'
-  printf 'PS1=" %s${_hi_u}%s@%s%s%s %s "\n' \
+  printf 'PS1=" %s${_hi_u}%s@%s%s%s%s %s "\n' \
     "$(_hi_user_escape)" "$nc" "$(_hi_color_escape "$(_hi_target_color)")" \
-    "$host" "$nc" "$(_hi_prompt_end SH '\$')"
+    "$host" "$nc" "$git" "$(_hi_prompt_end SH '\$')"
 }
 
 # The tree on disk, uncompressed - not what a session sends (see _hi_wire_size),
@@ -452,11 +467,19 @@ function _hi_remote_suffix() {
           ZDOTDIR="\$_hi_rc_dir" zsh -i
           ;;
         fish) fish -C "\$(cat "\$_hi_rc_dir/.hi_fallback_rc")" ;;
-        # ksh and mksh read the ENV variable for interactive shells exactly
-        # as sh does, and the rc is POSIX, so they need no arm of their own -
-        # only a name. The prompt is appended here rather than written into the
-        # shared rc: that file also feeds fish (no PS1 at all) and zsh (where
-        # the backslash-dollar escape means something else).
+        # ksh and mksh read \$ENV exactly as sh does, so they share the rc and
+        # the sh arm's shape. What they get on top is shells/ksh.sh and a prompt
+        # with a live git segment in it: both expand \$( ) when the prompt is
+        # printed, which is the one thing busybox ash below cannot do. The
+        # header is still bash-only - see the README's compatibility tables.
+        ksh | mksh)
+          printf '%s\n' '. \$_HI_ROOT/shells/ksh.sh' >> "\$_hi_rc_dir/.hi_fallback_rc"
+          echo "$(_hi_fallback_prompt git | $_HI_ARMOR)" | $_HI_UNARMOR >> "\$_hi_rc_dir/.hi_fallback_rc"
+          ENV="\$_hi_rc_dir/.hi_fallback_rc" "\$_hi_fallback" -i
+          ;;
+        # sh, dash, busybox ash. The prompt is appended here rather than written
+        # into the shared rc: that file also feeds fish (no PS1 at all) and zsh
+        # (where the backslash-dollar escape means something else).
         *)
           echo "$(_hi_fallback_prompt | $_HI_ARMOR)" | $_HI_UNARMOR >> "\$_hi_rc_dir/.hi_fallback_rc"
           ENV="\$_hi_rc_dir/.hi_fallback_rc" "\$_hi_fallback" -i
@@ -824,6 +847,52 @@ set +euo pipefail # the connection paths below run against unknown hosts, where 
 # hi's own flags, dispatched on $1 alone: _hi_parse hands every other -flag
 # to ssh, so anything hi answers itself has to be caught before it.
 case "${1:-}" in
+# `hi -h` / `hi --help`. Caught here for the reason every arm below is: _hi_parse
+# forwards every other -flag to ssh, and ssh has no -h either, so without this
+# `hi -h` answered with ssh's usage block - for a tool that is not ssh. A bare
+# `hi` with no target is deliberately *not* routed here: it still execs ssh, so
+# `hi -V` and friends behave as they do there.
+-h | --help)
+  cat <<EOF
+$_HI_USAGE
+
+Copies your hi.d to <target> and hands you an identical shell session there -
+header, colors, git prompt, aliases, vim/nano/tmux configs - then strips it all
+back out when the session ends. With [command ...], runs that instead, the way
+ssh does.
+
+<target> is resolved in this order, first match wins:
+  1. a Host in ~/.ssh/config (or any name ssh can reach)
+  2. a running docker container, by name or ID
+  3. a running podman container
+  4. a running nomad allocation, by ID or prefix
+  5. a kubernetes pod, in whatever context/namespace kubectl points at
+
+hi's own options:
+  -h, --help            this text
+      --version         the version: stamped at packaging time, or git describe
+      --doctor [target] a read-only pre-flight report instead of connecting -
+                        the local tree, the config overlay, every backend
+                        probed and timed, and with a target, which backend the
+                        name resolves to plus an ssh reachability check
+      --update <target> update a permanent hi.d on that target (git pull in the
+                        tree scripts/install.sh laid down) instead of
+                        connecting to it
+      --tmux            run the session inside a named tmux on the target, so a
+                        dropped connection detaches instead of losing the work.
+                        Needs a permanent hi.d there. May appear anywhere
+                        before the target.
+      --no-tmux         turn that back off when settings.sh made it the default
+
+Everything else is passed to ssh unchanged - -p, -i, -J, -o and the rest behave
+exactly as they do there. Only the first non-option word is the target;
+everything after it is the remote command.
+
+Configuration lives outside this tree, in \${XDG_CONFIG_HOME:-\$HOME/.config}/hi.d/
+so it survives an upgrade. See \`man hi\` and the README for all of it.
+EOF
+  exit 0
+  ;;
 # `hi --doctor [target]` hands off to the pre-flight report. Checkouts and
 # packaged installs have scripts/; a hi session on a target does not, and
 # says so rather than silently connecting somewhere.

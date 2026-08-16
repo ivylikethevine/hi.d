@@ -379,6 +379,30 @@ function test_shipped_table_lists_a_group_and_name_per_suite() {
   }
 }
 
+# --list-paths is --list plus the suite's absolute path, for tests/coverage.sh,
+# which has to launch each suite script itself. It is a separate flag rather
+# than a third column on --list because every --list consumer reads rows with
+# `read -r group name` - two of them in this file - where a third field would
+# land silently inside $name.
+function test_list_paths_adds_a_readable_path_per_suite() {
+  local group name path count=0
+  while read -r group name path; do
+    [ -n "$path" ] && [ -f "$path" ] || {
+      _hi_cecho " | --list-paths row has no readable path: $group $name $path" "$RED"
+      return 1
+    }
+    count=$((count + 1))
+  done < <("$_HI_TEST_RUN" --list-paths 2>/dev/null)
+  [ "$count" -gt 0 ]
+}
+
+# the two listings have to describe the same table, or coverage.sh and CI are
+# reading different things
+function test_list_paths_matches_list() {
+  [ "$("$_HI_TEST_RUN" --list-paths 2>/dev/null | awk '{print $1, $2}')" = \
+    "$("$_HI_TEST_RUN" --list 2>/dev/null)" ]
+}
+
 # Every suite has to be in a group CI actually runs, or it never runs on a push
 # and nothing says so - which is what happened to the `hi` suite. CI invokes
 # groups by name now (see ci.yml's `--group fast`/`e2e`/`backends`), so this
@@ -512,6 +536,8 @@ function run_runner_tests() {
 
   _hi_h2 "Testing: the shipped table"
   _hi_check "Lists a group and name per suite" test_shipped_table_lists_a_group_and_name_per_suite
+  _hi_check "--list-paths adds a readable path" test_list_paths_adds_a_readable_path_per_suite
+  _hi_check "--list-paths agrees with --list" test_list_paths_matches_list
   _hi_check "Every shipped path exists and is executable" test_every_shipped_suite_script_exists_and_is_executable
   _hi_check "CI runs every group in the table" test_ci_runs_every_group_in_the_table
   _hi_check "Each group selects only its own" test_every_group_selects_only_its_own_suites

@@ -141,6 +141,73 @@ function _hi_run_tmux_case() {
   [ "$ok" -eq 1 ]
 }
 
+# The bash-less ksh/mksh tier's git segment (shells/ksh.sh), which is the one
+# thing in hi's prompt that has to be recomputed per line without bash around.
+# It has to be an *interactive* case: the command-shaped nobash-ksh case above
+# goes through $CMDARG and never draws a prompt at all.
+#
+# The login directory is made the repo rather than cd-ing into one, so the very
+# first prompt already carries the segment and the driver stays the shared one.
+# The branch name is the assertion: a pty echoes back everything typed, and
+# nothing types this, so finding it in the transcript means mksh expanded
+# $(_hi_ksh_git) while drawing the prompt.
+function _hi_run_ksh_git_case() {
+  local image="$1" name="hi-sshtest-kshgit-$$" branch="hi-ksh-probe" ok=0
+
+  _hi_h3 "Testing the mksh tier's git segment"
+  _hi_sshd_container "$name" "$image" -e "LOGIN_SHELL=/bin/ash" || return 1
+
+  # identity and safe.directory passed with -c rather than written by
+  # `git config`: the exec runs as root inside a directory owned by hitest,
+  # which is exactly the dubious-ownership case git refuses to write config in
+  if ! docker exec "$name" sh -c "
+    G=\"git -c safe.directory=/home/hitest -c user.email=test@example.com -c user.name=Test -C /home/hitest\"
+    \$G init -q -b $branch . &&
+    echo tracked > /home/hitest/tracked.txt &&
+    \$G add tracked.txt &&
+    \$G commit -qm initial &&
+    chown -R hitest:hitest /home/hitest" >/dev/null 2>&1; then
+    _hi_h3 " | [kshgit] -- could not build the probe repo" "$RED"
+    docker rm -f "$name" >/dev/null 2>&1
+    return 1
+  fi
+
+  _hi_ssh_launch "$_HI_SSH_PORT"
+
+  # test_lib.sh's _hi_interactive_case can't drive this one: it waits for - and
+  # asserts - load.sh's "hi closing" line, and this tier never reaches load.sh
+  # at all (that is what "no bash" means here). Same shape otherwise, with the
+  # branch name as the second marker.
+  local out_file="$_HI_WORKDIR/kshgit.interactive.out" t0 t1 exit_code
+  if [ "${#_HI_PTY_FORCED[@]}" -eq 0 ]; then
+    _hi_skip "[kshgit]" "no python3 to drive an interactive pty"
+    docker rm -f "$name" >/dev/null 2>&1
+    return 0
+  fi
+
+  t0="$(_hi_now)"
+  : >"$out_file"
+  # shellcheck disable=SC2094 # separate processes; the left side only polls
+  {
+    _hi_poll_bool "$((${_HI_INTERACTIVE_SETTLE:-4} * 4))" 0.25 _hi_session_ready "$out_file" || true
+    printf "printf '%%s-%%s\\\\n' %s INTERACTIVE\nexit\n" "$_HI_TEST_MARKER"
+    # the hyphen-joined form only exists in real output - a pty echoes the line
+    # we typed, where printf's arguments are still space-separated
+    _hi_poll_bool 20 0.25 grep -q "$_HI_TEST_MARKER-INTERACTIVE" "$out_file" || true
+  } | "${_HI_PTY_FORCED[@]}" "${_HI_SSH_LAUNCH_BARE[@]}" >"$out_file" 2>&1 &
+  _hi_wait_pid "$!" 90 _hi_timed_out kshgit 90
+  exit_code="$_HI_WAIT_EXIT"
+  t1="$(_hi_now)"
+
+  # the branch name is the segment assertion: nothing types it, so it is in the
+  # transcript only because mksh expanded $(_hi_ksh_git) to draw the prompt
+  _hi_case_result kshgit "mksh git segment" "$exit_code" "$t0" "$t1" "$out_file" \
+    "$_HI_TEST_MARKER-INTERACTIVE" "$branch" && ok=1
+
+  docker rm -f "$name" >/dev/null 2>&1
+  [ "$ok" -eq 1 ]
+}
+
 function run_ssh_tests() {
   _hi_require_backend docker
 
@@ -152,11 +219,15 @@ function run_ssh_tests() {
   _HI_DEBIAN_OK=1
   _hi_sshd_image "its shells" || _HI_DEBIAN_OK=0
 
-  for _hi_img in alpine: alpine-zsh:zsh alpine-fish:fish alpine-ksh:mksh; do
+  # "+" separates extra packages, not a space: the specs are split on
+  # whitespace by the loop itself. The mksh image carries git because it is the
+  # only one whose prompt has a live git segment to render (shells/ksh.sh).
+  for _hi_img in alpine: alpine-zsh:zsh alpine-fish:fish alpine-ksh:mksh+git; do
     _hi_label="${_hi_img%%:*}"
     _hi_ctx="$_HI_WORKDIR/$_hi_label"
     mkdir -p "$_hi_ctx"
-    printf 'FROM alpine:3.20\nRUN apk add --no-cache openssh %s \\\n    && adduser -D -s /bin/ash hitest\nCOPY entrypoint.sh /entrypoint.sh\nRUN chmod +x /entrypoint.sh\nENTRYPOINT ["/entrypoint.sh"]\n' "${_hi_img#*:}" >"$_hi_ctx/Dockerfile"
+    printf 'FROM alpine:3.20\nRUN apk add --no-cache openssh %s \\\n    && adduser -D -s /bin/ash hitest\nCOPY entrypoint.sh /entrypoint.sh\nRUN chmod +x /entrypoint.sh\nENTRYPOINT ["/entrypoint.sh"]\n' \
+      "$(printf '%s' "${_hi_img#*:}" | tr '+' ' ')" >"$_hi_ctx/Dockerfile"
     _hi_sshd_entrypoint "$_hi_ctx" /bin/sh
 
     if _hi_build_image "$_hi_label" "hi-sshtest-$_hi_label-$$" "its fallback case" "$_hi_ctx"; then
@@ -240,6 +311,9 @@ EOF
       _hi_case _hi_run_case "$_hi_label" "hi-sshtest-$_hi_image-$$" /bin/ash "$(_hi_probe_cmd "$_HI_TEST_MARKER" "$_hi_shape")"
     fi
   done
+
+  [ "$(_hi_kv_get _HI_ALPINE_OK alpine-ksh)" = 1 ] &&
+    _hi_case _hi_run_ksh_git_case "hi-sshtest-alpine-ksh-$$"
 
   if [ "$_HI_BASH32_OK" -eq 1 ]; then
     _hi_case _hi_run_case bash32 "hi-sshtest-bash32-$$" /usr/local/bin/bash "$(_hi_probe_cmd "$_HI_TEST_MARKER" bash)"

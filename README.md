@@ -3,9 +3,9 @@
 ![CI (main)](https://github.com/ivylikethevine/hi.d/actions/workflows/ci.yml/badge.svg)
 ![CI (develop)](https://github.com/ivylikethevine/hi.d/actions/workflows/ci.yml/badge.svg?branch=develop)
 [![Coverage](https://github.com/ivylikethevine/hi.d/actions/workflows/coverage.yml/badge.svg)](https://github.com/ivylikethevine/hi.d/actions/workflows/coverage.yml)
-![ssh payload](https://img.shields.io/badge/ssh_payload-34KB_gzipped-4c1)
+![ssh payload](https://img.shields.io/badge/ssh_payload-39KB_gzipped-4c1)
 ![bash](https://img.shields.io/badge/bash-3.2%2B-4EAA25?logo=gnubash&logoColor=white)
-![shells](https://img.shields.io/badge/shells-bash%20%7C%20zsh%20%7C%20fish%20%7C%20sh-blue)
+![shells](https://img.shields.io/badge/shells-bash%20%7C%20zsh%20%7C%20fish%20%7C%20nu%20%7C%20sh-blue)
 ![targets](https://img.shields.io/badge/targets-ssh%20%7C%20docker%20%7C%20podman%20%7C%20nomad%20%7C%20k8s-8A2BE2)
 ![license](https://img.shields.io/badge/license-MIT-blue)
 
@@ -17,6 +17,9 @@ _Don't `ssh`ush your hosts, say `hi`!_
 
 More of these — every backend (ssh with a permanent install, docker, podman, nomad, kubernetes) across a
 variety of shells on both sides — in [docs/demos.md](docs/demos.md).
+
+Wondering how this compares to `sshrc`, `xxh`, `kyrat` or just using `chezmoi` — including where one of
+those is the better tool? [docs/comparison.md](docs/comparison.md).
 
 The payload badge above is enforced, not aspirational: the bench suite rebuilds the real payload
 (`$_HI_PAYLOAD` only - no tests, docs or CI ever ride along) and fails CI when the badge drifts more
@@ -102,8 +105,9 @@ suite on every run · 🟡 expected to work, nobody has proven it · ⚠️ work
 | `zsh` | ✅ full | `shells/zsh.zsh` |
 | `fish` | ✅ full | `shells/config.fish` |
 | `sh`/`dash`/`ash` (no bash on the target) | ⚠️ aliases and a colored `user@host` prompt, with a warning saying so | no header and no git segment - those need bash |
-| `ksh`/`mksh` (no bash on the target) | ⚠️ the same | it reads `$ENV` exactly as the `sh` tier does; `tests/targets/ssh_test.sh` covers it |
-| `nushell`, `elvish`, `xonsh`, `ion`, `oil`/`osh` | ❌ | see below |
+| `ksh`/`mksh` (no bash on the target) | ⚠️ aliases, the colored prompt **and a live git segment** - no header | it reads `$ENV` as the `sh` tier does, plus `shells/ksh.sh`: ksh93 and mksh expand `$( )` when the prompt is _printed_, which is what lets the segment be live where busybox `ash` cannot have one. The header needs bash. `tests/targets/ssh_test.sh` renders the segment against a real mksh |
+| `nushell` | ⚠️ header, prompt, git segment and a **subset** of the aliases | `shells/config.nu`. Needs `bash` on the target: nu can source none of `common/`, so the header, palette and git segment are rendered by shelling out to it, exactly as `config.fish` does. Chosen when nu is your _login_ shell or you name it in `_HI_SHELL_PREFERENCE` - never handed to someone whose login shell is bash. The alias subset, and what was left out, is listed at the bottom of `config.nu` |
+| `elvish`, `xonsh`, `ion`, `oil`/`osh` | ❌ | see below |
 | PowerShell | ❌ | bash-only by design |
 
 **Shells hi does not style yet.** Each would need its own rc in `shells/` (prompt, aliases, completion) plus a
@@ -111,10 +115,9 @@ tier in the fallback ladder in `hi.sh`'s `_hi_remote_suffix` and `load.sh`'s `lo
 
 | shell | why it is not here | what it would take |
 | --- | --- | --- |
-| `nushell` | its own non-POSIX language and a structured-data prompt API; `aliases.sh` cannot be shared with it at all | a full `shells/config.nu`, and a decision about whether the aliases are worth porting |
 | `elvish` | same shape, smaller audience | a `shells/rc.elv` |
 | `xonsh` | Python, so the prompt and aliases would be a third implementation | a `shells/rc.xsh` |
-| `ksh`/`mksh` | **partly done** — it has a tier in the no-bash ladder, and the POSIX prompt, so it gets aliases and a colored `user@host` | the header and the git segment, which need a `shells/ksh.sh` of their own |
+| `ksh`/`mksh` | **all but the header** — a tier in the no-bash ladder, the POSIX prompt, the aliases, and `shells/ksh.sh`'s git segment | the header, and only the header. `common/header.sh` is bash, and this tier is defined by bash being absent, so it would have to be written a second time in POSIX and then kept in sync forever - the git segment was worth that, a second header is not |
 | `tcsh`/`csh` | different rc syntax and no `$ENV` equivalent | its own rc, and honestly: ask whether anyone wants it |
 | PowerShell | not a POSIX shell; the greeting hi prints there is the whole extent of it | a separate project, really |
 
@@ -133,6 +136,7 @@ nor dropped their `PROMPT_COMMAND`.
 - reload your shell!
 - run `hi_configure` any time afterward to revisit the feature toggle prompts - header, prompt, personal settings, git status, editors, aliases, header details, terminal width, and whether hi styles this machine too or only the hosts you say `hi` to - without touching the shell rc wiring. Answers land in `~/.config/hi.d/settings.sh`; see [Configuration](#configuration) below
 - run `hi_check_configs` any time to just re-run that shell rc validation, without the rest of the install
+- run `hi --help` (or `hi -h`) for the short version of all of this: the synopsis, the target resolution order, and every flag hi answers itself. `man hi` is the long version. Everything hi does not answer is passed to `ssh` unchanged
 - run `hi --version` to see what is installed - the packaged version, or `git describe` in a checkout; the doctor and the connect header show it too
 - run `hi --tmux <target>` to have the session live inside a named tmux on the target, so a dropped connection detaches instead of losing your work - reconnect with `hi --tmux <target>` again and you're back in it (`_HI_TMUX_ATTACH=1` makes it the default, `--no-tmux` turns it back off, `_HI_TMUX_SESSION` names the session). Offered only where hi.d is permanent on the target: a disposable tree is deleted when the session ends, and hi says so rather than leaving you a tmux pointing at nothing
 - run `hi --update <target>` to update a host that has its own permanent `~/hi.d` (`scripts/install.sh` was run there) without logging into it - it's `hi_update`'s `git pull`, run over one ssh connection, and it refuses for the same two cases the local alias does: no permanent install, or one a package manager owns

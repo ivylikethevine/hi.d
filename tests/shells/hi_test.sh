@@ -477,6 +477,131 @@ function test_update_keeps_ssh_flags() {
   )
 }
 
+# --- the ksh/mksh git segment -------------------------------------------------
+#
+# shells/ksh.sh is the one place hi renders a git segment without bash, so it
+# carries its own copy of core.sh's palette and glyphs. These cases are the
+# drift guard on that copy - the segment rendering itself is proven against a
+# real mksh in tests/targets/ssh_test.sh, which is where a prompt belongs.
+
+# every escape ksh.sh defines has to be the one core.sh defines under the same
+# name, or the two tiers disagree about what "dirty" looks like
+function test_ksh_colors_match_core() {
+  local name val core_val
+  for name in NC RED YELLOW BRGREEN BRBLUE BRPURPLE; do
+    val="$(sed -n "s/^_HI_KSH_$name='\(.*\)'$/\1/p" "$_HI_ROOT/shells/ksh.sh")"
+    [ -n "$val" ] || return 1
+    # core.sh writes them as \e, ksh.sh as \033 - the same byte, spelled for a
+    # shell with no `echo -e`
+    core_val="$(eval "printf '%s' \"\${$name}\"" | sed 's/\\e/\\033/')"
+    [ "$val" = "$core_val" ] || {
+      _hi_cecho " | $name: ksh.sh has '$val', core.sh has '$core_val'" "$RED"
+      return 1
+    }
+  done
+}
+
+# the same for the glyph pair, both halves: a new glyph in core.sh's
+# _hi_choose_glyphs that never reaches ksh.sh is the drift this catches
+function test_ksh_glyphs_match_core() {
+  local name val ascii core="" # core is set by the eval below, which shellcheck can't see
+  for ascii in 0 1; do
+    for name in AHEAD BEHIND STAGED DIRTY INVALID UNTRACKED STASH CLEAN ELLIPSIS; do
+      val="$(_HI_ASCII="$ascii" bash -c '
+        source "$_HI_ROOT/shells/ksh.sh" >/dev/null 2>&1
+        eval "printf %s \"\$_HI_KSH_'"$name"'\""')"
+      _HI_ASCII="$ascii" _hi_choose_glyphs
+      eval "core=\"\$_HI_GLYPH_$name\""
+      [ "$val" = "$core" ] || {
+        _hi_cecho " | _HI_ASCII=$ascii $name: ksh.sh '$val' vs core.sh '$core'" "$RED"
+        _hi_choose_glyphs
+        return 1
+      }
+    done
+  done
+  _hi_choose_glyphs # leave the suite's own glyph set as it was
+}
+
+# the wiring: the ksh arm sources ksh.sh and asks for the git-carrying prompt,
+# and the sh/ash/dash arm still gets neither - busybox ash would print the text
+# of the command substitution rather than running it
+function test_remote_suffix_gives_ksh_the_segment() {
+  local out
+  out="$(DOMAIN=hitest@myhost hi_esc="" nc_esc="" _hi_remote_suffix)"
+  [[ "$out" == *"ksh | mksh)"* ]] || return 1
+  [[ "$out" == *'$_HI_ROOT/shells/ksh.sh'* ]]
+}
+
+# the segment reaches PS1 single-quoted, so it is expanded per prompt rather
+# than once at assignment - the whole reason the tier can have a live segment
+function test_fallback_prompt_git_segment_is_deferred() {
+  local out
+  out="$(DOMAIN=hitest@myhost _hi_fallback_prompt git | sed -n 's/^PS1=//p')"
+  [[ "$out" == *"'\$(_hi_ksh_git)'"* ]]
+}
+
+function test_fallback_prompt_has_no_segment_by_default() {
+  [[ "$(DOMAIN=hitest@myhost _hi_fallback_prompt)" != *_hi_ksh_git* ]]
+}
+
+# ksh.sh has to ride the payload, or the rc sources a file that isn't there
+function test_payload_carries_ksh_sh() {
+  [ -f "$_HI_ROOT/shells/ksh.sh" ] && [[ " ${_HI_PAYLOAD[*]} " == *" shells "* ]]
+}
+
+# --- hi --help ----------------------------------------------------------------
+#
+# The one arm of the dispatch block that has to be *executed* rather than
+# sourced: sourcing hi.sh stops at the BASH_SOURCE guard, which is above the
+# `case "${1:-}"`. So these run the real launcher as a subprocess, with an ssh
+# that fails loudly on $PATH - the whole point of the flag is that it never
+# reaches ssh, and before it existed `hi -h` answered with ssh's usage block.
+
+function _hi_help_out() {
+  local dir="$_HI_WORKDIR/nossh"
+  mkdir -p "$dir"
+  cat >"$dir/ssh" <<'EOF'
+#!/bin/sh
+echo "ssh was called: $*" >&2
+exit 97
+EOF
+  chmod +x "$dir/ssh"
+  PATH="$dir:$PATH" "$_HI_LAUNCHER" "$@" 2>&1
+}
+
+function test_help_long_flag_prints_usage() {
+  local out
+  out="$(_hi_help_out --help)" || return 1
+  [[ "$out" == "Usage: hi "* && "$out" != *"ssh was called"* ]]
+}
+
+function test_help_short_flag_prints_the_same() {
+  [ "$(_hi_help_out -h)" = "$(_hi_help_out --help)" ]
+}
+
+# the two things a usage block is for: what the flags are, and how a name is
+# resolved - hi's target ladder is the part no ssh user can guess
+function test_help_lists_hi_s_own_flags() {
+  local out flag
+  out="$(_hi_help_out --help)" || return 1
+  for flag in --doctor --update --version --tmux --no-tmux; do
+    [[ "$out" == *"$flag"* ]] || return 1
+  done
+  [[ "$out" == *docker* && "$out" == *podman* && "$out" == *nomad* && "$out" == *kubernetes* ]]
+}
+
+# The same drift guard tests/test_runner.sh's suite table gets: a flag hi
+# answers itself but the man page never mentions is a flag nobody finds.
+# $_HI_USAGE's synopsis has to match the man page's .SH SYNOPSIS too.
+function test_help_flags_are_all_in_the_man_page() {
+  local man="$_HI_HOME/hi.d/docs/hi.1" flag
+  [ -f "$man" ] || return 1
+  for flag in -h --help --doctor --update --version --tmux --no-tmux; do
+    # the man page escapes every dash as \- for roff
+    grep -q -- "${flag//-/\\\\-}" "$man" || return 1
+  done
+}
+
 # --- the bash-less prompt -----------------------------------------------------
 #
 # sh/ash/dash/ksh sessions used to get aliases and the host's own prompt, which
@@ -754,6 +879,20 @@ function run_hi_tests() {
   _hi_check "Nothing sent for an unconfigured host" test_host_overlay_sends_nothing_for_an_unknown_host
   _hi_check "A settings.d file alone counts as an overlay" test_host_overlay_counts_as_an_overlay
   _hi_check "Fallback rc sources it after settings.sh" test_fallback_rc_sources_the_host_overlay_after_settings
+
+  _hi_h2 "Testing: the ksh/mksh git segment"
+  _hi_check "ksh.sh's colors match core.sh" test_ksh_colors_match_core
+  _hi_check "ksh.sh's glyphs match core.sh" test_ksh_glyphs_match_core
+  _hi_check "The ksh arm sources it" test_remote_suffix_gives_ksh_the_segment
+  _hi_check "The segment is expanded per prompt" test_fallback_prompt_git_segment_is_deferred
+  _hi_check "No segment for sh/ash/dash" test_fallback_prompt_has_no_segment_by_default
+  _hi_check "It rides the payload" test_payload_carries_ksh_sh
+
+  _hi_h2 "Testing: hi --help"
+  _hi_check "--help prints the usage line" test_help_long_flag_prints_usage
+  _hi_check "-h is the same text" test_help_short_flag_prints_the_same
+  _hi_check "Lists hi's flags and the target ladder" test_help_lists_hi_s_own_flags
+  _hi_check "Every flag is in the man page" test_help_flags_are_all_in_the_man_page
 
   _hi_h2 "Testing: hi --update"
   _hi_check "Needs a target" test_update_needs_a_target

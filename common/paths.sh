@@ -45,6 +45,7 @@ export _HI_OSC52="$_HI_ROOT/shells/osc52.sh"
 export _HI_BASHRC="$_HI_ROOT/shells/bash.sh"
 export _HI_ZSHRC="$_HI_ROOT/shells/zsh.zsh"
 export _HI_FISH_CONFIG="$_HI_ROOT/shells/config.fish"
+export _HI_NU_CONFIG="$_HI_ROOT/shells/config.nu"
 
 # install.sh's line tag and managed symlink - here so install, --uninstall
 # and anyone else recognising hi's lines read one string
@@ -60,6 +61,8 @@ export _HI_HOME_BASHRC="$HOME/.bashrc"
 export _HI_HOME_ZSHRC="$HOME/.zshrc"
 export _HI_HOME_FISH_DIR="$HOME/.config/fish" # absent unless fish is installed
 export _HI_HOME_FISH_CONFIG="$HOME/.config/fish/config.fish"
+export _HI_HOME_NU_DIR="$HOME/.config/nushell" # likewise, absent unless nu is
+export _HI_HOME_NU_CONFIG="$HOME/.config/nushell/config.nu"
 
 # GLOSSARY: strftime %e over %-e. Self-contained strings - fish sources this
 # and can't call a bash helper.

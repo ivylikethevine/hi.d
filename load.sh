@@ -38,12 +38,20 @@ source "$_HI_HEADER"
 _HI_CONFIG_START="# hi-config-start"
 _HI_CONFIG_END="# hi-config-end"
 
-# rc file <- hi config, unless a previous session already added it. Fish only
-# gets one if fish is installed (its config dir won't exist otherwise).
-_HI_CONFIGS=("$_HI_BASHRC:$_HI_HOME_BASHRC" "$_HI_ZSHRC:$_HI_HOME_ZSHRC" "$_HI_FISH_CONFIG:$_HI_HOME_FISH_CONFIG")
+# rc file <- hi config, unless a previous session already added it. Fish and nu
+# only get one if that shell is installed (their config dirs won't exist
+# otherwise - see configure_files for the wrinkle nu adds to that).
+_HI_CONFIGS=("$_HI_BASHRC:$_HI_HOME_BASHRC" "$_HI_ZSHRC:$_HI_HOME_ZSHRC"
+  "$_HI_FISH_CONFIG:$_HI_HOME_FISH_CONFIG" "$_HI_NU_CONFIG:$_HI_HOME_NU_CONFIG")
 
 function configure_files() {
   local pair target block
+  # Nu is the one exception to the "the dir exists iff the shell is installed"
+  # rule the loop below relies on: nu creates its config dir on first run, not
+  # at install time, so a freshly installed nu has the binary and no
+  # ~/.config/nushell - and hi would then style every shell but the one it is
+  # about to hand over to. Making it is what nu itself would do a moment later.
+  command -v nu >/dev/null 2>&1 && mkdir -p "$_HI_HOME_NU_DIR"
   for pair in "${_HI_CONFIGS[@]}"; do
     target="${pair#*:}"
     [ -d "${target%/*}" ] || continue # targets are absolute; no dirname fork
@@ -95,7 +103,12 @@ function _hi_login_shell() {
 # The default puts `login` first for a reason found by the framework matrix: the
 # old ranking handed fish to anyone whose box had it, so a user whose login
 # shell is zsh-with-oh-my-zsh never saw their own setup. hi's configs are
-# grafted onto all three rc files either way; the user's are not.
+# grafted onto every rc file either way; the user's are not.
+#
+# nu is in the allow-list but not in the default ranking, deliberately: it is
+# picked when it is your *login* shell (the `login` token) or when you name it
+# in $_HI_SHELL_PREFERENCE, and never handed to someone whose login shell is
+# bash. Its session is styled by shells/config.nu.
 function _hi_session_shell() {
   local want
   # the ranking is appended rather than kept as a second loop: a preference
@@ -103,7 +116,7 @@ function _hi_session_shell() {
   for want in ${_HI_SHELL_PREFERENCE:-login fish zsh bash} fish zsh bash; do
     [ "$want" = login ] && want="$(_hi_login_shell)"
     case "$want" in
-    bash | zsh | fish) command -v "$want" >/dev/null 2>&1 && {
+    bash | zsh | fish | nu) command -v "$want" >/dev/null 2>&1 && {
       printf '%s' "$want"
       return 0
     } ;;
@@ -151,6 +164,7 @@ function load() {
   case "$shell" in
   fish) greeting="fish shell! :^)" color="$GREEN" ;;
   zsh) greeting="zsh shell! :)" color="$PURPLE" ;;
+  nu) greeting="nushell! :o)" color="$BRCYAN" ;;
   *) greeting="only bash today :(" color="$RED" ;;
   esac
   _hi_cecho "$greeting" "$color" 1

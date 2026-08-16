@@ -179,6 +179,49 @@ Not GitHub-button work: these are human actions purely because no runner covers 
   - **Homebrew tap PR** — _Written._ `release.yml`'s `tap` job: `needs: publish`, inside the same `environment: release` so it stays behind the one approval, opening a PR against `<owner>/homebrew-tap` with the freshly regenerated formula and the `brew install`/`test`/`audit` checklist in its body. No-ops loudly without `HOMEBREW_TAP_TOKEN`, the same shape the apk and minisign steps use — which is what makes it safe to land before the tap repo exists.
   - **AUR push** — _Written; the account is the remaining half._ The `aur` job pushes the regenerated `PKGBUILD` and `.SRCINFO` to `ssh://aur@aur.archlinux.org/hi.d.git` behind the same gate, with the key kept in `$RUNNER_TEMP` and the host key keyscanned rather than trusted on first use. It refuses to push a checkout with untracked files, and no-ops loudly without `AUR_SSH_KEY`. What it deliberately does not do is run namcap — that needs an Arch box — so the *first* push of each package stays manual and this job is for the releases after it. `hi.d-git` is never touched: it builds from `main` and has no version to bump.
 
+- [ ] **basher and fisher — the two shell-native channels** — every channel hi.d
+      ships to today (AUR, Homebrew, deb/rpm/apk) is an _operating system_
+      package manager, which means a manifest, a version bump and a review gate
+      per release. basher and fisher are neither: both install straight from a
+      GitHub repo at a ref, with no submission anywhere and nothing to publish
+      on release day. That makes them the cheapest reach hi.d has left — and
+      also the two most likely to need a change _in the tree_ rather than in
+      `packaging/`, which is why this is one entry and not two lines in the one
+      above. Unblocked; neither depends on a secret, an account, or v1.
+
+  - **basher** (`basher install ivylikethevine/hi.d`) — a bash package manager
+    that clones the repo and links what it finds. The fit is close: hi.d is
+    already a git-clone-and-run tree, which is exactly basher's model, and
+    `scripts/install.sh` already does the "link `hi.sh` onto PATH as `hi`" job
+    basher wants to do itself. Two things to settle before claiming support.
+    First, the binary name: what basher links by default is the filename, so an
+    unconfigured install puts `hi.sh` on PATH, not `hi` — the rename needs
+    declaring. Second, and the reason to check the mechanism before writing
+    anything: basher reads a **`package.sh` at the repo root**, and this repo
+    already has a `packaging/package.sh` that does something else entirely
+    (builds the deb/rpm/apk). Two files a directory apart with the same name and
+    unrelated jobs is a trap for the next reader, so decide the naming
+    deliberately. Neither of those is settled from memory — read basher's
+    current docs first, since the `package.sh` contract is the part most likely
+    to have moved.
+  - **fisher** (`fisher install ivylikethevine/hi.d`) — the honest entry of the
+    two, because **hi.d is not shaped like a fish plugin and pretending
+    otherwise would ship something broken.** fisher installs by copying
+    `functions/`, `completions/` and `conf.d/` out of a repo into the user's
+    fish config; files anywhere else are ignored. hi.d has none of those
+    directories — it has one `shells/config.fish` that `scripts/install.sh`
+    appends into the user's own config, plus a `common/` tree that
+    `config.fish` reaches back into by `$_HI_HOME` path (see `config.fish:37`,
+    `:48`, `:57`, which shell out to `bash -c` for the header and colors). A
+    fisher install would copy the fish files and leave every one of those paths
+    dangling. So the real question this entry asks is **whether fish support
+    should grow a plugin-shaped face at all** — a `conf.d/hi.fish` that locates
+    an existing hi.d and no-ops with a clear message when there isn't one — or
+    whether fisher is the wrong channel for a tool whose fish half is a client
+    of a larger tree. Answer that before writing a line of it. "It didn't fit"
+    is a valid outcome to record here, and a better one than a plugin that
+    installs green and does nothing.
+
 ### Product
 
 - [ ] **Shells hi doesn't style yet** — the README's
@@ -186,8 +229,28 @@ Not GitHub-button work: these are human actions purely because no runner covers 
       stands. The bash-less tiers (sh, dash, ash, ksh, mksh) now get hi's own
       colored `user@host` prompt as well as the aliases — resolved on the
       client and baked in, since those shells have no readline, no git prompt,
-      and busybox ash will not expand `$( )` inside PS1. What is still missing
-      there is the header and the git segment, which need bash or a
-      `shells/ksh.sh` of their own. nushell, elvish and xonsh need their own
-      language for any of it; tcsh has no `$ENV` equivalent to hook. Decide per
-      shell whether that is worth it — as a *login* shell they all work today.
+      and busybox ash will not expand `$( )` inside PS1.
+
+      ksh and mksh have since gone further: `shells/ksh.sh` gives that tier a
+      **live git segment**, expanded per prompt, because ksh93 and mksh do run
+      `$( )` while printing PS1 even though busybox ash does not.
+      `tests/targets/ssh_test.sh` renders it against a real mksh over real ssh.
+      What is left for that tier is the header, and the recommendation is to
+      leave it: `common/header.sh` is bash, this tier exists because bash is
+      absent, and a second POSIX implementation would have to be kept in sync
+      with the first forever. The segment earned that cost; a header would not.
+
+      nushell is done too, on a different footing: `shells/config.nu` puts nu in
+      `load.sh`'s session-shell ladder rather than `hi.sh`'s no-bash one, which
+      is what makes it tractable — `load.sh` only runs where bash exists, so nu
+      can shell out to `bash -c` for the header, the palette and the git
+      segment the way `config.fish` already does, instead of growing a second
+      implementation of each in nu's own language. It costs one fork per prompt
+      for the segment, and it ports a *subset* of the aliases: nu's structured
+      builtins (`ls`, `cat`, `grep`, `ps`, …) must not be shadowed by external
+      commands returning strings, and `config.nu` lists what was skipped and
+      why. A nu target with no bash still gets the POSIX fallback tier.
+
+      Still open: elvish and xonsh need their own language for any of it; tcsh
+      has no `$ENV` equivalent to hook. Decide per shell whether that is worth
+      it — as a *login* shell they all work today.

@@ -97,6 +97,7 @@ _HI_TESTS_DIR="${_HI_TESTS_DIR:-$_HI_ROOT/tests}"
 # being spelled out again, so it can't drift.
 _HI_GROUP=""
 _HI_LIST=0
+_HI_LIST_PATHS=0
 _HI_REQUIRE_RUN=0
 declare -a _HI_ARGS=()
 while [ "$#" -gt 0 ]; do
@@ -114,6 +115,7 @@ rather than PASS, so a green run can't overstate what actually ran.
   suite ...        one or more of the names below (default: all of them)
   --group <group>  every suite in one group: $(_hi_test_groups)
   --list           print "<group> <name>" per suite and exit
+  --list-paths     the same, plus each suite's absolute path as a third column
   --require-run    treat SKIPPED suites as failures - for CI runners where a
                    skip means the runner is broken, not the backend optional
   -h, --help       this text
@@ -133,6 +135,14 @@ EOF
     ;;
   # handled after selection below, so `--group X --list` lists that group
   --list) _HI_LIST=1 ;;
+  # a third column would land in $name for every `read -r group name` consumer
+  # (runner_test.sh has two), so the path gets its own flag rather than widening
+  # --list. tests/coverage.sh is the caller: it traces each suite script as the
+  # top-level process, which needs the path, not the name.
+  --list-paths)
+    _HI_LIST=1
+    _HI_LIST_PATHS=1
+    ;;
   --require-run) _HI_REQUIRE_RUN=1 ;;
   --group)
     [ "$#" -ge 2 ] || {
@@ -175,7 +185,12 @@ fi
 # which tests/harness/runner_test.sh reads instead of parsing an error message
 if [ "$_HI_LIST" = 1 ]; then
   for _hi_t in "${_HI_SELECTED[@]}"; do
-    printf '%s %s\n' "$(_hi_test_group "$_hi_t")" "$(_hi_test_name "$_hi_t")"
+    if [ "$_HI_LIST_PATHS" = 1 ]; then
+      printf '%s %s %s\n' "$(_hi_test_group "$_hi_t")" "$(_hi_test_name "$_hi_t")" \
+        "$_HI_HOME/hi.d/tests/$(_hi_test_path "$_hi_t")"
+    else
+      printf '%s %s\n' "$(_hi_test_group "$_hi_t")" "$(_hi_test_name "$_hi_t")"
+    fi
   done
   exit 0
 fi

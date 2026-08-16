@@ -78,6 +78,69 @@ function test_fish_registers_hi_completion() {
     grep -qF '$_HI_TARGETS'
 }
 
+# --- nushell ------------------------------------------------------------------
+#
+# nu is not POSIX, so it cannot source common/paths.sh the way the other three
+# rcs do - shells/config.nu reads the $_HI_* variables out of the environment
+# instead. That is what the bash wrapper below sets up: source core.sh (which
+# sources paths.sh and exports all of them), then exec nu with config.nu as its
+# config. Every case runs a real nu against the real file, since the risk here
+# is nu's own parser, not the text.
+#
+# The prompt closures are called directly rather than driven through an
+# interactive session: nu queries the terminal for the cursor position at every
+# REPL prompt, which a scripted pty has to answer or nu spins.
+function _hi_nu_eval() {
+  local file="$_HI_WORKDIR/probe.nu"
+  printf '%s\n' "$1" >"$file"
+  # env -i drops everything, so the toggles a case wants to set have to be
+  # named here rather than exported around the call - same reason _hi_rc_shell
+  # takes them as arguments
+  env -i HOME="$_HI_WORKDIR" TERM=xterm-256color PATH="$PATH" \
+    _HI_HOME="$_HI_HOME" _HI_CONFIG_DIR="$_HI_WORKDIR/cfg" _HI_DISABLE_HEADER=1 \
+    _HI_DISABLE_GIT_STATUS="${_HI_DISABLE_GIT_STATUS:-0}" \
+    _HI_DISABLE_PROMPT="${_HI_DISABLE_PROMPT:-0}" \
+    bash -c '
+      . "$_HI_HOME/hi.d/common/core.sh"
+      exec nu --config "$_HI_NU_CONFIG" --env-config /dev/null "$1"
+    ' _ "$file" 2>&1
+}
+
+# the file parses at all - nu fails the whole config on one syntax error, and
+# then styles nothing while still starting a session
+function test_nu_config_parses() {
+  local out
+  out="$(_hi_nu_eval 'print "NU_OK"')"
+  [[ "$out" == *NU_OK* && "$out" != *"Error"* ]]
+}
+
+function test_nu_prompt_carries_user_host_and_cwd() {
+  local out
+  out="$(_hi_nu_eval 'print (do $env.PROMPT_COMMAND)')"
+  [[ "$out" == *"$(_hi_whoami)"* && "$out" == *@* ]]
+}
+
+# the segment comes from common/git_prompt.sh through `bash -c`, so this also
+# proves the shell-out survives nu's quoting - the failure mode being that nu
+# reads bash's $( ) as its own subexpression
+function test_nu_git_segment_uses_git_prompt() {
+  local dir out
+  dir="$(mktemp -d "$_HI_WORKDIR/nugit.XXXXXX")"
+  git -C "$dir" init -q -b nu-branch . 2>/dev/null || return 1
+  git -C "$dir" -c user.email=t@e.com -c user.name=T commit -q --allow-empty -m i
+  out="$(cd "$dir" && _hi_nu_eval 'print (do $env.PROMPT_COMMAND_RIGHT)')"
+  [[ "$out" == *nu-branch* ]]
+}
+
+function test_nu_git_segment_respects_the_toggle() {
+  local dir out
+  dir="$(mktemp -d "$_HI_WORKDIR/nugitoff.XXXXXX")"
+  git -C "$dir" init -q -b nu-branch . 2>/dev/null || return 1
+  git -C "$dir" -c user.email=t@e.com -c user.name=T commit -q --allow-empty -m i
+  out="$(cd "$dir" && _HI_DISABLE_GIT_STATUS=1 _hi_nu_eval 'print (do $env.PROMPT_COMMAND_RIGHT)')"
+  [[ "$out" != *nu-branch* ]]
+}
+
 # --- the prompt separator -----------------------------------------------------
 #
 # The character each prompt ends with is a setting now (core.sh's
@@ -167,6 +230,10 @@ function run_rc_tests() {
   _hi_h2 "Testing: zsh and fish"
   _hi_check_requires zsh "zsh builds its prompt" test_zsh_prompt_is_built
   _hi_check_requires fish "fish registers hi completion" test_fish_registers_hi_completion
+  _hi_check_requires nu "nu parses config.nu" test_nu_config_parses
+  _hi_check_requires nu "nu's prompt carries user, host and cwd" test_nu_prompt_carries_user_host_and_cwd
+  _hi_check_requires nu "nu's git segment comes from git_prompt.sh" test_nu_git_segment_uses_git_prompt
+  _hi_check_requires nu "_HI_DISABLE_GIT_STATUS silences it" test_nu_git_segment_respects_the_toggle
 
   _hi_h2 "Testing: the prompt separator"
   local row shell var default

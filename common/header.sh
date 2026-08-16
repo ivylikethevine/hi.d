@@ -130,11 +130,22 @@ function banner() {
       local -a lines
       _hi_read_lines lines < <(git -C "$_HI_ROOT" status --short 2>/dev/null)
       _HI_BANNER_CHANGES="${#lines[@]}"
+      # memoized beside the count so the branch stays one git call a session
+      # too. symbolic-ref is empty on a detached HEAD - a release-tag checkout
+      # - and main is blanked here, so only an unusual branch earns a callout.
+      _HI_BANNER_BRANCH="$(_hi_sanitize "$(git -C "$_HI_ROOT" symbolic-ref --short -q HEAD 2>/dev/null || true)")"
+      [ "$_HI_BANNER_BRANCH" = main ] && _HI_BANNER_BRANCH=""
     fi
     changes="$BRYELLOW$_HI_BANNER_CHANGES ↑ "
     # columns counted, not ${#}-measured (GLOSSARY: bytes vs columns):
     # digits + "␣↑␣", with ↑ one column wide
     changes_w=$((${#_HI_BANNER_CHANGES} + 3))
+    # the Online (local) banner only: a remote session's Connected banner
+    # describes the target, and the disconnect banner stays as-is
+    if [ "$label" = Online ] && [ -n "${_HI_BANNER_BRANCH:-}" ]; then
+      changes+="($_HI_BANNER_BRANCH) "
+      changes_w=$((changes_w + ${#_HI_BANNER_BRANCH} + 3))
+    fi
   fi
   local host tildes start_len end_len start_tildes end_tildes width left core
   host="$(_hi_sanitize "$(_hi_hostname)")"

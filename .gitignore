@@ -1,10 +1,3 @@
-# NOTE: the rules below are deliberately broad (personal-config hygiene), and
-# they will silently swallow files you would expect `git add` to take -
-# anything matching **local**, **key**, **personal**, *.json, *.yml, *docker*
-# and so on. `git add` no-ops rather than erroring when that happens. Check
-# with `git check-ignore -v <path>` if a new file won't stage, and add a `!`
-# exception here rather than loosening the blanket rule.
-
 **output**
 **build**
 **tmp**
@@ -13,6 +6,8 @@
 **key**
 **local**
 **personal**
+
+.claude
 
 *.js
 *.ts
@@ -47,21 +42,7 @@
 *.tsv
 *.csv
 *.sql
-*.json
-!.zed/settings.json
 *.toml
-*.yaml
-*.yml
-!theme.yml
-!.github/workflows/*.yml
-!.github/actions/**/*.yml
-!.github/dependabot.yml
-!packaging/nfpm/nfpm.yaml
-
-*docker*
-!*docker_test.sh
-
-!.markdownlint.yaml
 
 # where packaging/package.sh stages the tree and drops the built packages.
 # Deliberately a name none of the blanket rules above already cover - a

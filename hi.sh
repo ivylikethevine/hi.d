@@ -510,4 +510,14 @@ set +euo pipefail # the connection paths below run against unknown hosts, where 
 # normally, $0 is this file and we dispatch.
 [[ "${BASH_SOURCE[0]}" == "$0" ]] || return 0
 
+# `hi --doctor [target]` hands off to the pre-flight report. Checkouts and
+# packaged installs have scripts/; a hi session on a target does not, and
+# says so rather than silently connecting somewhere.
+if [ "${1:-}" = --doctor ]; then
+  shift
+  [ -f "$_HI_DOCTOR" ] && exec "$_HI_DOCTOR" "$@"
+  _hi_cecho "hi --doctor needs the full hi.d checkout - not available in a hi session" "$RED" >&2
+  exit 1
+fi
+
 _hi "$@"

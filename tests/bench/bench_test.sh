@@ -125,6 +125,31 @@ function bench_payload_size() {
   fi
 }
 
+# The README wears the payload size as a badge; this keeps the badge honest
+# the same way the packaging drift guards keep the formula honest - CI fails
+# until the number is true again. ±1KB of slack, so a one-byte flip across a
+# rounding boundary cannot fail a PR that never touched the payload.
+function bench_payload_readme_badge() {
+  local bytes kb badge diff
+  set -- # hi.sh reads "$@"; make sure it sees none (same as hi_test.sh)
+  # shellcheck source=../../hi.sh
+  source "$_HI_LAUNCHER"
+  bytes="$(tar czf - -h -C "$_HI_HOME" "${_HI_PAYLOAD[@]/#/hi.d/}" | wc -c)"
+  kb=$(((bytes + 512) / 1024))
+  badge="$(sed -n 's/.*ssh_payload-\([0-9]*\)KB_gzipped.*/\1/p' "$_HI_ROOT/README.md" | head -1)"
+  if [ -z "$badge" ]; then
+    _hi_cecho " | README payload badge: MISSING (expected ssh_payload-<n>KB_gzipped in README.md)" "$RED"
+    return 1
+  fi
+  diff=$((badge - kb))
+  if [ "$diff" -ge -1 ] && [ "$diff" -le 1 ]; then
+    _hi_cecho " | README payload badge: says ${badge}KB, payload is ${kb}KB: OK" "$GREEN"
+  else
+    _hi_cecho " | README payload badge says ${badge}KB but the payload is ${kb}KB - update the badge" "$RED"
+    return 1
+  fi
+}
+
 function run_bench_tests() {
   _hi_workdir benchtest
   mkdir -p "$_HI_WORKDIR/cfg"
@@ -152,6 +177,7 @@ function run_bench_tests() {
 
   _hi_h2 "Benchmark: the wire"
   _hi_case bench_payload_size
+  _hi_case bench_payload_readme_badge
 
   _hi_suite_end "bench" \
     "Every hot path under its ceiling ($_HI_TOTAL benchmarks)" \

@@ -58,9 +58,12 @@ function _hi_run_runner() {
   # The environment is scrubbed so a fixture run behaves the same under the
   # real CI (which exports GITHUB_ACTIONS) as locally; a case that *wants* one
   # of those modes sets it back via _HI_RUN_WITH="VAR=VALUE" on the call.
+  # (No comments with apostrophes inside the $( ) below: bash 3.2 scans a
+  # command substitution with a dumb quote matcher and reads one as an
+  # unterminated string. GLOSSARY-worthy, learned from the macOS CI job.)
+  # shellcheck disable=SC2163 # the var=value pair is chosen by each caller
   _HI_RUN_OUT="$(
     unset GITHUB_ACTIONS _HI_VERBOSE
-    # shellcheck disable=SC2163 # the var=value pair is the caller's to pick
     [ -n "${_HI_RUN_WITH:-}" ] && export "${_HI_RUN_WITH?}"
     _HI_TESTS=("${entries[@]}")
     _HI_TESTS_DIR="$_HI_FIXTURES"

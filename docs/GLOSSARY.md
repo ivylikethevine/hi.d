@@ -139,3 +139,15 @@ On per-prompt/per-startup paths, builtins over binaries: `read -r x < file`
 instead of `$(cat file)` (a miss costs no fork and no error),
 `${target%/*}` instead of `$(dirname ...)`, `${row%%$'\t'*}` instead of
 `| cut -f1`. A few forks per prompt is the whole latency budget.
+
+## apostrophes in substitution comments
+
+bash 3.2 scans a `$( ... )` command substitution with a simple quote
+matcher, not the real parser: a comment line _inside_ one containing a lone
+`'` (an apostrophe in prose) reads as an unterminated string, and the whole
+file dies at parse time with "unexpected EOF while looking for matching
+`'`". bash 4+ parses substitutions recursively and is fine, which is why
+this only ever surfaces on macOS. Keep comments inside `$( )`
+apostrophe-free, or hoist them above the assignment. The lint greps cannot
+see this one; `tests/targets/ssh_test.sh` runs `bash -n` over every file in
+a real 3.2 container to catch the class.

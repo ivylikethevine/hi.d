@@ -1,12 +1,23 @@
 # hi.sh -> sshrc supercharged
 
 ![CI (main)](https://github.com/ivylikethevine/hi.d/actions/workflows/ci.yml/badge.svg)
-
 ![CI (develop)](https://github.com/ivylikethevine/hi.d/actions/workflows/ci.yml/badge.svg?branch=develop)
+[![Coverage](https://github.com/ivylikethevine/hi.d/actions/workflows/coverage.yml/badge.svg)](https://github.com/ivylikethevine/hi.d/actions/workflows/coverage.yml)
+![ssh payload](https://img.shields.io/badge/ssh_payload-26KB_gzipped-4c1)
+![bash](https://img.shields.io/badge/bash-3.2%2B-4EAA25?logo=gnubash&logoColor=white)
+![shells](https://img.shields.io/badge/shells-bash%20%7C%20zsh%20%7C%20fish%20%7C%20sh-blue)
+![targets](https://img.shields.io/badge/targets-ssh%20%7C%20docker%20%7C%20podman%20%7C%20nomad%20%7C%20k8s-8A2BE2)
+![license](https://img.shields.io/badge/license-MIT-blue)
 
 **One config directory to rule them all, uniting all shells from all hosts!**
 
 _Don't `ssh`ush your hosts, say `hi`!_
+
+![hi connecting to a container: banner, header, packages check, colored prompt, and the cleanup on exit](docs/demo.gif)
+
+The payload badge above is enforced, not aspirational: the bench suite rebuilds the real payload
+(`$_HI_PAYLOAD` only - no tests, docs or CI ever ride along) and fails CI when the badge drifts more
+than a kilobyte from the truth.
 
 ## Requirements
 
@@ -58,6 +69,7 @@ For ssh targets specifically, `hi` first checks (over the same connection, so it
 - reload your shell!
 - run `hi_configure` any time afterward to revisit the feature toggle prompts - header, prompt, personal settings, git status, editors, aliases, header details, terminal width, and whether hi styles this machine too or only the hosts you say `hi` to - without touching the shell rc wiring. Answers land in `~/.config/hi.d/settings.sh`; see [Configuration](#configuration) below
 - run `hi_check_configs` any time to just re-run that shell rc validation, without the rest of the install
+- run `hi_doctor` (or `hi --doctor <target>`) when something is slow or failing: it reports the tree, the config overlay, every backend probed and timed with the same ceilings the header and completion use, and - with a target - which backend the name resolves to plus an ssh reachability/tooling check, all read-only
 - configure `~/.ssh/config` tags via sshm
 - [optional] pin specific colors in `~/.config/hi.d/colors` - everything else gets a color automatically. Copy `hi.d/misc/colors` there to start from the shipped defaults
   - run `hi_color_preview` to preview what every ssh host/your user resolves to
@@ -197,6 +209,7 @@ tests/test_runner.sh
 | `scripts/install.sh`                            | configure the local shells, install, update and uninstall - `--prefix`/`$DESTDIR` for packagers                                                                        |
 | `scripts/uninstall.sh`                          | one-line shim onto `install.sh --uninstall` (`hi_uninstall`)                                                                                                           |
 | `scripts/color_preview.sh`                      | preview what every ssh host/user resolves to (`hi_color_preview`)                                                                                                      |
+| `scripts/doctor.sh`                             | pre-flight report: tree, config, timed backend probes, and a target's resolution + ssh reachability (`hi_doctor`, `hi --doctor`)                                       |
 | `tests/test_runner.sh`                          | unified runner - times and summarizes every test below (or a chosen subset) (`hi_test`)                                                                                |
 | `tests/test_lib.sh`                             | the whole suite skeleton: asserts/counters, scratch dir, skip preamble, probe commands, poll/pty helpers                                                               |
 | `tests/shells/alias_test.sh`                    | check `aliases.sh` still loads in dash/bash/zsh/fish                                                                                                                   |
@@ -207,6 +220,7 @@ tests/test_runner.sh
 | `tests/common/targets_test.sh`                  | unit tests for `targets.sh` and `bash.sh`'s completion, against fixture ssh configs and fake backend CLIs                                                              |
 | `tests/common/paths_test.sh`                    | unit tests for `paths.sh`'s local-only gate, both directions, and that settings reach it                                                                               |
 | `tests/scripts/color_preview_test.sh`           | unit tests for `color_preview.sh`'s precedence, table inputs and layout helpers                                                                                        |
+| `tests/scripts/doctor_test.sh`                  | unit tests for `doctor.sh` against shimmed backends and a fake ssh                                                                                                     |
 | `tests/shells/hi_test.sh`                       | unit tests for `hi.sh`'s argument parsing, backend predicates and generated bootloader/fallback rc                                                                     |
 | `tests/shells/load_test.sh`                     | unit tests for `load.sh`'s rc grafting, marker stripping, and disposable-vs-permanent `$_HI_ROOT` cleanup                                                              |
 | `tests/shells/rc_test.sh`                       | behavioral tests for `bash.sh`/`zsh.zsh`/`config.fish`: prompt built, completion registered, toggles honored                                                           |

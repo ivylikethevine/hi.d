@@ -149,6 +149,21 @@ EOF
 
   _HI_TEST_MARKER="HI_SSH_TEST_OK"
 
+  # see the registration in the bash32 block below for why this exists; the
+  # find runs inside the container so the file list and the parser agree on
+  # what a path is
+  function test_bash32_parses_every_file() {
+    docker run --rm -v "$_HI_HOME/hi.d":/w:ro bash:3.2 bash -c '
+      rc=0
+      for f in $(find /w -name "*.sh" -not -path "*/.git/*"); do
+        out=$(bash -n "$f" 2>&1) || {
+          printf "%s\n%s\n" "$f" "$out"
+          rc=1
+        }
+      done
+      exit $rc'
+  }
+
   _hi_pty_stdin auto "no tty and no python3 to fake one - ssh -t may not get a real pty, results may be unreliable"
   _hi_pty_force
 
@@ -181,6 +196,13 @@ EOF
     # passes right through it. Both transcripts have to be clean instead.
     _hi_case _hi_transcript_is_clean bash32 "$_HI_WORKDIR/bash32.ssh.out"
     _hi_case _hi_transcript_is_clean bash32-interactive "$_HI_WORKDIR/bash32-interactive.interactive.out"
+    # every *.sh through a real 3.2 parser (`bash -n`): the lint suite's grep
+    # table only knows the constructs it lists, while the parser catches the
+    # unlisted ones - an apostrophe in a comment inside $( ), say, which 3.2
+    # reads as an unterminated string (GLOSSARY: apostrophes in substitution
+    # comments). The macOS CI job found that one at runtime; this catches the
+    # whole class before a release does.
+    _hi_check "every *.sh parses under bash 3.2" test_bash32_parses_every_file
   fi
 
   if [ "$_HI_INSTALLED_OK" -eq 1 ]; then

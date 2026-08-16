@@ -3,9 +3,8 @@
 # the `hi_copy` alias in shells/aliases.sh, and misc/vim.rc's yank autocmd.
 #
 # The emitter's whole job is producing exactly the right bytes, so every case
-# here reads the bytes: the escape is captured through a pipe (no controlling
-# terminal, which is also the fallback path the script has to take) and matched
-# against the literal sequence, not a paraphrase of it.
+# reads the bytes - captured through a pipe, which is also the script's
+# no-controlling-terminal fallback - and matches the literal sequence.
 #
 # Nearly every function below is invoked indirectly, through _hi_check's "$@",
 # which SC2329 can't see.

@@ -1,24 +1,17 @@
 #!/bin/bash
-# Unit tests for hi.sh - the client entry point.
+# Unit tests for hi.sh, the client entry point. Sourcing it goes through the
+# same `[[ BASH_SOURCE == $0 ]]` hatch install.sh uses, which defines every
+# function without connecting to anything - so the pure half is reachable here
+# (argument parsing, the backend predicates, the heredoc generators), where a
+# mis-parse is an assertion rather than a confusing connection failure. The
+# predicates run against fake backend CLIs on $PATH, so their answers don't
+# depend on what this machine is running; _say_hi stays e2e-only by nature.
 #
-# hi.sh is only ever *executed*, so it ends with the same `[[ BASH_SOURCE ==
-# $0 ]] || return 0` hatch scripts/install.sh uses:
-# sourcing it here defines every function without connecting to anything.
-#
-# What that leaves reachable is the pure half of the file - argument parsing,
-# the backend predicates, and the heredoc generators - none of which the e2e
-# suites can pin down, since there a mis-parse surfaces only as a confusing
-# connection failure. _say_hi/_say_hi_container stay e2e-only by nature.
-#
-# The predicates run against fake docker/podman/nomad/kubectl CLIs on $PATH
-# (same approach as targets_test.sh), so their answers are fixed rather than
-# "whatever this machine is running".
-#
-# Nearly every function below is invoked indirectly - by name, through
-# _hi_case's "$@" - which SC2329 can't see. SC2317 rides along for the same
-# reason once more: shellcheck follows the `source "$_HI_LAUNCHER"` below into
-# hi.sh's trailing `_hi "$@"`, decides that call never returns, and marks this
-# whole file unreachable - it doesn't model the BASH_SOURCE guard above it.
+# Functions here are invoked indirectly through _hi_case's "$@" (SC2329). The
+# linter also follows `source "$_HI_LAUNCHER"` into hi.sh's trailing `_hi "$@"`,
+# decides it never returns, and marks this file unreachable (SC2317) - it does
+# not model the BASH_SOURCE guard. (A comment line may not *begin* with the
+# linter's name, or it is read as a directive.)
 # shellcheck disable=SC2329,SC2317
 set -euo pipefail
 
@@ -481,6 +474,59 @@ function test_update_keeps_ssh_flags() {
   )
 }
 
+# --- the size hi reports, and the transport that carries it -------------------
+#
+# This block exists because both halves were wrong at once: the connect line
+# reported `du` over the payload directories (the uncompressed tree, roughly
+# double the truth), and the armored script had grown to within a few kilobytes
+# of the *single-argument* execve limit, which is 128KB on Linux however large
+# ARG_MAX is. The second one is a hard failure - "Argument list too long", no
+# session at all - so it gets a guard with headroom rather than a comment.
+
+function test_human_bytes_matches_du_shapes() {
+  [ "$(_hi_human_bytes 0)" = 0B ] || return 1
+  [ "$(_hi_human_bytes 1023)" = 1023B ] || return 1
+  [ "$(_hi_human_bytes 1024)" = 1.0K ] || return 1
+  [ "$(_hi_human_bytes 34559)" = 34K ] || return 1
+  [ "$(_hi_human_bytes 5000000)" = 4.8M ]
+}
+
+# four characters per three bytes, rounded up - the padding is part of the
+# answer, so n * 4 / 3 (which truncates it) is the wrong formula
+function test_armored_len_rounds_up() {
+  [ "$(_hi_armored_len 0)" = 0 ] || return 1
+  [ "$(_hi_armored_len 1)" = 4 ] || return 1
+  [ "$(_hi_armored_len 3)" = 4 ] || return 1
+  [ "$(_hi_armored_len 4)" = 8 ] || return 1
+  # against the real encoder, which is the only opinion that counts
+  local n
+  for n in 1 2 3 100 999; do
+    [ "$(_hi_armored_len "$n")" -eq "$(head -c "$n" /dev/zero | base64 | tr -d '\n' | wc -c)" ] || return 1
+  done
+}
+
+# the reported number counts what is sent, not what is on disk: it must be
+# nowhere near `du` over the payload, which is what it used to be
+function test_wire_size_is_not_the_disk_size() {
+  local wire disk
+  wire="$(_hi_wire_estimate)"
+  disk="$(_hi_size)"
+  [ -n "$wire" ] && [ "$wire" != "$disk" ]
+}
+
+# The guard with teeth. The script hi sends is armored twice - the tar and
+# hi.sh inside it, then the whole thing again - and until it moved to stdin it
+# travelled as one argv entry. It no longer does, but the number is worth
+# watching: it is also what every session pays in bandwidth.
+function test_payload_stays_clear_of_the_arg_limit() {
+  local bytes
+  bytes="$(_hi_armored_len "$(($(_hi_armored_len "$(wc -c <"$_HI_LAUNCHER")") + \
+  $(_hi_armored_len "$(tar czf - -h -C "$_HI_HOME" "${_HI_PAYLOAD[@]/#/hi.d/}" | wc -c)")))")"
+  # 128KB (MAX_ARG_STRLEN) is where it used to break outright; 256KB is the
+  # "this has doubled, come and look" line
+  [ "$bytes" -lt 262144 ]
+}
+
 # --- hi --version -----------------------------------------------------------
 #
 # The dispatch is executed, not sourced: --version lives in the trailing case
@@ -629,6 +675,12 @@ function run_hi_tests() {
   _hi_check "Members are bare names" test_overlay_tar_members_are_bare_names
   _hi_check "Carries only what exists" test_overlay_tar_carries_only_what_exists
   _hi_check "Fallback rc points at the shipped tree" test_fallback_rc_points_config_dir_at_the_shipped_tree
+
+  _hi_h2 "Testing: the size hi reports"
+  _hi_check "_hi_human_bytes matches du's shapes" test_human_bytes_matches_du_shapes
+  _hi_check "_hi_armored_len rounds up like base64" test_armored_len_rounds_up
+  _hi_check "The wire size isn't the disk size" test_wire_size_is_not_the_disk_size
+  _hi_check "The payload stays clear of the argv limit" test_payload_stays_clear_of_the_arg_limit
 
   _hi_h2 "Testing: the per-host settings overlay"
   _hi_check "Only the matching host's file is sent" test_host_overlay_sends_only_the_matching_file

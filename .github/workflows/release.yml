@@ -296,3 +296,73 @@ jobs:
             '- [ ] `brew audit --strict --new hi.d`')"
           gh pr create --repo "$TAP_REPO" --head "$branch" \
             --title "hi.d $GITHUB_REF_NAME" --body "$body"
+
+  # The AUR half of the same job. It is a plain git push over ssh - the AUR has
+  # no PR mechanism to hold anything for review - so the safety here is the gate
+  # above (`needs: publish`, the same `release` environment) plus the fact that
+  # what it pushes is exactly the two files the build job regenerated and the
+  # packaging suite already checked.
+  #
+  # Two things this job deliberately does NOT do:
+  #   - run namcap. It is the hard gate before an AUR submission and it needs an
+  #     Arch box, which this runner is not. The first push of each package is
+  #     therefore still a manual, namcap'd one (packaging/README.md); this job
+  #     is for the releases after that.
+  #   - touch hi.d-git. That package builds from `main` and has no version to
+  #     bump, so a release has nothing to say to it.
+  #
+  # No secret, no push: it prints what to copy and exits 0, exactly as the tap
+  # job does, which is what lets it live here before the AUR account exists.
+  aur:
+    name: push the AUR package
+    needs: publish
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: packages
+          path: dist
+
+      - name: Push PKGBUILD and .SRCINFO to the AUR
+        env:
+          AUR_SSH_KEY: ${{ secrets.AUR_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${AUR_SSH_KEY:-}" ]; then
+            echo "no AUR_SSH_KEY secret - the AUR package was NOT updated;"
+            echo "copy dist/manifests/PKGBUILD and .SRCINFO to the aur/hi.d repo by hand,"
+            echo "after running the namcap gate in packaging/README.md"
+            exit 0
+          fi
+          # the key never touches the workspace: $RUNNER_TEMP is outside it, and
+          # the host key is pinned by keyscan rather than accepted on first use
+          install -m 700 -d "$RUNNER_TEMP/ssh"
+          printf '%s\n' "$AUR_SSH_KEY" >"$RUNNER_TEMP/ssh/aur"
+          chmod 600 "$RUNNER_TEMP/ssh/aur"
+          ssh-keyscan -t ed25519 aur.archlinux.org >"$RUNNER_TEMP/ssh/known_hosts" 2>/dev/null
+          export GIT_SSH_COMMAND="ssh -i $RUNNER_TEMP/ssh/aur -o IdentitiesOnly=yes -o UserKnownHostsFile=$RUNNER_TEMP/ssh/known_hosts"
+
+          git clone --depth 1 ssh://aur@aur.archlinux.org/hi.d.git aur
+          cp dist/manifests/PKGBUILD aur/PKGBUILD
+          cp dist/manifests/.SRCINFO aur/.SRCINFO
+          cd aur
+          # only those two files are ever tracked in an AUR repo, and the guard
+          # is worth keeping: a stray file pushed there is a package that fails
+          # to build for everyone
+          if [ -n "$(git ls-files --others --exclude-standard)" ]; then
+            echo "refusing to push: the AUR checkout has untracked files" >&2
+            git status --short >&2
+            exit 1
+          fi
+          if git diff --quiet; then
+            echo "AUR package already current - nothing to push"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git commit -am "hi.d $GITHUB_REF_NAME"
+          git push origin master

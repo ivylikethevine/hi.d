@@ -300,30 +300,22 @@ function _hi_require_backend() {
   _hi_stand_down "$1 unreachable" "$1 not reachable, skipping"
 }
 
-# The command each e2e suite runs *on the target* to prove hi actually landed
-# there; it echoes $1 (the suite's marker) only if the assertion holds, and
-# the suite greps the session transcript for that marker. $2 picks the shape:
+# The command each e2e suite runs *on the target* to prove hi landed there: it
+# echoes $1 (the marker) only if the assertion holds, and the suite greps the
+# transcript for it. $2 picks the shape, which differs by what each branch has
+# in scope:
 #
-#   bash              hi.sh's main branch chainloads straight to `bash
-#                     --rcfile hi.bashrc` without sourcing aliases.sh itself,
-#                     so this asserts the copy landed *and* sources it directly
-#   fallback          the container fallback branch (see _say_hi_container's
-#                     `no bash` arm) only copies+sources shells/aliases.sh -
-#                     it never touches common/paths.sh, so $_HI_ALIASES and
-#                     hi_info aren't in scope; check a plain alias instead
-#   fallback_fish     fish aliases are functions, and its `alias name` (no
-#                     value) is a syntax error rather than an existence check
-#                     - same assertion as fallback, in fish's own dialect
-#   ssh_fallback      the *ssh* fallback rc (see hi.sh's _hi_fallback_rc) does
-#                     source paths.sh before running our command, unlike the
-#                     container one - so hi_info is in scope here
+#   bash              the main branch: asserts the copy landed and sources
+#                     aliases.sh itself, which that branch does not
+#   fallback          the container fallback copies only aliases.sh - no
+#                     paths.sh, so hi_info isn't in scope; check a plain alias
+#   fallback_fish     the same, in fish's dialect (its aliases are functions)
+#   ssh_fallback      the ssh fallback rc *does* source paths.sh, so hi_info is
 #   ssh_fallback_fish ssh_fallback in fish's dialect
-#   installed         the target already has a permanent hi.d: asserts _say_hi
-#                     pointed straight at it ($_HI_ROOT = ~/hi.d) instead of
-#                     shipping a fresh tree over
+#   installed         a permanent hi.d: asserts $_HI_ROOT is ~/hi.d, i.e.
+#                     _say_hi loaded it in place rather than shipping a tree
 #
-# Every string below stays single-quoted: the variables in it expand on the
-# target, not here.
+# Every string stays single-quoted: the variables expand on the target.
 # shellcheck disable=SC2016 # these expand later, on the target
 function _hi_probe_cmd() {
   local marker="$1"
@@ -374,24 +366,16 @@ function _hi_pty_force() {
   return 0
 }
 
-# The _hi_pty_wrap preamble every suite that backgrounds the launcher through
-# _hi_exec_case needs: stashes our real stdin on fd 3 and decides the pty
-# wrap from *that*. $1 is _hi_pty_wrap's mode, $2 its warning.
+# The _hi_pty_wrap preamble every suite that backgrounds the launcher needs:
+# stash our real stdin on fd 3 and decide the pty wrap from *that*. $1 is the
+# mode, $2 the warning. `exec -it` refuses a remote tty unless our stdin is one,
+# which it isn't in CI, so the local fake is what makes these suites reliable
+# off an interactive terminal.
 #
-# `<backend> exec -it` and `kubectl exec -it` refuse to allocate a remote tty
-# unless our own stdin already is one - true whenever this runs headless/CI -
-# so a locally-faked pty is what makes these suites reliable everywhere rather
-# than only from an interactive terminal.
-#
-# The tty check has to happen against a duplicated fd, not fd 0 directly: the
-# launcher runs backgrounded with `&`, and since job control is off in a
-# non-interactive script, bash silently rewires a backgrounded job's stdin to
-# /dev/null regardless of what the script's own stdin was - so testing `-t 0`
-# here and then handing the background job fd 0 later would report a real
-# terminal and still fail. Duplicating to fd 3 up front and threading `<&3`
-# through to the background command (which _hi_exec_case does) keeps the
-# original tty-ness intact either way - which is also why the two have to be
-# used together.
+# The check must use the duplicated fd: bash rewires a backgrounded job's stdin
+# to /dev/null with job control off, so testing `-t 0` here and handing the job
+# fd 0 later would report a terminal and still fail. fd 3 plus `<&3` in
+# _hi_exec_case keeps the original tty-ness - which is why they go together.
 function _hi_pty_stdin() {
   exec 3<&0
   _hi_pty_wrap 3 "$1" "$2"

@@ -1,0 +1,208 @@
+#!/bin/bash
+# hi against the shell frameworks people actually have installed.
+#
+# Almost nobody's ~/.zshrc is empty, and load.sh appends hi's block to the *end*
+# of it - so hi runs after the framework and is the one positioned to break it.
+# It has: `setopt KSH_ARRAYS` was set here for hi's convenience, and oh-my-zsh
+# indexes arrays from 1.
+#
+# Each case boots a container with the framework installed per its own README,
+# connects for real, and asserts the marker landed, the probe below says the
+# specific collision is absent, and the transcript carries no shell error noise.
+# A collision is rarely fatal - it just prints at you every prompt, which is
+# what no other suite would notice.
+#
+# Each image removes the shells that outrank the one under test: load() picks
+# fish > zsh > bash regardless of login shell, so on the shared image every case
+# would land in fish and no framework would load. Builds need the network; a
+# failed one skips its case rather than failing the suite.
+#
+# Nearly every function below is invoked indirectly, through _hi_case's "$@",
+# which SC2329 can't see.
+# shellcheck disable=SC2329
+set -euo pipefail
+
+# shellcheck source=../../common/core.sh
+source "${_HI_HOME:-$HOME}/hi.d/common/core.sh"
+# shellcheck source=../test_lib.sh
+source "$_HI_TEST_LIB"
+
+# "<label>=<0|1>", the same kv shape the other target suites use
+_HI_FRAMEWORK_OK=""
+
+# <label>:<login shell>:<Dockerfile body>. Each installs the framework
+# unattended and leaves a *real* rc file behind - an empty ~/.zshrc would prove
+# nothing, since the whole question is what happens when hi's block is appended
+# after someone else's.
+_HI_FRAMEWORKS=(
+  "omz:/usr/bin/zsh:zsh"
+  "p10k:/usr/bin/zsh:zsh"
+  "starship:/bin/bash:bash"
+  "bashit:/bin/bash:bash"
+)
+
+# The line each case types into the live session, once hi and the framework are
+# both loaded. Built from two arguments because a pty echoes the input, so the
+# token must be assembled by the shell. zsh checks the array base (hi must not
+# leave KSH_ARRAYS on under omz/p10k); bash checks that hi's `ps1` is still
+# chained onto the framework's PROMPT_COMMAND rather than replacing it.
+function _hi_framework_probe() {
+  case "$1" in
+  zsh) printf '%s\n' "setopt | grep -q ksharrays && printf 'HI_FW-%s\\n' LEAKED || printf 'HI_FW-%s\\n' CLEAN" ;;
+  bash) printf '%s\n' "[[ \$PROMPT_COMMAND == *ps1* ]] && printf 'HI_FW-%s\\n' CLEAN || printf 'HI_FW-%s\\n' LOST" ;;
+  esac
+}
+
+function _hi_framework_dockerfile() {
+  case "$1" in
+  omz)
+    cat <<'EOF'
+RUN apt-get purge -y -qq fish >/dev/null 2>&1 || true
+RUN apt-get update -qq && apt-get install -y -qq zsh curl ca-certificates git >/dev/null
+USER hitest
+RUN sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended
+USER root
+EOF
+    ;;
+  # oh-my-zsh plus the prompt everyone pairs it with. powerlevel10k is the
+  # sharpest test of the array base: it is thousands of lines of zsh that all
+  # assume the native one.
+  p10k)
+    cat <<'EOF'
+RUN apt-get purge -y -qq fish >/dev/null 2>&1 || true
+RUN apt-get update -qq && apt-get install -y -qq zsh curl ca-certificates git >/dev/null
+USER hitest
+RUN sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended \
+ && git clone --depth=1 https://github.com/romkatv/powerlevel10k.git ~/.oh-my-zsh/custom/themes/powerlevel10k \
+ && sed -i 's|^ZSH_THEME=.*|ZSH_THEME="powerlevel10k/powerlevel10k"|' ~/.zshrc \
+ && printf 'POWERLEVEL9K_DISABLE_CONFIGURATION_WIZARD=true\n' >>~/.zshrc
+USER root
+EOF
+    ;;
+  # a prompt that owns PROMPT_COMMAND, which is the bash-side collision:
+  # shells/bash.sh chains onto it rather than replacing it, and this is what
+  # says whether that chaining actually holds
+  starship)
+    cat <<'EOF'
+RUN apt-get purge -y -qq fish zsh >/dev/null 2>&1 || true
+RUN apt-get update -qq && apt-get install -y -qq curl ca-certificates >/dev/null \
+ && curl -fsSL https://starship.rs/install.sh | sh -s -- --yes >/dev/null
+USER hitest
+RUN printf 'eval "$(starship init bash)"\n' >>~/.bashrc
+USER root
+EOF
+    ;;
+  bashit)
+    cat <<'EOF'
+RUN apt-get purge -y -qq fish zsh >/dev/null 2>&1 || true
+RUN apt-get update -qq && apt-get install -y -qq git ca-certificates >/dev/null
+USER hitest
+RUN git clone --depth=1 https://github.com/Bash-it/bash-it.git ~/.bash_it \
+ && ~/.bash_it/install.sh --silent --no-modify-config \
+ && printf 'export BASH_IT="$HOME/.bash_it"\nexport BASH_IT_THEME="bobby"\nsource "$BASH_IT"/bash_it.sh\n' >>~/.bashrc
+USER root
+EOF
+    ;;
+  esac
+}
+
+function _hi_build_frameworks() {
+  local spec label ctx
+  for spec in "${_HI_FRAMEWORKS[@]}"; do
+    label="${spec%%:*}"
+    ctx="$_HI_WORKDIR/$label"
+    mkdir -p "$ctx"
+    {
+      printf 'FROM %s\n' "$_HI_SSHD_IMAGE"
+      _hi_framework_dockerfile "$label"
+    } >"$ctx/Dockerfile"
+    if _hi_build_image "$label" "hi-fwtest-$label-$$" "the $label case" \
+      -f "$ctx/Dockerfile" "$ctx"; then
+      _hi_kv_set _HI_FRAMEWORK_OK "$label" 1
+    else
+      _hi_kv_set _HI_FRAMEWORK_OK "$label" 0
+    fi
+  done
+}
+
+# One interactive session per framework - a command-shaped run replaces load()
+# outright and never reaches the rc graft, which is where collisions live. Its
+# own pty driver rather than _hi_interactive_case only because it needs to type
+# a second line (the probe); everything else follows that helper's shape.
+function _hi_run_framework_case() {
+  local label="$1" login_shell="$2" family="$3" name out ok=0 exit_code t0 t1
+
+  name="hi-fwtest-$label-c-$$"
+  out="$_HI_WORKDIR/$label.interactive.out"
+  _hi_h3 "Testing framework: $label ($login_shell)"
+  _hi_sshd_container "$name" "hi-fwtest-$label-$$" -e "LOGIN_SHELL=$login_shell" || return 1
+  _hi_ssh_launch "$_HI_SSH_PORT"
+
+  if [ "${#_HI_PTY_FORCED[@]}" -eq 0 ]; then
+    _hi_skip "[$label]" "no python3 to drive an interactive pty"
+    docker rm -f "$name" >/dev/null 2>&1
+    return 0
+  fi
+
+  t0="$(_hi_now)"
+  : >"$out"
+  # shellcheck disable=SC2094 # separate processes; the reader only polls
+  {
+    _hi_poll_bool "$((${_HI_INTERACTIVE_SETTLE:-4} * 4))" 0.25 _hi_session_ready "$out" || true
+    printf "printf '%%s-%%s\\n' %s INTERACTIVE\n" "$_HI_TEST_MARKER"
+    _hi_framework_probe "$family"
+    printf 'exit\n'
+    _hi_poll_bool 20 0.25 grep -q "hi closing" "$out" || true
+  } | "${_HI_PTY_FORCED[@]}" "${_HI_SSH_LAUNCH_BARE[@]}" >"$out" 2>&1 &
+  _hi_wait_pid "$!" 90 _hi_timed_out "$label" 90
+  exit_code="$_HI_WAIT_EXIT"
+  t1="$(_hi_now)"
+
+  if _hi_case_result "$label" "framework" "$exit_code" "$t0" "$t1" "$out" \
+    "$_HI_TEST_MARKER-INTERACTIVE" "hi closing" "HI_FW-CLEAN"; then
+    # the assertion this suite exists for: hi and the framework coexisting
+    # without either one printing at the user
+    _hi_transcript_is_clean "$label" "$out" && ok=1
+  fi
+
+  docker rm -f "$name" >/dev/null 2>&1
+  [ "$ok" -eq 1 ]
+}
+
+function run_framework_tests() {
+  _hi_require_backend docker
+
+  _hi_workdir fwtest
+  _hi_h1 "Testing hi alongside the common shell frameworks"
+  _hi_ssh_keypair
+
+  _hi_h2 "Building test images"
+  _hi_sshd_image "the framework cases" || _hi_stand_down "no base image"
+  _hi_build_frameworks
+
+  _HI_TEST_MARKER="HI_FRAMEWORK_TEST_OK"
+  _hi_pty_stdin auto "no tty and no python3 to fake one - results may be unreliable"
+  _hi_pty_force
+
+  _hi_suite_begin
+
+  local spec label shell family
+  for spec in "${_HI_FRAMEWORKS[@]}"; do
+    IFS=: read -r label shell family <<<"$spec"
+    if [ "$(_hi_kv_get _HI_FRAMEWORK_OK "$label")" = 1 ]; then
+      _hi_case _hi_run_framework_case "$label" "$shell" "$family"
+    else
+      _hi_skip "[$label]" "image did not build"
+    fi
+  done
+
+  for spec in "${_HI_FRAMEWORKS[@]}"; do
+    docker image rm -f "hi-fwtest-${spec%%:*}-$$" >/dev/null 2>&1 || true
+  done
+
+  _hi_suite_end "" \
+    "hi coexists with every framework tested ($_HI_TOTAL cases)" \
+    "hi collides with $_HI_FAILED/$_HI_TOTAL frameworks"
+}
+
+run_framework_tests

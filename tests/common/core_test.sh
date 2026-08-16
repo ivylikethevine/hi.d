@@ -1,8 +1,9 @@
 #!/bin/bash
 # Unit tests for common/core.sh
 # Nearly every function below is invoked indirectly - by name, through
-# _hi_case's "$@" - which SC2329 can't see.
-# shellcheck disable=SC2329
+# _hi_case's "$@" - which SC2329 can't see. The single-quoted probe scripts are
+# expanded by the *child* shell, which is the whole point (SC2016).
+# shellcheck disable=SC2329,SC2016
 set -euo pipefail
 
 # shellcheck source=../../common/core.sh
@@ -228,6 +229,62 @@ function test_overlay_refuses_a_path() {
   [ "$(_hi_overlay_probe _HI_TARGET=../settings)" = global ]
 }
 
+# --- the same primitives, in zsh ----------------------------------------------
+#
+# shells/zsh.zsh sources core.sh directly, so its functions run in zsh too - and
+# three zsh differences had each silently broken something: `${name:i:1}` is a
+# history modifier there, $BASH_REMATCH is never populated, and an unquoted
+# `$var` is not word-split. All three were invisible to a bash-only suite, so
+# these cases run the real functions in a real zsh and compare with bash's
+# answer; the point is that the two agree.
+
+function _hi_in_shell() {
+  local shell="$1" script="$2"
+  env _HI_HOME="$_HI_HOME" _HI_SSH_CONFIG="$_HI_WORKDIR/ssh_config" \
+    "$shell" -c "source \"\$_HI_HOME/hi.d/common/core.sh\"; $script" 2>&1
+}
+
+function _hi_shell_agrees() {
+  local script="$1" a b
+  a="$(_hi_in_shell bash "$script")"
+  b="$(_hi_in_shell zsh "$script")"
+  [ -n "$a" ] && [ "$a" = "$b" ]
+}
+
+function test_zsh_hash_color_agrees_with_bash() {
+  _hi_ssh_tag_fixture >/dev/null
+  _hi_shell_agrees 'printf "%s,%s,%s" "$(_hi_hash_color alice)" "$(_hi_hash_color prod-db)" "$(_hi_hash_color x)"'
+}
+
+function test_zsh_host_tag_agrees_with_bash() {
+  _hi_shell_agrees 'printf "%s|%s" "$(_hi_ssh_host_tag myhost)" "$(_hi_ssh_host_tag devhost)"'
+}
+
+function test_zsh_host_tag_rejects_the_same_hosts() {
+  _hi_shell_agrees '_hi_ssh_host_tag untaggedhost >/dev/null; printf "untagged:%s " "$?"; _hi_ssh_host_tag nope >/dev/null; printf "unknown:%s" "$?"'
+}
+
+function test_zsh_resolve_color_agrees_with_bash() {
+  _hi_shell_agrees 'printf "%s" "$(_hi_resolve_color hostname myhost)"'
+}
+
+# the regression that matters for oh-my-zsh: hi must not leave KSH_ARRAYS on in
+# the user's shell, because omz and its plugins index arrays from 1
+function test_zsh_rc_leaves_ksharrays_alone() {
+  local out
+  out="$(env _HI_HOME="$_HI_HOME" TERM=xterm-256color zsh -c \
+    'source "$_HI_HOME/hi.d/shells/zsh.zsh"; setopt | grep -c ksharrays' 2>/dev/null)"
+  [ "$out" = 0 ]
+}
+
+# ...and it still has to work when the user (or their framework) turned it on
+function test_zsh_rc_survives_ksharrays_being_on() {
+  local out
+  out="$(env _HI_HOME="$_HI_HOME" TERM=xterm-256color zsh -c \
+    'setopt KSH_ARRAYS; source "$_HI_HOME/hi.d/shells/zsh.zsh"; print -n "$USER_COLOR"' 2>/dev/null)"
+  [ -n "$out" ]
+}
+
 function run_core_tests() {
   _hi_workdir sharedtest
 
@@ -279,6 +336,14 @@ function run_core_tests() {
   _hi_check "Exact host beats the hosttag file" test_overlay_exact_host_beats_hosttag
   _hi_check "Unknown target falls through" test_overlay_unknown_target_falls_through
   _hi_check "A target with a slash is refused" test_overlay_refuses_a_path
+
+  _hi_h2 "Testing: the same answers in zsh"
+  _hi_check_requires zsh "_hi_hash_color agrees with bash" test_zsh_hash_color_agrees_with_bash
+  _hi_check_requires zsh "_hi_ssh_host_tag agrees with bash" test_zsh_host_tag_agrees_with_bash
+  _hi_check_requires zsh "...and rejects the same hosts" test_zsh_host_tag_rejects_the_same_hosts
+  _hi_check_requires zsh "_hi_resolve_color agrees with bash" test_zsh_resolve_color_agrees_with_bash
+  _hi_check_requires zsh "zsh.zsh leaves KSH_ARRAYS off" test_zsh_rc_leaves_ksharrays_alone
+  _hi_check_requires zsh "zsh.zsh survives KSH_ARRAYS being on" test_zsh_rc_survives_ksharrays_being_on
 
   _hi_suite_end "core.sh"
 }

@@ -1,17 +1,13 @@
 #!/bin/bash
-# End-to-end test of hi.sh's ephemeral-target cleanup (the `trap 'rm -rf
-# $_HI_CLEANUP' exit` set up in _say_hi's non-installed branch, see hi.sh)
-# surviving an abrupt disconnect, not just a clean `exit`.
+# End-to-end test that hi's ephemeral-target cleanup (_say_hi's `trap 'rm -rf
+# $_HI_CLEANUP' exit`) survives an abrupt disconnect, not just a clean `exit`.
 #
-# Freezing the session takes *two* SIGSTOPs, not one. _say_hi multiplexes the
-# install-probe and the real session over one connection (ControlMaster=auto /
-# ControlPersist=30, see hi.sh), so by the time the session is up there is a
-# backgrounded ControlPersist master holding the TCP socket alongside the `ssh
-# -t ...` the test can see - and the master, not the session client, is what
-# answers sshd's ClientAlive probes. Freeze only the client and sshd quite
-# correctly keeps the session: that's a hung terminal, not a dead link. Both
-# have to stop for this to model a real one, which is why _hi_ssh_mux_pids
-# exists and why a missing master below is a hard failure.
+# Freezing the session takes *two* SIGSTOPs: _say_hi multiplexes over one
+# connection, so a backgrounded ControlPersist master holds the socket beside
+# the visible `ssh -t`, and it is the master that answers sshd's ClientAlive
+# probes. Freeze only the client and sshd correctly keeps the session - that is
+# a hung terminal, not a dead link. Hence _hi_ssh_mux_pids, and hence a missing
+# master being a hard failure below.
 #
 # Nearly every function below is invoked indirectly - by name, through
 # _hi_case's/_hi_poll_bool's "$@", or as a trap hook - which SC2329 can't see.

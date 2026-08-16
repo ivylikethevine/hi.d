@@ -33,17 +33,11 @@ if [ -z "${_hi_core_loaded:-}" ]; then
   if [ -f "$_HI_CONFIG_DIR/settings.sh" ]; then
     . "$_HI_CONFIG_DIR/settings.sh"
   fi
-  # Per-host overlay: $_HI_CONFIG_DIR/settings.d/<name>.sh, after settings.sh so
-  # a host can override a global toggle (a slow link wants _HI_HEADER_CHECK=0, a
-  # shared root box wants the prompt only). Two names, in this order: the
-  # hosttag file from the `# Tags:` comment colors already read, then the
-  # exact-host file - they stack, and the more specific one wins.
-  #
-  # $_HI_TARGET/$_HI_TARGET_TAG are set only inside a session hi opened (hi.sh's
-  # remote preamble), so every line here is a no-op on the client. A name
-  # carrying a slash is skipped rather than resolved: the value arrives from the
-  # command line, and settings.d is meant to be one flat directory.
-  # shells/config.fish keeps its own copy of this block.
+  # Per-host overlay, after settings.sh so a host can override a global toggle:
+  # the hosttag file (from the `# Tags:` comment colors read too), then the
+  # exact-host file - they stack, specific wins. $_HI_TARGET is set only inside
+  # a session hi opened, so this is a no-op on the client. A name with a slash
+  # is skipped; settings.d is one flat directory. config.fish keeps a copy.
   for _hi_o in "tag-${_HI_TARGET_TAG:-}" "${_HI_TARGET:-}"; do
     case "$_hi_o" in
     tag- | '' | */*) continue ;;
@@ -204,19 +198,12 @@ function _hi_on_exit() {
   fi
 }
 
-# _hi_prompt_end <SHELL> <default> - the character the prompt ends with, for
-# that shell. Each shell's prompt has always closed with a different one (bash
-# `\$`, zsh `>`, fish `|`) and they were hardcoded three times; these are now
-# only the defaults.
-#
-# Precedence: the shell-specific setting, then the one that covers all three,
-# then the shipped default. An empty value counts as unset rather than as "no
-# separator" - a prompt ending in a bare space is almost never what someone
-# meant, and `_HI_PROMPT_END_ZSH=' '` still expresses it.
-#
-# The value lands in $PS1 unquoted and is *not* escaped: that is deliberate, so
-# `%#` in zsh or `\$` in bash still mean what they mean there. shells/config.fish
-# keeps its own copy of this rule, as it does for the toggle list.
+# _hi_prompt_end <SHELL> <default> - the character that shell's prompt ends
+# with. Precedence: the shell-specific setting, then the one covering all three,
+# then the shipped default (bash `\$`, zsh `>`, fish `|`). Empty counts as
+# unset, not as "no separator" - `' '` still expresses that. The value reaches
+# $PS1 unescaped on purpose, so zsh's `%#` and bash's `\$` still mean what they
+# mean. config.fish keeps its own copy of this rule.
 function _hi_prompt_end() {
   local specific
   eval "specific=\"\${_HI_PROMPT_END_$1:-}\""
@@ -294,14 +281,27 @@ function _hi_color_escape() {
   printf '%b' "$NC"
 }
 
-# deterministic name -> palette bucket, so the same item -> same color
+# Deterministic name -> palette bucket, so an item keeps its color. Two details
+# are what make it right in zsh as well as bash: `${name:$i:1}` needs the `$`
+# (without it zsh reads `:i` as a history modifier and dies), and the bucket is
+# picked by counting rather than `${arr[n]}`, since zsh indexes from 1. The
+# second is what `setopt KSH_ARRAYS` used to paper over - at the cost of
+# breaking oh-my-zsh and anything else assuming zsh's own base.
 function _hi_hash_color() {
-  local name="$1" sum=0 i ord
-  for ((i = 0; i < ${#name}; i++)); do
-    printf -v ord '%d' "'${name:i:1}"
+  local name="$1" sum=0 i=0 ord bucket idx=0 candidate
+  while [ "$i" -lt "${#name}" ]; do
+    printf -v ord '%d' "'${name:$i:1}"
     sum=$((sum + ord))
+    i=$((i + 1))
   done
-  printf '%s\n' "${_HI_COLOR_NAMES[sum % ${#_HI_COLOR_NAMES[@]}]}"
+  bucket=$((sum % ${#_HI_COLOR_NAMES[@]}))
+  for candidate in "${_HI_COLOR_NAMES[@]}"; do
+    if [ "$idx" -eq "$bucket" ]; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+    idx=$((idx + 1))
+  done
 }
 
 # the user/host of the machine hi.d is permanently installed on. hi.sh ships
@@ -346,25 +346,48 @@ function _hi_override_color() {
   _hi_colors_lookup "$1" "$special"
 }
 
-# grab the "# Tags: a, b" comment sitting directly above
-# a "Host <alias>" line in ~/.ssh/config. an unknown host will return 1
+# The "# Tags: a, b" comment sitting directly above a "Host <alias>" line in
+# ~/.ssh/config; an unknown host returns 1. Parsed with `case` and parameter
+# expansion rather than `[[ =~ ]]` because the captures were the problem: zsh
+# fills $match and only sets $BASH_REMATCH under an option hi has no business
+# turning on, so this returned nothing at all there. No captures, no argument.
 function _hi_ssh_host_tag() {
-  local line tag=""
-  [[ -f "$_HI_SSH_CONFIG" ]] || return 1
-  while IFS=$' ' read -r line; do
-    if [[ "$line" =~ ^[[:space:]]*#[[:space:]]*[Tt]ags[:=][[:space:]]*(.+)$ ]]; then
-      tag=${BASH_REMATCH[1]%%[,[:space:]]*}
-    elif [[ "$line" =~ ^[[:space:]]*Host[[:space:]]+([^#]+) ]]; then
-      local alias
-      for alias in ${BASH_REMATCH[1]}; do
-        [[ "$alias" = "$1" ]] || continue
-        [[ -n "$tag" ]] && printf '%s\n' "$tag" && return 0
+  local line trimmed rest tag="" aliases
+  [ -f "$_HI_SSH_CONFIG" ] || return 1
+  while IFS= read -r line || [ -n "$line" ]; do
+    # leading whitespace off, once, for every branch below
+    trimmed="${line#"${line%%[![:space:]]*}"}"
+    case "$trimmed" in
+    '#'*)
+      rest="${trimmed#\#}"
+      rest="${rest#"${rest%%[![:space:]]*}"}"
+      case "$rest" in
+      [Tt]ags[:=]*)
+        rest="${rest#*[:=]}"
+        rest="${rest#"${rest%%[![:space:]]*}"}"
+        # the leftmost tag only - "prod, web" pins on prod
+        tag="${rest%%[,[:space:]]*}"
+        ;;
+      esac
+      ;;
+    Host[[:space:]]*)
+      aliases="${trimmed#Host}"
+      aliases="${aliases%%#*}" # a trailing comment is not an alias
+      # A padded substring rather than a loop over `$aliases`: zsh doesn't
+      # word-split an unquoted variable, so the loop saw " myhost" as one
+      # element and never matched. Tabs folded first; literal names only.
+      aliases="${aliases//	/ }"
+      case " $aliases " in
+      *" $1 "*)
+        [ -n "$tag" ] && printf '%s\n' "$tag" && return 0
         return 1
-      done
+        ;;
+      esac
       tag=""
-    elif [[ -n "$line" ]]; then
-      tag=""
-    fi
+      ;;
+    '') ;;
+    *) tag="" ;;
+    esac
   done <"$_HI_SSH_CONFIG"
   return 1
 }

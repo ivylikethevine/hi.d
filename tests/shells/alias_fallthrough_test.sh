@@ -1,28 +1,15 @@
 #!/bin/bash
-# Unit tests for shells/aliases.sh's two pieces of logic that aren't covered
-# by tests/shells/alias_test.sh (which only checks the file loads and everything it
-# unconditionally defines actually landed):
+# The two pieces of shells/aliases.sh that alias_test.sh doesn't cover: the
+# `command -v a || command -v b || ...` fallthrough chains, and the
+# _HI_DISABLE_* guards that skip parts of the file. Both run for real in zsh,
+# sh, bash and fish against a from-scratch PATH of no-op fake binaries, so the
+# results are about resolution behaviour rather than what this machine happens
+# to have installed.
 #
-#   1. "preferential fallthrough" - the `command -v a || command -v b || ...`
-#      chains (_HI_EDITOR_BIN, _HI_EXA_BIN, _HI_EZA_BIN) that pick the first
-#      installed binary from an ordered candidate list.
-#   2. the _HI_DISABLE_EDITORS / _HI_DISABLE_ALIASES guards that skip parts
-#      of the file wholesale.
-#
-# Both are run for real in zsh, sh, bash and fish against a from-scratch PATH
-# containing only hand-picked no-op fake binaries, so results assert actual
-# resolution behavior ("candidate X is missing, does it fall through to Y")
-# rather than just "did it load" - and don't depend on what happens to be
-# installed on the machine running the test.
-#
-# This is also the regression test for a real bug this file caught: in zsh,
-# dash and POSIX sh (not bash, not fish), `command -v name` returns an
-# *alias's* definition once `name` has been aliased, instead of skipping to
-# the real binary - so a fallthrough chain reachable from an already-aliased
-# name silently broke (e.g. $EDITOR resolved to the literal text
-# "alias nano='nano --rcfile ...'" any time nano was aliased above it, which
-# is the default). See the resolve-before-aliasing block at the top of
-# shells/aliases.sh.
+# It is also the regression test for the bug that motivated it: in zsh, dash and
+# sh (not bash, not fish) `command -v name` returns an *alias's* definition once
+# one exists, so any chain reachable from an aliased name silently broke - see
+# the resolve-before-aliasing block at the top of shells/aliases.sh.
 #
 # Nearly every function below is invoked indirectly - by name, through
 # _hi_case's "$@" - which SC2329 can't see.

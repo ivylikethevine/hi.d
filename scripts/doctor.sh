@@ -69,7 +69,10 @@ function doctor_local() {
   else
     doctor_row checkout "no .git - a package-manager install (hi_update will say so too)"
   fi
-  doctor_row payload "$(_hi_size) over the wire per ssh session (${_HI_PAYLOAD[*]})"
+  # two numbers because they answer two questions: what leaves this machine
+  # (a gzipped tar, base64-armored for the ssh path) and how big the thing is
+  # once it lands. The first is the one people mean by "what does hi cost".
+  doctor_row payload "$(_hi_wire_estimate) over the wire per ssh session, $(_hi_size) unpacked (${_HI_PAYLOAD[*]})"
   local s have=""
   for s in bash zsh fish; do
     command -v "$s" >/dev/null 2>&1 && have="$have$s "
@@ -199,7 +202,7 @@ function doctor_ssh_target() {
   if [ -n "$root" ]; then
     doctor_row install "permanent $root - hi loads it in place, ships nothing"
   else
-    doctor_row install "none - hi ships $(_hi_size) each session"
+    doctor_row install "none - hi ships $(_hi_wire_estimate) each session"
   fi
   tools="$(ssh "${ctl_opts[@]}" "$DOMAIN" 'for c in base64 bash zsh fish tmux vim git; do command -v "$c" >/dev/null 2>&1 && printf "%s " "$c"; done' 2>/dev/null || true)"
   doctor_row remote "has: ${tools:-nothing this probes for}"

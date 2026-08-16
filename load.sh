@@ -75,15 +75,12 @@ function clean_all() {
   return 0
 }
 
-# True when this session should run inside a named tmux on the target, so a
-# dropped connection detaches instead of losing the work (`hi --tmux <target>`,
-# or _HI_TMUX_ATTACH=1 in settings.sh). Both refusals below are honest ones -
-# they print and carry on rather than dropping the connection:
-#
-#   - a disposable tree ($_HI_CLEANUP) is deleted the moment this session ends,
-#     and a tmux that outlived it would be reading a directory that is gone.
-#     shells/aliases.sh withholds the `tmux` alias on exactly the same test.
-#   - no tmux on the host, which is not something the client can know.
+# True when this session should run inside a named tmux (`hi --tmux`, or
+# _HI_TMUX_ATTACH=1), so a dropped connection detaches instead of losing the
+# work. Both refusals print and carry on rather than dropping the connection: a
+# disposable tree ($_HI_CLEANUP) is deleted when the session ends and a detached
+# tmux would outlive it - the same test shells/aliases.sh makes - and whether
+# there is a tmux here at all is not something the client can know.
 function _hi_tmux_wanted() {
   [ "${_HI_TMUX_ATTACH:-0}" = 1 ] || return 1
   if [ -n "${_HI_CLEANUP:-}" ]; then
@@ -128,12 +125,10 @@ function load() {
   # the header above is our greeting
   [ "$shell" = fish ] && shell_cmd=(fish -C "set fish_greeting ''" -i)
   if _hi_tmux_wanted; then
-    # -A: attach to the named session if it is there, create it if not, which
-    # is the one answer to "what if it already exists" that never loses work.
-    # The command is passed as separate arguments rather than one string, so
-    # fish's -C argument survives without a layer of quoting; tmux ignores it
-    # entirely when it attaches to an existing session, as it should.
-    # -f is read only when the *server* starts (see misc/tmux.conf).
+    # -A: attach if the session exists, create it if not - the one answer that
+    # never loses work. The command goes as separate arguments so fish's -C
+    # survives unquoted; tmux ignores it when attaching. -f is read only when
+    # the server starts (see misc/tmux.conf).
     tmux -f "$_HI_TMUXCONF" new-session -A -s "${_HI_TMUX_SESSION:-hi}" \
       "${shell_cmd[@]}" || shell_ec=$?
   else

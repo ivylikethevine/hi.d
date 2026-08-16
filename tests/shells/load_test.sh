@@ -1,18 +1,14 @@
 #!/bin/bash
-# Unit tests for load.sh - the target-side half of hi: the marker-delimited
-# block it grafts onto the host's rc files, and the cleanup that takes it
-# (and, only when the tree is disposable, hi.d itself) back out again.
+# Unit tests for load.sh, the target-side half of hi: the marker-delimited block
+# it grafts onto the host's rc files, and the cleanup that takes it - and, only
+# for a disposable tree, hi.d itself - back out. Sourced with
+# _HI_LOAD_NO_INIT=1 for the functions alone, with _HI_CONFIGS and _HI_ROOT
+# reassigned into the scratch dir.
 #
-# load.sh is sourced here with _HI_LOAD_NO_INIT=1, which skips its profile
-# restoration and leaves just the functions - the same hatch install.sh gets
-# from its BASH_SOURCE guard. Everything it touches is
-# redirected into the scratch dir by reassigning _HI_CONFIGS (built from
-# $_HI_BASHRC/$_HI_HOME_BASHRC at source time) and _HI_ROOT.
-#
-# SAFETY: clean_all ends in `rm -rf "$_HI_ROOT"`, so no case below may call it
-# directly - every call goes through _hi_clean_all, which shadows _HI_ROOT with
-# a scratch path. Calling the real thing with the real _HI_ROOT would delete
-# this checkout. The canary case at the end of the suite proves none did.
+# SAFETY: clean_all ends in `rm -rf "$_HI_ROOT"`, so no case calls it directly -
+# every call goes through _hi_clean_all, which shadows _HI_ROOT. The real thing
+# with the real _HI_ROOT would delete this checkout; the canary case at the end
+# proves none did.
 #
 # Nearly every function below is invoked indirectly - by name, through
 # _hi_case's "$@" - which SC2329 can't see.

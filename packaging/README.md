@@ -117,6 +117,11 @@ reads it). Put the public key line from `minisign.pub` into the README's "Verify
 section, replacing the placeholder. Then delete both local files; the secret and the README are their
 homes. Until the secret exists, releases ship unsigned sums and the publish log says so.
 
+**Create the AUR deploy key.** Only after the AUR account exists and each package has been pushed once by
+hand (the namcap gate below cannot run in this CI). `release.yml`'s `aur` job then keeps `hi.d` current: an
+ed25519 key whose public half is added to your AUR account, private half added as an `AUR_SSH_KEY` repo
+secret. Absent, the job prints what to copy and exits 0.
+
 **Create the Homebrew tap token.** Only once the `homebrew-tap` repo exists. `release.yml`'s `tap` job
 opens the formula PR with it: a fine-grained PAT scoped to that repo, contents + pull-requests write, added
 as a `HOMEBREW_TAP_TOKEN` repo secret. Absent, the job prints what to copy by hand and exits 0.
@@ -140,8 +145,9 @@ just created, instead of requiring a pre-tag bump and a force-retag to reconcile
    build produced. Packages, `SHA256SUMS`, and manifests land on the release, and the regenerated
    manifests are committed back to `main` (they are consumed from the AUR/tap repos, not from inside the
    tarball, so they don't need to be in the tagged tree).
-4. Copy the manifests from the release (or from `main`) to the AUR. The tap gets a PR opened for it
-   automatically once `HOMEBREW_TAP_TOKEN` exists — see the Homebrew section below.
+4. Both channels update themselves once their secrets exist: the tap gets a PR (`HOMEBREW_TAP_TOKEN`), the
+   AUR gets a push (`AUR_SSH_KEY`). Until then, copy the manifests from the release (or from `main`) by hand,
+   per the sections below.
 
 `bump.sh 1.0.0` still works by hand if CI is ever unavailable (`--tarball <file>` skips the
 download), and `bump.sh --check 1.0.0` stays useful locally to confirm the manifests match a cut release.
@@ -152,7 +158,10 @@ discipline that makes this good enough: title PRs the way you'd want them read i
 `gh pr list --state merged` before tagging to retitle anything that wouldn't. Revisit git-cliff only if
 the generated notes start needing curation.
 
-## Publishing each channel (all manual)
+## Publishing each channel
+
+Every channel below is gated on the manual approval in `release.yml`, and two of them (the AUR and the tap)
+are pushed by CI once their secrets exist — the checks each section describes are still yours to run first.
 
 ### AUR
 
@@ -169,6 +178,9 @@ pacman -Qlp ./*.pkg.tar.zst      # /usr/share/hi.d/..., /usr/bin/hi, /etc/profil
 ```
 
 Then push `PKGBUILD` + `.SRCINFO` (only those two files) to `ssh://aur@aur.archlinux.org/hi.d-git.git`.
+**This first push is the manual one** — it is where namcap actually gates. After it, `release.yml`'s `aur`
+job pushes the versioned `hi.d` package on every release, given the `AUR_SSH_KEY` secret; `hi.d-git` has no
+version to bump and is never touched by CI.
 `hi.d-git` first — it works today with no tag — and the versioned `hi.d` once v1.0.0 exists.
 
 Never submit with `b2sums=('SKIP')` on the versioned package. `SKIP` is correct and expected on

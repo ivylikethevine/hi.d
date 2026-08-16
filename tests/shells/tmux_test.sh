@@ -1,14 +1,10 @@
 #!/bin/bash
-# Unit tests for the tmux integration: misc/tmux.conf, the `tmux` alias in
-# shells/aliases.sh, and the overlay/path plumbing behind both.
-#
-# The interesting assertions here are the two that are easy to get wrong and
-# invisible until someone is inside a multiplexer on a remote box:
-#
-#   1. the alias must NOT exist on a disposable tree ($_HI_CLEANUP), because a
-#      detached tmux outlives the ssh session and the tree is deleted on exit;
-#   2. the config must carry the _HI_* variables in `update-environment`, or a
-#      new window inside a hi session gets a shell that can't find hi.
+# Unit tests for the tmux integration: misc/tmux.conf, the `tmux` alias, and the
+# overlay/path plumbing behind both. Two assertions matter and are invisible
+# until someone is inside a multiplexer on a remote box: the alias must not
+# exist on a disposable tree ($_HI_CLEANUP), whose deletion a detached tmux
+# would outlive, and the config must forward the _HI_* variables, or a new
+# window gets a shell that cannot find hi.
 #
 # Nearly every function below is invoked indirectly, through _hi_check's "$@",
 # which SC2329 can't see.

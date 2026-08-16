@@ -1,33 +1,18 @@
 #!/bin/bash
-# Unit tests for tests/test_lib.sh - the shared scaffolding every other suite
-# is built on, and so the one file whose bugs would be invisible: a broken
-# _hi_case would silently under-count failures, a broken _hi_suite_end would
-# exit 0 on a red banner, and every suite would still look like it passed.
+# Unit tests for tests/test_lib.sh - the scaffolding every other suite is built
+# on, and so the one file whose bugs would be invisible: a broken _hi_case
+# under-counts failures and every suite still looks green. Covers the counters,
+# the scratch-dir and container teardown, the skip-cleanly preamble, the
+# target-side probe strings, and the polling/process helpers.
 #
-# Covers the counters and their reporting (_hi_case/_hi_assert/_hi_check/
-# _hi_suite_begin/_hi_suite_end), the scratch-dir and container teardown
-# (_hi_workdir/_hi_track_container/_hi_test_cleanup), the skip-cleanly
-# preamble (_hi_require/_hi_require_backend), the target-side probe strings
-# (_hi_probe_cmd), and the polling/process helpers (_hi_poll_bool with and
-# without its abort predicate, _hi_poll_value, _hi_wait_pid on both the normal
-# and timed-out paths, _hi_pty_wrap's auto/force modes).
+# Anything that exits or installs a trap runs in a subshell so it can't take
+# this suite down, and $_HI_WORKDIR/$_HI_STARTED are saved around the cases that
+# overwrite them - this suite uses the globals it is testing.
 #
-# Anything that exits (_hi_require, _hi_suite_end) or installs a trap
-# (_hi_workdir) is exercised in a subshell, so it can't take this suite down
-# with it - and $_HI_WORKDIR/$_HI_STARTED are saved and restored around the
-# cases that overwrite them, since this suite uses the very globals it's
-# testing.
-#
-# Nearly every function below is invoked indirectly - by name, through
-# _hi_case's/_hi_poll_bool's "$@", or as a trap hook - which SC2329 can't see.
-# shellcheck disable=SC2329
-#
-# The cases that point $_HI_WORKDIR/$_HI_STARTED at scratch values do it
-# inside `( ... )` precisely so the change *is* discarded on the way out -
-# that containment is the mechanism, not an accident, so SC2030/SC2031's
-# "modified in a subshell, that change might be lost" is the intended
-# behaviour here rather than a warning.
-# shellcheck disable=SC2030,SC2031
+# Functions here are invoked indirectly (through "$@", or as a trap hook), which
+# SC2329 can't see; the subshell containment above is the mechanism SC2030/2031
+# would warn about.
+# shellcheck disable=SC2329,SC2030,SC2031
 set -euo pipefail
 
 # shellcheck source=../../common/core.sh

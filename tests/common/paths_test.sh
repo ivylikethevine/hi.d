@@ -1,18 +1,13 @@
 #!/bin/bash
-# Unit tests for common/paths.sh's local-only gate - the six-var flip at the
-# bottom of the file, which is real branching logic and the whole point of the
-# _HI_DISABLE_LOCAL feature.
+# Unit tests for common/paths.sh's local-only gate: the six-var flip at the
+# bottom of the file, which is what _HI_DISABLE_LOCAL means. It turns every
+# toggle off on the machine hi.d is *installed* on while leaving them on when
+# that machine says `hi` elsewhere, told apart by _HI_REMOTE_SESSION (load.sh
+# exports it; a local rc never does). Backwards, it would either strip hi from
+# every target or leave it running where the user asked it not to.
 #
-# The gate turns every toggle off on the machine hi.d is *installed* on while
-# leaving them on when that machine says `hi` elsewhere, told apart by
-# _HI_REMOTE_SESSION - which load.sh exports on a remote session and a local
-# shell's own rc never does. Getting that backwards would either strip hi from
-# every target or leave it running where the user asked it not to, and nothing
-# asserted either direction before this file.
-#
-# paths.sh is sourced rather than executed, in a child shell per case so one
-# case's exports can't leak into the next. Each case reads the vars back out
-# of that child, which is also what proves the settings file is picked up
+# Each case sources paths.sh in its own child shell so exports can't leak, and
+# reads the variables back out - which also proves settings.sh is picked up
 # ahead of the gate rather than after it.
 #
 # Nearly every function below is invoked indirectly - by name, through

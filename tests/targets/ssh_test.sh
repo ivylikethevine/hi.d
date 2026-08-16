@@ -1,20 +1,13 @@
 #!/bin/bash
-# Boots throwaway sshd containers - one per remote login shell - and drives
-# hi.sh's real ssh path (_say_hi) against each of them over actual ssh. This
-# proves the base64 armor/quoting in _say_hi survives whichever shell sshd
-# hands the incoming "sh -c '...'" command to server-side, not just bash/dash.
-# One of those containers runs bash 3.2 (what macOS ships) rather than a
-# current bash, which is what keeps hi free of bash-4-only builtins.
-# Also boots one extra debian container with hi.d pre-installed (as
-# scripts/install.sh would leave it) to prove _say_hi detects it and loads it
-# in place instead of copying a fresh one over, plus two bash-less alpine
-# images - one with only zsh, one with only fish - to prove those two tiers of
-# _hi_remote_suffix's `for _hi_s in zsh fish sh` fallback probe actually get
-# picked when they're what's available, not just the sh tier (the plain
-# bash-less alpine image below only ever exercises sh, since it has neither
-# zsh nor fish installed).
-# The debian image itself comes from test_lib.sh's _hi_sshd_image, shared with
-# ssh_disconnect_test.sh so a full run builds it once rather than twice.
+# Throwaway sshd containers - one per remote login shell - driven through
+# hi.sh's real ssh path over actual ssh, which is what proves _say_hi's
+# armor and quoting survive whatever shell sshd hands the command to. The
+# images cover: bash/dash/zsh/fish logins; bash 3.2 (what macOS ships, and what
+# keeps hi free of bash-4 builtins); a pre-installed hi.d, to prove _say_hi
+# loads it in place rather than shipping a tree; bash-less alpine with only zsh
+# and with only fish, for the two fallback tiers the plain alpine image never
+# reaches; and that same install plus tmux, for --tmux. The debian base comes
+# from test_lib.sh's _hi_sshd_image, shared with ssh_disconnect_test.sh.
 #
 # Nearly every function below is invoked indirectly - by name, through
 # _hi_case's/_hi_poll_bool's "$@", or as a trap hook - which SC2329 can't see.

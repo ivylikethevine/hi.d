@@ -33,6 +33,7 @@ than a kilobyte from the truth.
 
 1. `hi.sh` runs on the client. It archives `hi.d/` and sends it to the target. What it leaves out is `hi.sh` itself, `.git`, `scripts/`, `tests/`, `.github/`, this README, `LICENSE` and the editor/tooling dotfiles - see `$_HI_PAYLOAD` at the top of `hi.sh` for the authoritative allow list. The target unpacks it into a `/tmp` directory. `_HI_ROOT` is `$INSTALL_DIR/hi.d` on the client and `$_HI_HOME/hi.d` on the target.
    Your own `settings.sh`, `colors` and `packages` live outside the tree (see [Configuration](#configuration)), so they follow in a second, much smaller archive unpacked over the target's `misc/` - `$_HI_OVERLAY_FILES` in `hi.sh`, plus whichever `settings.d/` files match this target (`_hi_overlay_host_files`). Nothing is sent if you haven't overridden anything.
+   The whole thing - the tar, `hi.sh` and the bootloader, each base64-armored - is assembled into one script, armored again, and written to the target over the **stdin** of the first of two calls multiplexed on a single ssh connection; the second call runs it. Not as a command-line argument, which is what it used to be: Linux caps a single argv entry at 128KB regardless of `ARG_MAX`, and the payload had grown within a few kilobytes of that. The size hi prints on connect is that armored total - what the connection actually carries, roughly 4/3 of the gzipped payload the badge above measures.
 2. On the target, `$_HI_ROOT/hi.bashrc` sources `$_HI_ROOT/load.sh` and calls `load`.
 3. `load.sh` prints the header, appends hi's shell configs to the host's own rc files, and starts a session in the highest priority shell available (fish > zsh > bash).
    Note this order is the reverse of the one below, and deliberately so: `load.sh` only runs at all when the target _has_ bash, so it is free to prefer the nicest shell available. The `zsh > fish > sh` order quoted elsewhere is the **no-bash fallback**, which is ranking what's left after bash turned out to be missing.
@@ -54,7 +55,7 @@ For ssh targets specifically, `hi` first checks (over the same connection, so it
 `hi <target>` works against Windows OpenSSH targets too, at whatever level the target supports:
 
 - **WSL, Git Bash, Cygwin or MSYS2 reachable on `PATH`**: the full experience (header, colors, git prompt, aliases) - same code path as any other ssh host.
-- **Stock Windows OpenSSH with no `bash` at all**: `hi` falls back to a plain interactive PowerShell session (no hi.d styling - that's bash-only) instead of failing outright. This still happens over the _same single ssh connection_, since `cmd.exe` (Windows' default `DefaultShell`) understands `||` the same way a POSIX shell does; a target with `DefaultShell` set to PowerShell directly is outside what this fallback can detect.
+- **Stock Windows OpenSSH with no `bash` at all**: `hi` falls back to a plain interactive PowerShell session (no hi.d styling - that's bash-only) instead of failing outright. It still costs one authentication: hi writes its bootloader over the first of two calls multiplexed on the _same ssh connection_, and a target where that write can't run `sh -c` at all is a target with no POSIX shell, which is exactly the case the fallback is for. A target with `DefaultShell` set to PowerShell directly lands in the same fallback.
 
 **Installing hi _on_ Windows:** use WSL. The `.deb` from the releases page installs into a WSL distribution unchanged - `/etc/profile.d/hi.d.sh`, `/usr/bin/hi`, everything exactly as on any Debian - and WSL is where a Windows developer already using `ssh`/`docker`/`kubectl` most likely works anyway. Native channels (Scoop and friends) are assessed in `packaging/windows.md` and wait on a green Windows CI job.
 
@@ -65,6 +66,68 @@ For ssh targets specifically, `hi` first checks (over the same connection, so it
 ### Kubernetes pods
 
 `hi <pod-name>` also works against a running Kubernetes pod (checked last, after ssh/docker/podman/nomad) - same idea again, using `kubectl exec` with `--` separating its own flags from the remote command. Uses whatever context/namespace your `kubectl` is currently pointed at; like Nomad's multi-task allocations above, a multi-container pod needs `-c <name>` to pick one, which `hi` doesn't pass through, so it needs a single unambiguous container (`kubectl` falls back to the pod's first container with a warning rather than failing outright).
+
+### Compatibility
+
+Three separate questions, because hi answers them at three different moments. **Legend:** ✅ exercised by a
+suite on every run · 🟡 expected to work, nobody has proven it · ⚠️ works, reduced · ❌ not supported.
+
+**1. The target's OS** — can hi land a session there at all?
+
+| target OS | result | proven by |
+| --- | --- | --- |
+| Linux, glibc (Debian/Ubuntu/Fedora/Arch…) | ✅ full session | `tests/targets/ssh_test.sh`, on Debian bookworm |
+| Linux, musl + busybox (Alpine…) | ✅ full session with `bash` installed, ⚠️ aliases-only without | `ssh_test.sh`, on Alpine 3.20 |
+| macOS | 🟡 full session — bash 3.2 is what it ships, and the suite runs a real bash 3.2 target; the client half (BSD `sed`/`mktemp`/`base64`) is unit-tested only | `ssh_test.sh` bash-3.2 case; `.github/workflows/macos-e2e.yml` is written but has never run |
+| WSL | 🟡 it is Linux, and the `.deb` installs into it unchanged | — |
+| Windows, with Git Bash/Cygwin/MSYS2 on `PATH` | 🟡 full session, same code path as any ssh host | `.github/workflows/windows-e2e.yml`, written, never run |
+| Windows, stock OpenSSH (`cmd.exe`/PowerShell) | ⚠️ plain PowerShell session, no hi styling — the fallback is deliberate, not a failure | same, never run |
+| \*BSD, Solaris/illumos | 🟡 nothing in hi is Linux-specific past the header's `/proc` probes, which degrade to `?` | — |
+
+**2. The target's _login_ shell** — the one sshd hands hi's command to, before any of hi runs.
+
+| login shell | result | note |
+| --- | --- | --- |
+| `bash`, `sh`, `dash`, busybox `ash` | ✅ | the ordinary case |
+| `zsh` | ✅ | |
+| `fish` | ✅ | the reason hi's remote command is wrapped in `sh -c '…'`: fish parses neither `{ …; }` nor `\|\|` the way sh does |
+| `ksh` (ksh93/mksh/pdksh), `tcsh`/`csh` | 🟡 | they only have to run one `sh -c` command; nothing tests them |
+| `nushell`, `elvish`, `xonsh`, `ion`, `oil`/`osh` | 🟡 | same — one command, no shell-specific syntax in it |
+| PowerShell, `cmd.exe` | ⚠️ | no POSIX shell to write the bootloader with, so hi falls back to a plain PowerShell session |
+
+**3. The shell you end up _in_** — what hi hands you once it is on the target.
+
+| session shell | result | note |
+| --- | --- | --- |
+| `bash` ≥ 3.2 | ✅ full: header, prompt, git status, aliases, editor configs | 3.2 is the floor because macOS still ships it |
+| `zsh` | ✅ full | `shells/zsh.zsh` |
+| `fish` | ✅ full | `shells/config.fish` |
+| `sh`/`dash`/`ash` (no bash on the target) | ⚠️ aliases only, with a warning saying so | there is no header or prompt without bash |
+| `nushell`, `elvish`, `xonsh`, `ion`, `oil`/`osh` | ❌ | see below |
+| PowerShell | ❌ | bash-only by design |
+
+**Shells hi does not style yet.** Each would need its own rc in `shells/` (prompt, aliases, completion) plus a
+tier in the fallback ladder in `hi.sh`'s `_hi_remote_suffix` and `load.sh`'s `load()`:
+
+| shell | why it is not here | what it would take |
+| --- | --- | --- |
+| `nushell` | its own non-POSIX language and a structured-data prompt API; `aliases.sh` cannot be shared with it at all | a full `shells/config.nu`, and a decision about whether the aliases are worth porting |
+| `elvish` | same shape, smaller audience | a `shells/rc.elv` |
+| `xonsh` | Python, so the prompt and aliases would be a third implementation | a `shells/rc.xsh` |
+| `ksh`/`mksh` | closest to already working — it reads `$ENV`, like the `sh` fallback does | probably just a tier in the ladder plus a prompt; the aliases file is already POSIX |
+| `tcsh`/`csh` | different rc syntax and no `$ENV` equivalent | its own rc, and honestly: ask whether anyone wants it |
+| PowerShell | not a POSIX shell; the greeting hi prints there is the whole extent of it | a separate project, really |
+
+If you use one of these as a *login* shell, hi still works — it lands you in bash (or the best of
+zsh/fish/sh) for the session. It is only the session shell that is limited.
+
+**One thing to know if you use a shell framework.** hi picks the session shell by what the target *has*
+(`fish` > `zsh` > `bash`), not by what your login shell is — see step 3 of [How it works](#how-it-works). So
+on a target with fish installed, hi hands you fish even if your login shell is zsh with oh-my-zsh, and that
+zsh setup never loads. hi's own configs are appended to all three rc files either way. The frameworks
+themselves are tested against hi in `tests/targets/framework_test.sh` — oh-my-zsh, powerlevel10k, starship
+and bash-it, each asserting the session comes up with no shell errors and that hi neither changed zsh's array
+base under them nor dropped their `PROMPT_COMMAND`.
 
 ### Installation/Usage
 
@@ -240,7 +303,7 @@ tests/test_runner.sh aliases shellcheck # just the named suite(s)
 Suite names: `aliases`, `alias_fallthrough`, `osc52`, `tmux`, `shellcheck`, `install`, `hi`, `header`, `core`,
 `git_prompt`, `targets`, `paths`, `color_preview`, `load`, `test_lib`, `test_runner` are fast and dependency-free - they're the first thing CI
 runs on every push/PR (the last two are the harness testing itself). `ssh`, `ssh_disconnect`, `docker`, `podman`,
-`nomad`, `kube` are end-to-end:
+`nomad`, `kube`, `framework` are end-to-end:
 they spin up real throwaway containers/clusters/agents and drive `hi.sh`'s actual connection paths against them, so
 they're slower and need the relevant backend installed - each skips cleanly with a warning instead of failing if its
 backend isn't available. CI runs `ssh`, `ssh_disconnect` and `docker` as a second job once the fast ones pass, which
@@ -288,6 +351,7 @@ tests/test_runner.sh
 | `tests/test_lib.sh`                             | the whole suite skeleton: asserts/counters, scratch dir, skip preamble, probe commands, poll/pty helpers                                                               |
 | `tests/shells/alias_test.sh`                    | check `aliases.sh` still loads in dash/bash/zsh/fish                                                                                                                   |
 | `tests/shells/alias_fallthrough_test.sh`        | unit tests for `aliases.sh`'s `command -v a \|\| command -v b` fallthrough and `_HI_DISABLE_*` flag logic                                                              |
+| `tests/targets/framework_test.sh`               | hi against oh-my-zsh, powerlevel10k, starship and bash-it - a real session per framework, asserting no shell errors and no collision with their prompt or zsh's array base |
 | `tests/shells/tmux_test.sh`                     | unit tests for `tmux.conf` (it parses, it forwards the `_HI_*` environment, it appends to `update-environment`) and for the alias's permanent-tree-only rule            |
 | `tests/shells/osc52_test.sh`                    | unit tests for the OSC 52 escape's exact bytes (plain, tmux, screen), the size cap, the `hi_copy` alias in every shell, and `vim.rc`'s yank autocmd                     |
 | `tests/common/header_test.sh`                   | unit tests for `header.sh`: row-joining, banner padding/floor math, the `_HI_DISABLE_HEADER` gate, and the per-priority found/missing/hide logic of the packages check |

@@ -97,18 +97,41 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: zizmor --no-progress .github/
 
+  # Advisory, not a gate. A heading level or a stray hard tab in a doc is worth
+  # seeing and has never shipped a bug, so this job reports and does not block:
+  # the lint step keeps its exit code (`continue-on-error` on the *step*, so the
+  # findings still annotate the diff), and the job then restates them as a
+  # warning in the run summary. Note the difference from `continue-on-error` on
+  # the job, which would paint the job green and hide the result entirely.
+  #
+  # The corollary, for whenever branch protection goes on (see docs/ROADMAP.md):
+  # do not add this job to the required checks - it is designed to be ignorable.
   markdownlint:
-    name: markdownlint
+    name: markdownlint (advisory)
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: DavidAnson/markdownlint-cli2-action@21c1be1b93ad9ed58fa840aacc3f279cde2a72ff # v24.2.0
+      - id: lint
+        continue-on-error: true
+        uses: DavidAnson/markdownlint-cli2-action@21c1be1b93ad9ed58fa840aacc3f279cde2a72ff # v24.2.0
         with:
           globs: "**/*.md"
           config: ".markdownlint.yaml"
+
+      - name: Say so, without failing
+        if: steps.lint.outcome == 'failure'
+        run: |
+          set -euo pipefail
+          echo "::warning title=markdownlint::Markdown lint findings above - advisory, not blocking"
+          {
+            echo "### markdownlint found something"
+            echo
+            echo "Advisory only: this job never blocks a merge. See the step above for the findings,"
+            echo "or run \`markdownlint-cli2 '**/*.md'\` locally."
+          } >>"$GITHUB_STEP_SUMMARY"
 
   # Hot-path timings against generous ceilings - catches an order-of-magnitude
   # regression (a fork in a loop, a probe losing its timeout), and prints the

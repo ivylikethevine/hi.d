@@ -4,8 +4,9 @@ Candidate additions for developing hi.d. Two halves, because they need two
 different kinds of attention:
 
 - **[Human actions](#human-actions)** — nothing here is code. Each entry names
-  where you go, what you do, and what ticks it. Every one of them is gated on
-  publishing, so all of it can wait while the package is in development.
+  where you go, what you do, and what ticks it. Almost all of it is gated on
+  publishing, so it can wait while the package is in development; the
+  exceptions say so.
 - **[Code work](#code-work)** — entries that are written in this repo. Each is
   marked **Unblocked** or **Blocked on:** so it's clear at a glance which need a
   human step first.
@@ -69,6 +70,15 @@ Two keypairs. **The in-repo half of both is already written and tested** — CI 
   - **Where:** a fine-grained PAT, then Settings → Secrets and variables → Actions
   - **Do:** create a token scoped to the `homebrew-tap` repo with contents + pull-requests write, add it as `HOMEBREW_TAP_TOKEN`.
   - **Ticks when:** the secret exists and a release has opened a tap PR.
+
+- [ ] **AUR deploy key** — only once the AUR account exists and each package has
+      been pushed by hand once (that first push is where namcap gates, and no
+      runner here can run it). `release.yml`'s `aur` job keeps the versioned
+      package current after that, and no-ops loudly without the secret.
+
+  - **Where:** a terminal, then Settings → Secrets and variables → Actions
+  - **Do:** `ssh-keygen -t ed25519`, add the public half to your AUR account, add the private half as `AUR_SSH_KEY`, delete the local private half.
+  - **Ticks when:** the secret exists and a release has pushed to the AUR.
 
 ### CI runs to dispatch
 
@@ -145,115 +155,55 @@ Not GitHub-button work: these are human actions purely because no runner covers 
 
   - **Ticks when:** run clean for both AUR packages.
 
+- [ ] **Regenerate the demo GIFs** — the one entry here that is _not_ waiting on
+      publishing. `docs/demos.md` says it plainly: the GIFs are manual
+      artifacts, reviewed by eye, and regenerated whenever the header or the
+      prompt changes. Both have changed since they were recorded — the packages
+      check now carries hi's own dependencies, and the prompt separator is a
+      setting — so all five are stale, plus `docs/demo.gif` in the README.
+
+  - **Where:** a machine with `vhs`, docker, podman, nomad and a kind cluster — the same set `docs/tapes/fixtures.sh` stands up, which is why no runner does this.
+  - **Do:** `docs/tapes/fixtures.sh`, then `vhs docs/tapes/<name>.tape` from the repo root for each, then `fixtures.sh down`.
+  - **Ticks when:** all five plus `docs/demo.gif` match what a session prints today.
+
 ## Code work
 
 ### Release & packaging
 
-- [ ] **Channel publish automation** — cutting a release still ends with
+- [ ] **Channel publish automation** — cutting a release used to end with
       hand-copying manifests to the AUR and the tap. Both are pushes to git
-      repos, and both can be jobs behind the same manual release gate. - **Homebrew tap PR** — _Written._ `release.yml`'s `tap` job: `needs:
-      publish`, inside the same `environment: release` so it stays behind the
-      one approval, opening a PR against `<owner>/homebrew-tap` with the
-      freshly regenerated formula and the `brew install`/`test`/`audit`
-      checklist in its body. No-ops loudly when `HOMEBREW_TAP_TOKEN` is
-      absent, the same shape the apk and minisign steps use — which is what
-      makes it safe to land before the tap repo exists. Ticks on its first
-      real PR. - **AUR push** — _Blocked on:_ an AUR account and an SSH deploy key
-      (see [External accounts](#external-accounts--submissions)). Same shape,
-      higher stakes: a push to `ssh://aur@aur.archlinux.org/`, and the
-      namcap gate can't run in this CI. Do the tap job first.
+      repos, and both are now jobs behind the same manual release gate. This
+      entry ticks when both have run for real.
 
-### Repo & CI
-
-- [ ] **markdownlint should warn, not block** — `ci.yml`'s `markdownlint` job
-      runs `DavidAnson/markdownlint-cli2-action` as a hard gate, so a prose nit
-      in a doc fails the same check set that guards `hi.sh`. The two are not
-      the same risk: a broken heading level has never shipped a bug. Make the
-      job non-blocking while keeping its output — `continue-on-error: true` is
-      the one-line version; annotations in the run summary (or a
-      `::warning::`-emitting step) is the version that still gets read. Whether
-      the required-checks ruleset in
-      [Human actions](#github-repo-settings) needs a matching edit depends on
-      which of the two is chosen, so decide that before applying the ruleset.
-- [ ] **The reported payload size is the wrong number** — `_hi_size` in `hi.sh`
-      is `du -shc` over `$_HI_PAYLOAD`, i.e. the *uncompressed on-disk* size of
-      the directories, and that number is what the connect line and the header
-      show as what hi "sent". What actually crosses the wire is the base64
-      armor of a gzipped tar (plus the bootloader, itself base64 of the
-      generated script) — reliably smaller, and the difference is not a rounding
-      error. The honest number is already computable at the one place both
-      streams are built in `_say_hi`: measure the armored strings rather than
-      the source tree. Things to settle: the permanent-install branch sends no
-      tree at all (today it prints "-> local hi.d install" instead of a size,
-      which stays right), the container path builds its tar separately, and
-      `tests/bench/bench_test.sh`'s payload budget plus the README badge both
-      measure the gzipped tarball already — so the badge is the number to agree
-      with, and the bench suite is where the guard belongs.
+  - **Homebrew tap PR** — _Written._ `release.yml`'s `tap` job: `needs: publish`, inside the same `environment: release` so it stays behind the one approval, opening a PR against `<owner>/homebrew-tap` with the freshly regenerated formula and the `brew install`/`test`/`audit` checklist in its body. No-ops loudly without `HOMEBREW_TAP_TOKEN`, the same shape the apk and minisign steps use — which is what makes it safe to land before the tap repo exists.
+  - **AUR push** — _Written; the account is the remaining half._ The `aur` job pushes the regenerated `PKGBUILD` and `.SRCINFO` to `ssh://aur@aur.archlinux.org/hi.d.git` behind the same gate, with the key kept in `$RUNNER_TEMP` and the host key keyscanned rather than trusted on first use. It refuses to push a checkout with untracked files, and no-ops loudly without `AUR_SSH_KEY`. What it deliberately does not do is run namcap — that needs an Arch box — so the *first* push of each package stays manual and this job is for the releases after it. `hi.d-git` is never touched: it builds from `main` and has no version to bump.
 
 ### Product
 
-- [x] **tmux support** — _Done_, in the two halves that stand on their own.
-      `misc/tmux.conf` ships alongside the vim/nano/eza configs, with the same
-      overlay slot (`~/.config/hi.d/tmux.conf`, riding `$_HI_OVERLAY_FILES`),
-      its own toggle (`_HI_DISABLE_TMUX`), and a `tmux -f` alias exactly as
-      `vim -u` is. Carrying hi _inside_ a remote tmux turned out to be the
-      config's `update-environment` lines: tmux refreshes those variables from
-      the attaching client, so a window opened after attach gets a shell that
-      can still find `$_HI_HOME` — verified against a server deliberately
-      started without them. The cleanup conflict is settled the way this entry
-      predicted: the alias exists only where `$_HI_CLEANUP` is empty, i.e. on a
-      permanent install, since a detached tmux outlives the session that would
-      otherwise delete the tree underneath it.
-- [x] **Configurable prompt separator, per shell** — _Done._ The character
-      closing the prompt was hardcoded once per shell and differed in each
-      (`bash.sh` `$`, `zsh.zsh` `>`, `config.fish` `|`); those are now the
-      defaults behind `_HI_PROMPT_END_BASH` / `_HI_PROMPT_END_ZSH` /
-      `_HI_PROMPT_END_FISH`, resolved by `_hi_prompt_end` in `common/core.sh`
-      (and its mirror in `config.fish`). The three decisions came out: root
-      still overrides fish's with `#`; the value reaches `PS1` unescaped, so
-      zsh's `%#` and bash's `\$` mean what they mean there; and a single
-      `_HI_PROMPT_END` covers all three, with the shell-specific one winning.
-      `hi_configure` asks for each (skipped when the prompt is off, and a value
-      equal to the default clears the override rather than writing it).
-- [ ] **Interop with the common shell frameworks** — _Unblocked_, and the
-      likeliest source of "hi broke my shell" reports from anyone who doesn't
-      start from a bare rc. `load.sh`'s `configure_files` appends hi's block to
-      the _end_ of `~/.bashrc`, `~/.zshrc` and `config.fish`, so hi runs after
-      the framework and generally wins — which is right for the prompt and
-      wrong for everything the framework sets up afterwards. Known collisions,
-      each worth its own test before any fix:
-      - **oh-my-zsh**: `shells/zsh.zsh` sets `setopt KSH_ARRAYS`, and omz (plus
-        most of its plugins and themes) assumes zsh's native 1-based arrays.
-        That is the sharpest edge here and it is ours, not theirs.
-      - **prompt frameworks** — powerlevel10k, starship, tide, spaceship: each
-        installs its own `PROMPT`/`fish_prompt`, so whichever loads last wins
-        silently. hi should notice one is present and either stand down (the
-        user chose that prompt) or say so, rather than clobbering it —
-        `_HI_DISABLE_PROMPT` already exists as the answer, so this is about
-        detection and a one-line notice, not new machinery.
-      - **completion init**: `zsh.zsh` runs its own cached `compinit`, and omz
-        runs one too; two initializations mean a slower shell and, if the
-        `fpath` differs between them, a confusing one.
-      - **bash-it / ble.sh** and **fisher / oh-my-fish**: same shape, less
-        common; `PROMPT_COMMAND` chaining in bash is already handled
-        (`ps1${PROMPT_COMMAND:+; $PROMPT_COMMAND}`), which is the pattern the
-        rest should follow.
-      First step is a matrix rather than code: a container per framework in the
-      e2e suite (they all install from a script into a bare image), asserting
-      the session comes up with no shell errors — the same bar
-      `tests/targets/ssh_test.sh` already holds bash 3.2 to. What that matrix
-      says is failing decides which of the above gets fixed and which gets
-      documented as "turn this toggle off".
-- [x] **tmux auto-attach** — _Done._ `hi --tmux <target>` (or
-      `_HI_TMUX_ATTACH=1` in settings.sh, with `--no-tmux` to override it back)
-      runs the session inside a named tmux on the target, so a dropped
-      connection detaches instead of losing the work. The open question is
-      answered by `new-session -A`: attach to `$_HI_TMUX_SESSION` (default
-      `hi`) if it exists, create it if not — the one answer that never loses
-      anything. The client only decides whether it was asked for; load.sh's
-      `_hi_tmux_wanted` asks the target's own questions and refuses *loudly,
-      without dropping the connection*, when there is no tmux there or when the
-      tree is disposable (a detached session would outlive the tree it reads).
-      `tests/targets/ssh_test.sh` proves the promise the only way that means
-      anything: it starts a session, kills the client, and asserts the tmux
-      session is still there.
+- [ ] **Shells hi doesn't style yet** — the README's
+      [compatibility tables](../README.md#compatibility) now say plainly which
+      shells get the full session (bash ≥ 3.2, zsh, fish), which get aliases
+      only (sh/dash/ash), and which get nothing (nushell, elvish, xonsh, ksh,
+      tcsh, PowerShell). Any of them landing hi a session as a *login* shell is
+      already fine — that path only has to run one `sh -c`. What is missing is a
+      session shell: an rc in `shells/`, a tier in `hi.sh`'s
+      `_hi_remote_suffix` ladder and in `load.sh`'s `load()`. `ksh`/`mksh` is
+      the one worth doing first by a distance: it reads `$ENV` exactly as the
+      `sh` fallback already does, and `shells/aliases.sh` is POSIX, so it is a
+      prompt and a ladder tier rather than a third implementation of
+      everything. nushell and elvish each need their own language; xonsh is
+      Python. Decide per shell whether the aliases are worth porting before
+      writing any of them.
+
+- [ ] **Session shell should follow the login shell** — _Unblocked_, and the
+      design question the matrix above turned up. `load.sh`'s `load()` picks
+      the session shell by what the target *has* (`fish` > `zsh` > `bash`) and
+      never looks at what the user's login shell is. So someone whose login
+      shell is zsh-with-oh-my-zsh, on a box that also has fish, is handed fish —
+      and their entire setup never loads. It is deliberate ("prefer the nicest
+      shell available") and it is defensible for hi's own configs, which are
+      grafted onto all three rc files anyway; it is much less defensible for the
+      user's. First step is a decision, not code: prefer `$SHELL` when hi
+      supports it and fall back to the ranking otherwise, or make the ranking a
+      setting (`_HI_SHELL_PREFERENCE`), or both. Then it is a few lines in
+      `load()` and a case in the e2e matrix per shape.

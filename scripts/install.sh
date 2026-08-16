@@ -433,16 +433,12 @@ function config_max_width() {
   _HI_SETTING_LINES+=("${value:+export _HI_MAX_WIDTH=$value}")
 }
 
-# Ask what each shell's prompt should end with. One question per shell, because
-# that is the entire point of the setting: bash, zsh and fish have never agreed
-# here, and the shipped defaults (`\$`, `>`, `|`) are three different answers.
-# Skipped when the prompt itself is off, like config_header_details. Entering
-# nothing keeps what is configured; entering the shipped default clears the
-# override rather than writing it out, exactly as config_max_width does with 80.
-#
-# The written value is single-quoted, since a separator is as likely to be `$`
-# or `>` as it is a letter, and $_HI_SETTINGS is sourced by four shells. `'` is
-# the one character that cannot survive that, so it is refused.
+# What each shell's prompt ends with - one question each, since that is the
+# point: the shipped defaults (`\$`, `>`, `|`) are three different answers.
+# Skipped when the prompt is off, like config_header_details; entering the
+# default clears the override rather than writing it, as config_max_width does
+# with 80. Values are single-quoted on the way out (a separator is as likely to
+# be `$` as a letter), so `'` itself is refused.
 _HI_PROMPT_END_ROWS=("bash:BASH:\\\$" "zsh:ZSH:>" "fish:FISH:|")
 
 function config_prompt_ends() {

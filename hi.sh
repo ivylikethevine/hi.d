@@ -34,18 +34,17 @@ _HI_OVERLAY_FILES=(settings.sh colors packages tmux.conf)
 # not spaces, and a transport that folds newlines into spaces would otherwise
 # break it. $_HI_UNARMOR only ever runs inside the sh bootloader (the login
 # shell never parses its braces - fish couldn't).
+# Stands in for the connect line's size until the script carrying it has been
+# assembled and measured (see _say_hi); wider than any answer it can produce.
+_HI_SIZE_TOKEN="@@SIZE@@"
+
 _HI_ARMOR="base64"
 _HI_UNARMOR="tr -s ' ' '\n' | { base64 -d 2>/dev/null || base64 -D; }"
 
-# true when the user has any overlay at all. Both transports ask first rather
-# than piping an empty archive at `tar mxzf -`, which is an "unexpected EOF"
-# error rather than a no-op - an unconfigured user must pay nothing for this.
-# The per-host settings this target gets, by their names under $_HI_CONFIG_DIR:
-# the hosttag file, then the exact-host file. core.sh sources them in that order
-# (the more specific one wins); only the ones that exist are printed, and only
-# the files matching *this* target are ever sent - another host's settings have
-# no business on this box. $DOMAIN is unset while hi.sh is merely sourced (the
-# test hatch), which is what the guard is for.
+# The per-host settings for this target, named as they sit under
+# $_HI_CONFIG_DIR: hosttag file, then exact-host file (core.sh sources them in
+# that order, so the specific one wins). Only files matching *this* target are
+# ever sent. $DOMAIN is unset when hi.sh is merely sourced - hence the guard.
 function _hi_overlay_host_files() {
   local tag f
   [ -n "${DOMAIN:-}" ] || return 0
@@ -56,6 +55,9 @@ function _hi_overlay_host_files() {
   return 0
 }
 
+# True when the user has any overlay at all. Both transports ask first rather
+# than piping an empty archive at `tar mxzf -`, which is an "unexpected EOF"
+# error rather than a no-op - an unconfigured user must pay nothing for this.
 function _hi_has_overlay() {
   local f
   for f in "${_HI_OVERLAY_FILES[@]}"; do
@@ -135,16 +137,11 @@ function _hi_remote_root() {
   printf '%s' "$out"
 }
 
-# `hi --update <target>` - bring a *permanent* hi.d on the target up to date
-# without opening a session on it, so a fleet is one command per host rather
-# than one login per host.
-#
-# The scope is deliberately narrow, and matches paths.sh's `hi_update` alias
-# exactly - this is that alias, run over ssh: `git pull` in the tree
-# scripts/install.sh laid down, and nothing else. The two refusals are the
-# same two, for the same reasons. An ephemeral session has nothing to update
-# (every connect ships a fresh copy and deletes it on exit), and a
-# package-manager install belongs to the package manager.
+# `hi --update <target>` - update a *permanent* hi.d on the target without
+# opening a session, so a fleet is one command per host. This is paths.sh's
+# `hi_update` alias run over ssh: `git pull` and nothing else, with the same two
+# refusals. An ephemeral session ships a fresh copy every connect and has
+# nothing to update; a package-manager install belongs to the package manager.
 function _hi_update() {
   local root ctl_path ec=0
   local -a ctl_opts
@@ -217,25 +214,17 @@ EOF
 }
 
 # The no-bash target's rc, consumed by sh, zsh *and* fish (see _say_hi's
-# `fish -C` branch), so every line has to be valid in all three - which plain
-# `export NAME=value` and `[ -f x ] && . x` both are.
+# `fish -C` branch), so every line must be valid in all three - `export
+# NAME=value` and `[ -f x ] && . x` are.
 #
-# Toggle defaults first, so the two files after them can still win: aliases.sh
-# reads _HI_DISABLE_EDITORS/_HI_DISABLE_ALIASES bare, paths.sh's local-only gate
-# reads _HI_DISABLE_LOCAL/_HI_REMOTE_SESSION. _HI_REMOTE_SESSION is 1 because
-# this *is* a remote session and this path deliberately never reaches load.sh,
-# which normally exports it; left unset, the gate reads a remote target as local
-# and strips hi from the session for anyone who set _HI_DISABLE_LOCAL=1.
-#
-# settings.sh needs the `[ -f ]` guard the other two don't, since nothing writes
-# it until scripts/install.sh runs: a bare `.` on a missing file doesn't just
-# fail in ash/dash, it abandons the rest of the file - taking paths.sh,
-# aliases.sh and $CMDARG with it.
-#
-# _HI_CONFIG_DIR is the target's own misc/, not ${XDG_CONFIG_HOME:-...}: the
-# overlay we shipped was extracted over that directory, and a ~/.config/hi.d
-# belonging to whoever we logged in as is not the config this session is meant
-# to run with. Same reasoning as the two transports that set it.
+# Toggle defaults come first so the files after them can still win.
+# _HI_REMOTE_SESSION is 1 because this *is* a remote session and this path never
+# reaches load.sh, which normally exports it; unset, paths.sh's gate reads the
+# target as local and strips hi for anyone with _HI_DISABLE_LOCAL=1. settings.sh
+# needs its `[ -f ]` guard because nothing writes it until install.sh runs, and
+# a bare `.` on a missing file abandons the rest of the file in ash/dash.
+# _HI_CONFIG_DIR is the target's own misc/, where the shipped overlay was
+# unpacked - not a ~/.config/hi.d belonging to whoever we logged in as.
 function _hi_fallback_rc() {
   local t
   # shellcheck disable=SC2016 # $_HI_ROOT is the target's to expand
@@ -247,11 +236,9 @@ function _hi_fallback_rc() {
   done
   # shellcheck disable=SC2016 # $_HI_ROOT is the target's to expand
   printf '[ -f $_HI_ROOT/misc/settings.sh ] && . $_HI_ROOT/misc/settings.sh\n'
-  # The per-host overlay, resolved on the client rather than on the target: this
-  # rc has no $_HI_TARGET to test, and core.sh - which does the resolving
-  # everywhere else - is never reached on a bash-less host. Same order (hosttag
-  # then exact host), and after settings.sh for the same reason: the specific
-  # file has to be able to override the global one.
+  # The per-host overlay, resolved here because this rc has no $_HI_TARGET to
+  # test and never reaches core.sh, which does it everywhere else. Same order
+  # (hosttag, then host) and after settings.sh, so the specific file wins.
   for t in $(_hi_overlay_host_files); do
     # shellcheck disable=SC2016 # $_HI_ROOT is the target's to expand
     printf '[ -f $_HI_ROOT/misc/%s ] && . $_HI_ROOT/misc/%s\n' "$t" "$t"
@@ -263,8 +250,57 @@ ${CMDARG:-}
 EOF
 }
 
+# The tree on disk, uncompressed - not what a session sends (see _hi_wire_size),
+# but the right answer to "how big is the thing hi would ship". doctor.sh asks.
 function _hi_size() {
   _hi_du_size "${_HI_PAYLOAD[@]/#/$_HI_ROOT/}"
+}
+
+# What crosses the connection: the streams measured as *sent* (gzipped, then
+# armored), not the directories they came from - which is what `du` answered and
+# why it overstated every session. Callers pass the strings they are about to
+# send; the scaffolding around them isn't counted.
+function _hi_wire_size() {
+  local total=0 part
+  for part in "$@"; do total=$((total + ${#part})); done
+  # the outer armor, which every one of these streams also passes through
+  _hi_human_bytes "$(_hi_armored_len "$total")"
+}
+
+# base64 length of <n> bytes: four chars per three-byte group, rounded up.
+# Divide-then-multiply is the formula, not a slip - n * 4 / 3 loses the padding.
+function _hi_armored_len() {
+  # shellcheck disable=SC2017
+  printf '%s' "$((($1 + 2) / 3 * 4))"
+}
+
+# What a fresh session would put on the wire, without connecting: the same
+# streams _say_hi armors. The overlay isn't counted - which files ride along is
+# a question about a target, and this has none. doctor.sh is the caller.
+function _hi_wire_estimate() {
+  # $_HI_LAUNCHER, not $0: this is reached by *sourcing* hi.sh (doctor.sh does),
+  # where $0 is whatever ran the source. _say_hi keeps $0 - there it is the
+  # running copy, which is the copy it ships.
+  _hi_wire_size "$($_HI_ARMOR <"$_HI_LAUNCHER")" "$(_hi_bootloader | $_HI_ARMOR)" \
+    "$(tar czf - -h -C "$_HI_HOME" "${_HI_PAYLOAD[@]/#/hi.d/}" | $_HI_ARMOR)"
+}
+
+# a file's size in bytes; `stat`'s flags differ GNU/BSD, `wc -c` doesn't
+function _hi_file_bytes() {
+  wc -c <"$1" | tr -d ' '
+}
+
+# bytes -> the shape `du -sh` prints ("28K", "1.2M"), which is what the connect
+# line has always carried
+function _hi_human_bytes() {
+  awk -v b="$1" 'BEGIN {
+    split("B K M G", unit, " ")
+    i = 1
+    while (b >= 1024 && i < 4) { b /= 1024; i++ }
+    if (i == 1) printf "%dB", b
+    else if (b < 10) printf "%.1f%s", b, unit[i]
+    else printf "%.0f%s", b, unit[i]
+  }'
 }
 
 # what this copy is: the packager's stamp when there is one, `git describe` in
@@ -281,17 +317,12 @@ function _hi_version() {
   fi
 }
 
-# the bit both _say_hi branches need before anything target-specific happens.
+# The bit both _say_hi branches need before anything target-specific happens.
+# The tmux lines settle only *whether it was asked for*; whether the target has
+# tmux, and whether its tree is permanent, are load.sh's questions.
 #
-# Note what the two tmux lines do and don't decide: the client settles *whether
-# it was asked for* (the --tmux flag, or _HI_TMUX_ATTACH in settings.sh) and
-# nothing else. Whether this target has tmux at all, and whether its tree is
-# permanent enough for a detached session to be a good idea, are the target's
-# own questions - load.sh's _hi_tmux_wanted asks them there.
-#
-# Every line here is expanded on the client, so nothing in this heredoc may
-# carry a backtick or an unescaped $( ): they run here, now. (A comment is not
-# a comment yet - the shell has not seen it.)
+# Everything here is expanded on the client, so no backtick or unescaped $( )
+# may appear below - not even inside a comment, which the shell hasn't seen yet.
 function _hi_remote_preamble() {
   cat <<REMOTE
       _hi_now() { d=\$(date +%s.%N 2>/dev/null); case "\$d" in *N*|'') date +%s ;; *) printf '%s' "\$d" ;; esac; }
@@ -332,23 +363,16 @@ function _hi_remote_preamble() {
 REMOTE
 }
 
-# the bit both _say_hi branches need once their own setup is done: report copy
-# time, then hand off to bash if it's there, or the best fallback shell if not.
-# Expects \$_hi_rc_dir to already point at wherever hi.bashrc/.hi_fallback_rc
-# should live for this branch.
+# What both _say_hi branches need once their own setup is done: report copy
+# time, then hand off to bash, or to the best fallback shell. Expects
+# \$_hi_rc_dir to point at wherever hi.bashrc/.hi_fallback_rc lives.
 #
-# `bash --rcfile X -i` needs both parts, in that order. -i: bash reads an rcfile
-# only when interactive, decided from its own stdin rather than the flag, so
-# with no local tty for `ssh -t` the remote bash would ignore hi.bashrc - and
-# load.sh and $CMDARG with it - and exit 0. (That was `hi <target> <command>`
-# doing nothing from a script, a pipe or cron; only this arm was affected, since
-# the fallbacks below each get an explicit -i or fish's -C.) After --rcfile:
-# bash's GNU long-option pass ends at the first short option, so `bash -i
-# --rcfile f` dies with "--: invalid option".
-#
-# fish's exit only unwinds the source call it's in, not the shell, so a sourced
-# .hi_fallback_rc's trailing "; exit" never lands - the fish case feeds the
-# file's content to -C directly so exit applies to the fish process itself.
+# `bash --rcfile X -i` needs both parts in that order: without -i bash decides
+# it isn't interactive (from stdin, not the flag) and ignores the rcfile
+# entirely - that was `hi <target> <cmd>` doing nothing from a script or cron -
+# and after --rcfile, because bash's long-option pass ends at the first short
+# one. fish's `exit` inside a sourced file only unwinds the source, so the fish
+# case feeds the file's content to -C instead.
 function _hi_remote_suffix() {
   cat <<REMOTE
       export _HI_COPY_TIME=\$(awk -v a="\$_hi_t0" -v b="\$(_hi_now)" 'BEGIN{printf "%.3f", b-a}')
@@ -378,7 +402,7 @@ REMOTE
 # it's there.
 function _say_hi() {
   local size hi_esc nc_esc script middle b64 boot_tmp remote_root tmp_root ctl_path ec=0
-  local overlay overlay_line=""
+  local launcher="" bootloader="" tree="" overlay="" overlay_line=""
   local -a ctl_opts
 
   # only this path armors its payload; the container backends stream through
@@ -415,7 +439,11 @@ function _say_hi() {
 REMOTE
     )"
   else
-    size="$(_hi_size)"
+    # armored before the script is assembled, so the size below is measured on
+    # the bytes that actually go out
+    launcher="$($_HI_ARMOR <"$0")"
+    bootloader="$(_hi_bootloader | $_HI_ARMOR)"
+    tree="$(tar czf - -h -C "$_HI_HOME" "${_HI_PAYLOAD[@]/#/hi.d/}" | $_HI_ARMOR)"
     # second, tiny stream over the tree we just unpacked: the payload carries
     # only the *in-tree* misc/, so an overlay outside it has to be sent
     # explicitly. Empty (and the line omitted entirely) when there is no
@@ -426,6 +454,9 @@ REMOTE
       overlay="$(_hi_overlay_tar | $_HI_ARMOR)"
       overlay_line="echo \"$overlay\" | $_HI_UNARMOR | tar mxzf - -C \"\$_HI_ROOT/misc\""
     fi
+    # not known yet: everything above is armored again with the rest of the
+    # script, so the figure can only be measured once it is assembled
+    size="$_HI_SIZE_TOKEN"
     middle="$(
       cat <<REMOTE
       export _HI_HOME=\$(mktemp -d -t $(whoami).hi.XXXXXX) # busybox mktemp needs exactly six X
@@ -436,10 +467,10 @@ REMOTE
       trap 'rm -rf \$_HI_CLEANUP' exit
       _hi_rc_dir="\$_HI_ROOT"
       printf '%s %s%s' "$hi_esc" "$nc_esc" "$size"
-      echo "$($_HI_ARMOR <"$0")" | $_HI_UNARMOR > "\$_HI_ROOT/hi.sh"
+      echo "$launcher" | $_HI_UNARMOR > "\$_HI_ROOT/hi.sh"
       chmod +x "\$_HI_ROOT/hi.sh"
-      echo "$(_hi_bootloader | $_HI_ARMOR)" | $_HI_UNARMOR > "\$_hi_rc_dir/hi.bashrc"
-      echo "$(tar czf - -h -C "$_HI_HOME" "${_HI_PAYLOAD[@]/#/hi.d/}" | $_HI_ARMOR)" | $_HI_UNARMOR | tar mxzf - -C "\$_HI_HOME"
+      echo "$bootloader" | $_HI_UNARMOR > "\$_hi_rc_dir/hi.bashrc"
+      echo "$tree" | $_HI_UNARMOR | tar mxzf - -C "\$_HI_HOME"
       $overlay_line
       export _HI_CONNECT_PREFIX=" $size"
 REMOTE
@@ -450,6 +481,16 @@ REMOTE
 $middle
 $(_hi_remote_suffix)"
 
+  # The bytes this connection carries: base64 of the whole script, itself
+  # base64 of the tar, hi.sh and the bootloader - armored twice, each armor 4/3
+  # of what it wraps. Derived arithmetically before the outer armor, since the
+  # number has to appear *inside* the thing it measures; $_HI_SIZE_TOKEN holds
+  # its place and is the same width, so the figure is honest to a few bytes.
+  if [ -z "$remote_root" ]; then
+    size="$(_hi_human_bytes "$(_hi_armored_len "${#script}")")"
+    script="${script//$_HI_SIZE_TOKEN/$size}"
+  fi
+
   # single-line armor portably: GNU spells it -w0, BSD doesn't wrap by
   # default - piping through tr is the one shape that does both
   b64="$(printf '%s' "$script" | base64 | tr -d '\n')"
@@ -457,11 +498,32 @@ $(_hi_remote_suffix)"
   # the *target* by the mkdir below (which fails loudly if the name is taken)
   boot_tmp="$(mktemp -u -t hi.boot.XXXXXX)"
 
-  # shellcheck disable=SC2029
-  ssh -t "${ctl_opts[@]}" "${SSHARGS[@]}" "$DOMAIN" \
-    "mkdir -m 700 $boot_tmp && echo $b64 | sh -c 'base64 -d 2>/dev/null || base64 -D' > $boot_tmp/bootloader && sh $boot_tmp/bootloader; rm -rf $boot_tmp" '||' \
-    powershell -NoLogo -NoExit -Command \
-    "Write-Host 'hi from PowerShell - no bash or sh on this host, hi.d colors/aliases are unavailable' -ForegroundColor Yellow" || ec=$?
+  # Two calls, multiplexed over the one connection (so still one
+  # authentication). The script cannot travel as an argument: Linux caps a
+  # *single* argv entry at 128KB (MAX_ARG_STRLEN) however large ARG_MAX is, and
+  # the payload had grown within a few KB of it - one more shipped file and
+  # every session would have died with "Argument list too long". stdin has no
+  # ceiling. It has to be two calls because the second one's stdin belongs to
+  # the interactive session; feed it a pipe and the remote shell reads EOF.
+  #
+  # The write doubles as the probe, inside one `sh -c` for the reason
+  # $_HI_UNARMOR gives above: the command meets the *login* shell first, and
+  # that may be fish, which parses neither `{ ...; }` nor `||` as sh does. A
+  # target where even `sh -c` won't run has no POSIX shell (stock Windows
+  # OpenSSH), which is what selects the PowerShell fallback below. The `tr` step
+  # is dropped: stdin delivers the armor byte for byte, and folding newlines
+  # into spaces was the only thing it ever fixed.
+  # shellcheck disable=SC2029 # $boot_tmp is ours to expand, into the target's shell
+  if printf '%s' "$b64" | ssh "${ctl_opts[@]}" "${SSHARGS[@]}" "$DOMAIN" \
+    "sh -c 'mkdir -m 700 $boot_tmp && { base64 -d 2>/dev/null || base64 -D; } > $boot_tmp/bootloader'" 2>/dev/null; then
+    # shellcheck disable=SC2029
+    ssh -t "${ctl_opts[@]}" "${SSHARGS[@]}" "$DOMAIN" \
+      "sh $boot_tmp/bootloader; rm -rf $boot_tmp" || ec=$?
+  else
+    ssh -t "${ctl_opts[@]}" "${SSHARGS[@]}" "$DOMAIN" \
+      powershell -NoLogo -NoExit -Command \
+      "Write-Host 'hi from PowerShell - no bash or sh on this host, hi.d colors/aliases are unavailable' -ForegroundColor Yellow" || ec=$?
+  fi
 
   ssh -O exit "${ctl_opts[@]}" "$DOMAIN" >/dev/null 2>&1 || true
   rm -rf "$ctl_path" 2>/dev/null || true
@@ -473,7 +535,7 @@ $(_hi_remote_suffix)"
 # flags from the remote command). The case below picks the command shape;
 # everything past it is identical.
 function _say_hi_container() {
-  local label="$1" shell_end root fallback exit_code shell_secs size prefix
+  local label="$1" shell_end root fallback exit_code shell_secs size prefix tarball
   local -a probe cp attach
   case "$label" in
   # one arm, since podman reuses docker's exec syntax outright
@@ -547,17 +609,28 @@ function _say_hi_container() {
 
   shell_secs="$(_hi_elapsed "$_HI_SHELL_START" "$shell_end")"
   _hi_cecho " shell: ${shell_secs}s " "$BLUE" 1
-  size="$(_hi_size)"
+
+  # Staged to a file rather than piped in, so the size announced is the one
+  # actually sent: `du` answers about the uncompressed tree, and `tee | wc -c`
+  # knows only after the copy it is announcing. No armor here - `exec -i` takes
+  # raw bytes.
+  tarball="$tmp.tar.gz"
+  if ! tar czf "$tarball" -h -C "$_HI_HOME" "${_HI_PAYLOAD[@]/#/hi.d/}"; then
+    _hi_cecho " failed to archive hi.d for [$DOMAIN]" "$BRRED"
+    return 1
+  fi
+  size="$(_hi_human_bytes "$(_hi_file_bytes "$tarball")")"
   prefix=" shell: ${shell_secs}s -> bash ($label) $size"
   echo -ne "$YELLOW-> bash ($label)$NC $size"
 
   # this is a failure state, so we exit early
-  if ! tar czf - -h -C "$_HI_HOME" "${_HI_PAYLOAD[@]/#/hi.d/}" |
-    "${cp[@]}" sh -c "mkdir -p '$root' && tar mxzf - -C '$root'"; then
+  if ! "${cp[@]}" sh -c "mkdir -p '$root' && tar mxzf - -C '$root'" <"$tarball"; then
+    rm -f "$tarball"
     _hi_cecho " failed to copy hi.d into [$DOMAIN]" "$BRRED"
     "${probe[@]}" rm -rf "$root" >/dev/null 2>&1
     return 1
   fi
+  rm -f "$tarball"
 
   # the config overlay, as a second stream over the misc/ the tar above just
   # laid down - see the ssh path for why it can't ride along in the first one.
@@ -596,9 +669,8 @@ function _hi_parse() {
       SSHARGS+=("$1" "$2")
       shift
       ;;
-    # hi's own flags that can appear anywhere before the target, unlike
-    # --doctor/--version/--update, which replace the connection outright and
-    # are dispatched on $1 alone below. Never forwarded to ssh.
+    # hi's own flags, allowed anywhere before the target and never forwarded to
+    # ssh - unlike --doctor/--version/--update, dispatched on $1 alone below
     --tmux) _HI_TMUX_ATTACH=1 ;;
     --no-tmux) _HI_TMUX_ATTACH=0 ;;
     -*) SSHARGS+=("$1") ;;

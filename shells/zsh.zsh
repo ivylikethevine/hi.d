@@ -5,7 +5,12 @@ source "${_HI_HOME:-$HOME}/hi.d/common/core.sh"
 source "$_HI_GIT_PROMPT"
 source "$_HI_ALIASES"
 
-setopt KSH_ARRAYS # required for sanity & some of the other scripts we run
+# NOT setopt KSH_ARRAYS. It used to be here so that core.sh's array indexing
+# read the same in zsh as in bash - but it is a global option, hi's block is
+# appended to the *end* of ~/.zshrc, and oh-my-zsh (with essentially every
+# plugin and theme it ships) assumes zsh's own 1-based arrays. Turning it on
+# under them breaks their code, in their shell, for our convenience. core.sh
+# now picks its palette bucket by counting instead, which is right in both.
 setopt prompt_subst
 
 _hi_interactive_extras

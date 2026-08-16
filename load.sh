@@ -75,6 +75,43 @@ function clean_all() {
   return 0
 }
 
+# The user's login shell, by name: $SHELL when sshd set it (it does), the passwd
+# entry otherwise (container `exec` paths often have neither).
+function _hi_login_shell() {
+  local shell="${SHELL:-}" user
+  if [ -z "$shell" ]; then
+    user="$(_hi_whoami)" # memoized in core.sh; this path forked `id` twice
+    shell="$(getent passwd "$user" 2>/dev/null | awk -F: '{ print $NF }')"
+    [ -n "$shell" ] || shell="$(awk -F: -v u="$user" '$1 == u { print $NF }' /etc/passwd 2>/dev/null)"
+  fi
+  printf '%s' "${shell##*/}"
+}
+
+# Which shell this session runs in. $_HI_SHELL_PREFERENCE is an ordered list of
+# names hi styles, plus the token `login` for "whatever the user's login shell
+# is"; the first entry that is installed wins, and bash is the floor because
+# load.sh only runs where bash exists.
+#
+# The default puts `login` first for a reason found by the framework matrix: the
+# old ranking handed fish to anyone whose box had it, so a user whose login
+# shell is zsh-with-oh-my-zsh never saw their own setup. hi's configs are
+# grafted onto all three rc files either way; the user's are not.
+function _hi_session_shell() {
+  local want
+  # the ranking is appended rather than kept as a second loop: a preference
+  # that names nothing installed falls through to it either way
+  for want in ${_HI_SHELL_PREFERENCE:-login fish zsh bash} fish zsh bash; do
+    [ "$want" = login ] && want="$(_hi_login_shell)"
+    case "$want" in
+    bash | zsh | fish) command -v "$want" >/dev/null 2>&1 && {
+      printf '%s' "$want"
+      return 0
+    } ;;
+    esac
+  done
+  printf 'bash'
+}
+
 # True when this session should run inside a named tmux (`hi --tmux`, or
 # _HI_TMUX_ATTACH=1), so a dropped connection detaches instead of losing the
 # work. Both refusals print and carry on rather than dropping the connection: a
@@ -109,12 +146,13 @@ function load() {
   _hi_cecho " | " "$NC" 1
   _hi_cecho "hi loaded with... " "$BRCYAN" 1
 
-  local shell=bash greeting="only bash today :(" color="$RED"
-  if command -v fish &>/dev/null; then
-    shell=fish greeting="fish shell! :^)" color="$GREEN"
-  elif command -v zsh &>/dev/null; then
-    shell=zsh greeting="zsh shell! :)" color="$PURPLE"
-  fi
+  local shell greeting color
+  shell="$(_hi_session_shell)"
+  case "$shell" in
+  fish) greeting="fish shell! :^)" color="$GREEN" ;;
+  zsh) greeting="zsh shell! :)" color="$PURPLE" ;;
+  *) greeting="only bash today :(" color="$RED" ;;
+  esac
   _hi_cecho "$greeting" "$color" 1
   _hi_cecho " | load: $(_hi_elapsed "$start" "$(_hi_now)")s | copy: ${_HI_COPY_TIME:--1}s"
 

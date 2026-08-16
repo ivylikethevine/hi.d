@@ -141,30 +141,31 @@ publishing step — all of it waits for v1.
 
 Not GitHub-button work: these are human actions purely because no runner covers them. Listed separately so they don't get mistaken for something a workflow could take over.
 
-- [ ] **Homebrew formula verification** — reachable only from a mac (or
-      Homebrew on Linux). `brew install --build-from-source`, `brew test`,
-      `brew audit --strict --new`. Nothing in this repo's CI can check any of
-      it, which is why the checklist _is_ the enforcement.
+- [ ] **Homebrew formula verification** — _the formula is verified; the mac is
+      not._ `brew install --build-from-source`, `brew test` and
+      `brew audit --strict --new` have all been run in the `homebrew/brew`
+      container against a local tarball, and the installed keg exercised
+      (`hi --version` reports the formula's version, the man page lands, the
+      wrapper exports `_HI_HOME`, `hi --doctor` reads the keg). Two real
+      findings came out of it and are fixed: the description needed a capital,
+      and `uses_from_macos "openssh"` is rejected by audit - the formula now
+      declares no dependencies, which is right, since `ssh` and `base64` ship
+      with every system that could install it. Audit's only remaining
+      complaints are the unreachable homepage and HEAD URL, i.e. the repo not
+      being public yet.
 
-  - **Ticks when:** run against the v1 formula.
+  - **Ticks when:** the same three commands pass on an actual mac, where the keg lives under `/opt/homebrew` rather than Linuxbrew's prefix.
+- [ ] **AUR package verification** — _the local half is done_: both PKGBUILDs
+      have been built with `makepkg`, linted with `namcap` (recipe silent,
+      package down to three documented false positives), installed into a clean
+      `archlinux:base` container, exercised and removed. Two fixes came out of
+      it — `coreutils` dropped from `depends` (it is in `base`) and `hi.d-git`
+      now stamps `$pkgver`, since the installed tree has no `.git` for
+      `hi --version` to fall back on. What is left is the part that needs the
+      real thing: the same run against the published source rather than a local
+      clone, which is only possible once the repo is public.
 
-- [ ] **AUR package verification** — needs an Arch box (or container) for
-      `makepkg` and `namcap`. Same story: the packaging suite guards the
-      manifest's shape offline, but only namcap catches hardcoded paths and bad
-      permissions in a built package.
-
-  - **Ticks when:** run clean for both AUR packages.
-
-- [ ] **Regenerate the demo GIFs** — the one entry here that is _not_ waiting on
-      publishing. `docs/demos.md` says it plainly: the GIFs are manual
-      artifacts, reviewed by eye, and regenerated whenever the header or the
-      prompt changes. Both have changed since they were recorded — the packages
-      check now carries hi's own dependencies, and the prompt separator is a
-      setting — so all five are stale, plus `docs/demo.gif` in the README.
-
-  - **Where:** a machine with `vhs`, docker, podman, nomad and a kind cluster — the same set `docs/tapes/fixtures.sh` stands up, which is why no runner does this.
-  - **Do:** `docs/tapes/fixtures.sh`, then `vhs docs/tapes/<name>.tape` from the repo root for each, then `fixtures.sh down`.
-  - **Ticks when:** all five plus `docs/demo.gif` match what a session prints today.
+  - **Ticks when:** run clean for both packages against the published source.
 
 ## Code work
 
@@ -181,29 +182,12 @@ Not GitHub-button work: these are human actions purely because no runner covers 
 ### Product
 
 - [ ] **Shells hi doesn't style yet** — the README's
-      [compatibility tables](../README.md#compatibility) now say plainly which
-      shells get the full session (bash ≥ 3.2, zsh, fish), which get aliases
-      only (sh/dash/ash), and which get nothing (nushell, elvish, xonsh, ksh,
-      tcsh, PowerShell). Any of them landing hi a session as a *login* shell is
-      already fine — that path only has to run one `sh -c`. What is missing is a
-      session shell: an rc in `shells/`, a tier in `hi.sh`'s
-      `_hi_remote_suffix` ladder and in `load.sh`'s `load()`. `ksh`/`mksh` is
-      the one worth doing first by a distance: it reads `$ENV` exactly as the
-      `sh` fallback already does, and `shells/aliases.sh` is POSIX, so it is a
-      prompt and a ladder tier rather than a third implementation of
-      everything. nushell and elvish each need their own language; xonsh is
-      Python. Decide per shell whether the aliases are worth porting before
-      writing any of them.
-
-- [ ] **Session shell should follow the login shell** — _Unblocked_, and the
-      design question the matrix above turned up. `load.sh`'s `load()` picks
-      the session shell by what the target *has* (`fish` > `zsh` > `bash`) and
-      never looks at what the user's login shell is. So someone whose login
-      shell is zsh-with-oh-my-zsh, on a box that also has fish, is handed fish —
-      and their entire setup never loads. It is deliberate ("prefer the nicest
-      shell available") and it is defensible for hi's own configs, which are
-      grafted onto all three rc files anyway; it is much less defensible for the
-      user's. First step is a decision, not code: prefer `$SHELL` when hi
-      supports it and fall back to the ranking otherwise, or make the ranking a
-      setting (`_HI_SHELL_PREFERENCE`), or both. Then it is a few lines in
-      `load()` and a case in the e2e matrix per shape.
+      [compatibility tables](../README.md#compatibility) say where each shell
+      stands. The bash-less tiers (sh, dash, ash, ksh, mksh) now get hi's own
+      colored `user@host` prompt as well as the aliases — resolved on the
+      client and baked in, since those shells have no readline, no git prompt,
+      and busybox ash will not expand `$( )` inside PS1. What is still missing
+      there is the header and the git segment, which need bash or a
+      `shells/ksh.sh` of their own. nushell, elvish and xonsh need their own
+      language for any of it; tcsh has no `$ENV` equivalent to hook. Decide per
+      shell whether that is worth it — as a *login* shell they all work today.

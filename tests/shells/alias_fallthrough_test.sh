@@ -26,23 +26,6 @@ _HI_SHELLS="zsh sh bash fish"
 # associative array, which is bash 4 (macOS ships 3.2)
 _HI_SHELL_BIN=""
 
-function _hi_fake_bin() {
-  printf '%s\n' '#!/bin/sh' 'exit 0' >"$1/$2"
-  chmod +x "$1/$2"
-}
-
-function _hi_fake_path() {
-  local dir="$_HI_WORKDIR/$1" bin
-  shift
-  if [ ! -d "$dir" ]; then
-    mkdir -p "$dir"
-    for bin in "$@"; do
-      _hi_fake_bin "$dir" "$bin"
-    done
-  fi
-  printf '%s' "$dir"
-}
-
 function _hi_expect_winner() {
   local candidates="$1" installed="$2" c i
   for c in $candidates; do

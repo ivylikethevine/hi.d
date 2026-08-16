@@ -22,7 +22,11 @@ function demo_keypair() {
 function demo_sshd_image() {
   # the e2e sshd image shape: debian + sshd + the four shells, PUBKEY wired
   # by the entrypoint; on top of it, this checkout preinstalled at ~/hi.d -
-  # the permanent-install story is the one the README GIF cannot show
+  # the permanent-install story is the one the README GIF cannot show.
+  #
+  # hitest's login shell is fish on purpose: hi follows the login shell now
+  # (load.sh's _hi_session_shell), so this is what makes the demo land in a
+  # shell other than the client's - which is the whole point of the GIF.
   cat >"$_HI_DEMO_DIR/entrypoint.sh" <<'EOF'
 #!/bin/bash
 set -eu
@@ -39,18 +43,31 @@ RUN apt-get update && apt-get install -y --no-install-recommends \\
       openssh-server bash zsh fish git ca-certificates \\
     && rm -rf /var/lib/apt/lists/* \\
     && mkdir -p /run/sshd \\
-    && useradd -m -s /bin/bash hitest
+    && useradd -m -s /usr/bin/fish hitest
 COPY --chown=hitest:hitest checkout /home/hitest/hi.d
 RUN chmod +x /home/hitest/hi.d/hi.sh
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 ENTRYPOINT ["/entrypoint.sh"]
 EOF
-  # a clean copy rather than the live checkout as context: .git and dist/
-  # would bloat the build context and the image alike
+  # A clean copy rather than the live checkout as context: .git and dist/ would
+  # bloat the build context and the image alike.
+  #
+  # From HEAD by default, because a demo should show a state that exists in the
+  # history. $HI_DEMO_SOURCE=worktree renders what is in front of you instead -
+  # which matters more than it sounds: the *client* side of every tape is the
+  # working tree either way, so rendering a dirty tree without this gives you a
+  # new client talking to an old target, and the GIF quietly lies.
   rm -rf "$_HI_DEMO_DIR/checkout"
   mkdir -p "$_HI_DEMO_DIR/checkout"
-  (cd "$_HI_ROOT" && git archive HEAD | tar -x -C "$_HI_DEMO_DIR/checkout")
+  if [ "${HI_DEMO_SOURCE:-head}" = worktree ]; then
+    # tracked files only, uncommitted contents included - the same set
+    # `git archive` would take, read from the working tree
+    (cd "$_HI_ROOT" && git ls-files -z | tar --null -T - -cf -) |
+      tar -x -C "$_HI_DEMO_DIR/checkout"
+  else
+    (cd "$_HI_ROOT" && git archive HEAD | tar -x -C "$_HI_DEMO_DIR/checkout")
+  fi
   docker build -q -t hi-demo-sshd "$_HI_DEMO_DIR" >/dev/null
 }
 

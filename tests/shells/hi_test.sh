@@ -12,7 +12,8 @@
 # decides it never returns, and marks this file unreachable (SC2317) - it does
 # not model the BASH_SOURCE guard. (A comment line may not *begin* with the
 # linter's name, or it is read as a directive.)
-# shellcheck disable=SC2329,SC2317
+# The single-quoted strings below are the target's to expand, not ours (SC2016).
+# shellcheck disable=SC2329,SC2317,SC2016
 set -euo pipefail
 
 # shellcheck source=../../common/core.sh
@@ -453,7 +454,9 @@ function test_update_pulls_a_checkout() {
   root="$_HI_WORKDIR/checkout/hi.d"
   mkdir -p "$root/.git"
   _hi_update_case "$root" myhost >/dev/null 2>&1
-  grep -q "git -C '$root' pull" "$_HI_SSH_LOG"
+  # the pull and its target, not the quoting: _hi_ssh_sh runs the script
+  # through printf %q, so the literal spacing is its business, not ours
+  grep -q "git -C" "$_HI_SSH_LOG" && grep -qF "$root" "$_HI_SSH_LOG"
 }
 
 # ssh flags still reach ssh, so `hi --update -p 2222 host` works like `hi` does
@@ -472,6 +475,61 @@ function test_update_keeps_ssh_flags() {
     _HI_REMOTE_ROOT="$root" _hi_update -p 2222 myhost >/dev/null 2>&1
     grep -q -- "-p 2222 myhost" "$_HI_WORKDIR/flags.log"
   )
+}
+
+# --- the bash-less prompt -----------------------------------------------------
+#
+# sh/ash/dash/ksh sessions used to get aliases and the host's own prompt, which
+# on busybox is a bare "$". The line hi writes has to survive shells with no
+# readline and no command substitution in PS1, so it bakes everything in on the
+# client and leaves exactly one escape for the target to expand.
+
+# one line, so one case reads all of it: the username resolved once by the rc
+# rather than per prompt, the host without its user@ part, a color from hi's own
+# palette, the separator left for the shell (\$ - $ for a user, # for root), and
+# no `$( )` inside PS1, which busybox ash would not expand anyway
+function test_fallback_prompt_carries_user_host_and_color() {
+  local out ps1
+  out="$(DOMAIN=hitest@myhost _hi_fallback_prompt)"
+  ps1="$(printf '%s\n' "$out" | sed -n 's/^PS1=//p')"
+  [[ "$out" == *'_hi_u=$(id -un'* ]] || return 1
+  [[ "$ps1" == *myhost* && "$ps1" == *$'\e['* ]] || return 1
+  [[ "$ps1" == *'\$ "'* && "$ps1" != *'$('* ]]
+}
+
+# the separator is a setting everywhere else, so it is one here too
+function test_fallback_prompt_honors_the_separator_setting() {
+  [[ "$(_HI_PROMPT_END='>>' DOMAIN=hitest@myhost _hi_fallback_prompt)" == *'>> "'* ]]
+}
+
+function test_fallback_prompt_respects_the_toggle() {
+  [ -z "$(_HI_DISABLE_PROMPT=1 DOMAIN=hitest@myhost _hi_fallback_prompt)" ]
+}
+
+# the whole point: a real POSIX shell renders it without complaint
+function test_fallback_prompt_renders_in_dash() {
+  local out
+  out="$(DOMAIN=hitest@myhost _hi_fallback_prompt |
+    dash -s -c '. /dev/stdin; printf %s "$PS1"' 2>&1)" || return 1
+  [[ "$out" == *myhost* && "$out" != *'id -un'* ]]
+}
+
+# The shared rc must NOT carry it: that file is also fed to fish, which has no
+# PS1 and stops dead on the line, and to zsh, where `\$` is not this escape.
+# The POSIX arm appends it instead - which is what the suffix below shows.
+function test_fallback_rc_stays_shell_agnostic() {
+  local out
+  out="$(DOMAIN=hitest@myhost CMDARG="" _hi_fallback_rc)"
+  [[ "$out" != *PS1=* ]]
+}
+
+function test_remote_suffix_appends_the_prompt_for_posix_shells() {
+  local out
+  out="$(DOMAIN=hitest@myhost _hi_remote_suffix)"
+  # the append lands after the fish arm, i.e. on the `*)` one that runs
+  # sh/ksh/mksh, and that arm is still the one exporting ENV
+  _hi_before "$out" 'fish -C' '>> "\$_hi_rc_dir/.hi_fallback_rc"' &&
+    _hi_before "$out" '>> "\$_hi_rc_dir/.hi_fallback_rc"' 'ENV='
 }
 
 # --- the size hi reports, and the transport that carries it -------------------
@@ -675,6 +733,14 @@ function run_hi_tests() {
   _hi_check "Members are bare names" test_overlay_tar_members_are_bare_names
   _hi_check "Carries only what exists" test_overlay_tar_carries_only_what_exists
   _hi_check "Fallback rc points at the shipped tree" test_fallback_rc_points_config_dir_at_the_shipped_tree
+
+  _hi_h2 "Testing: the bash-less prompt"
+  _hi_check "Carries user, host, color and separator" test_fallback_prompt_carries_user_host_and_color
+  _hi_check "_HI_PROMPT_END applies here too" test_fallback_prompt_honors_the_separator_setting
+  _hi_check "_HI_DISABLE_PROMPT skips it" test_fallback_prompt_respects_the_toggle
+  _hi_check_requires dash "Renders in a real dash" test_fallback_prompt_renders_in_dash
+  _hi_check "The shared rc stays shell-agnostic" test_fallback_rc_stays_shell_agnostic
+  _hi_check "The POSIX arm appends it" test_remote_suffix_appends_the_prompt_for_posix_shells
 
   _hi_h2 "Testing: the size hi reports"
   _hi_check "_hi_human_bytes matches du's shapes" test_human_bytes_matches_du_shapes

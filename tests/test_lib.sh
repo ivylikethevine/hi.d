@@ -122,6 +122,29 @@ function _hi_check_requires() {
   fi
 }
 
+# _hi_fake_bin <dir> <name> - a no-op executable, for suites that prove a
+# resolution ladder ("candidate X is missing, does it fall through to Y")
+# against a PATH they control rather than against whatever this machine has.
+function _hi_fake_bin() {
+  printf '%s\n' '#!/bin/sh' 'exit 0' >"$1/$2"
+  chmod +x "$1/$2"
+}
+
+# _hi_fake_path <name> <bin...> - a $_HI_WORKDIR/<name> directory holding those
+# fakes, printed. Built once per name: the callers ask for the same set many
+# times over.
+function _hi_fake_path() {
+  local dir="$_HI_WORKDIR/$1" bin
+  shift
+  if [ ! -d "$dir" ]; then
+    mkdir -p "$dir"
+    for bin in "$@"; do
+      _hi_fake_bin "$dir" "$bin"
+    done
+  fi
+  printf '%s' "$dir"
+}
+
 # _hi_scratch_tree <name> <dir...> - a throwaway hi.d under $_HI_WORKDIR/<name>
 # holding copies of the named top-level directories, and prints the _HI_HOME
 # that points at it. What a "minimal shipped tree" needs is one edit here
@@ -708,7 +731,7 @@ function _hi_ssh_launch() {
 # docker_test.sh and podman_test.sh are both just `_hi_container_backend_test
 # docker|podman` - this one function proves both branches of
 # _say_hi_container: the bash-present main path (tar copy + `bash --rcfile`),
-# and every arm of the bash-less fallback's `for s in zsh fish sh` probe.
+# and every arm of the bash-less fallback's ladder ($_HI_SHELL_LADDER).
 # Everything is ephemeral and nothing touches host ssh config. Skips cleanly
 # if $backend isn't installed/running. Needs network access the first time it
 # runs, to pull/build the test images.
@@ -724,7 +747,7 @@ function _hi_container_backend_test() {
   # shellcheck disable=SC2034 # read back through _hi_kv_get, which shellcheck
   # cannot follow (the name is a string there)
   local shell shell_ok=""
-  for shell in zsh fish; do
+  for shell in zsh fish mksh; do
     mkdir -p "$_HI_WORKDIR/$shell"
     printf 'FROM alpine:3.20\nRUN apk add --no-cache %s\n' "$shell" >"$_HI_WORKDIR/$shell/Dockerfile"
     if _hi_build_image "$shell" "hi-${backend}test-$shell-$$" "the $shell fallback" "$_HI_WORKDIR/$shell"; then
@@ -793,7 +816,7 @@ function _hi_container_backend_test() {
   _hi_case _hi_run_case bash debian:bookworm-slim "$(_hi_probe_cmd "$marker" bash)"
   _hi_case _hi_run_interactive_case bash-interactive debian:bookworm-slim
   local spec
-  for spec in zsh:fallback fish:fallback_fish; do
+  for spec in zsh:fallback fish:fallback_fish mksh:fallback; do
     shell="${spec%%:*}"
     if [ "$(_hi_kv_get shell_ok "$shell")" = 1 ]; then
       _hi_case _hi_run_case "$shell" "hi-${backend}test-$shell-$$" "$(_hi_probe_cmd "$marker" "${spec#*:}")"

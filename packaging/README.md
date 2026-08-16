@@ -177,6 +177,30 @@ namcap ./*.pkg.tar.zst           # catches hardcoded paths and bad permissions
 pacman -Qlp ./*.pkg.tar.zst      # /usr/share/hi.d/..., /usr/bin/hi, /etc/profile.d/hi.d.sh
 ```
 
+**What a clean run looks like.** `namcap PKGBUILD` is silent. `namcap` on the built package prints exactly
+three warnings, all of them namcap being unable to read shell scripts, all correct to keep:
+
+```text
+W: Dependency fish detected but optional (programs ['fish'] ...)   # optdepend on purpose - hi works without it
+W: Dependency zsh detected but optional (programs ['zsh'] ...)     # same
+W: Dependency included, but may not be needed ('openssh')          # hi runs ssh; no shebang says so
+```
+
+Anything else is a real finding. (`coreutils` used to appear here too and was dropped from `depends` - it is
+in `base`, which packaging guidelines say to assume.)
+
+**The end-to-end check**, which is what caught the `hi.d-git` package shipping no version stamp:
+
+```bash
+docker run --rm -v "$PWD:/pkgs:ro" archlinux:base bash -c '
+  pacman -Sy --noconfirm openssh && pacman -U --noconfirm /pkgs/*.pkg.tar.zst
+  bash -lc "echo \$_HI_HOME; command -v hi; hi --version"'
+```
+
+Both packages have been run through all of this against a local clone (the only substitution being
+`source=`, since the repo is not published yet): built, linted, installed into a clean Arch container,
+exercised, and removed with nothing left behind.
+
 Then push `PKGBUILD` + `.SRCINFO` (only those two files) to `ssh://aur@aur.archlinux.org/hi.d-git.git`.
 **This first push is the manual one** — it is where namcap actually gates. After it, `release.yml`'s `aur`
 job pushes the versioned `hi.d` package on every release, given the `AUR_SSH_KEY` secret; `hi.d-git` has no
@@ -206,8 +230,25 @@ brew test hi.d
 brew audit --strict --new hi.d
 ```
 
-Only reachable from a mac (or Homebrew on Linux); none of it can be verified from this repo's CI, which
-is why the checklist is the enforcement.
+`brew audit` needs a *named* formula, so it wants the formula in a tap - `brew tap-new ivy/tap`, copy the
+file into its `Formula/`, then `brew audit --strict --new ivy/tap/hi.d`. Passing a path is refused outright.
+
+**What a clean run looks like** (this has been run, in the `homebrew/brew` container, against a local
+tarball - the only substitution being `url`/`sha256`, since the repo is not published): install and test
+both exit 0, and audit reports only these two, which are the unpublished repo and nothing else:
+
+```text
+* The homepage URL https://github.com/ivylikethevine/hi.d is not reachable (HTTP status code 404)
+* HEAD: The URL https://github.com/ivylikethevine/hi.d.git is not a valid Git URL
+```
+
+Two real findings came out of that first run and are fixed: the description had to start with a capital,
+and `uses_from_macos "openssh"` was rejected - that macro is for formulae macOS provides *to Homebrew*, and
+openssh is not one. The formula now declares no dependencies at all, which is correct: `ssh` and `base64`
+ship with macOS and with any Linux that would install this.
+
+A mac is still worth using before the first publish - the container is Linux, so it exercises Linuxbrew's
+paths rather than a keg under `/opt/homebrew` - but nothing about the formula itself is unverified now.
 
 ### deb / rpm / apk
 

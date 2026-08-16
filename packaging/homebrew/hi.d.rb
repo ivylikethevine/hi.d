@@ -4,17 +4,23 @@
 #
 # hi.d.rb -> class HiD: Homebrew's Formulary.class_s camel-cases across the dot.
 class HiD < Formula
-  desc "sshrc supercharged - your shell config, on every host you say hi to"
+  # capitalised because `brew audit --strict` requires it; the other channels
+  # keep the "sshrc supercharged" phrasing, which no linter of theirs objects to
+  desc "Your shell config, on every host you say hi to - sshrc supercharged"
   homepage "https://github.com/ivylikethevine/hi.d"
   url "https://github.com/ivylikethevine/hi.d/archive/refs/tags/v0.0.0.tar.gz"
   sha256 "0000000000000000000000000000000000000000000000000000000000000000"
   license "MIT"
   head "https://github.com/ivylikethevine/hi.d.git", branch: "main"
 
-  uses_from_macos "openssh"
-  # No armor dependency. hi armors the ssh bootstrap payload with `base64`,
-  # which macOS has always shipped (and so does every Linux base system this
-  # formula could land on).
+  # No dependencies at all, deliberately.
+  #
+  # `ssh` and `base64` are the two binaries hi cannot work without, and both
+  # ship with macOS and with every Linux base system this formula could land
+  # on. `uses_from_macos "openssh"` was here and `brew audit --strict` rejects
+  # it - that macro is for formulae macOS provides *to Homebrew*, which openssh
+  # is not. `depends_on "openssh"` would be worse: it would build a second sshd
+  # on Linux for a client hi already has.
   #
   # No `depends_on "bash"` either: hi is written for bash 3.2 precisely so that
   # macOS's own /bin/bash can run it.

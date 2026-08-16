@@ -9,6 +9,12 @@ builds every target the tapes connect to and `fixtures.sh down` removes them
 all). Manual artifacts, reviewed by eye — regenerate whenever the header or
 prompt changes.
 
+Two things to get right when you do: `hi` on `$PATH` must be *this* checkout
+(`/usr/bin/hi` may point at another install), and the target image is built
+from `HEAD`, so uncommitted work shows on the client side of the GIF but not
+the target's. Render from a commit, or set `HI_DEMO_SOURCE=worktree` to build
+the target from the working tree instead.
+
 ## ssh, with a permanent install
 
 The target carries its own `~/hi.d`, so nothing ships over the wire — hi

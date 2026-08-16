@@ -8,7 +8,6 @@ pkgbase = hi.d-git
 	makedepends = git
 	depends = bash
 	depends = openssh
-	depends = coreutils
 	optdepends = zsh: zsh support on the client
 	optdepends = fish: fish support on the client
 	optdepends = docker: container targets

@@ -12,10 +12,10 @@
 # A collision is rarely fatal - it just prints at you every prompt, which is
 # what no other suite would notice.
 #
-# Each image removes the shells that outrank the one under test: load() picks
-# fish > zsh > bash regardless of login shell, so on the shared image every case
-# would land in fish and no framework would load. Builds need the network; a
-# failed one skips its case rather than failing the suite.
+# Each image keeps every shell the base has: load() follows the *login* shell
+# now (see _hi_session_shell), so the framework's own shell is the one hi lands
+# in - which is also what makes these cases a test of that. Builds need the
+# network; a failed one skips its case rather than failing the suite.
 #
 # Nearly every function below is invoked indirectly, through _hi_case's "$@",
 # which SC2329 can't see.
@@ -57,7 +57,6 @@ function _hi_framework_dockerfile() {
   case "$1" in
   omz)
     cat <<'EOF'
-RUN apt-get purge -y -qq fish >/dev/null 2>&1 || true
 RUN apt-get update -qq && apt-get install -y -qq zsh curl ca-certificates git >/dev/null
 USER hitest
 RUN sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended
@@ -69,7 +68,6 @@ EOF
   # assume the native one.
   p10k)
     cat <<'EOF'
-RUN apt-get purge -y -qq fish >/dev/null 2>&1 || true
 RUN apt-get update -qq && apt-get install -y -qq zsh curl ca-certificates git >/dev/null
 USER hitest
 RUN sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended \
@@ -84,7 +82,6 @@ EOF
   # says whether that chaining actually holds
   starship)
     cat <<'EOF'
-RUN apt-get purge -y -qq fish zsh >/dev/null 2>&1 || true
 RUN apt-get update -qq && apt-get install -y -qq curl ca-certificates >/dev/null \
  && curl -fsSL https://starship.rs/install.sh | sh -s -- --yes >/dev/null
 USER hitest
@@ -94,7 +91,6 @@ EOF
     ;;
   bashit)
     cat <<'EOF'
-RUN apt-get purge -y -qq fish zsh >/dev/null 2>&1 || true
 RUN apt-get update -qq && apt-get install -y -qq git ca-certificates >/dev/null
 USER hitest
 RUN git clone --depth=1 https://github.com/Bash-it/bash-it.git ~/.bash_it \

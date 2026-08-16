@@ -204,7 +204,11 @@ function doctor_ssh_target() {
   else
     doctor_row install "none - hi ships $(_hi_wire_estimate) each session"
   fi
-  tools="$(ssh "${ctl_opts[@]}" "$DOMAIN" 'for c in base64 bash zsh fish tmux vim git; do command -v "$c" >/dev/null 2>&1 && printf "%s " "$c"; done' 2>/dev/null || true)"
+  # through _hi_ssh_sh, like every other command hi sends: unwrapped, a fish
+  # login shell cannot parse the loop and the report claimed the target had
+  # nothing - no base64, no bash, all of it false
+  tools="$(_hi_ssh_sh "for c in base64 bash $_HI_SHELL_LADDER tmux vim git; do command -v \"\$c\" >/dev/null 2>&1 && printf \"%s \" \"\$c\"; done" \
+    "${ctl_opts[@]}" 2>/dev/null || true)"
   doctor_row remote "has: ${tools:-nothing this probes for}"
   case " $tools" in
   *" base64 "*) ;;
@@ -212,7 +216,7 @@ function doctor_ssh_target() {
   esac
   case " $tools" in
   *" bash "*) ;;
-  *) doctor_row remote "no bash - sessions fall back to zsh/fish/sh with aliases only" "$YELLOW" ;;
+  *) doctor_row remote "no bash - sessions fall back to ${_HI_SHELL_LADDER// / > } with aliases only" "$YELLOW" ;;
   esac
   ssh -O exit "${ctl_opts[@]}" "$DOMAIN" >/dev/null 2>&1 || true
   rm -f "$ctl_path" 2>/dev/null || true

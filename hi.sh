@@ -36,10 +36,33 @@ _HI_OVERLAY_FILES=(settings.sh colors packages tmux.conf)
 # shell never parses its braces - fish couldn't).
 # Stands in for the connect line's size until the script carrying it has been
 # assembled and measured (see _say_hi); wider than any answer it can produce.
+# What a bash-less target falls back to, best first. One definition, because
+# both transports probe for it and scripts/doctor.sh reports on it - it was
+# three copies, and doctor's had already drifted (it still promised
+# "zsh/fish/sh" after ksh joined). ksh and mksh need no arm of their own: they
+# read $ENV exactly as sh does.
+export _HI_SHELL_LADDER="zsh fish ksh mksh sh"
+
 _HI_SIZE_TOKEN="@@SIZE@@"
 
 _HI_ARMOR="base64"
 _HI_UNARMOR="tr -s ' ' '\n' | { base64 -d 2>/dev/null || base64 -D; }"
+
+# The target's tag and color, resolved once per run. Each resolution walks
+# ~/.ssh/config line by line, and three callers wanted the same answer: the
+# remote preamble, the per-host overlay selection, and the bash-less prompt.
+# Memoized the way core.sh memoizes _hi_hostname, for the same reason.
+function _hi_target_tag() {
+  [ -n "${_HI_TARGET_TAG_CACHE+x}" ] ||
+    _HI_TARGET_TAG_CACHE="$(_hi_ssh_host_tag "$DOMAIN" 2>/dev/null || true)"
+  printf '%s' "$_HI_TARGET_TAG_CACHE"
+}
+
+function _hi_target_color() {
+  [ -n "${_HI_TARGET_COLOR_CACHE:-}" ] ||
+    _HI_TARGET_COLOR_CACHE="$(_hi_resolve_color hostname "${DOMAIN##*@}")"
+  printf '%s' "$_HI_TARGET_COLOR_CACHE"
+}
 
 # The per-host settings for this target, named as they sit under
 # $_HI_CONFIG_DIR: hosttag file, then exact-host file (core.sh sources them in
@@ -48,7 +71,7 @@ _HI_UNARMOR="tr -s ' ' '\n' | { base64 -d 2>/dev/null || base64 -D; }"
 function _hi_overlay_host_files() {
   local tag f
   [ -n "${DOMAIN:-}" ] || return 0
-  tag="$(_hi_ssh_host_tag "$DOMAIN" 2>/dev/null || true)"
+  tag="$(_hi_target_tag)"
   for f in ${tag:+"settings.d/tag-$tag.sh"} "settings.d/$DOMAIN.sh"; do
     [ -f "$_HI_CONFIG_DIR/$f" ] && printf '%s\n' "$f"
   done
@@ -126,14 +149,33 @@ function _hi_is_k8s_pod() {
     [ "$(kubectl get pod "$1" -o jsonpath='{.status.phase}' 2>/dev/null)" = Running ]
 }
 
+# Run <script> on $DOMAIN through `sh -c`, with ssh's own flags in "$@" ahead
+# of it. Every command hi sends meets the target's *login* shell first, and that
+# shell may be fish, which parses neither `x=1` nor `{ ...; }` nor `||` as sh
+# does. Wrapping is therefore not per-site care but the transport's job - the
+# alternative is finding out one function at a time (the install probe answered
+# "nothing installed" on every fish-login host until it was wrapped).
+#
+# The quoting is single-quote-and-escape rather than printf %q: %q escapes every
+# space with a backslash, which the login shell then has to unescape - readable
+# in neither the code nor a `ssh -v` log, and one more thing for fish to differ
+# about. Callers write plain sh and never count quotes.
+function _hi_ssh_sh() {
+  local script="$1"
+  shift
+  # shellcheck disable=SC2029 # the script is ours to expand, here, on purpose
+  ssh "$@" "${SSHARGS[@]}" "$DOMAIN" "sh -c '${script//\'/\'\\\'\'}'"
+}
+
 # Cheap check for a permanent hi.d already on $DOMAIN (scripts/install.sh has
 # been run there): prints its path if so. Runs over the ssh ControlMaster in
 # "$@", so it costs no extra authentication - _say_hi's real connection
 # multiplexes through the same socket.
+# shellcheck disable=SC2016 # the probe's variables are the target's to expand
 function _hi_remote_root() {
   local out
-  out="$(ssh "$@" -o ConnectTimeout=5 "${SSHARGS[@]}" "$DOMAIN" \
-    '_r="$HOME/hi.d"; [ -x "$_r/hi.sh" ] && [ -f "$_r/common/paths.sh" ] && printf "%s" "$_r"' 2>/dev/null)" || out=""
+  out="$(_hi_ssh_sh '_r="$HOME/hi.d"; [ -x "$_r/hi.sh" ] && [ -f "$_r/common/paths.sh" ] && printf "%s" "$_r"' \
+    "$@" -o ConnectTimeout=5 2>/dev/null)" || out=""
   printf '%s' "$out"
 }
 
@@ -184,9 +226,8 @@ function _hi_update() {
     _hi_cecho " updating $root on [$DOMAIN]" "$BRBLUE"
     # .git as the test, the same one hi_update makes locally: it is absent both
     # from a payload and from a packaged install
-    # shellcheck disable=SC2029 # $root is the client's to expand - it is what we probed for
-    ssh "${ctl_opts[@]}" "${SSHARGS[@]}" "$DOMAIN" \
-      "[ -d '$root/.git' ] || { echo 'hi --update: no .git in $root - if a package manager installed hi.d there, update it with that package manager' >&2; exit 1; }; git -C '$root' pull" || ec=$?
+    _hi_ssh_sh "[ -d '$root/.git' ] || { echo 'hi --update: no .git in $root - if a package manager installed hi.d there, update it with that package manager' >&2; exit 1; }; git -C '$root' pull" \
+      "${ctl_opts[@]}" || ec=$?
   fi
 
   ssh -O exit "${ctl_opts[@]}" "$DOMAIN" >/dev/null 2>&1 || true
@@ -215,7 +256,8 @@ EOF
 
 # The no-bash target's rc, consumed by sh, zsh *and* fish (see _say_hi's
 # `fish -C` branch), so every line must be valid in all three - `export
-# NAME=value` and `[ -f x ] && . x` are.
+# NAME=value` and `[ -f x ] && . x` are. Anything shell-specific (the POSIX
+# prompt, say) is appended by that shell's own arm, not written here.
 #
 # Toggle defaults come first so the files after them can still win.
 # _HI_REMOTE_SESSION is 1 because this *is* a remote session and this path never
@@ -248,6 +290,27 @@ function _hi_fallback_rc() {
 . \$_HI_ROOT/shells/aliases.sh 2>/dev/null
 ${CMDARG:-}
 EOF
+}
+
+# A prompt for the bash-less tiers (sh, ash, dash, ksh, mksh - fish and zsh get
+# their own rc). Until now they got aliases and their host's default prompt,
+# which on a busybox target is a bare "$".
+#
+# Thin on purpose: the colors are resolved here (the same ones hi uses
+# everywhere else), the username once when the rc is sourced rather than per
+# prompt, and the only thing left for the shell to expand is the separator -
+# `\$` by default, which every POSIX shell renders as $ for a user and # for
+# root. No command substitution inside PS1: busybox ash does not do it there.
+# shellcheck disable=SC2016 # $_hi_u and the separator are the target's to expand
+function _hi_fallback_prompt() {
+  local host="${DOMAIN##*@}" nc
+  [ "${_HI_DISABLE_PROMPT:-0}" = 1 ] && return 0
+  # _hi_color_escape already emits real escapes; only $NC is a literal to expand
+  printf -v nc '%b' "$NC"
+  printf '_hi_u=$(id -un 2>/dev/null || echo "${USER:-?}")\n'
+  printf 'PS1=" %s${_hi_u}%s@%s%s%s %s "\n' \
+    "$(_hi_user_escape)" "$nc" "$(_hi_color_escape "$(_hi_target_color)")" \
+    "$host" "$nc" "$(_hi_prompt_end SH '\$')"
 }
 
 # The tree on disk, uncompressed - not what a session sends (see _hi_wire_size),
@@ -328,8 +391,8 @@ function _hi_remote_preamble() {
       _hi_now() { d=\$(date +%s.%N 2>/dev/null); case "\$d" in *N*|'') date +%s ;; *) printf '%s' "\$d" ;; esac; }
       _hi_t0=\$(_hi_now)
       export _HI_TARGET="$DOMAIN"
-      export _HI_TARGET_COLOR="$(_hi_resolve_color hostname "$DOMAIN")"
-      export _HI_TARGET_TAG="$(_hi_ssh_host_tag "$DOMAIN" 2>/dev/null || true)"
+      export _HI_TARGET_COLOR="$(_hi_target_color)"
+      export _HI_TARGET_TAG="$(_hi_target_tag)"
       export _HI_LOCAL_USER="$(whoami)"
       export _HI_LOCAL_HOSTNAME="$(_hi_hostname)"
       export _HI_RELEASE="$(_hi_version)"
@@ -380,7 +443,7 @@ function _hi_remote_suffix() {
         bash --rcfile "\$_hi_rc_dir/hi.bashrc" -i
       else
         _hi_fallback=sh
-        for _hi_s in zsh fish sh; do command -v "\$_hi_s" >/dev/null 2>&1 && { _hi_fallback="\$_hi_s"; break; }; done
+        for _hi_s in $_HI_SHELL_LADDER; do command -v "\$_hi_s" >/dev/null 2>&1 && { _hi_fallback="\$_hi_s"; break; }; done
         printf '%s no bash on [$DOMAIN], dropping into plain %s w/ aliases only %s\n' "$hi_esc" "\$_hi_fallback" "$nc_esc" >&2
         echo "$(_hi_fallback_rc | $_HI_ARMOR)" | $_HI_UNARMOR > "\$_hi_rc_dir/.hi_fallback_rc"
         case "\$_hi_fallback" in
@@ -389,7 +452,15 @@ function _hi_remote_suffix() {
           ZDOTDIR="\$_hi_rc_dir" zsh -i
           ;;
         fish) fish -C "\$(cat "\$_hi_rc_dir/.hi_fallback_rc")" ;;
-        *) ENV="\$_hi_rc_dir/.hi_fallback_rc" sh -i ;;
+        # ksh and mksh read the ENV variable for interactive shells exactly
+        # as sh does, and the rc is POSIX, so they need no arm of their own -
+        # only a name. The prompt is appended here rather than written into the
+        # shared rc: that file also feeds fish (no PS1 at all) and zsh (where
+        # the backslash-dollar escape means something else).
+        *)
+          echo "$(_hi_fallback_prompt | $_HI_ARMOR)" | $_HI_UNARMOR >> "\$_hi_rc_dir/.hi_fallback_rc"
+          ENV="\$_hi_rc_dir/.hi_fallback_rc" "\$_hi_fallback" -i
+          ;;
         esac
       fi
 REMOTE
@@ -567,7 +638,7 @@ function _say_hi_container() {
   # no bash on the target means no fancy stuff, just our aliases
   if ! "${probe[@]}" sh -c 'command -v bash' >/dev/null 2>"$tmp"; then
     # shellcheck disable=SC2016
-    fallback=$("${probe[@]}" sh -c 'for s in zsh fish sh; do command -v "$s" >/dev/null 2>&1 && { echo "$s"; break; }; done' 2>"$tmp")
+    fallback=$("${probe[@]}" sh -c "for s in $_HI_SHELL_LADDER; do command -v \"\$s\" >/dev/null 2>&1 && { echo \"\$s\"; break; }; done" 2>"$tmp")
     [ -n "$fallback" ] || return 1
     _hi_cecho " no bash in [$DOMAIN], skipping hi config -> plain $fallback w/ aliases" "$YELLOW"
 
@@ -588,6 +659,13 @@ function _say_hi_container() {
       printf 'export _HI_DISABLE_EDITORS=0\nexport _HI_DISABLE_ALIASES=0\n'
       printf 'export _HI_ASCII=%s\n' "${_HI_ASCII:-$(_hi_ascii_flag)}"
       printf '. %s/aliases.sh 2>/dev/null\n' "$root"
+      # the POSIX prompt, for the shells that can parse it - the same rule as
+      # the ssh path's `*)` arm, applied while the file is being written rather
+      # than in a second `exec` round trip afterwards
+      case "$fallback" in
+      zsh | fish) ;;
+      *) _hi_fallback_prompt ;;
+      esac
       [ -n "${CMDARG:-}" ] && printf '%s\n' "$CMDARG"
     } |
       "${cp[@]}" sh -c "cat > '$root/.hi_fallback_rc'" 2>"$tmp"

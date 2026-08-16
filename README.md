@@ -26,7 +26,7 @@ than a kilobyte from the truth.
 
 - **Client**: `bash` and `base64` (for ssh targets - armors the bootstrap payload through the login shell; coreutils, busybox, macOS/BSD and Git Bash all ship one) or `docker`/`podman`/`nomad`/`kubectl` for the container/alloc/pod backends.
 - **bash version**: 3.2 or newer, on both ends. That is what macOS still ships, so hi stays clear of every bash-4-only construct - no `mapfile`/`readarray` (`_hi_read_lines` in `common/core.sh` does that job), no associative arrays, no namerefs, no `${x,,}`. Two things enforce it: `tests/shells/shellcheck_test.sh` greps for those constructs, and `tests/targets/ssh_test.sh` runs a real bash 3.2 target in a container and fails if the session prints so much as one shell error.
-- **Target**: `base64` for ssh targets (effectively everywhere - coreutils, busybox, macOS/BSD); nothing extra for container/alloc/pod targets. `bash` gets you the full experience (header, colors, git prompt, aliases, vim/nano configs); without it `hi` still lands you in the best available shell (`zsh` > `fish` > `sh`) with just the aliases loaded, rather than failing outright.
+- **Target**: `base64` for ssh targets (effectively everywhere - coreutils, busybox, macOS/BSD); nothing extra for container/alloc/pod targets. `bash` gets you the full experience (header, colors, git prompt, aliases, vim/nano configs); without it `hi` still lands you in the best available shell (`zsh` > `fish` > `ksh` > `sh`) with the aliases and, on the POSIX tiers, a colored prompt - rather than failing outright.
 - Everything else (client and target) is plain POSIX/bash/zsh/fish shell - no compiled artifacts, no package manager, no build step.
 
 ### How it works
@@ -35,12 +35,11 @@ than a kilobyte from the truth.
    Your own `settings.sh`, `colors` and `packages` live outside the tree (see [Configuration](#configuration)), so they follow in a second, much smaller archive unpacked over the target's `misc/` - `$_HI_OVERLAY_FILES` in `hi.sh`, plus whichever `settings.d/` files match this target (`_hi_overlay_host_files`). Nothing is sent if you haven't overridden anything.
    The whole thing - the tar, `hi.sh` and the bootloader, each base64-armored - is assembled into one script, armored again, and written to the target over the **stdin** of the first of two calls multiplexed on a single ssh connection; the second call runs it. Not as a command-line argument, which is what it used to be: Linux caps a single argv entry at 128KB regardless of `ARG_MAX`, and the payload had grown within a few kilobytes of that. The size hi prints on connect is that armored total - what the connection actually carries, roughly 4/3 of the gzipped payload the badge above measures.
 2. On the target, `$_HI_ROOT/hi.bashrc` sources `$_HI_ROOT/load.sh` and calls `load`.
-3. `load.sh` prints the header, appends hi's shell configs to the host's own rc files, and starts a session in the highest priority shell available (fish > zsh > bash).
-   Note this order is the reverse of the one below, and deliberately so: `load.sh` only runs at all when the target _has_ bash, so it is free to prefer the nicest shell available. The `zsh > fish > sh` order quoted elsewhere is the **no-bash fallback**, which is ranking what's left after bash turned out to be missing.
+3. `load.sh` prints the header, appends hi's shell configs to the host's own rc files, and starts a session in **your login shell** when hi styles it (bash, zsh or fish), falling back to whichever of `fish > zsh > bash` the target has. `_HI_SHELL_PREFERENCE` is that rule as a setting - see [Configuration](#configuration). The `zsh > fish > ksh > sh` order quoted elsewhere is the **no-bash fallback**, ranking what's left when bash turned out to be missing.
 4. When the session ends, `load.sh`'s `trap` strips those additions back out, and the `/tmp` directory is removed by the cleanup trap `hi.sh` set up on connect.
 5. `hi <target> 'some command'` skips the interactive session and just runs the command there, like `ssh` does.
 
-The setup in steps 1-2 is plain POSIX and runs under `sh`, so it works even if the target has no `bash` at all - `hi` still copies the whole of `~/hi.d` over in that case, but hands off to the best plain shell available (`zsh`/`fish`/`sh`) with just our aliases loaded, instead of the full `load.sh` experience, which needs `bash`.
+The setup in steps 1-2 is plain POSIX and runs under `sh`, so it works even if the target has no `bash` at all - `hi` still copies the whole of `~/hi.d` over in that case, but hands off to the best plain shell available (`zsh`/`fish`/`ksh`/`sh`) with just our aliases loaded, instead of the full `load.sh` experience, which needs `bash`.
 
 For ssh targets specifically, `hi` first checks (over the same connection, so it costs no extra authentication) whether the target already has its own permanent `~/hi.d` - i.e. `scripts/install.sh` has been run there. If so, it skips the archive/copy step entirely and points `_HI_ROOT` straight at that existing copy instead, leaving it in place when the session ends.
 
@@ -48,7 +47,7 @@ For ssh targets specifically, `hi` first checks (over the same connection, so it
 
 ### Docker / Podman containers
 
-`hi <name>` also works against a running docker or podman container - if `<name>` isn't a `Host` in `~/.ssh/config` but is a running container (by name or ID, docker checked first), `hi` copies `~/hi.d` in and chainloads `load.sh` exactly like the ssh path, for an identical session (colors, prompt, aliases, vim/nano configs, etc). No armoring is needed here (`docker exec -i`/`podman exec -i` pass stdin through as raw bytes), and cleanup happens once you exit. Podman's CLI is close enough to docker's that it reuses the exact same command shapes, just against `podman` instead. The container needs `bash` for the full experience; without it, `hi` drops you into the best plain shell available (`zsh`/`fish`/`sh`) with our aliases and a warning.
+`hi <name>` also works against a running docker or podman container - if `<name>` isn't a `Host` in `~/.ssh/config` but is a running container (by name or ID, docker checked first), `hi` copies `~/hi.d` in and chainloads `load.sh` exactly like the ssh path, for an identical session (colors, prompt, aliases, vim/nano configs, etc). No armoring is needed here (`docker exec -i`/`podman exec -i` pass stdin through as raw bytes), and cleanup happens once you exit. Podman's CLI is close enough to docker's that it reuses the exact same command shapes, just against `podman` instead. The container needs `bash` for the full experience; without it, `hi` drops you into the best plain shell available (`zsh`/`fish`/`ksh`/`sh`) with our aliases and a warning.
 
 ### Windows hosts
 
@@ -102,7 +101,8 @@ suite on every run · 🟡 expected to work, nobody has proven it · ⚠️ work
 | `bash` ≥ 3.2 | ✅ full: header, prompt, git status, aliases, editor configs | 3.2 is the floor because macOS still ships it |
 | `zsh` | ✅ full | `shells/zsh.zsh` |
 | `fish` | ✅ full | `shells/config.fish` |
-| `sh`/`dash`/`ash` (no bash on the target) | ⚠️ aliases only, with a warning saying so | there is no header or prompt without bash |
+| `sh`/`dash`/`ash` (no bash on the target) | ⚠️ aliases and a colored `user@host` prompt, with a warning saying so | no header and no git segment - those need bash |
+| `ksh`/`mksh` (no bash on the target) | ⚠️ the same | it reads `$ENV` exactly as the `sh` tier does; `tests/targets/ssh_test.sh` covers it |
 | `nushell`, `elvish`, `xonsh`, `ion`, `oil`/`osh` | ❌ | see below |
 | PowerShell | ❌ | bash-only by design |
 
@@ -114,20 +114,18 @@ tier in the fallback ladder in `hi.sh`'s `_hi_remote_suffix` and `load.sh`'s `lo
 | `nushell` | its own non-POSIX language and a structured-data prompt API; `aliases.sh` cannot be shared with it at all | a full `shells/config.nu`, and a decision about whether the aliases are worth porting |
 | `elvish` | same shape, smaller audience | a `shells/rc.elv` |
 | `xonsh` | Python, so the prompt and aliases would be a third implementation | a `shells/rc.xsh` |
-| `ksh`/`mksh` | closest to already working — it reads `$ENV`, like the `sh` fallback does | probably just a tier in the ladder plus a prompt; the aliases file is already POSIX |
+| `ksh`/`mksh` | **partly done** — it has a tier in the no-bash ladder, and the POSIX prompt, so it gets aliases and a colored `user@host` | the header and the git segment, which need a `shells/ksh.sh` of their own |
 | `tcsh`/`csh` | different rc syntax and no `$ENV` equivalent | its own rc, and honestly: ask whether anyone wants it |
 | PowerShell | not a POSIX shell; the greeting hi prints there is the whole extent of it | a separate project, really |
 
 If you use one of these as a *login* shell, hi still works — it lands you in bash (or the best of
 zsh/fish/sh) for the session. It is only the session shell that is limited.
 
-**One thing to know if you use a shell framework.** hi picks the session shell by what the target *has*
-(`fish` > `zsh` > `bash`), not by what your login shell is — see step 3 of [How it works](#how-it-works). So
-on a target with fish installed, hi hands you fish even if your login shell is zsh with oh-my-zsh, and that
-zsh setup never loads. hi's own configs are appended to all three rc files either way. The frameworks
-themselves are tested against hi in `tests/targets/framework_test.sh` — oh-my-zsh, powerlevel10k, starship
-and bash-it, each asserting the session comes up with no shell errors and that hi neither changed zsh's array
-base under them nor dropped their `PROMPT_COMMAND`.
+**If you use a shell framework**, hi lands you in your own login shell, so your framework loads normally —
+that is what `_HI_SHELL_PREFERENCE`'s default (`login fish zsh bash`) means. The frameworks are tested
+against hi in `tests/targets/framework_test.sh`: oh-my-zsh, powerlevel10k, starship and bash-it, each
+asserting the session comes up with no shell errors and that hi neither changed zsh's array base under them
+nor dropped their `PROMPT_COMMAND`.
 
 ### Installation/Usage
 
@@ -281,6 +279,7 @@ Each is **on by default**; set it to `0` to hide that line. All are ignored when
 | `_HI_PROBE_TIMEOUT` | `2`             | seconds any one backend CLI gets, during completion and in the header          |
 | `_HI_SSH_CONFIG`    | `~/.ssh/config` | where ssh hosts and their `# Tags:` comments are read from                     |
 | `_HI_ASCII`         | by locale       | `1` forces ASCII stand-ins for the banner/prompt/packages glyphs (`^ ok x` for `↑ ✓ ✗`), `0` forces the glyphs; unset asks the locale, so a `LANG=C` target degrades cleanly instead of printing mojibake |
+| `_HI_SHELL_PREFERENCE` | `login fish zsh bash` | which shell a session runs in: an ordered list of `bash`/`zsh`/`fish`, plus `login` for "your own login shell". First one installed on the target wins; `bash` is the floor, since that is what `load.sh` needs to run at all |
 | `_HI_PROMPT_END`    | per shell       | the character each prompt ends with, when you want the same one everywhere; the three below win over it |
 | `_HI_PROMPT_END_BASH` | `\$`         | bash's prompt separator (`\$` is bash's own escape for "`$`, or `#` for root")                          |
 | `_HI_PROMPT_END_ZSH` | `>`            | zsh's prompt separator - zsh prompt escapes work here, so `%#` behaves as it does anywhere else in `PS1` |

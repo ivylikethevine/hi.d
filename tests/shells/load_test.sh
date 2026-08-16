@@ -12,7 +12,9 @@
 #
 # Nearly every function below is invoked indirectly - by name, through
 # _hi_case's "$@" - which SC2329 can't see.
-# shellcheck disable=SC2329
+# The single-quoted probe scripts expand in the child shell, which is the
+# point (SC2016).
+# shellcheck disable=SC2329,SC2016
 set -euo pipefail
 
 # shellcheck source=../../common/core.sh
@@ -158,6 +160,66 @@ function test_this_checkout_was_never_touched() {
   [ -f "$_HI_ROOT/load.sh" ] && [ -f "$_HI_ROOT/hi.sh" ] && [ -d "$_HI_ROOT/common" ]
 }
 
+# --- _hi_session_shell --------------------------------------------------------
+#
+# Which shell the session runs in - $_HI_SHELL_PREFERENCE is the whole rule, and
+# load.sh's own comment says why `login` leads its default.
+
+# _hi_shell_answer <fake-bin...> [NAME=VALUE ...] - the shell chosen when those
+# binaries, and only those, are on $PATH.
+#
+# $PATH is *replaced*, not prefixed: the point is which shells exist, and this
+# machine's real fish would answer for itself otherwise. The few real tools
+# _hi_login_shell needs are symlinked in, and the interpreter is named by
+# absolute path since one of the fakes is called `bash`.
+# _hi_shell_answer <"bins..."> [NAME=VALUE ...] - the shell chosen when those
+# binaries, and only those, are on $PATH.
+#
+# $PATH is *replaced*, not prefixed: the question is which shells exist, and
+# this machine's real fish would answer for itself otherwise. The few real tools
+# _hi_login_shell needs are symlinked in, and the interpreter is named by
+# absolute path since one of the fakes is called `bash`.
+function _hi_shell_answer() {
+  local bins="$1" dir real
+  shift
+  # shellcheck disable=SC2086 # a deliberate word split into the fake list
+  dir="$(_hi_fake_path "shells-${bins// /-}" $bins)"
+  for real in id awk getent sh; do
+    command -v "$real" >/dev/null 2>&1 && ln -sf "$(command -v "$real")" "$dir/$real"
+  done
+  env -i "$@" PATH="$dir" HOME="$_HI_WORKDIR" _HI_HOME="$_HI_HOME" "$BASH" -c '
+    _HI_LOAD_NO_INIT=1
+    source "$_HI_HOME/hi.d/common/core.sh"
+    source "$_HI_HOME/hi.d/load.sh"
+    _hi_session_shell' 2>/dev/null
+}
+
+function test_session_shell_prefers_the_login_shell() {
+  [ "$(_hi_shell_answer "bash zsh fish" SHELL=/bin/zsh)" = zsh ] || return 1
+  [ "$(_hi_shell_answer "bash zsh fish" SHELL=/usr/bin/bash)" = bash ]
+}
+
+# a login shell hi doesn't style is not a reason to refuse the session
+function test_session_shell_falls_back_for_an_unstyled_login_shell() {
+  [ "$(_hi_shell_answer "bash zsh fish" SHELL=/usr/bin/nu)" = fish ]
+}
+
+# ...nor is one that isn't installed here
+function test_session_shell_falls_back_when_the_login_shell_is_absent() {
+  [ "$(_hi_shell_answer "bash zsh" SHELL=/usr/bin/fish)" = zsh ]
+}
+
+function test_session_shell_honors_the_preference_list() {
+  [ "$(_hi_shell_answer "bash zsh fish" SHELL=/bin/zsh _HI_SHELL_PREFERENCE=bash)" = bash ] || return 1
+  # the pre-login-shell behaviour, for anyone who liked it
+  [ "$(_hi_shell_answer "bash zsh fish" SHELL=/bin/bash _HI_SHELL_PREFERENCE="fish zsh bash")" = fish ]
+}
+
+# load.sh only runs where bash exists, so bash is the floor no matter what
+function test_session_shell_floors_at_bash() {
+  [ "$(_hi_shell_answer "bash" SHELL=/usr/bin/fish _HI_SHELL_PREFERENCE="fish zsh")" = bash ]
+}
+
 # --- _hi_tmux_wanted ----------------------------------------------------------
 #
 # The gate in front of `hi --tmux`. Every "no" here has to be a *loud* no that
@@ -221,6 +283,13 @@ function run_load_tests() {
   _hi_h2 "Testing: profile restoration"
   _hi_check "Sourcing restores the profile chain and PATH" test_source_restores_profile_and_path
   _hi_check "_HI_LOAD_NO_INIT=1 skips both" test_no_init_guard_skips_profile_and_path
+
+  _hi_h2 "Testing: _hi_session_shell"
+  _hi_check "Prefers the login shell" test_session_shell_prefers_the_login_shell
+  _hi_check "Falls back for a shell hi doesn't style" test_session_shell_falls_back_for_an_unstyled_login_shell
+  _hi_check "Falls back when it isn't installed" test_session_shell_falls_back_when_the_login_shell_is_absent
+  _hi_check "_HI_SHELL_PREFERENCE decides" test_session_shell_honors_the_preference_list
+  _hi_check "Floors at bash" test_session_shell_floors_at_bash
 
   _hi_h2 "Testing: _hi_tmux_wanted"
   _hi_check "Off by default" test_tmux_wanted_off_by_default

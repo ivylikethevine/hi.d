@@ -5,8 +5,8 @@
 # images cover: bash/dash/zsh/fish logins; bash 3.2 (what macOS ships, and what
 # keeps hi free of bash-4 builtins); a pre-installed hi.d, to prove _say_hi
 # loads it in place rather than shipping a tree; bash-less alpine with only zsh
-# and with only fish, for the two fallback tiers the plain alpine image never
-# reaches; and that same install plus tmux, for --tmux. The debian base comes
+# with only fish, and with only mksh, for the fallback tiers the plain alpine
+# image never reaches; and that same install plus tmux, for --tmux. The debian base comes
 # from test_lib.sh's _hi_sshd_image, shared with ssh_disconnect_test.sh.
 #
 # Nearly every function below is invoked indirectly - by name, through
@@ -152,7 +152,7 @@ function run_ssh_tests() {
   _HI_DEBIAN_OK=1
   _hi_sshd_image "its shells" || _HI_DEBIAN_OK=0
 
-  for _hi_img in alpine: alpine-zsh:zsh alpine-fish:fish; do
+  for _hi_img in alpine: alpine-zsh:zsh alpine-fish:fish alpine-ksh:mksh; do
     _hi_label="${_hi_img%%:*}"
     _hi_ctx="$_HI_WORKDIR/$_hi_label"
     mkdir -p "$_hi_ctx"
@@ -233,7 +233,8 @@ EOF
     done
   fi
 
-  for _hi_case_spec in nobash:alpine:ssh_fallback nobash-zsh:alpine-zsh:ssh_fallback nobash-fish:alpine-fish:ssh_fallback_fish; do
+  for _hi_case_spec in nobash:alpine:ssh_fallback nobash-zsh:alpine-zsh:ssh_fallback \
+    nobash-fish:alpine-fish:ssh_fallback_fish nobash-ksh:alpine-ksh:ssh_fallback; do
     IFS=: read -r _hi_label _hi_image _hi_shape <<<"$_hi_case_spec"
     if [ "$(_hi_kv_get _HI_ALPINE_OK "$_hi_image")" = 1 ]; then
       _hi_case _hi_run_case "$_hi_label" "hi-sshtest-$_hi_image-$$" /bin/ash "$(_hi_probe_cmd "$_HI_TEST_MARKER" "$_hi_shape")"
@@ -271,6 +272,14 @@ EOF
     # clean_all never runs at all. Also asserts the rc graft came back out.
     _hi_case _hi_run_interactive_case installed-interactive "hi-sshtest-debian-installed-$$" /bin/bash \
       'test -f /home/hitest/hi.d/.installed_sentinel && test -x /home/hitest/hi.d/hi.sh && ! grep -q hi-config-start /home/hitest/.bashrc'
+    # The same permanent install behind a *fish* login shell. _hi_remote_root's
+    # probe reaches that shell before any sh does, and `_r="$HOME/hi.d"` is not
+    # an assignment in fish - unwrapped, this answered "nothing installed" and
+    # hi shipped a tree the target already had. The marker asserts $_HI_ROOT is
+    # the permanent one, so a regression here fails rather than merely wasting
+    # a copy.
+    _hi_case _hi_run_case installed-fish "hi-sshtest-debian-installed-$$" /usr/bin/fish \
+      "$(_hi_probe_cmd "$_HI_TEST_MARKER" installed)"
   fi
 
   if [ "$_HI_TMUX_OK" -eq 1 ]; then
@@ -294,6 +303,7 @@ EOF
   # *not* removed - it's shared with ssh_disconnect_test.sh so a full run
   # builds it once rather than twice.
   docker image rm -f "hi-sshtest-alpine-$$" "hi-sshtest-alpine-zsh-$$" "hi-sshtest-alpine-fish-$$" \
+    "hi-sshtest-alpine-ksh-$$" \
     "hi-sshtest-bash32-$$" "hi-sshtest-debian-installed-$$" "hi-sshtest-debian-tmux-$$" >/dev/null 2>&1 || true
 
   _hi_suite_end "" \

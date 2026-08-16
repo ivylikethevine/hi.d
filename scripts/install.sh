@@ -628,6 +628,18 @@ function install_tree() {
   ln -sfn "$_HI_PREFIX/hi.d/hi.sh" "$bindir/hi"
   _hi_cecho " $bindir/hi -> $_HI_PREFIX/hi.d/hi.sh :)" "$GREEN"
 
+  # The man page lands outside the tree - man(1) won't look inside
+  # /usr/share/hi.d - and gzipped, deterministically (-n), which is the form
+  # lintian and namcap both prefer. Guarded on the source file: docs/ is not
+  # in $_HI_PACKAGE_CONTENTS, so an already-installed tree has no copy to
+  # re-stage from.
+  local mandir="${DESTDIR:-}/usr/share/man/man1"
+  if [ -f "$_HI_ROOT/docs/hi.1" ] && command -v gzip >/dev/null 2>&1; then
+    mkdir -p "$mandir"
+    gzip -9n <"$_HI_ROOT/docs/hi.1" >"$mandir/hi.1.gz"
+    _hi_cecho " $mandir/hi.1.gz :)" "$GREEN"
+  fi
+
   # Every shell needs $_HI_HOME before it sources anything, and a package can't
   # rewrite the user's rc files to say so - this is the one place it can put it
   # that every login shell reads. Empty (and skipped) for a $HOME prefix, which

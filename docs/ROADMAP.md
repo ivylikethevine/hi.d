@@ -13,20 +13,19 @@ checkbox is ticked.
       job that enables Remote Login, authorizes a throwaway key, and runs
       `hi localhost 'echo marker'` covers the whole client-and-target BSD path
       in one go. First step: a workflow_dispatch job; promote to every-PR only
-      once it proves stable.
+      once it proves stable. The job is written
+      (`.github/workflows/macos-e2e.yml`, pty-wrapped like the e2e suites,
+      with a cleanup-trap assertion); ticks on its first green dispatch.
 - [ ] **Windows target e2e** — the README documents the Git Bash/WSL/
       PowerShell fallback ladder and `packaging/windows.md` gates every native
       Windows channel on "the Windows CI job is green" - but no such job
       exists. windows-latest runners ship OpenSSH server: configure it, then
       drive `hi localhost` at each `DefaultShell` shape (cmd, powershell) plus
       Git Bash on PATH. First step: workflow_dispatch; the cmd `||` fallback
-      the README promises is the case to pin down first.
-- [ ] **kcov on a schedule** — `tests/coverage.sh` exists but only runs when
-      someone remembers. A monthly `schedule:` workflow that runs it and
-      uploads the HTML report as an artifact keeps "which arms of install.sh
-      are untested" answerable, without wiring coverage into any PR gate (the
-      original not-in-CI rule was about gating, not visibility). First step:
-      the workflow, dispatch-triggerable for a dry run.
+      the README promises is the case to pin down first. The job is written
+      (`.github/workflows/windows-e2e.yml`: stock sshd, admin authorized_keys
+      ACL, Git Bash client, asserts the PowerShell greeting); explicitly
+      experimental - ticks on its first green dispatch.
 
 ## CI & supply chain
 
@@ -38,39 +37,14 @@ checkbox is ticked.
       before-first-release checklist - a repo setting `gh api` applies in one
       command; run it alongside the `release` environment setup. Ticks when
       the ruleset is actually active on the repo.
-- [ ] **Tool-version bump automation** — dependabot moves the SHA-pinned
-      `uses:` but cannot see the curl-installed tools inside the setup-*
-      composite actions (shellcheck, shfmt, checkbashisms, actionlint, zizmor,
-      nfpm) - `.github/dependabot.yml` says so itself. A small scheduled
-      workflow that asks each upstream's releases API for the latest version
-      and opens a PR editing the action defaults closes that gap. First step:
-      a script that just _prints_ outdated defaults; wire it to cron once its
-      output is trustworthy.
 - [ ] **OpenSSF Scorecard** — a public supply-chain score that directly
       credits work already done here (SHA pins, minimal token permissions,
       dependabot, zizmor, branch protection once applied). One workflow from
       ossf/scorecard-action plus a README badge. First step: run it once via
       workflow_dispatch and read the report before publishing any badge.
-
-## Release & packaging
-
-- [ ] **Release rehearsal** — release.yml only ever runs on a pushed tag, so
-      it rots silently between releases (an actions bump, a bump.sh change, a
-      runner image update). A workflow_dispatch mode that runs the whole build
-      job against a fake version - `bump.sh --tarball` over a HEAD archive
-      instead of the tag tarball - and stops before publish would catch that
-      on demand. First step: the dispatch input and the tarball switch.
-- [ ] **hi(1) man page** — every channel ships bare of docs, and `man hi` is
-      the expectation a package manager sets. Hand-written troff (a
-      markdown-to-man generator would add a build dep to a repo that has
-      none), shipped through `install_tree` so deb/rpm/apk, AUR and brew all
-      get it from the same file. First step: write `hi.1`, add it to
-      `_HI_PACKAGE_CONTENTS`, nfpm.yaml and the formula.
-- [ ] **Windows via WSL note (+ Scoop later)** — `packaging/windows.md`'s
-      verdict: the .deb already installs into WSL unchanged, the cost is one
-      README paragraph, and every native channel waits on a green Windows CI
-      job. First step: the README paragraph; revisit Scoop after the Windows
-      e2e item above lands.
+      The workflow is written (`.github/workflows/scorecard.yml`,
+      dispatch-only, SARIF artifact, publish_results off); ticks once it has
+      been run and the report read.
 
 ## Product
 
@@ -95,7 +69,7 @@ checkbox is ticked.
 - [ ] **hi doctor** — the pieces exist (hi_check_configs, hi_color_preview,
       the header's timeout-bounded backend probes) but no one command answers
       "why is hi slow or failing against this target". A `hi --doctor
-    [target]` reporting backend reachability with timings, config parse
+  [target]` reporting backend reachability with timings, config parse
       status, overlay files found, and the ssh multiplex probe result. First
       step: inventory what each existing check already prints and what is
       missing from the picture.
@@ -115,15 +89,18 @@ checkbox is ticked.
 
 ## Documentation
 
-- [ ] **CONTRIBUTING.md** — the dev loop is real but tribal: export
-      `_HI_HOME`, the runner's groups and `_HI_VERBOSE`, the lint gate's
-      halves (shellcheck, native zsh/fish, the bash-3.2 grep, shfmt,
-      checkbashisms), and the PR-title discipline the release notes depend
-      on. One page saves every future contributor the archaeology. First
-      step: write down exactly the commands this repo's own CI runs.
 - [ ] **Demo recording** — the README explains hi but nothing _shows_ the
       thirty seconds that sell it: connect, header, colors, prompt,
       disconnect cleanup. charmbracelet/vhs renders a GIF from a checked-in
       `.tape` script, so the demo regenerates when the header changes instead
       of rotting like a screen recording would. First step: a tape against a
-      local docker target, rendered by hand before any CI wiring.
+      local docker target, rendered by hand before any CI wiring. The tape is
+      checked in (`docs/demo.tape`, docker fixture, cleanup included); render
+      it with a local vhs, eyeball the GIF, then tick.
+- [ ] **tldr page** — a `hi` page in the tldr-pages repo
+      (github.com/tldr-pages/tldr): five example lines reach everyone who
+      types `tldr hi` before anyone reads a man page. Upstream has its own
+      style guide and review, so this is a submission, not a file here.
+      First step: draft the page against their template once v1 is tagged
+      and the CLI surface is frozen - examples that churn are worse than no
+      page.

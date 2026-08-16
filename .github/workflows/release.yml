@@ -1,11 +1,20 @@
 name: Release
 
-# Only ever fires on a pushed v* tag. Nothing here runs on a branch push or a
-# PR - ci.yml owns those and publishes nothing.
+# Fires on a pushed v* tag (the real thing), or by hand as a *rehearsal*: the
+# dispatch runs the whole build job against a HEAD archive and a fake version,
+# and the publish job is hard-gated to tag pushes - so the release machinery
+# can be exercised any day, not only discovered broken on release day.
+# Nothing here runs on a branch push or a PR - ci.yml owns those.
 on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: rehearsal version (build only - nothing publishes)
+        required: false
+        default: "0.0.0"
 
 # read-only by default; only the gated publish job gets `contents: write`
 permissions:
@@ -37,11 +46,36 @@ jobs:
       # The tarball both channels checksum only exists once the tag does, so
       # the bump runs here, not before tagging (which needed a force-retag).
       # Review happens at the environment gate, over the files this produced.
-      - name: Regenerate the manifests from the tag
-        run: packaging/bump.sh "${GITHUB_REF_NAME#v}"
+      # A rehearsal has no tag tarball, so it checksums a HEAD archive built
+      # to the same shape instead - same code path, fake sums, never committed.
+      - name: Pick the version (tag or rehearsal input)
+        # the input reaches the script through env, never inline ${{ }} in a
+        # run block - a crafted dispatch input must stay data (zizmor:
+        # template-injection)
+        env:
+          REHEARSAL_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            echo "HI_VERSION=$REHEARSAL_VERSION" >>"$GITHUB_ENV"
+            git archive --prefix "hi.d-$REHEARSAL_VERSION/" -o /tmp/rehearsal.tar.gz HEAD
+            echo "HI_TARBALL=/tmp/rehearsal.tar.gz" >>"$GITHUB_ENV"
+          else
+            echo "HI_VERSION=${GITHUB_REF_NAME#v}" >>"$GITHUB_ENV"
+            echo "HI_TARBALL=" >>"$GITHUB_ENV"
+          fi
+
+      - name: Regenerate the manifests
+        run: |
+          set -euo pipefail
+          if [ -n "$HI_TARBALL" ]; then
+            packaging/bump.sh --tarball "$HI_TARBALL" "$HI_VERSION"
+          else
+            packaging/bump.sh "$HI_VERSION"
+          fi
 
       - name: Verify the result
-        run: packaging/bump.sh --check "${GITHUB_REF_NAME#v}"
+        run: packaging/bump.sh --check "$HI_VERSION"
 
       # after the bump, so the packaging drift guards in the fast group run
       # against the manifests this release will actually ship
@@ -98,6 +132,9 @@ jobs:
   publish:
     name: publish to the release (manual approval)
     needs: build
+    # hard gate, not just the environment: a rehearsal dispatch must never be
+    # able to publish, however the environment happens to be configured
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     environment: release
     permissions:

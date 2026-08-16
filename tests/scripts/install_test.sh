@@ -444,6 +444,24 @@ function test_install_tree_ships_scripts() {
   [ -d "$_HI_WORKDIR/scripts/dest/usr/share/hi.d/scripts" ]
 }
 
+# the man page: gzipped outside the tree when the source has one (a checkout
+# or tarball does; docs/ is not in $_HI_PACKAGE_CONTENTS, so an installed
+# tree doesn't, and install_tree must simply skip it then)
+function test_install_tree_stages_the_man_page() {
+  local dir="$_HI_WORKDIR/man"
+  local _HI_ROOT="$dir/src/hi.d" _HI_PREFIX="/usr/share" DESTDIR="$dir/dest"
+  _hi_package_src man
+  mkdir -p "$_HI_ROOT/docs"
+  printf '.TH HI 1\n' >"$_HI_ROOT/docs/hi.1"
+  install_tree >/dev/null
+  [ -f "$dir/dest/usr/share/man/man1/hi.1.gz" ]
+}
+
+function test_install_tree_skips_the_man_page_without_a_source() {
+  _hi_package_fixture noman
+  [ ! -e "$_HI_WORKDIR/noman/dest/usr/share/man" ]
+}
+
 # the link has to point where hi.sh will be on the installed system, not into
 # the staging root, which won't exist by then
 function test_install_tree_links_hi_without_destdir_in_the_target() {
@@ -667,6 +685,8 @@ function run_install_tests() {
   _hi_h2 "Testing: install_tree (packaging mode)"
   _hi_check "Copies the tree under DESTDIR" test_install_tree_copies_the_tree_under_destdir
   _hi_check "Ships scripts/" test_install_tree_ships_scripts
+  _hi_check "Stages the man page, gzipped" test_install_tree_stages_the_man_page
+  _hi_check "Skips the man page without a source" test_install_tree_skips_the_man_page_without_a_source
   _hi_check "Links hi without DESTDIR in the target" test_install_tree_links_hi_without_destdir_in_the_target
   _hi_check "Writes the profile.d snippet" test_install_tree_writes_the_profile_snippet
   _hi_check "Touches no rc file" test_install_tree_touches_no_rc_file

@@ -1,0 +1,62 @@
+name: Windows e2e
+
+# The case the README promises and nothing tests: a stock Windows OpenSSH
+# target (DefaultShell = cmd, no bash on the sshd PATH) must land in the
+# PowerShell fallback via the cmd-compatible `||` - not hang, not error out.
+# The client is the runner's own Git Bash. Dispatch-only and frankly
+# experimental: this is the job packaging/windows.md gates every native
+# Windows channel on, so red runs here are information, not noise.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  stock-openssh:
+    name: hi at stock Windows OpenSSH (PowerShell fallback)
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Start the OpenSSH server
+        shell: powershell
+        run: |
+          $cap = Get-WindowsCapability -Online -Name 'OpenSSH.Server*'
+          if ($cap.State -ne 'Installed') { Add-WindowsCapability -Online -Name $cap.Name }
+          Set-Service -Name sshd -StartupType Automatic
+          Start-Service sshd
+
+      - name: Generate a throwaway key
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.ssh"
+          ssh-keygen -t ed25519 -N '' -q -f "$HOME/.ssh/loop"
+
+      # the runner user is an Administrator, so the key goes into the shared
+      # administrators file, which sshd only honors with this exact ACL
+      - name: Authorize it
+        shell: powershell
+        run: |
+          $key = Get-Content "$env:USERPROFILE\.ssh\loop.pub"
+          $file = "$env:ProgramData\ssh\administrators_authorized_keys"
+          Set-Content -Path $file -Value $key
+          icacls $file /inheritance:r /grant 'Administrators:F' /grant 'SYSTEM:F'
+
+      # cmd runs hi's first command, its mkdir chokes on the POSIX path, `||`
+      # falls through, and PowerShell greets - that whole ladder is the case.
+      # -NoExit holds the session open, so an `exit` is piped in and a timeout
+      # backstops it; the marker in the transcript is the assertion either way.
+      - name: Say hi (expect the PowerShell fallback)
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="$(printf 'exit\n' | timeout 120 ./hi.sh -i "$HOME/.ssh/loop" \
+            -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+            -o LogLevel=ERROR "${USERNAME:-$(whoami)}@127.0.0.1" 2>&1)" || true
+          printf '%s\n' "$out"
+          printf '%s\n' "$out" | grep -q "hi from PowerShell"

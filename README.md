@@ -42,6 +42,8 @@ For ssh targets specifically, `hi` first checks (over the same connection, so it
 - **WSL, Git Bash, Cygwin or MSYS2 reachable on `PATH`**: the full experience (header, colors, git prompt, aliases) - same code path as any other ssh host.
 - **Stock Windows OpenSSH with no `bash` at all**: `hi` falls back to a plain interactive PowerShell session (no hi.d styling - that's bash-only) instead of failing outright. This still happens over the _same single ssh connection_, since `cmd.exe` (Windows' default `DefaultShell`) understands `||` the same way a POSIX shell does; a target with `DefaultShell` set to PowerShell directly is outside what this fallback can detect.
 
+**Installing hi _on_ Windows:** use WSL. The `.deb` from the releases page installs into a WSL distribution unchanged - `/etc/profile.d/hi.d.sh`, `/usr/bin/hi`, everything exactly as on any Debian - and WSL is where a Windows developer already using `ssh`/`docker`/`kubectl` most likely works anyway. Native channels (Scoop and friends) are assessed in `packaging/windows.md` and wait on a green Windows CI job.
+
 ### Nomad allocations
 
 `hi <alloc-id>` also works against a running Nomad allocation (matched by ID/prefix, checked after the ssh-host and docker/podman-container checks) - same idea, same session, same code path as docker. Since `nomad alloc exec` has no `docker cp`/`-e` equivalent, files are streamed in with `exec -i` + `cat >` and env vars are set through a `sh -c "export ...; exec ..."` wrapper. Multi-task allocations would need `nomad alloc exec -task <name>`, which `hi` doesn't pass through, so they need a single unambiguous task.

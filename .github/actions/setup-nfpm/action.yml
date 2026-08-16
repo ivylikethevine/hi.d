@@ -7,7 +7,7 @@ inputs:
   version:
     description: nfpm version to install
     required: false
-    default: "2.43.0"
+    default: "2.47.0"
 
 runs:
   using: composite

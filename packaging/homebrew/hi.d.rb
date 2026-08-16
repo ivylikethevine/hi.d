@@ -32,6 +32,10 @@ class HiD < Formula
                              "hi.sh", "load.sh", "LICENSE", "README.md"
     chmod 0755, libexec/"hi.d/hi.sh"
 
+    # same page install_tree gzips into /usr/share/man for the other channels;
+    # brew wants it plain and puts it on the manpath itself
+    man1.install "docs/hi.1"
+
     # A wrapper rather than bin.install_symlink: hi.sh sources
     # "${_HI_HOME:-$HOME}/hi.d/common/core.sh" and never locates itself, so a
     # bare symlink on PATH would look for the tree in $HOME and find nothing.

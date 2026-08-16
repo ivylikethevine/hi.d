@@ -1,0 +1,57 @@
+name: macOS e2e
+
+# The BSD path end-to-end: the runner ssh's to itself, so one job covers
+# client AND target - macOS userland (`sed -i ''`, BSD mktemp, `base64 -D`)
+# and /bin/bash 3.2 on both ends, which the fast suites can only imitate.
+# Dispatch-only until it proves stable; promote into ci.yml after that.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  loopback:
+    name: hi localhost (BSD both ends)
+    runs-on: macos-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Enable Remote Login and authorize a throwaway key
+        run: |
+          set -euo pipefail
+          ssh-keygen -t ed25519 -N '' -q -f "$HOME/.ssh/loop"
+          cat "$HOME/.ssh/loop.pub" >>"$HOME/.ssh/authorized_keys"
+          chmod 700 "$HOME/.ssh" && chmod 600 "$HOME/.ssh/authorized_keys"
+          sudo systemsetup -setremotelogin on
+          for _ in $(seq 1 30); do
+            ssh -i "$HOME/.ssh/loop" -o BatchMode=yes -o StrictHostKeyChecking=no \
+              -o UserKnownHostsFile=/dev/null -o ConnectTimeout=2 \
+              "$USER@127.0.0.1" true && exit 0
+            sleep 1
+          done
+          echo "sshd never answered" >&2
+          exit 1
+
+      # the same pty trick the e2e suites use: `ssh -t` needs a tty on our
+      # side, and a CI step has none
+      - name: Say hi to ourselves
+        run: |
+          set -euo pipefail
+          out="$(python3 -c 'import pty, sys; sys.exit(pty.spawn(sys.argv[1:]))' \
+            ./hi.sh -i "$HOME/.ssh/loop" -o StrictHostKeyChecking=no \
+            -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+            "$USER@127.0.0.1" 'echo HI_MAC_LOOP_OK' 2>&1)" || true
+          printf '%s\n' "$out"
+          printf '%s\n' "$out" | grep -q HI_MAC_LOOP_OK
+
+      - name: The cleanup trap left nothing behind
+        run: |
+          set -euo pipefail
+          if ls -d "${TMPDIR:-/tmp}"/*.hi.* 2>/dev/null; then
+            echo "session directory survived the exit" >&2
+            exit 1
+          fi

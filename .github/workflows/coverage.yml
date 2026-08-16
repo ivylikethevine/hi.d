@@ -1,0 +1,39 @@
+name: Coverage
+
+# Monthly kcov over the fast suites, published as an artifact - visibility,
+# never a gate: no PR waits on this and no threshold fails it. The question it
+# keeps answerable is "which arms of install.sh/bump.sh do the ~500 cases
+# never touch". Dispatchable for a dry run.
+on:
+  schedule:
+    - cron: "17 6 3 * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  kcov:
+    name: kcov over the fast suites
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install zsh, fish and kcov
+        run: sudo apt-get update && sudo apt-get install -y zsh fish kcov
+
+      # the shellcheck suite runs under kcov too; same pinned binary as ci.yml
+      - uses: ./.github/actions/setup-shellcheck
+
+      - name: Run the fast suites under kcov
+        run: tests/coverage.sh coverage-report
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: coverage-report
+          path: coverage-report
+          if-no-files-found: error
+          retention-days: 90

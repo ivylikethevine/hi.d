@@ -73,8 +73,6 @@ alias now='echo "LOCAL: $(date $_HI_HUMAN_SHORT_DATE) => UTC: $(date -u $_HI_HUM
 alias zed="$(command -v zeditor || command -v zed || command -v echo)"
 alias ehi="zed $_HI_ROOT"
 alias essh="zed $_HI_SSH_DIR"
-# TODO: add script/compat for local config changes?
-alias elinks="zed ~/projects/links"
 
 # docker compose
 alias dcl="docker container ls && docker compose ls"
@@ -106,8 +104,6 @@ alias ctar="tar -zcvf"
 alias utar="tar -zxvf"
 
 # file diffing
-# TODO: test out these diffing tools
-# alias diff="$(command -v diff-so-fancy || command -v icdiff || command -v diff)"
 alias mindiff="diff -Bdw"
 
 # fallthrough aliases for improved basics

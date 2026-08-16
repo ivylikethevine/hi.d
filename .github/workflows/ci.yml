@@ -2,55 +2,43 @@ name: CI
 
 on:
   pull_request:
+  # the README badges report branch status - a PR-only trigger left them lying
+  push:
+    branches: [main, develop]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# superseded PR pushes cancel their in-flight run; main/develop never cancel
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   test:
     name: fast suites (ubuntu-latest)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
       - name: Install zsh and fish
         run: sudo apt-get update && sudo apt-get install -y zsh fish
 
-      # ubuntu-latest's apt package lags upstream badly so we install
-      # the latest upstream binary
-      - name: Cache shellcheck
-        id: shellcheck-cache
-        uses: actions/cache@v4
-        with:
-          path: /usr/local/bin/shellcheck
-          key: shellcheck-0.11.0-linux-x86_64
-
-      - name: Install shellcheck
-        if: steps.shellcheck-cache.outputs.cache-hit != 'true'
-        env:
-          SHELLCHECK_VERSION: 0.11.0
-        run: |
-          set -euo pipefail
-          curl -sSfL -o /tmp/shellcheck.tar.xz \
-            "https://github.com/koalaman/shellcheck/releases/download/v${SHELLCHECK_VERSION}/shellcheck-v${SHELLCHECK_VERSION}.linux.x86_64.tar.xz"
-          tar -xJf /tmp/shellcheck.tar.xz -C /tmp "shellcheck-v${SHELLCHECK_VERSION}/shellcheck"
-          sudo mv "/tmp/shellcheck-v${SHELLCHECK_VERSION}/shellcheck" /usr/local/bin/shellcheck
-          rm -rf /tmp/shellcheck.tar.xz "/tmp/shellcheck-v${SHELLCHECK_VERSION}"
-          shellcheck --version
+      - uses: ./.github/actions/setup-shellcheck
 
       - name: Run fast test suites
         env:
           _HI_HOME: ${{ github.workspace }}/..
         run: "${{ github.workspace }}/tests/test_runner.sh --group fast"
 
-  # The same suites on macOS, where /bin/bash is 3.2. hi is written to run there
-  # (no mapfile, no associative arrays, no namerefs - see the bash-4 lint in
-  # tests/shells/shellcheck_test.sh, and the real bash 3.2 target
-  # tests/targets/ssh_test.sh boots), and the whole fast group passes under 3.2
-  # in a container. What is still unproven from Linux is the BSD userland this
-  # runner brings with it - sed/awk/du/stat/mktemp flags - so the job stays
-  # advisory. Flip continue-on-error off once a run here comes back green.
+  # The same suites on macOS: /bin/bash 3.2, BSD userland. The %e/width/sort
+  # fixes in common/ came out of this job, so it gates for real now.
   test-macos:
     name: fast suites (macos-latest)
     runs-on: macos-latest
-    continue-on-error: true
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
 
@@ -66,12 +54,39 @@ jobs:
   markdownlint:
     name: markdownlint
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
       - uses: DavidAnson/markdownlint-cli2-action@v20
         with:
           globs: "**/*.md"
           config: ".markdownlint.yaml"
+
+  # catches nfpm.yaml/install_tree breakage on the PR that causes it, not at
+  # the next release tag
+  packaging-smoke:
+    name: package build (deb, rpm, apk)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install nfpm
+        env:
+          NFPM_VERSION: 2.43.0
+        run: |
+          set -euo pipefail
+          curl -sSfL -o /tmp/nfpm.tar.gz \
+            "https://github.com/goreleaser/nfpm/releases/download/v${NFPM_VERSION}/nfpm_${NFPM_VERSION}_Linux_x86_64.tar.gz"
+          tar -xzf /tmp/nfpm.tar.gz -C /tmp nfpm
+          sudo mv /tmp/nfpm /usr/local/bin/nfpm
+          nfpm --version
+
+      - name: Build the packages
+        run: packaging/package.sh
+
+      - name: Assert all three formats were built
+        run: ls -l dist/*.deb dist/*.rpm dist/*.apk
 
   e2e:
     name: e2e (ssh, docker)
@@ -81,10 +96,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # --require-run: here a skip is a broken runner, not an optional backend
       - name: Run end-to-end suites
         env:
           _HI_HOME: ${{ github.workspace }}/..
-        run: "${{ github.workspace }}/tests/test_runner.sh --group e2e"
+        run: "${{ github.workspace }}/tests/test_runner.sh --require-run --group e2e"
 
   e2e-backends:
     name: e2e (podman, nomad, kube)
@@ -112,4 +128,4 @@ jobs:
       - name: Run backend end-to-end suites
         env:
           _HI_HOME: ${{ github.workspace }}/..
-        run: "${{ github.workspace }}/tests/test_runner.sh --group backends"
+        run: "${{ github.workspace }}/tests/test_runner.sh --require-run --group backends"

@@ -244,6 +244,29 @@ function test_a_skipping_suite_is_not_counted_as_passed() {
   [[ "$_HI_RUN_OUT" == *"1/2 test suites passed"* ]] && [[ "$_HI_RUN_OUT" == *"1 skipped"* ]]
 }
 
+# --require-run is what CI's e2e jobs pass: the fixture that passes above
+# has to fail under it
+function test_require_run_fails_when_a_suite_skips() {
+  _hi_skipping_fixture stood_down5
+  _hi_run_runner $'stood_down5:stood_down5.sh\nok:green.sh' --require-run
+  [ "$_HI_RUN_EXIT" -eq 1 ] && [[ "$_HI_RUN_OUT" == *"--require-run"* ]]
+}
+
+function test_require_run_passes_when_nothing_skips() {
+  _hi_run_runner $'a:green.sh\nb:green.sh' --require-run
+  [ "$_HI_RUN_EXIT" -eq 0 ]
+}
+
+function test_require_run_adds_skips_to_the_failure_exit_code() {
+  _hi_skipping_fixture stood_down6
+  _hi_run_runner $'stood_down6:stood_down6.sh\nbad:red.sh' --require-run
+  [ "$_HI_RUN_EXIT" -eq 2 ]
+}
+
+function test_require_run_is_listed_in_help() {
+  "$_HI_TEST_RUN" --help | grep -q -- '--require-run'
+}
+
 # a skip contributes no cases, so it must not add a 0 to the totals either
 function test_a_skipping_suite_contributes_no_cases() {
   _hi_counting_fixture five 5 0
@@ -398,6 +421,10 @@ function run_runner_tests() {
   _hi_check "Not a failure" test_a_skipping_suite_is_not_a_failure
   _hi_check "Not counted as passed" test_a_skipping_suite_is_not_counted_as_passed
   _hi_check "Contributes no cases" test_a_skipping_suite_contributes_no_cases
+  _hi_check "--require-run turns a skip into a failure" test_require_run_fails_when_a_suite_skips
+  _hi_check "--require-run passes when nothing skips" test_require_run_passes_when_nothing_skips
+  _hi_check "--require-run adds skips to the exit code" test_require_run_adds_skips_to_the_failure_exit_code
+  _hi_check "--require-run appears in --help" test_require_run_is_listed_in_help
 
   _hi_h2 "Testing: the shipped table"
   _hi_check "Lists a group and name per suite" test_shipped_table_lists_a_group_and_name_per_suite

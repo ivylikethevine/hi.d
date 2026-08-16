@@ -1,0 +1,34 @@
+name: Setup shellcheck
+# ubuntu's apt package lags upstream badly; one pinned install shared by
+# ci.yml and release.yml - bump the default here and both follow
+description: Install a pinned upstream shellcheck binary, with caching
+
+inputs:
+  version:
+    description: shellcheck version to install
+    required: false
+    default: "0.11.0"
+
+runs:
+  using: composite
+  steps:
+    - name: Cache shellcheck
+      id: shellcheck-cache
+      uses: actions/cache@v4
+      with:
+        path: /usr/local/bin/shellcheck
+        key: shellcheck-${{ inputs.version }}-linux-x86_64
+
+    - name: Install shellcheck
+      if: steps.shellcheck-cache.outputs.cache-hit != 'true'
+      shell: bash
+      env:
+        SHELLCHECK_VERSION: ${{ inputs.version }}
+      run: |
+        set -euo pipefail
+        curl -sSfL -o /tmp/shellcheck.tar.xz \
+          "https://github.com/koalaman/shellcheck/releases/download/v${SHELLCHECK_VERSION}/shellcheck-v${SHELLCHECK_VERSION}.linux.x86_64.tar.xz"
+        tar -xJf /tmp/shellcheck.tar.xz -C /tmp "shellcheck-v${SHELLCHECK_VERSION}/shellcheck"
+        sudo mv "/tmp/shellcheck-v${SHELLCHECK_VERSION}/shellcheck" /usr/local/bin/shellcheck
+        rm -rf /tmp/shellcheck.tar.xz "/tmp/shellcheck-v${SHELLCHECK_VERSION}"
+        shellcheck --version

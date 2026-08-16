@@ -33,6 +33,7 @@ if ! declare -p _HI_TESTS >/dev/null 2>&1; then
     "fast:paths:common/paths_test.sh"
     "fast:color_preview:scripts/color_preview_test.sh"
     "fast:load:shells/load_test.sh"
+    "fast:rc:shells/rc_test.sh"
     "fast:test_lib:harness/lib_test.sh"
     "fast:test_runner:harness/runner_test.sh"
     "e2e:ssh:targets/ssh_test.sh"
@@ -78,6 +79,7 @@ _HI_TESTS_DIR="${_HI_TESTS_DIR:-$_HI_ROOT/tests}"
 # being spelled out again, so it can't drift.
 _HI_GROUP=""
 _HI_LIST=0
+_HI_REQUIRE_RUN=0
 declare -a _HI_ARGS=()
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -94,6 +96,8 @@ rather than PASS, so a green run can't overstate what actually ran.
   suite ...        one or more of the names below (default: all of them)
   --group <group>  every suite in one group: $(_hi_test_groups)
   --list           print "<group> <name>" per suite and exit
+  --require-run    treat SKIPPED suites as failures - for CI runners where a
+                   skip means the runner is broken, not the backend optional
   -h, --help       this text
 
 Suites, in the order they run:
@@ -105,6 +109,7 @@ EOF
     ;;
   # handled after selection below, so `--group X --list` lists that group
   --list) _HI_LIST=1 ;;
+  --require-run) _HI_REQUIRE_RUN=1 ;;
   --group)
     [ "$#" -ge 2 ] || {
       _hi_cecho "test_runner.sh: --group needs a value" "$RED" >&2
@@ -292,6 +297,13 @@ if [ "$_HI_SUITE_FAILED" -eq 0 ]; then
   _hi_h1 "$((${#_HI_SELECTED[@]} - _HI_SUITE_SKIPPED))/${#_HI_SELECTED[@]} test suites passed ($_HI_TOTAL_DUR$_HI_SKIP_NOTE)"
 else
   _hi_h1 "$_HI_SUITE_FAILED/${#_HI_SELECTED[@]} test suites FAILED ($_HI_TOTAL_DUR$_HI_SKIP_NOTE)" "$RED"
+fi
+
+# a runner missing its backends skips everything and exits 0 - at the job
+# level that reads as a pass; --require-run makes it a failure
+if [ "$_HI_REQUIRE_RUN" = 1 ] && [ "$_HI_SUITE_SKIPPED" -gt 0 ]; then
+  _hi_h1 "$_HI_SUITE_SKIPPED suite(s) skipped, but --require-run was given" "$RED"
+  exit $((_HI_SUITE_FAILED + _HI_SUITE_SKIPPED))
 fi
 
 exit "$_HI_SUITE_FAILED"

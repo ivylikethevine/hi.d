@@ -25,51 +25,15 @@ export _HI_HOME
 # shellcheck source=../common/core.sh
 source "$_HI_HOME/hi.d/common/core.sh"
 
-_HI_PKGBUILD="$_HI_ROOT/packaging/aur/hi.d/PKGBUILD"
-_HI_SRCINFO="$_HI_ROOT/packaging/aur/hi.d/.SRCINFO"
-_HI_FORMULA="$_HI_ROOT/packaging/homebrew/hi.d.rb"
+# Overridable so the test suite can point them at fixture copies; everything
+# real goes through the defaults.
+: "${_HI_PKGBUILD:=$_HI_ROOT/packaging/aur/hi.d/PKGBUILD}"
+: "${_HI_SRCINFO:=$_HI_ROOT/packaging/aur/hi.d/.SRCINFO}"
+: "${_HI_FORMULA:=$_HI_ROOT/packaging/homebrew/hi.d.rb}"
 _HI_URL_BASE="https://github.com/ivylikethevine/hi.d/archive"
 # what a manifest reads before any release has been cut; --check rejects both
 _HI_PLACEHOLDER_SHA="0000000000000000000000000000000000000000000000000000000000000000"
-_HI_CHECK_ONLY=""
 _HI_USAGE="Usage: bump.sh [--check] <version>"
-
-while [ $# -gt 0 ]; do
-  case "$1" in
-  --check) _HI_CHECK_ONLY=1 ;;
-  -h | --help)
-    cat <<EOF
-$_HI_USAGE
-
-Writes <version> (no leading v) into packaging/aur/hi.d/PKGBUILD, its
-.SRCINFO, and packaging/homebrew/hi.d.rb, along with the b2sum and sha256
-of the matching GitHub release tarball.
-
-  --check   Verify the manifests already agree on <version> and carry real
-            checksums, then exit non-zero if not. Touches nothing and needs
-            no network. This is the release workflow's gate.
-
-packaging/aur/hi.d-git/ is untouched: its pkgver() derives from the branch.
-EOF
-    exit 0
-    ;;
-  -*)
-    echo "bump.sh: unrecognized argument: $1" >&2
-    echo "$_HI_USAGE" >&2
-    exit 1
-    ;;
-  *) _HI_VERSION="$1" ;;
-  esac
-  shift
-done
-
-[ -n "${_HI_VERSION:-}" ] || {
-  echo "bump.sh: a version is required" >&2
-  echo "$_HI_USAGE" >&2
-  exit 1
-}
-# v-prefixes belong on the tag, not in pkgver/sha256 lookups; accept either
-_HI_VERSION="${_HI_VERSION#v}"
 
 # sha256 and blake2b of $1, each with a non-coreutils fallback so this also runs
 # on a mac (no sha256sum, no b2sum) rather than only on the Linux CI box.
@@ -90,18 +54,19 @@ function b2_of() {
   fi
 }
 
-# Rewrite one line in place. A temp file plus mv rather than `sed -i`, whose
-# in-place flag takes an argument on BSD and not on GNU - the same portability
-# trap common/paths.sh's date formats just walked into.
+# Rewrite one line in place. A temp file rather than `sed -i` (whose in-place
+# flag differs BSD/GNU), written back with cat, not mv - mv would put mktemp's
+# 0600 on a tracked manifest.
 function rewrite() {
   local file="$1" expr="$2" tmp
   tmp="$(mktemp -t hi.bump.XXXXXX)"
   sed "$expr" "$file" >"$tmp"
-  mv "$tmp" "$file"
+  cat "$tmp" >"$file"
+  rm -f "$tmp"
 }
 
 function check_manifests() {
-  local bad=0 pkgver sha b2
+  local bad=0 pkgver sha b2 srcinfo_b2
   _hi_h2 "Checking the manifests say $_HI_VERSION"
 
   pkgver="$(sed -n 's/^pkgver=//p' "$_HI_PKGBUILD" | head -1)"
@@ -142,20 +107,48 @@ function check_manifests() {
     bad=1
   fi
 
+  # the AUR consumes .SRCINFO, not the PKGBUILD, so its b2sums/source lines
+  # have to be checked too - pkgver alone lets a stale checksum through
+  srcinfo_b2="$(sed -n 's/^[[:space:]]*b2sums = //p' "$_HI_SRCINFO" | head -1)"
+  if [ -n "$b2" ] && [ "$srcinfo_b2" = "$b2" ]; then
+    _hi_cecho " .SRCINFO b2sums matches the PKGBUILD's :)" "$GREEN"
+  else
+    _hi_cecho " .SRCINFO b2sums does not match the PKGBUILD's - regenerate it" "$RED"
+    bad=1
+  fi
+
+  if grep -qF "v$_HI_VERSION.tar.gz" "$_HI_SRCINFO"; then
+    _hi_cecho " .SRCINFO source points at v$_HI_VERSION :)" "$GREEN"
+  else
+    _hi_cecho " .SRCINFO source does not point at v$_HI_VERSION" "$RED"
+    bad=1
+  fi
+
   return "$bad"
 }
 
 function write_manifests() {
   local url tarball sha b2
-  url="$_HI_URL_BASE/v$_HI_VERSION.tar.gz"
-  tarball="$(mktemp -t hi.tarball.XXXXXX)"
-  _hi_on_exit "rm -f '$tarball'"
+  # _HI_BUMP_TARBALL: checksum this local file instead of downloading - the
+  # test suite's offline path, and an escape hatch when GitHub is unreachable
+  if [ -n "${_HI_BUMP_TARBALL:-}" ]; then
+    tarball="$_HI_BUMP_TARBALL"
+    _hi_h2 "Using the local tarball $tarball"
+    [ -f "$tarball" ] || {
+      _hi_cecho " no such file: $tarball" "$RED" >&2
+      return 1
+    }
+  else
+    url="$_HI_URL_BASE/v$_HI_VERSION.tar.gz"
+    tarball="$(mktemp -t hi.tarball.XXXXXX)"
+    _hi_on_exit "rm -f '$tarball'"
 
-  _hi_h2 "Fetching $url"
-  curl -fsSL -o "$tarball" "$url" || {
-    _hi_cecho " could not fetch it - has v$_HI_VERSION been tagged and pushed?" "$RED" >&2
-    return 1
-  }
+    _hi_h2 "Fetching $url"
+    curl -fsSL -o "$tarball" "$url" || {
+      _hi_cecho " could not fetch it - has v$_HI_VERSION been tagged and pushed?" "$RED" >&2
+      return 1
+    }
+  fi
   # both sums from the same bytes, so the two channels can never disagree about
   # what they are checksumming
   sha="$(sha256_of "$tarball")"
@@ -176,10 +169,61 @@ function write_manifests() {
     (cd "$(dirname "$_HI_PKGBUILD")" && makepkg --printsrcinfo >.SRCINFO)
     _hi_cecho " $_HI_SRCINFO :)" "$GREEN"
   else
-    _hi_cecho " no makepkg here - regenerate .SRCINFO on an Arch box before submitting:" "$YELLOW"
-    _hi_cecho "   cd packaging/aur/hi.d && makepkg --printsrcinfo > .SRCINFO" "$YELLOW"
+    rewrite_srcinfo_lines "$b2"
+    _hi_cecho " $_HI_SRCINFO (pkgver/source/b2sums only - rerun makepkg --printsrcinfo on an Arch box if any other PKGBUILD field changed)" "$YELLOW"
   fi
 }
+
+# The no-makepkg fallback (any non-Arch box, incl. the ubuntu release runner):
+# the three lines a bump changes are derivable, so rewrite them in place. The
+# \([[:space:]]*\) capture keeps .SRCINFO's leading tab.
+function rewrite_srcinfo_lines() {
+  local b2="$1"
+  rewrite "$_HI_SRCINFO" "s/^\\([[:space:]]*\\)pkgver = .*/\\1pkgver = $_HI_VERSION/"
+  rewrite "$_HI_SRCINFO" "s|^\\([[:space:]]*\\)source = .*|\\1source = hi.d-$_HI_VERSION.tar.gz::$_HI_URL_BASE/v$_HI_VERSION.tar.gz|"
+  rewrite "$_HI_SRCINFO" "s/^\\([[:space:]]*\\)b2sums = .*/\\1b2sums = $b2/"
+}
+
+# sourcing stops here (tests reach the functions above) - install.sh's pattern
+[[ "${BASH_SOURCE[0]}" == "$0" ]] || return 0
+
+_HI_CHECK_ONLY=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+  --check) _HI_CHECK_ONLY=1 ;;
+  -h | --help)
+    cat <<EOF
+$_HI_USAGE
+
+Writes <version> (no leading v) into packaging/aur/hi.d/PKGBUILD, its
+.SRCINFO, and packaging/homebrew/hi.d.rb, along with the b2sum and sha256
+of the matching GitHub release tarball.
+
+  --check   Verify the manifests already agree on <version> and carry real
+            checksums, then exit non-zero if not. Touches nothing and needs
+            no network. This is the release workflow's gate.
+
+packaging/aur/hi.d-git/ is untouched: its pkgver() derives from the branch.
+EOF
+    exit 0
+    ;;
+  -*)
+    echo "bump.sh: unrecognized argument: $1" >&2
+    echo "$_HI_USAGE" >&2
+    exit 1
+    ;;
+  *) _HI_VERSION="$1" ;;
+  esac
+  shift
+done
+
+[ -n "${_HI_VERSION:-}" ] || {
+  echo "bump.sh: a version is required" >&2
+  echo "$_HI_USAGE" >&2
+  exit 1
+}
+# v-prefixes belong on the tag, not in pkgver/sha256 lookups; accept either
+_HI_VERSION="${_HI_VERSION#v}"
 
 if [ -n "$_HI_CHECK_ONLY" ]; then
   _hi_h1 "Checking manifests for $_HI_VERSION"
@@ -194,4 +238,4 @@ fi
 _hi_h1 "Bumping hi.d to $_HI_VERSION"
 write_manifests
 _hi_h1 "Bumped!"
-_hi_cecho " | review the diff, commit it, then tag v$_HI_VERSION - the release workflow verifies both agree" "$BLUE"
+_hi_cecho " | review the diff, commit it - the release workflow re-derives and verifies the same sums from the tag" "$BLUE"

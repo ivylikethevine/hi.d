@@ -7,8 +7,9 @@ on:
     tags:
       - "v*"
 
+# read-only by default; only the gated publish job gets `contents: write`
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   # Everything that can fail, and nothing that can publish. Runs unattended so
@@ -25,35 +26,26 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y zsh fish
 
       # same pinned upstream binary ci.yml uses - the distro package lags badly
-      - name: Cache shellcheck
-        id: shellcheck-cache
-        uses: actions/cache@v4
-        with:
-          path: /usr/local/bin/shellcheck
-          key: shellcheck-0.11.0-linux-x86_64
-
-      - name: Install shellcheck
-        if: steps.shellcheck-cache.outputs.cache-hit != 'true'
-        env:
-          SHELLCHECK_VERSION: 0.11.0
-        run: |
-          set -euo pipefail
-          curl -sSfL -o /tmp/shellcheck.tar.xz \
-            "https://github.com/koalaman/shellcheck/releases/download/v${SHELLCHECK_VERSION}/shellcheck-v${SHELLCHECK_VERSION}.linux.x86_64.tar.xz"
-          tar -xJf /tmp/shellcheck.tar.xz -C /tmp "shellcheck-v${SHELLCHECK_VERSION}/shellcheck"
-          sudo mv "/tmp/shellcheck-v${SHELLCHECK_VERSION}/shellcheck" /usr/local/bin/shellcheck
-          rm -rf /tmp/shellcheck.tar.xz "/tmp/shellcheck-v${SHELLCHECK_VERSION}"
+      - uses: ./.github/actions/setup-shellcheck
 
       - name: Run fast test suites
         env:
           _HI_HOME: ${{ github.workspace }}/..
         run: "${{ github.workspace }}/tests/test_runner.sh --group fast"
 
-      # The gate that stops a tag and its manifests drifting apart: bump.sh is
-      # run by hand before tagging, and this only verifies the result. CI never
-      # rewrites a manifest nobody reviewed.
-      - name: Verify the manifests match the tag
+      # The tarball both channels checksum only exists once the tag does, so
+      # the bump runs here, not before tagging (which needed a force-retag).
+      # Review happens at the environment gate, over the files this produced.
+      - name: Regenerate the manifests from the tag
+        run: packaging/bump.sh "${GITHUB_REF_NAME#v}"
+
+      - name: Verify the result
         run: packaging/bump.sh --check "${GITHUB_REF_NAME#v}"
+
+      - name: Run the packaging drift guards against the fresh manifests
+        env:
+          _HI_HOME: ${{ github.workspace }}/..
+        run: "${{ github.workspace }}/tests/test_runner.sh packaging"
 
       - name: Install nfpm
         env:
@@ -68,6 +60,12 @@ jobs:
 
       - name: Build the packages
         run: packaging/package.sh
+
+      # something to verify the downloaded .deb/.rpm/.apk against
+      - name: Write SHA256SUMS over the packages
+        run: |
+          set -euo pipefail
+          (cd dist && sha256sum -- *.deb *.rpm *.apk > SHA256SUMS)
 
       - name: Collect the manifests alongside them
         run: |
@@ -86,6 +84,7 @@ jobs:
             dist/*.deb
             dist/*.rpm
             dist/*.apk
+            dist/SHA256SUMS
             dist/manifests/*
           if-no-files-found: error
 
@@ -102,6 +101,8 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     environment: release
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
 
@@ -120,4 +121,29 @@ jobs:
           # The manifests ride along with the packages so that updating the AUR
           # and the tap is a copy rather than a re-derivation of the same sums.
           gh release upload "$GITHUB_REF_NAME" --clobber \
-            dist/*.deb dist/*.rpm dist/*.apk dist/manifests/*
+            dist/*.deb dist/*.rpm dist/*.apk dist/SHA256SUMS dist/manifests/*
+
+      # Committing the regenerated manifests here - after the human gate - is
+      # what lets the tag stay put: they are consumed from the AUR/tap repos,
+      # not from inside the tarball, so they needn't be in the tagged tree.
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          path: main
+
+      - name: Commit the manifests to main
+        run: |
+          set -euo pipefail
+          cp dist/manifests/PKGBUILD main/packaging/aur/hi.d/PKGBUILD
+          cp dist/manifests/.SRCINFO main/packaging/aur/hi.d/.SRCINFO
+          cp dist/manifests/hi.d.rb main/packaging/homebrew/hi.d.rb
+          cd main
+          if git diff --quiet; then
+            echo "manifests already current on main - nothing to commit"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add packaging/aur/hi.d/PKGBUILD packaging/aur/hi.d/.SRCINFO packaging/homebrew/hi.d.rb
+          git commit -m "packaging: manifests for $GITHUB_REF_NAME"
+          git push origin main

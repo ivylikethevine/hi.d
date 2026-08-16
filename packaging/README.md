@@ -50,22 +50,26 @@ Until that exists, a pushed `v*` tag publishes without asking.
 ## Cutting a release
 
 ```bash
-packaging/bump.sh 1.0.0        # needs the tag to exist first - see below
-git add -A packaging && git commit -m "packaging: 1.0.0"
-git push && git push --tags
+git tag v1.0.0 && git push origin v1.0.0
 ```
 
-Order matters and is slightly awkward: `bump.sh` checksums the GitHub tarball, which only exists once the
-tag is pushed. So in practice:
+That is the whole local ceremony. The tag never moves: `bump.sh` checksums the GitHub tarball, which only
+exists once the tag is pushed — so the release workflow runs the bump itself, against the tarball the tag
+just created, instead of requiring a pre-tag bump and a force-retag to reconcile the two.
 
-1. `git tag v1.0.0 && git push --tags` — the tarball now exists.
-2. `packaging/bump.sh 1.0.0` — fetches it, writes `pkgver`, `b2sums`, the formula `url`/`sha256`, and
-   regenerates `.SRCINFO`.
-3. Commit the manifests and push.
-4. Re-push the tag onto that commit (`git tag -f v1.0.0 && git push -f --tags`) so the workflow's
-   `bump.sh --check` sees manifests that match. The workflow refuses to build otherwise, which is the
-   point — a release whose manifests disagree with its tag is worse than no release.
-5. Approve the `publish` job in the Actions UI. Packages and manifests land on the release.
+1. `git tag v1.0.0 && git push origin v1.0.0` — the tarball now exists and the workflow starts.
+2. The `build` job runs the fast suites, then `bump.sh 1.0.0` (fetches the tarball, writes `pkgver`,
+   `b2sums`, the formula `url`/`sha256`, and the derivable `.SRCINFO` lines), verifies with
+   `bump.sh --check`, runs the packaging drift guards against the fresh manifests, and builds the
+   deb/rpm/apk plus a `SHA256SUMS` over them. Nothing has published yet.
+3. Approve the `publish` job in the Actions UI — this is your review point, over the exact artifacts the
+   build produced. Packages, `SHA256SUMS`, and manifests land on the release, and the regenerated
+   manifests are committed back to `main` (they are consumed from the AUR/tap repos, not from inside the
+   tarball, so they don't need to be in the tagged tree).
+4. Copy the manifests from the release (or from `main`) to the AUR and the tap, per the sections below.
+
+`bump.sh 1.0.0` still works by hand if CI is ever unavailable (`_HI_BUMP_TARBALL=<file>` skips the
+download), and `bump.sh --check 1.0.0` stays useful locally to confirm the manifests match a cut release.
 
 ## Publishing each channel (all manual)
 

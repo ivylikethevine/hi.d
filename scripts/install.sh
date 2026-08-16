@@ -68,8 +68,10 @@ its current setting when there is no tty to answer on.
                    files, remove the settings.sh this wrote, and unlink
                    /usr/bin/hi if it points at this hi.d. Safe to re-run.
                    hi.d itself is left in place - rm -rf it yourself once
-                   you're done with it. This is what \`hi_uninstall\` (and
-                   scripts/uninstall.sh) calls.
+                   you're done with it - and so is the one-time
+                   <rc-file>.hi-orig backup the install took before its
+                   first write to each rc file. This is what
+                   \`hi_uninstall\` (and scripts/uninstall.sh) calls.
   -y, --yes        Install even if that validation finds problems. Without
                    it, a non-interactive run stops rather than rewriting
                    shell configs that don't parse.
@@ -154,10 +156,19 @@ function config_shell() {
   fi
 
   _hi_cecho " local $name out of date, updating..." "$YELLOW"
+  # one-time backup on hi's first write to a non-empty file; never overwritten,
+  # so it stays the pre-hi original. Uninstall leaves it, deliberately.
+  if [ -s "$target" ] && [ -z "$existing" ] && [ ! -e "$target.hi-orig" ]; then
+    cp -p "$target" "$target.hi-orig"
+    _hi_cecho " saved a one-time backup: $target.hi-orig" "$BLUE"
+  fi
   tmpfile="$(mktemp -t hi.append.XXXXXX)"
   grep -vF "$_HI_MARKER" "$target" >"$tmpfile" || true
   printf '%s' "$desired" >>"$tmpfile"
-  mv "$tmpfile" "$target"
+  # cat, not mv: mv would put mktemp's 0600 on the user's rc file and sever
+  # any hardlink/ACL on it
+  cat "$tmpfile" >"$target"
+  rm -f "$tmpfile"
   _hi_cecho " local $name updated :)" "$GREEN"
 }
 
@@ -427,7 +438,9 @@ function ensure_settings_shebang() {
     *) cat "$_HI_SETTINGS" >>"$tmpfile" ;;
     esac
   fi
-  mv "$tmpfile" "$_HI_SETTINGS"
+  # cat, not mv - same mode-preservation reasoning as config_shell
+  cat "$tmpfile" >"$_HI_SETTINGS"
+  rm -f "$tmpfile"
 }
 
 # Runs $@'s syntax-check flag against an existing rc file (without executing it)
@@ -506,8 +519,25 @@ function config_hi() {
     _hi_cecho " $_HI_LINK already points at $_HI_LAUNCHER :)" "$GREEN"
     return 0
   fi
-  _hi_cecho " Linking $_HI_LINK -> $_HI_LAUNCHER... [password required]" "$BLUE"
-  sudo ln -sfn "$_HI_LAUNCHER" "$_HI_LINK"
+  # A writable bindir needs no sudo, and a sudo-less box must not abort a
+  # *completed* install at its last step - from here it's warnings, not `set -e`.
+  if [ -w "$(dirname "$_HI_LINK")" ]; then
+    ln -sfn "$_HI_LAUNCHER" "$_HI_LINK"
+    _hi_cecho " linked $_HI_LINK -> $_HI_LAUNCHER :)" "$GREEN"
+  elif command -v sudo >/dev/null 2>&1; then
+    _hi_cecho " Linking $_HI_LINK -> $_HI_LAUNCHER... [password required]" "$BLUE"
+    sudo ln -sfn "$_HI_LAUNCHER" "$_HI_LINK" || link_hi_by_hand
+  else
+    link_hi_by_hand
+  fi
+}
+
+# the non-fatal fallthrough for config_hi: say exactly how to finish the job
+function link_hi_by_hand() {
+  _hi_cecho " couldn't link $_HI_LINK (no sudo, or it was refused) - the install still works;" "$YELLOW"
+  _hi_cecho " finish it as root with: ln -sfn '$_HI_LAUNCHER' '$_HI_LINK'" "$YELLOW"
+  _hi_cecho " or re-run with --no-link to silence this." "$YELLOW"
+  return 0
 }
 
 # --- uninstalling -----------------------------------------------------------
@@ -532,8 +562,17 @@ function unlink_hi() {
     _hi_cecho " $_HI_LINK doesn't point at this hi.d, leaving it alone" "$GREEN"
     return 0
   fi
-  _hi_cecho " Unlinking $_HI_LINK... [password required]" "$BLUE"
-  sudo rm -f "$_HI_LINK"
+  # same non-fatal ladder as config_hi
+  if [ -w "$(dirname "$_HI_LINK")" ]; then
+    rm -f "$_HI_LINK"
+    _hi_cecho " removed $_HI_LINK :)" "$GREEN"
+  elif command -v sudo >/dev/null 2>&1; then
+    _hi_cecho " Unlinking $_HI_LINK... [password required]" "$BLUE"
+    sudo rm -f "$_HI_LINK" ||
+      _hi_cecho " couldn't remove it - as root: rm '$_HI_LINK'" "$YELLOW"
+  else
+    _hi_cecho " no sudo here - remove it as root: rm '$_HI_LINK'" "$YELLOW"
+  fi
 }
 
 # Strips hi's marker-tagged lines from the local shell rc files, removes the
@@ -566,6 +605,15 @@ function install_tree() {
   local profile="${DESTDIR:-}/etc/profile.d/hi.d.sh" item line
   _hi_h2 "Installing the tree"
 
+  # cp -R merges, so clear a pre-existing dest or removed files keep shipping;
+  # the basename guard keeps the rm -rf aimed only at a dir named hi.d
+  if [ -e "$dest" ]; then
+    if [ "$(basename "$dest")" != "hi.d" ]; then
+      _hi_cecho " refusing to clear $dest - not a directory named hi.d" "$RED" >&2
+      return 1
+    fi
+    rm -rf "$dest"
+  fi
   mkdir -p "$dest"
   for item in "${_HI_PACKAGE_CONTENTS[@]}"; do
     [ -e "$_HI_ROOT/$item" ] || continue

@@ -49,12 +49,12 @@
 *.sql
 *.json
 !.zed/settings.json
-!tests/bench/baseline.json
 *.toml
 *.yaml
 *.yml
 !theme.yml
 !.github/workflows/*.yml
+!.github/actions/**/*.yml
 !packaging/nfpm/nfpm.yaml
 
 *docker*

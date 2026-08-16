@@ -205,6 +205,173 @@ function test_bump_check_rejects_a_version_the_manifests_do_not_carry() {
   ! "$_HI_PKG_DIR/bump.sh" --check 999.999.999 >/dev/null 2>&1
 }
 
+# --- bump.sh's write path, offline --------------------------------------------
+#
+# Fixture manifests plus a local tarball (_HI_BUMP_TARBALL) stand in for the
+# GitHub download; each case runs in a subshell so the overridden paths can't
+# leak into the drift guards above.
+
+function bump_fixture() {
+  local dir="$_HI_WORKDIR/bump"
+  rm -rf "$dir"
+  mkdir -p "$dir/src"
+  cp "$_HI_PKG_DIR/aur/hi.d/PKGBUILD" "$dir/PKGBUILD"
+  cp "$_HI_PKG_DIR/aur/hi.d/.SRCINFO" "$dir/.SRCINFO"
+  cp "$_HI_PKG_DIR/homebrew/hi.d.rb" "$dir/hi.d.rb"
+  printf 'hello\n' >"$dir/src/file"
+  tar -czf "$dir/src.tar.gz" -C "$dir" src
+}
+
+# the subshell preamble: point the overridable paths at the fixture and
+# source bump.sh (inert under its guard)
+function _hi_bump_env() {
+  _HI_PKGBUILD="$_HI_WORKDIR/bump/PKGBUILD"
+  _HI_SRCINFO="$_HI_WORKDIR/bump/.SRCINFO"
+  _HI_FORMULA="$_HI_WORKDIR/bump/hi.d.rb"
+  _HI_BUMP_TARBALL="$_HI_WORKDIR/bump/src.tar.gz"
+  _HI_VERSION=9.9.9
+  # shellcheck source=../../packaging/bump.sh
+  source "$_HI_PKG_DIR/bump.sh"
+}
+
+function test_bump_write_rewrites_pkgver_and_b2sums() {
+  bump_fixture
+  (
+    _hi_bump_env
+    write_manifests >/dev/null 2>&1
+    grep -q '^pkgver=9\.9\.9$' "$_HI_PKGBUILD" &&
+      grep -qF "b2sums=('$(b2_of "$_HI_BUMP_TARBALL")')" "$_HI_PKGBUILD"
+  )
+}
+
+function test_bump_write_rewrites_formula_url_and_sha256() {
+  bump_fixture
+  (
+    _hi_bump_env
+    write_manifests >/dev/null 2>&1
+    grep -qF 'v9.9.9.tar.gz' "$_HI_FORMULA" &&
+      grep -qF "sha256 \"$(sha256_of "$_HI_BUMP_TARBALL")\"" "$_HI_FORMULA"
+  )
+}
+
+# the no-makepkg path (any non-Arch box, incl. the release runner) has to fix
+# all three lines the AUR reads out of .SRCINFO, not just pkgver
+function test_bump_srcinfo_fallback_rewrites_the_three_lines() {
+  bump_fixture
+  (
+    _hi_bump_env
+    rewrite_srcinfo_lines feedbeef
+    grep -qF 'pkgver = 9.9.9' "$_HI_SRCINFO" &&
+      grep -qF 'source = hi.d-9.9.9.tar.gz::' "$_HI_SRCINFO" &&
+      grep -qF 'v9.9.9.tar.gz' "$_HI_SRCINFO" &&
+      grep -qF 'b2sums = feedbeef' "$_HI_SRCINFO" &&
+      grep -q $'^\tpkgver' "$_HI_SRCINFO" # the leading tab survived the sed
+  )
+}
+
+function test_bump_check_passes_after_a_write() {
+  bump_fixture
+  (
+    _hi_bump_env
+    write_manifests >/dev/null 2>&1
+    check_manifests >/dev/null 2>&1
+  )
+}
+
+function test_bump_check_catches_stale_srcinfo_b2sums() {
+  bump_fixture
+  (
+    _hi_bump_env
+    write_manifests >/dev/null 2>&1
+    rewrite "$_HI_SRCINFO" 's/^\([[:space:]]*\)b2sums = .*/\1b2sums = 1111/'
+    ! check_manifests >/dev/null 2>&1
+  )
+}
+
+function test_bump_check_catches_stale_srcinfo_source() {
+  bump_fixture
+  (
+    _hi_bump_env
+    write_manifests >/dev/null 2>&1
+    rewrite "$_HI_SRCINFO" 's|^\([[:space:]]*\)source = .*|\1source = hi.d-0.0.1.tar.gz::x/v0.0.1.tar.gz|'
+    ! check_manifests >/dev/null 2>&1
+  )
+}
+
+# a wrong tool or wrong output field shows up as a wrong constant
+function test_bump_sha256_matches_a_known_vector() {
+  local f="$_HI_WORKDIR/vector"
+  printf 'hello\n' >"$f"
+  (
+    _hi_bump_env
+    [ "$(sha256_of "$f")" = "5891b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be03" ]
+  )
+}
+
+# the two b2 implementations (coreutils b2sum, openssl fallback) must agree,
+# or a bump on a mac writes a sum makepkg then rejects
+function test_bump_b2_fallback_agrees_with_b2sum() {
+  if ! command -v b2sum >/dev/null 2>&1 || ! command -v openssl >/dev/null 2>&1; then
+    _hi_cecho "   b2sum or openssl missing, nothing to compare" "$YELLOW"
+    return 0
+  fi
+  local f="$_HI_WORKDIR/vector2"
+  printf 'hello\n' >"$f"
+  (
+    _hi_bump_env
+    [ "$(b2sum "$f" | awk '{ print $1 }')" = "$(openssl dgst -blake2b512 "$f" | awk '{ print $NF }')" ]
+  )
+}
+
+# mode read via ls's first field - stat's flags differ GNU/BSD
+# shellcheck disable=SC2012 # the path is a fixture this suite just wrote
+function test_bump_rewrite_preserves_file_mode() {
+  bump_fixture
+  (
+    _hi_bump_env
+    chmod 604 "$_HI_PKGBUILD"
+    before="$(ls -l "$_HI_PKGBUILD" | awk '{ print $1 }')"
+    rewrite "$_HI_PKGBUILD" 's/^pkgver=.*/pkgver=1.2.3/'
+    [ "$(ls -l "$_HI_PKGBUILD" | awk '{ print $1 }')" = "$before" ]
+  )
+}
+
+# --- package.sh, offline half ---------------------------------------------------
+
+function test_package_sh_stage_only_needs_no_nfpm() {
+  local out="$_HI_WORKDIR/pkgdist"
+  "$_HI_PKG_DIR/package.sh" --stage-only --outdir "$out" >/dev/null 2>&1 &&
+    [ -f "$out/staging/usr/share/hi.d/hi.sh" ]
+}
+
+function test_package_sh_version_flag_wins() {
+  local out
+  out="$("$_HI_PKG_DIR/package.sh" --version 7.7.7 --stage-only --outdir "$_HI_WORKDIR/pkgdist2" 2>&1)"
+  [[ "$out" == *"Packaging hi.d 7.7.7"* ]]
+}
+
+function test_package_sh_rejects_unknown_arguments() {
+  ! "$_HI_PKG_DIR/package.sh" --bogus >/dev/null 2>&1
+}
+
+# a checkout not named hi.d (CI paths, worktrees) gets the shim
+function test_staged_launcher_shims_a_misnamed_checkout() {
+  ln -sfn "$_HI_ROOT" "$_HI_WORKDIR/checkout"
+  (
+    set -- # package.sh reads "$@" when executed; make sure sourcing sees none
+    # shellcheck source=../../packaging/package.sh
+    source "$_HI_PKG_DIR/package.sh"
+    _HI_ROOT="$_HI_WORKDIR/checkout"
+    _HI_DIST="$_HI_WORKDIR/pkgdist3"
+    out="$(staged_launcher)"
+    [ "$out" = "$_HI_DIST/shim/hi.d/scripts/install.sh" ] && [ -x "$out" ]
+  )
+}
+
+function test_release_workflow_uploads_sha256sums() {
+  [ "$(grep -c 'SHA256SUMS' "$_HI_RELEASE_WF")" -ge 3 ] # written, uploaded as artifact, attached to the release
+}
+
 function run_packaging_tests() {
   _hi_workdir packagingtest
 
@@ -242,6 +409,24 @@ function run_packaging_tests() {
   _hi_h2 "Testing: package.sh / bump.sh"
   _hi_check "package.sh takes its version from the PKGBUILD" test_package_sh_reads_the_version_from_the_pkgbuild
   _hi_check "bump.sh --check rejects a mismatch" test_bump_check_rejects_a_version_the_manifests_do_not_carry
+
+  _hi_h2 "Testing: bump.sh's write path (offline)"
+  _hi_check "Rewrites pkgver and b2sums" test_bump_write_rewrites_pkgver_and_b2sums
+  _hi_check "Rewrites formula url and sha256" test_bump_write_rewrites_formula_url_and_sha256
+  _hi_check ".SRCINFO fallback rewrites all three lines" test_bump_srcinfo_fallback_rewrites_the_three_lines
+  _hi_check "--check passes after a write" test_bump_check_passes_after_a_write
+  _hi_check "--check catches stale .SRCINFO b2sums" test_bump_check_catches_stale_srcinfo_b2sums
+  _hi_check "--check catches a stale .SRCINFO source" test_bump_check_catches_stale_srcinfo_source
+  _hi_check "sha256 matches a known vector" test_bump_sha256_matches_a_known_vector
+  _hi_check "b2 fallback agrees with b2sum" test_bump_b2_fallback_agrees_with_b2sum
+  _hi_check "rewrite preserves the file mode" test_bump_rewrite_preserves_file_mode
+
+  _hi_h2 "Testing: package.sh (offline half)"
+  _hi_check "--stage-only stages without nfpm" test_package_sh_stage_only_needs_no_nfpm
+  _hi_check "--version beats the PKGBUILD's" test_package_sh_version_flag_wins
+  _hi_check "Unknown arguments are an error" test_package_sh_rejects_unknown_arguments
+  _hi_check "staged_launcher shims a misnamed checkout" test_staged_launcher_shims_a_misnamed_checkout
+  _hi_check "release.yml ships SHA256SUMS" test_release_workflow_uploads_sha256sums
 
   _hi_suite_end "packaging"
 }

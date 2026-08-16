@@ -33,53 +33,6 @@ _HI_STAGE_ONLY=""
 _HI_VERSION=""
 _HI_USAGE="Usage: package.sh [--version <x.y.z>] [--stage-only] [--outdir <dir>]"
 
-while [ $# -gt 0 ]; do
-  case "$1" in
-  --stage-only) _HI_STAGE_ONLY=1 ;;
-  --version)
-    [ $# -ge 2 ] || {
-      echo "package.sh: --version requires a value" >&2
-      exit 1
-    }
-    _HI_VERSION="$2"
-    shift
-    ;;
-  --version=*) _HI_VERSION="${1#--version=}" ;;
-  --outdir)
-    [ $# -ge 2 ] || {
-      echo "package.sh: --outdir requires a path" >&2
-      exit 1
-    }
-    _HI_DIST="$2"
-    shift
-    ;;
-  --outdir=*) _HI_DIST="${1#--outdir=}" ;;
-  -h | --help)
-    cat <<EOF
-$_HI_USAGE
-
-Stages hi.d the way a package manager would (scripts/install.sh --prefix
-/usr/share, into dist/staging) and then builds ${_HI_PACKAGERS[*]} packages
-from that staging root with nfpm.
-
-  --version <x.y.z>  Version to stamp. Defaults to the pkgver in
-                     packaging/aur/hi.d/PKGBUILD, which packaging/bump.sh
-                     owns - that file is the one version of record.
-  --stage-only       Stop after staging. Needs no nfpm, and is the quickest
-                     way to see exactly what a package would contain.
-  --outdir <dir>     Where to stage and write packages. Default: dist/
-EOF
-    exit 0
-    ;;
-  *)
-    echo "package.sh: unrecognized argument: $1" >&2
-    echo "$_HI_USAGE" >&2
-    exit 1
-    ;;
-  esac
-  shift
-done
-
 # The version of record lives in the PKGBUILD (bump.sh writes it there); reading
 # it back rather than keeping a second copy is what stops the two disagreeing.
 function pkgbuild_version() {
@@ -134,6 +87,56 @@ function run_nfpm() {
       -f "$_HI_NFPM_CONFIG" -p "$packager" -t "$_HI_DIST")
   done
 }
+
+# sourcing stops here (tests reach the functions above) - install.sh's pattern
+[[ "${BASH_SOURCE[0]}" == "$0" ]] || return 0
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+  --stage-only) _HI_STAGE_ONLY=1 ;;
+  --version)
+    [ $# -ge 2 ] || {
+      echo "package.sh: --version requires a value" >&2
+      exit 1
+    }
+    _HI_VERSION="$2"
+    shift
+    ;;
+  --version=*) _HI_VERSION="${1#--version=}" ;;
+  --outdir)
+    [ $# -ge 2 ] || {
+      echo "package.sh: --outdir requires a path" >&2
+      exit 1
+    }
+    _HI_DIST="$2"
+    shift
+    ;;
+  --outdir=*) _HI_DIST="${1#--outdir=}" ;;
+  -h | --help)
+    cat <<EOF
+$_HI_USAGE
+
+Stages hi.d the way a package manager would (scripts/install.sh --prefix
+/usr/share, into dist/staging) and then builds ${_HI_PACKAGERS[*]} packages
+from that staging root with nfpm.
+
+  --version <x.y.z>  Version to stamp. Defaults to the pkgver in
+                     packaging/aur/hi.d/PKGBUILD, which packaging/bump.sh
+                     owns - that file is the one version of record.
+  --stage-only       Stop after staging. Needs no nfpm, and is the quickest
+                     way to see exactly what a package would contain.
+  --outdir <dir>     Where to stage and write packages. Default: dist/
+EOF
+    exit 0
+    ;;
+  *)
+    echo "package.sh: unrecognized argument: $1" >&2
+    echo "$_HI_USAGE" >&2
+    exit 1
+    ;;
+  esac
+  shift
+done
 
 : "${_HI_VERSION:=$(pkgbuild_version)}"
 

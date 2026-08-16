@@ -8,8 +8,8 @@ source "${_HI_HOME:-$HOME}/hi.d/common/core.sh"
 
 _HI_EXCLUDE=(--exclude README.md --exclude .git --exclude .gitignore --exclude scripts
   --exclude hi.sh --exclude hi.bashrc --exclude .zed --exclude .vscode --exclude .shellcheckrc
-  --exclude tests --exclude .github --exclude .claude
-  --exclude CLAUDE.md --exclude .devcontainer --exclude .markdownlint.yaml --exclude LICENSE)
+  --exclude tests --exclude .github --exclude .claude --exclude CLAUDE.md --exclude .devcontainer
+  --exclude .markdownlint.yaml --exclude LICENSE --exclude packaging)
 
 # The user's config overlay ($_HI_CONFIG_DIR, outside the tree), by the names it
 # has to land under in the target's misc/. Until the overlay existed these rode

@@ -66,6 +66,50 @@ function test_config_shell_appends_at_the_end() {
   [[ "$(tail -1 "$target")" == *"hi line"* ]]
 }
 
+# mode read via ls's first field - stat's flags differ GNU/BSD
+# shellcheck disable=SC2012 # the paths are fixtures this suite just wrote
+function test_config_shell_preserves_target_mode() {
+  local target="$_HI_WORKDIR/mode" before
+  printf 'content\n' >"$target"
+  chmod 640 "$target"
+  before="$(ls -l "$target" | awk '{ print $1 }')"
+  config_shell mode "$target" "hi line"
+  [ "$(ls -l "$target" | awk '{ print $1 }')" = "$before" ]
+}
+
+# a dotfile manager's hardlinked ~/.bashrc must not be severed by a mv
+function test_config_shell_preserves_hardlinks() {
+  local target="$_HI_WORKDIR/hardlink" twin="$_HI_WORKDIR/hardlink.twin"
+  printf 'content\n' >"$target"
+  ln "$target" "$twin"
+  config_shell hardlink "$target" "hi line"
+  grep -qF "hi line" "$twin"
+}
+
+function test_config_shell_backs_up_on_first_insert() {
+  local target="$_HI_WORKDIR/backup"
+  printf 'original content\n' >"$target"
+  config_shell backup "$target" "hi line"
+  [ -f "$target.hi-orig" ] && [ "$(cat "$target.hi-orig")" = "original content" ]
+}
+
+# the backup stays the pre-hi original - a rerun must not overwrite it
+function test_config_shell_backup_survives_reruns() {
+  local target="$_HI_WORKDIR/backup2"
+  printf 'original\n' >"$target"
+  config_shell backup2 "$target" "hi line"
+  config_shell backup2 "$target" "another line"
+  [ "$(cat "$target.hi-orig")" = "original" ]
+}
+
+# nothing to preserve, nothing to back up
+function test_config_shell_no_backup_for_empty_target() {
+  local target="$_HI_WORKDIR/backup3"
+  : >"$target"
+  config_shell backup3 "$target" "hi line"
+  [ ! -e "$target.hi-orig" ]
+}
+
 # Nothing is spliced into common/paths.sh any more - the settings live in
 # $_HI_SETTINGS, which every entry point sources *ahead* of paths.sh so that
 # paths.sh's local-only gate can read them. That ordering is the load-bearing
@@ -152,6 +196,23 @@ function test_shebang_replaces_a_different_one_and_keeps_content() {
   [ "$(head -n 1 "$f")" = "#!/bin/sh" ] &&
     [ "$(grep -c '^#!' "$f")" -eq 1 ] &&
     grep -qF "export _HI_MAX_WIDTH=120" "$f"
+}
+
+# same mode-preservation contract as config_shell
+function _hi_shebang_mode() {
+  mkdir -p "$_HI_CONFIG_DIR"
+  printf 'X=1\n' >"$_HI_SETTINGS"
+  chmod 604 "$_HI_SETTINGS"
+  ensure_settings_shebang
+}
+
+# shellcheck disable=SC2012 # fixture paths, mode via ls as above
+function test_settings_shebang_preserves_mode() {
+  _hi_settings_fixture shebang_mode _hi_shebang_mode
+  local ref="$_HI_WORKDIR/mode.ref"
+  : >"$ref"
+  chmod 604 "$ref"
+  [ "$(ls -l "$(_hi_fixture_settings shebang_mode)" | awk '{ print $1 }')" = "$(ls -l "$ref" | awk '{ print $1 }')" ]
 }
 
 # the three config_* groups accumulate rather than each calling config_shell,
@@ -315,6 +376,42 @@ function test_config_hi_skips_chmod_when_already_executable() {
     ) | grep -q "CHMOD RAN"
 }
 
+# a writable bindir needs no sudo at all - root installs, userland prefixes
+function test_config_hi_links_plainly_when_bindir_is_writable() {
+  local dir="$_HI_WORKDIR/writablebin"
+  mkdir -p "$dir/bin"
+  printf '#!/bin/bash\n' >"$dir/hi.sh"
+  chmod 755 "$dir/hi.sh"
+  (
+    function sudo() {
+      echo "SUDO RAN"
+      return 1
+    }
+    _HI_LAUNCHER="$dir/hi.sh"
+    _HI_LINK="$dir/bin/hi"
+    config_hi
+  ) >/dev/null
+  [ "$(readlink "$dir/bin/hi")" = "$dir/hi.sh" ]
+}
+
+# refused/absent sudo on an unwritable bindir must end in instructions, not a
+# `set -e` death at the last step of a completed install
+function test_config_hi_degrades_when_sudo_cannot_link() {
+  local dir="$_HI_WORKDIR/nosudo" out rc=0
+  mkdir -p "$dir/bin"
+  printf '#!/bin/bash\n' >"$dir/hi.sh"
+  chmod 755 "$dir/hi.sh"
+  chmod 555 "$dir/bin"
+  out="$(
+    function sudo() { return 1; }
+    _HI_LAUNCHER="$dir/hi.sh"
+    _HI_LINK="$dir/bin/hi"
+    config_hi
+  )" || rc=$?
+  chmod 755 "$dir/bin"
+  [ "$rc" -eq 0 ] && [[ "$out" == *"--no-link"* ]] && [ ! -e "$dir/bin/hi" ]
+}
+
 # --- packaging mode ---------------------------------------------------------
 #
 # install_tree is the whole of what a PKGBUILD's package() (or a deb/rpm recipe)
@@ -363,6 +460,32 @@ function test_install_tree_touches_no_rc_file() {
   _hi_package_fixture norc
   local dest="$_HI_WORKDIR/norc/dest"
   [ ! -e "$dest/root" ] && [ ! -e "$dest$HOME" ] && [ ! -e "$dest/etc/bash.bashrc" ]
+}
+
+# cp -R merges, so a re-stage must clear the dest or removed files keep shipping
+function test_install_tree_clears_a_stale_destination() {
+  local dir="$_HI_WORKDIR/staledest" item
+  local _HI_ROOT="$dir/src/hi.d" _HI_PREFIX="/usr/share" DESTDIR="$dir/dest"
+  mkdir -p "$_HI_ROOT/common" "$_HI_ROOT/misc" "$_HI_ROOT/scripts" "$_HI_ROOT/shells"
+  for item in hi.sh load.sh LICENSE README.md; do printf 'x\n' >"$_HI_ROOT/$item"; done
+  install_tree >/dev/null
+  printf 'stale\n' >"$dir/dest/usr/share/hi.d/leftover"
+  install_tree >/dev/null
+  [ ! -e "$dir/dest/usr/share/hi.d/leftover" ] && [ -f "$dir/dest/usr/share/hi.d/load.sh" ]
+}
+
+# clearing the dest removes a pre-existing symlink itself, never its target
+function test_install_tree_replaces_a_symlinked_dest_without_following() {
+  local dir="$_HI_WORKDIR/symdest" item
+  local _HI_ROOT="$dir/src/hi.d" _HI_PREFIX="/usr/share" DESTDIR="$dir/dest"
+  mkdir -p "$_HI_ROOT/common" "$_HI_ROOT/misc" "$_HI_ROOT/scripts" "$_HI_ROOT/shells"
+  for item in hi.sh load.sh LICENSE README.md; do printf 'x\n' >"$_HI_ROOT/$item"; done
+  mkdir -p "$dir/dest/usr/share" "$dir/elsewhere"
+  printf 'keep\n' >"$dir/elsewhere/precious"
+  ln -s "$dir/elsewhere" "$dir/dest/usr/share/hi.d"
+  install_tree >/dev/null
+  [ -f "$dir/elsewhere/precious" ] && [ ! -L "$dir/dest/usr/share/hi.d" ] &&
+    [ -f "$dir/dest/usr/share/hi.d/load.sh" ]
 }
 
 # --- the uninstall half -----------------------------------------------------
@@ -489,6 +612,11 @@ function run_install_tests() {
   _hi_check "Preserves unrelated content" test_config_shell_preserves_unrelated_content
   _hi_check "Skips empty args" test_config_shell_skips_empty_args
   _hi_check "Appends at the end" test_config_shell_appends_at_the_end
+  _hi_check "Preserves the target's mode" test_config_shell_preserves_target_mode
+  _hi_check "Preserves hardlinks" test_config_shell_preserves_hardlinks
+  _hi_check "Backs up on the first insert" test_config_shell_backs_up_on_first_insert
+  _hi_check "Backup survives reruns" test_config_shell_backup_survives_reruns
+  _hi_check "No backup for an empty target" test_config_shell_no_backup_for_empty_target
 
   _hi_h2 "Testing: settings are sourced ahead of paths.sh"
   _hi_check "common/core.sh" test_core_sources_settings_first
@@ -499,6 +627,7 @@ function run_install_tests() {
   _hi_check "Stays first under the settings block" test_shebang_stays_first_under_the_settings_block
   _hi_check "Not duplicated on reruns" test_shebang_is_not_duplicated_on_reruns
   _hi_check "Replaces a different shebang" test_shebang_replaces_a_different_one_and_keeps_content
+  _hi_check "Preserves settings.sh's mode" test_settings_shebang_preserves_mode
 
   _hi_h2 "Testing: config_settings"
   _hi_check "Writes every group at once" test_config_settings_writes_every_group_at_once
@@ -533,6 +662,8 @@ function run_install_tests() {
   _hi_check "Skips when already linked" test_config_hi_skips_when_already_linked
   _hi_check "Survives an unwritable launcher" test_config_hi_survives_an_unwritable_launcher
   _hi_check "Skips chmod when already executable" test_config_hi_skips_chmod_when_already_executable
+  _hi_check "Links plainly into a writable bindir" test_config_hi_links_plainly_when_bindir_is_writable
+  _hi_check "Degrades when sudo can't link" test_config_hi_degrades_when_sudo_cannot_link
 
   _hi_h2 "Testing: install_tree (packaging mode)"
   _hi_check "Copies the tree under DESTDIR" test_install_tree_copies_the_tree_under_destdir
@@ -540,6 +671,8 @@ function run_install_tests() {
   _hi_check "Links hi without DESTDIR in the target" test_install_tree_links_hi_without_destdir_in_the_target
   _hi_check "Writes the profile.d snippet" test_install_tree_writes_the_profile_snippet
   _hi_check "Touches no rc file" test_install_tree_touches_no_rc_file
+  _hi_check "Clears a stale destination" test_install_tree_clears_a_stale_destination
+  _hi_check "Replaces a symlinked dest without following" test_install_tree_replaces_a_symlinked_dest_without_following
 
   _hi_h2 "Testing: strip_marker (--uninstall)"
   _hi_check "Removes only tagged lines" test_strip_marker_removes_tagged_lines_only

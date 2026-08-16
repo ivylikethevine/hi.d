@@ -167,4 +167,22 @@ set -g __fish_git_prompt_color_stagedstate yellow
 set -g __fish_git_prompt_color_invalidstate red
 set -g __fish_git_prompt_color_cleanstate brgreen
 
+# the same C-locale ASCII fallback core.sh's _hi_choose_glyphs gives bash and
+# zsh - fish's informative prompt otherwise draws its own multibyte set.
+# _HI_ASCII overrides the locale probe both ways, like everywhere else.
+if test "$_HI_ASCII" = 1
+    or begin
+        test "$_HI_ASCII" != 0
+        and not string match -qri 'utf-?8' -- "$LC_ALL$LC_CTYPE$LANG"
+    end
+    set -g __fish_git_prompt_char_upstream_ahead '^'
+    set -g __fish_git_prompt_char_upstream_behind 'v'
+    set -g __fish_git_prompt_char_stagedstate '*'
+    set -g __fish_git_prompt_char_dirtystate '+'
+    set -g __fish_git_prompt_char_invalidstate 'x'
+    set -g __fish_git_prompt_char_untrackedfiles '?'
+    set -g __fish_git_prompt_char_stashstate '$'
+    set -g __fish_git_prompt_char_cleanstate 'ok'
+end
+
 end

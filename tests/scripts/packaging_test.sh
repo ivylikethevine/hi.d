@@ -54,6 +54,7 @@ function test_nfpm_staging_sources_all_exist() {
   dest="$(stage_fixture)"
   while IFS= read -r src; do
     rel="${src#./dist/staging}"
+    rel="${rel%/\*}" # the apk entries glob a directory; existence-check the dir
     [ -e "$dest$rel" ] || {
       _hi_cecho "   missing from the staged tree: $rel" "$RED"
       bad=1
@@ -78,9 +79,52 @@ function test_nfpm_symlink_matches_install_tree() {
   [ -n "$declared" ] && [ "$declared" = "$actual" ]
 }
 
-# no $DESTDIR may leak into a link target - it does not exist at runtime
+# no $DESTDIR may leak into a link target - it does not exist at runtime.
+# Only the symlink entry's own src line is checked: the apk workaround ships
+# legitimate staged hi.sh/load.sh file entries elsewhere in the manifest.
 function test_nfpm_symlink_target_is_absolute_and_unstaged() {
-  ! grep -qE '^ *- src: \./dist/staging.*hi\.sh$' "$_HI_NFPM"
+  ! grep -B1 'dst: /usr/bin/hi' "$_HI_NFPM" | grep -q 'dist/staging'
+}
+
+# The apk cannot use the tree entry (nfpm 2.47.0 mode-bit bug, see nfpm.yaml),
+# so it repeats _HI_PACKAGE_CONTENTS as per-member entries - a second copy of
+# the list, kept honest here the way the formula's copy is.
+function test_nfpm_apk_entries_match_package_contents() {
+  local m src
+  for m in "${_HI_PACKAGE_CONTENTS[@]}"; do
+    if [ -d "$_HI_ROOT/$m" ]; then
+      src="./dist/staging/usr/share/hi.d/$m/*"
+    else
+      src="./dist/staging/usr/share/hi.d/$m"
+    fi
+    grep -qF -- "- src: $src" "$_HI_NFPM" || {
+      _hi_cecho "   no apk entry for $m" "$RED"
+      return 1
+    }
+  done
+  # count agrees too, so a stray apk entry can't ship what the list doesn't name
+  [ "$(grep -c '^ *packager: apk$' "$_HI_NFPM")" -eq "${#_HI_PACKAGE_CONTENTS[@]}" ]
+}
+
+# ...and the globs are one level deep, so a nested directory appearing under a
+# tree member would silently fall out of the apk. Fail here first, with names.
+function test_nfpm_apk_globs_cover_the_staged_depth() {
+  local dest deep
+  dest="$(stage_fixture)"
+  deep="$(find "$dest/usr/share/hi.d" -mindepth 2 -type d)"
+  [ -z "$deep" ] || {
+    _hi_cecho "   nested dirs need their own apk glob entries: $deep" "$RED"
+    return 1
+  }
+}
+
+# the apk signature block: key file from the env (unset = unsigned, exactly
+# what a keyless local build wants), key name pinned to the /etc/apk/keys
+# filename the docs tell users to install
+# shellcheck disable=SC2016 # ${HI_APK_KEY} is nfpm's to expand, quoted as literal text
+function test_nfpm_declares_the_apk_signature() {
+  grep -qF 'key_file: ${HI_APK_KEY}' "$_HI_NFPM" &&
+    grep -qF 'key_name: hi.d.rsa.pub' "$_HI_NFPM"
 }
 
 # --- the Homebrew formula vs _HI_PACKAGE_CONTENTS -----------------------------
@@ -196,6 +240,22 @@ function test_release_workflow_only_runs_on_tags() {
 # bump.sh --check is the tag/manifest gate; the build must not skip it
 function test_release_workflow_verifies_the_manifests() {
   grep -qF 'packaging/bump.sh --check' "$_HI_RELEASE_WF"
+}
+
+# the minisign half of release verification: the signing step and its secret
+# live in the publish job (below the environment gate), the pinned installer
+# action exists, and the weekly drift check knows about the pin
+function test_publish_job_signs_the_sums() {
+  local publish
+  publish="$(sed -n '/^  publish:/,$p' "$_HI_RELEASE_WF")"
+  printf '%s' "$publish" | grep -qF 'MINISIGN_SECRET_KEY' &&
+    printf '%s' "$publish" | grep -qF 'minisign -S' &&
+    printf '%s' "$publish" | grep -qF 'setup-minisign'
+}
+
+function test_minisign_pin_is_drift_checked() {
+  grep -qF 'setup-minisign|github|jedisct1/minisign' "$_HI_ROOT/.github/scripts/check_tool_versions.sh" &&
+    grep -q '^    default: "' "$_HI_ROOT/.github/actions/setup-minisign/action.yml"
 }
 
 # --- the scripts themselves ---------------------------------------------------
@@ -330,6 +390,36 @@ function test_bump_rewrite_preserves_file_mode() {
   [ "$(ls -l "$f" | awk '{ print $1 }')" = "$before" ]
 }
 
+# --- the version stamp ----------------------------------------------------------
+#
+# Every channel seds `^_HI_RELEASE=` into the hi.sh it installs, at build time
+# (package.sh's stamp_launcher, the PKGBUILD's package(), the formula's
+# inreplace) - the stamp cannot live in git because bump.sh only runs after
+# the tag exists. These keep the line and all three stampers agreeing.
+
+# exactly one stampable line, and committed empty - a literal in git would
+# ship a stale version in the tag tarball
+# shellcheck disable=SC2016 # the ${...:-} default is hi.sh's, quoted as literal text
+function test_launcher_release_line_is_unique_and_empty() {
+  [ "$(grep -c '^_HI_RELEASE=' "$_HI_ROOT/hi.sh")" -eq 1 ] &&
+    grep -qF '_HI_RELEASE="${_HI_RELEASE:-}"' "$_HI_ROOT/hi.sh"
+}
+
+# shellcheck disable=SC2016 # $pkgver is makepkg's, quoted as literal text
+function test_pkgbuild_stamps_the_release() {
+  grep -qF 's/^_HI_RELEASE=.*/_HI_RELEASE=\"$pkgver\"/' "$_HI_PKGBUILD"
+}
+
+function test_formula_stamps_the_release() {
+  grep -qF 'inreplace libexec/"hi.d/hi.sh", /^_HI_RELEASE=.*$/' "$_HI_FORMULA"
+}
+
+function test_package_sh_stamps_the_staged_launcher() {
+  local out="$_HI_WORKDIR/pkgstamp"
+  "$_HI_PKG_DIR/package.sh" --stage-only --version 9.9.9 --outdir "$out" >/dev/null 2>&1 &&
+    grep -qF '_HI_RELEASE="9.9.9"' "$out/staging/usr/share/hi.d/hi.sh"
+}
+
 # --- package.sh, offline half ---------------------------------------------------
 
 function test_package_sh_stage_only_needs_no_nfpm() {
@@ -342,6 +432,21 @@ function test_package_sh_version_flag_wins() {
   local out
   out="$("$_HI_PKG_DIR/package.sh" --version 7.7.7 --stage-only --outdir "$_HI_WORKDIR/pkgdist2" 2>&1)"
   [[ "$out" == *"Packaging hi.d 7.7.7"* ]]
+}
+
+# Two stagings under the same pinned SOURCE_DATE_EPOCH carry identical - and
+# actually clamped, not merely equal-by-luck - mtimes. CI's packaging-smoke
+# double build asserts the packaged bytes; this is the offline half of that
+# contract. -nt/-ot rather than stat: stat's flags differ GNU/BSD.
+function test_stage_mtimes_are_clamped_and_reproducible() {
+  local a="$_HI_WORKDIR/repro-a" b="$_HI_WORKDIR/repro-b" ref="$_HI_WORKDIR/repro-now"
+  SOURCE_DATE_EPOCH=946684800 "$_HI_PKG_DIR/package.sh" --stage-only --outdir "$a" >/dev/null 2>&1 &&
+    SOURCE_DATE_EPOCH=946684800 "$_HI_PKG_DIR/package.sh" --stage-only --outdir "$b" >/dev/null 2>&1 ||
+    return 1
+  a="$a/staging/usr/share/hi.d/hi.sh"
+  b="$b/staging/usr/share/hi.d/hi.sh"
+  touch "$ref"
+  [ ! "$a" -nt "$b" ] && [ ! "$b" -nt "$a" ] && [ "$a" -ot "$ref" ]
 }
 
 function test_package_sh_rejects_unknown_arguments() {
@@ -381,6 +486,9 @@ function run_packaging_tests() {
   _hi_check "References the staging root" test_nfpm_references_the_staging_root
   _hi_check "Symlink matches install_tree's" test_nfpm_symlink_matches_install_tree
   _hi_check "Link target carries no staging prefix" test_nfpm_symlink_target_is_absolute_and_unstaged
+  _hi_check "apk entries match _HI_PACKAGE_CONTENTS" test_nfpm_apk_entries_match_package_contents
+  _hi_check "apk globs cover the staged depth" test_nfpm_apk_globs_cover_the_staged_depth
+  _hi_check "apk signature block is declared" test_nfpm_declares_the_apk_signature
 
   _hi_h2 "Testing: the Homebrew formula"
   _hi_check "File list matches _HI_PACKAGE_CONTENTS" test_formula_file_list_matches_package_contents
@@ -402,6 +510,8 @@ function run_packaging_tests() {
   _hi_check "Only the gated job publishes" test_only_the_gated_job_publishes
   _hi_check "Runs on tags only" test_release_workflow_only_runs_on_tags
   _hi_check "Verifies the manifests against the tag" test_release_workflow_verifies_the_manifests
+  _hi_check "The publish job signs the sums" test_publish_job_signs_the_sums
+  _hi_check "The minisign pin is drift-checked" test_minisign_pin_is_drift_checked
 
   _hi_h2 "Testing: package.sh / bump.sh"
   _hi_check "package.sh takes its version from the PKGBUILD" test_package_sh_reads_the_version_from_the_pkgbuild
@@ -424,9 +534,16 @@ function run_packaging_tests() {
   fi
   _hi_check "rewrite preserves the file mode" test_bump_rewrite_preserves_file_mode
 
+  _hi_h2 "Testing: the version stamp"
+  _hi_check "hi.sh's stamp line is unique and empty" test_launcher_release_line_is_unique_and_empty
+  _hi_check "The PKGBUILD stamps it" test_pkgbuild_stamps_the_release
+  _hi_check "The formula stamps it" test_formula_stamps_the_release
+  _hi_check "package.sh stamps the staged copy" test_package_sh_stamps_the_staged_launcher
+
   _hi_h2 "Testing: package.sh (offline half)"
   _hi_check "--stage-only stages without nfpm" test_package_sh_stage_only_needs_no_nfpm
   _hi_check "--version beats the PKGBUILD's" test_package_sh_version_flag_wins
+  _hi_check "Staged mtimes are clamped and reproducible" test_stage_mtimes_are_clamped_and_reproducible
   _hi_check "Unknown arguments are an error" test_package_sh_rejects_unknown_arguments
   _hi_check "staged_launcher shims a misnamed checkout" test_staged_launcher_shims_a_misnamed_checkout
   _hi_check "release.yml ships SHA256SUMS" test_release_workflow_uploads_sha256sums

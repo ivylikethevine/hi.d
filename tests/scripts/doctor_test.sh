@@ -76,6 +76,14 @@ EOF
   printf '%s' "$dir"
 }
 
+# the first doctor_local case: the version row, carrying whatever _hi_version
+# answers (a stamp here, so the row is deterministic)
+function test_local_reports_the_version() {
+  local out
+  out="$(_HI_RELEASE=1.2.3 doctor_local)"
+  [[ "$out" == *version* && "$out" == *"1.2.3"* ]]
+}
+
 function test_backend_missing_reports_not_installed() {
   local out
   out="$(PATH="$(_hi_doctor_path)" doctor_backend docker docker ps -q)"
@@ -172,6 +180,9 @@ function run_doctor_tests() {
   _hi_suite_begin
 
   _hi_h1 "Testing scripts/doctor.sh"
+
+  _hi_h2 "Testing: doctor_local"
+  _hi_check "Reports the version" test_local_reports_the_version
 
   _hi_h2 "Testing: doctor_backend"
   _hi_check "Missing CLI -> not installed" test_backend_missing_reports_not_installed

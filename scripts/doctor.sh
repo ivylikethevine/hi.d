@@ -61,6 +61,7 @@ function doctor_local() {
   local branch changes
   _hi_h2 "The local tree"
   doctor_row tree "$_HI_ROOT"
+  doctor_row version "$(_hi_version)"
   if [ -d "$_HI_ROOT/.git" ]; then
     branch="$(git -C "$_HI_ROOT" symbolic-ref --short -q HEAD 2>/dev/null || true)"
     changes="$(git -C "$_HI_ROOT" status --short 2>/dev/null | grep -c . || true)"

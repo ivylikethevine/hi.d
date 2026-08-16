@@ -141,9 +141,40 @@ jobs:
 
       - uses: ./.github/actions/setup-nfpm
 
+      # a throwaway key so the smoke covers the signed shape end to end - the
+      # real key is the APK_SIGNING_KEY secret, release.yml's business only
+      - name: Generate a throwaway apk signing key
+        run: |
+          set -euo pipefail
+          openssl genrsa -out "$RUNNER_TEMP/smoke.rsa" 4096
+          openssl rsa -in "$RUNNER_TEMP/smoke.rsa" -pubout -out "$RUNNER_TEMP/smoke.rsa.pub"
+          echo "HI_APK_KEY=$RUNNER_TEMP/smoke.rsa" >>"$GITHUB_ENV"
+
       # package.sh itself asserts one artifact per format and writes SHA256SUMS
       - name: Build the packages
         run: packaging/package.sh
+
+      # the check that catches "apk-tools rejects what nfpm built" (it happened:
+      # nfpm 2.47.0's tree entries) and proves the signature chain: the pubkey
+      # lands in /etc/apk/keys under the name nfpm.yaml stamps into the
+      # signature, and apk add must accept the package with NO --allow-untrusted
+      - name: Install the signed apk on Alpine
+        run: |
+          set -euo pipefail
+          docker run --rm -v "$PWD/dist:/dist:ro" \
+            -v "$RUNNER_TEMP/smoke.rsa.pub:/etc/apk/keys/hi.d.rsa.pub:ro" \
+            alpine:3.20 sh -c 'apk add /dist/hi.d_*_noarch.apk && sh -lc "hi --version" && ls /usr/share/hi.d/common/core.sh'
+
+      # the reproducibility contract: the same commit builds byte-identical
+      # deb/rpm/apk (SOURCE_DATE_EPOCH from HEAD plus clamped staging mtimes),
+      # so SHA256SUMS means the artifact, not the build that happened to make
+      # it. nfpm.yaml hardcodes ./dist/staging, so the runs are sequential
+      # with the first moved aside rather than parallel via --outdir.
+      - name: Build again and require byte-identical packages
+        run: |
+          mv dist dist.first
+          packaging/package.sh
+          diff dist.first/SHA256SUMS dist/SHA256SUMS
 
   e2e:
     name: e2e (ssh, docker)

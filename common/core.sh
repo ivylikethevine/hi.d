@@ -194,6 +194,53 @@ function _hi_has_color() {
   [ -n "${TERM:-}" ] && [ "$TERM" != dumb ]
 }
 
+# Can this session render multibyte glyphs? The locale says (same no-fork
+# trade as _hi_has_color): a LANG=C busybox or a serial console turns ↑ ✓ ✗
+# into mojibake. _HI_ASCII overrides the probe both ways - 1 forces ASCII,
+# 0 forces the glyphs, anything else asks the locale.
+function _hi_use_ascii() {
+  case "${_HI_ASCII:-}" in
+  1) return 0 ;;
+  0) return 1 ;;
+  esac
+  case "${LC_ALL:-${LC_CTYPE:-${LANG:-}}}" in
+  *[Uu][Tt][Ff]-8* | *[Uu][Tt][Ff]8*) return 1 ;;
+  *) return 0 ;;
+  esac
+}
+
+# the same decision as a 1/0 flag, for shipping to a target: glyphs render in
+# the *client's* terminal, so the client's capability is what the target's
+# session should honor - its own LANG=C says nothing about your display
+function _hi_ascii_flag() { _hi_use_ascii && echo 1 || echo 0; }
+
+# One glyph set per session, decided at source time where the hot paths (the
+# prompt renders per command) read plain variables. Tests flip _HI_ASCII and
+# call this again to re-decide. The _W widths are visible columns, not bytes -
+# the multibyte glyphs are all one column, "ok" is two - for the width math in
+# check_line and banner. The marks are named so the suite matches these same
+# bytes: a lookalike literal can differ in codepoint while looking identical.
+function _hi_choose_glyphs() {
+  if _hi_use_ascii; then
+    _HI_GLYPH_AHEAD="^" _HI_GLYPH_BEHIND="v" _HI_GLYPH_STAGED="*"
+    _HI_GLYPH_DIRTY="+" _HI_GLYPH_INVALID="x" _HI_GLYPH_UNTRACKED="?"
+    _HI_GLYPH_STASH="\$" _HI_GLYPH_CLEAN="ok" _HI_GLYPH_ELLIPSIS=".."
+    _HI_GLYPH_MASK="*"
+    _HI_MARK_OK="ok" _HI_MARK_ALT="~" _HI_MARK_NO="x"
+    _HI_MARK_OK_W=2 _HI_MARK_ALT_W=1 _HI_MARK_NO_W=1
+  else
+    _HI_GLYPH_AHEAD="↑" _HI_GLYPH_BEHIND="↓" _HI_GLYPH_STAGED="●"
+    _HI_GLYPH_DIRTY="✚" _HI_GLYPH_INVALID="✖" _HI_GLYPH_UNTRACKED="…"
+    _HI_GLYPH_STASH="⚑" _HI_GLYPH_CLEAN="✔" _HI_GLYPH_ELLIPSIS="…"
+    _HI_GLYPH_MASK="●"
+    _HI_MARK_OK="✓"  # installed, and it was the preferred name
+    _HI_MARK_ALT="~" # installed, but via a fallback alternative
+    _HI_MARK_NO="✗"  # not installed
+    _HI_MARK_OK_W=1 _HI_MARK_ALT_W=1 _HI_MARK_NO_W=1
+  fi
+}
+_hi_choose_glyphs
+
 # the ANSI escape for a palette name (see _HI_COLOR_NAMES); unknown names reset
 function _hi_color_escape() {
   local i=0 name

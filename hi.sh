@@ -6,6 +6,15 @@ set -euo pipefail # must be disabled after our code (this file is part of the in
 # shellcheck source=./common/core.sh
 source "${_HI_HOME:-$HOME}/hi.d/common/core.sh"
 
+# The version this copy answers `hi --version` with. Empty in git - a checkout
+# answers with `git describe` instead (see _hi_version) - and sed to the real
+# version by every packager at build time: package.sh stamps the staged copy
+# for deb/rpm/apk, the PKGBUILD and the Homebrew formula stamp theirs. The
+# ${...:-} default keeps the env seam open: the ssh preamble exports the
+# resolved version into a session, so the shipped copy on a target answers
+# too. Once a packager stamps a literal, the file wins and env stops mattering.
+_HI_RELEASE="${_HI_RELEASE:-}"
+
 # What ships to a target, by name. An allow list, not excludes: anything new in
 # the tree (docs, CI, editor config) stays off the wire until it earns a place
 # here. install.sh's _HI_PACKAGE_CONTENTS answers the different question of
@@ -164,6 +173,20 @@ function _hi_size() {
   _hi_du_size "${_HI_PAYLOAD[@]/#/$_HI_ROOT/}"
 }
 
+# what this copy is: the packager's stamp when there is one, `git describe` in
+# a checkout (--always answers with the bare commit before any tag exists),
+# and a candid unknown for a stampless tree with no git to ask.
+function _hi_version() {
+  if [ -n "$_HI_RELEASE" ]; then
+    printf '%s\n' "$_HI_RELEASE"
+  elif [ -d "$_HI_ROOT/.git" ]; then
+    git -C "$_HI_ROOT" describe --tags --always --dirty 2>/dev/null ||
+      printf 'unknown (git would not answer)\n'
+  else
+    printf 'unknown (no stamp, no git)\n'
+  fi
+}
+
 # the bit both _say_hi branches need before anything target-specific happens
 function _hi_remote_preamble() {
   cat <<REMOTE
@@ -174,6 +197,32 @@ function _hi_remote_preamble() {
       export _HI_TARGET_TAG="$(_hi_ssh_host_tag "$DOMAIN" 2>/dev/null || true)"
       export _HI_LOCAL_USER="$(whoami)"
       export _HI_LOCAL_HOSTNAME="$(_hi_hostname)"
+      export _HI_RELEASE="$(_hi_version)"
+      # the client's glyph verdict, not the target's: see _hi_ascii_flag
+      export _HI_ASCII="${_HI_ASCII:-$(_hi_ascii_flag)}"
+      # ssh forwards the client TERM verbatim, and a TERM the target has no
+      # terminfo entry for (ghostty's xterm-ghostty is the canonical case)
+      # breaks clear/backspace before hi even matters. Ubiquitous names skip
+      # the probe; anything else must be found in a terminfo tree - plain
+      # dirs and the BSD/macOS hex layout both checked - or it is swapped
+      # for xterm-256color, which every tree that exists at all carries.
+      # _HI_TERM_FALLBACK=0 keeps the original TERM no matter what.
+      case "\${_HI_TERM_FALLBACK:-1}:\$TERM" in
+      0:* | 1:xterm | 1:xterm-256color | 1:xterm-color | 1:screen | 1:screen-256color | 1:tmux | 1:tmux-256color | 1:linux | 1:vt100 | 1:vt220 | 1:dumb | 1:) ;;
+      *)
+        _hi_ti_ok=""
+        _hi_ti_c=\${TERM%"\${TERM#?}"}
+        _hi_ti_x=\$(printf '%x' "'\$_hi_ti_c" 2>/dev/null)
+        for _hi_ti_d in "\${TERMINFO:-}" "\$HOME/.terminfo" /etc/terminfo /lib/terminfo /usr/share/terminfo; do
+          [ -n "\$_hi_ti_d" ] || continue
+          if [ -e "\$_hi_ti_d/\$_hi_ti_c/\$TERM" ] || [ -e "\$_hi_ti_d/\$_hi_ti_x/\$TERM" ]; then
+            _hi_ti_ok=1
+            break
+          fi
+        done
+        [ -n "\$_hi_ti_ok" ] || export TERM=xterm-256color
+        ;;
+      esac
 REMOTE
 }
 
@@ -369,6 +418,7 @@ function _say_hi_container() {
     # reads $_HI_COLORS or $_HI_PACKAGES, so there is nothing for it to affect.
     {
       printf 'export _HI_DISABLE_EDITORS=0\nexport _HI_DISABLE_ALIASES=0\n'
+      printf 'export _HI_ASCII=%s\n' "${_HI_ASCII:-$(_hi_ascii_flag)}"
       printf '. %s/aliases.sh 2>/dev/null\n' "$root"
       [ -n "${CMDARG:-}" ] && printf '%s\n' "$CMDARG"
     } |
@@ -417,7 +467,7 @@ function _say_hi_container() {
 
   # _HI_CLEANUP marks this tree as disposable for load.sh's clean_all - the
   # `rm -rf "$root"` below is the client-side belt to its braces
-  "${attach[@]}" sh -c "export _HI_HOME='$root' _HI_ROOT='$root/hi.d' _HI_CONFIG_DIR='$root/hi.d/misc' _HI_CLEANUP='$root' _HI_COPY_TIME='$(_hi_copy_time "$copy_start" "$_HI_SHELL_START" "$shell_end")' _HI_CONNECT_PREFIX='$prefix'; exec bash --rcfile '$root/hi.d/hi.bashrc'"
+  "${attach[@]}" sh -c "export _HI_HOME='$root' _HI_ROOT='$root/hi.d' _HI_CONFIG_DIR='$root/hi.d/misc' _HI_CLEANUP='$root' _HI_COPY_TIME='$(_hi_copy_time "$copy_start" "$_HI_SHELL_START" "$shell_end")' _HI_CONNECT_PREFIX='$prefix' _HI_ASCII='${_HI_ASCII:-$(_hi_ascii_flag)}' _HI_RELEASE='$(_hi_version)'; exec bash --rcfile '$root/hi.d/hi.bashrc'"
   exit_code=$?
 
   "${probe[@]}" rm -rf "$root" >/dev/null 2>&1
@@ -510,14 +560,22 @@ set +euo pipefail # the connection paths below run against unknown hosts, where 
 # normally, $0 is this file and we dispatch.
 [[ "${BASH_SOURCE[0]}" == "$0" ]] || return 0
 
+# hi's own flags, dispatched on $1 alone: _hi_parse hands every other -flag
+# to ssh, so anything hi answers itself has to be caught before it.
+case "${1:-}" in
 # `hi --doctor [target]` hands off to the pre-flight report. Checkouts and
 # packaged installs have scripts/; a hi session on a target does not, and
 # says so rather than silently connecting somewhere.
-if [ "${1:-}" = --doctor ]; then
+--doctor)
   shift
   [ -f "$_HI_DOCTOR" ] && exec "$_HI_DOCTOR" "$@"
   _hi_cecho "hi --doctor needs the full hi.d checkout - not available in a hi session" "$RED" >&2
   exit 1
-fi
+  ;;
+--version)
+  _hi_version
+  exit 0
+  ;;
+esac
 
 _hi "$@"

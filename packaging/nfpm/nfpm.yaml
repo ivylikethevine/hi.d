@@ -43,10 +43,59 @@ overrides:
       - bash
       - openssh-client
 
+# The apk is signed when package.sh exports HI_APK_KEY (CI does, from the
+# APK_SIGNING_KEY repo secret); with it unset nfpm builds the same apk
+# unsigned, so local builds keep working keyless. key_name is the filename
+# users drop into /etc/apk/keys/ - it is not env-expanded by nfpm, and it is
+# public information anyway, so it is spelled out.
+apk:
+  signature:
+    key_file: ${HI_APK_KEY}
+    key_name: hi.d.rsa.pub
+
 contents:
+  # deb and rpm take the whole staged tree in one entry. The apk cannot: nfpm
+  # 2.47.0's tree walker leaks Go's ModeDir bit (0o20000000000) into the tar
+  # mode of directory entries on the apk path, and apk-tools rejects the
+  # package outright ("package file format error"). Until that is fixed
+  # upstream, the apk gets per-directory globs below - same files, same modes,
+  # walked by the glob writer that masks modes correctly.
   - src: ./dist/staging/usr/share/hi.d
     dst: /usr/share/hi.d
     type: tree
+    packager: deb
+  - src: ./dist/staging/usr/share/hi.d
+    dst: /usr/share/hi.d
+    type: tree
+    packager: rpm
+
+  # The apk copy of the tree, one entry per _HI_PACKAGE_CONTENTS member (the
+  # packaging suite keeps this list honest against install.sh's, the same way
+  # it keeps the Homebrew formula's copy).
+  - src: ./dist/staging/usr/share/hi.d/common/*
+    dst: /usr/share/hi.d/common/
+    packager: apk
+  - src: ./dist/staging/usr/share/hi.d/misc/*
+    dst: /usr/share/hi.d/misc/
+    packager: apk
+  - src: ./dist/staging/usr/share/hi.d/scripts/*
+    dst: /usr/share/hi.d/scripts/
+    packager: apk
+  - src: ./dist/staging/usr/share/hi.d/shells/*
+    dst: /usr/share/hi.d/shells/
+    packager: apk
+  - src: ./dist/staging/usr/share/hi.d/hi.sh
+    dst: /usr/share/hi.d/hi.sh
+    packager: apk
+  - src: ./dist/staging/usr/share/hi.d/load.sh
+    dst: /usr/share/hi.d/load.sh
+    packager: apk
+  - src: ./dist/staging/usr/share/hi.d/LICENSE
+    dst: /usr/share/hi.d/LICENSE
+    packager: apk
+  - src: ./dist/staging/usr/share/hi.d/README.md
+    dst: /usr/share/hi.d/README.md
+    packager: apk
 
   # Deliberately no staging prefix in src: this is the link target on the
   # *installed* system, and dist/staging is not there at runtime - the same

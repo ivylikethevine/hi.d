@@ -24,6 +24,10 @@
 
 `hi --doctor {{host}}`
 
+- Print the installed version:
+
+`hi --version`
+
 - Preview the color every known host and user resolves to:
 
 `hi_color_preview`

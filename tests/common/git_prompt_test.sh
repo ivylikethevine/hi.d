@@ -8,6 +8,9 @@
 # stdout form is what's under test), which SC2119 can't tell from a mistake.
 # shellcheck disable=SC2119
 set -euo pipefail
+# every case below matches the multibyte prompt glyphs literally; pin that
+# set so a runner without a UTF-8 locale doesn't get the ASCII fallback
+# (chosen after core.sh is sourced, below)
 
 # shellcheck source=../../common/core.sh
 source "${_HI_HOME:-$HOME}/hi.d/common/core.sh"
@@ -15,6 +18,24 @@ source "${_HI_HOME:-$HOME}/hi.d/common/core.sh"
 source "$_HI_TEST_LIB"
 # shellcheck source=../../common/git_prompt.sh
 source "$_HI_GIT_PROMPT"
+
+_HI_ASCII=0
+_hi_choose_glyphs
+
+# the fallback direction, one case: with ASCII chosen, a clean repo renders
+# "ok" and no multibyte ✔ - the set swap itself is core_test's business
+# (defined here, registered at the bottom; needs _hi_git_new_repo below)
+function test_prompt_ascii_fallback_renders_ok() {
+  local dir out
+  dir="$(_hi_git_new_repo)"
+  out="$(
+    cd "$dir"
+    _HI_ASCII=1
+    _hi_choose_glyphs
+    _hi_git_prompt
+  )"
+  [[ "$out" == *"ok"* ]] && ! printf '%s' "$out" | LC_ALL=C grep -qF "✔"
+}
 
 # fresh repo, one commit, always on a branch literally named "main" -
 # forced via symbolic-ref before the first commit, so this doesn't depend on
@@ -227,6 +248,7 @@ function run_git_prompt_tests() {
 
   _hi_h2 "Use-Case: clean status"
   _hi_check "Shows branch and checkmark" test_clean_repo_shows_branch_and_checkmark
+  _hi_check "ASCII fallback renders ok" test_prompt_ascii_fallback_renders_ok
 
   _hi_h2 "Use-Case: working tree flags"
   _hi_check "Staged change -> bullet count" test_staged_change_shows_bullet_count

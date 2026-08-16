@@ -16,7 +16,12 @@ function header_row() {
 }
 
 function timestamp() {
-  header_row "$BRBLUE$(date -u "$_HI_HUMAN_CENTRIC_DATE")  " "  $BRYELLOW$(date "$_HI_HUMAN_CENTRIC_DATE")"
+  local -a cells=("$BRBLUE$(date -u "$_HI_HUMAN_CENTRIC_DATE")  " "  $BRYELLOW$(date "$_HI_HUMAN_CENTRIC_DATE")")
+  # the version cell exists only when hi knows one - a packager's stamp, or
+  # the resolved version the ssh preamble exports into a session. A bare
+  # local shell has neither and keeps the two-cell row its tests pin.
+  [ -n "${_HI_RELEASE:-}" ] && cells+=("${GREEN}hi.d $(_hi_sanitize "$_HI_RELEASE")")
+  header_row "${cells[@]}"
 }
 
 function system_info() {
@@ -85,7 +90,7 @@ function identity() {
   if [ -n "$email" ]; then
     domain=${email#*@}
     printf -v bullets '%*s' "${#domain}" ''
-    user_part="$YELLOW${email%%@*}@${bullets// /●}"
+    user_part="$YELLOW${email%%@*}@${bullets// /$_HI_GLYPH_MASK}"
   else
     user_part="${YELLOW}No Git ID Found..."
   fi
@@ -136,9 +141,9 @@ function banner() {
       _HI_BANNER_BRANCH="$(_hi_sanitize "$(git -C "$_HI_ROOT" symbolic-ref --short -q HEAD 2>/dev/null || true)")"
       [ "$_HI_BANNER_BRANCH" = main ] && _HI_BANNER_BRANCH=""
     fi
-    changes="$BRYELLOW$_HI_BANNER_CHANGES ↑ "
+    changes="$BRYELLOW$_HI_BANNER_CHANGES $_HI_GLYPH_AHEAD "
     # columns counted, not ${#}-measured (GLOSSARY: bytes vs columns):
-    # digits + "␣↑␣", with ↑ one column wide
+    # digits + "␣↑␣", with the glyph (↑ or its ASCII ^) one column wide
     changes_w=$((${#_HI_BANNER_CHANGES} + 3))
     # the Online (local) banner only: a remote session's Connected banner
     # describes the target, and the disconnect banner stays as-is
@@ -186,11 +191,8 @@ function hi_header() {
 _HI_YES=("$BRBLUE" "$BRBLUE" hide "$GREEN" "$BRGREEN" "$BRGREEN")
 _HI_NO=(hide "$BRYELLOW" "$YELLOW" hide hide "$BRRED")
 
-# named so the suite matches these same bytes - a lookalike literal can
-# differ in codepoint while looking identical in an editor
-_HI_MARK_OK="✓"  # installed, and it was the preferred name
-_HI_MARK_ALT="~" # installed, but via a fallback alternative
-_HI_MARK_NO="✗"  # not installed
+# The marks themselves (_HI_MARK_OK/_ALT/_NO) live in core.sh's
+# _hi_choose_glyphs, beside the rest of the glyph set and its ASCII fallback.
 
 # For each "cmd:priority[,...]", pick the installed package with the
 # highest priority (or the first package if none are installed), then apply the
@@ -218,15 +220,22 @@ function check_line() {
     ((++idx))
   done
 
+  local mark_w
   if ((found)); then
     color="${_HI_YES[best_priority]:-$NC}"
-    if ((best_idx == 0)); then symbol="$GREEN$_HI_MARK_OK"; else symbol="$YELLOW$_HI_MARK_ALT$NC"; fi
+    if ((best_idx == 0)); then
+      symbol="$GREEN$_HI_MARK_OK" mark_w="$_HI_MARK_OK_W"
+    else
+      symbol="$YELLOW$_HI_MARK_ALT$NC" mark_w="$_HI_MARK_ALT_W"
+    fi
   else
     color="${_HI_NO[best_priority]:-$NC}"
-    symbol="$RED$_HI_MARK_NO"
+    symbol="$RED$_HI_MARK_NO" mark_w="$_HI_MARK_NO_W"
   fi
   rendered="$color $best $symbol"
-  [[ "$color" == hide ]] || visible+=("$best_priority"$'\x1f'"$((${#best} + 5))"$'\x1f'"$rendered")
+  # 4 = the "| " lead plus the spaces around the item; the mark's own column
+  # width comes from the chosen set (the ASCII "ok" is two columns, ✓ is one)
+  [[ "$color" == hide ]] || visible+=("$best_priority"$'\x1f'"$((${#best} + 4 + mark_w))"$'\x1f'"$rendered")
 }
 
 # print sorted package results limited by _HI_MAX_WIDTH

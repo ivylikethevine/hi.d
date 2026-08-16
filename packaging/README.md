@@ -26,13 +26,20 @@ cannot: `install_tree` hardcodes `/usr/bin` and `/etc/profile.d`, neither of whi
 
 | path | what it is |
 | --- | --- |
-| `package.sh` | stages the tree, then builds deb/rpm/apk with nfpm |
+| `package.sh` | stages the tree, stamps the staged `hi.sh` with the version, then builds deb/rpm/apk with nfpm |
 | `bump.sh` | writes the version + real checksums into every manifest; `--check` verifies |
 | `aur/hi.d/` | the versioned AUR package (`PKGBUILD`, `.SRCINFO`) |
 | `aur/hi.d-git/` | the same package built from `main` |
 | `homebrew/hi.d.rb` | the tap formula |
 | `nfpm/nfpm.yaml` | deb/rpm/apk, built from the staged tree |
 | `windows.md` | the Windows channel assessment (nothing built) |
+
+**The version stamp.** Every channel seds `_HI_RELEASE=` into the `hi.sh` it installs, at build time:
+`package.sh` stamps the staged copy for deb/rpm/apk, the PKGBUILD's `package()` and the formula's
+`inreplace` stamp theirs. It cannot live in git: `bump.sh` runs only after the tag exists (its checksums
+need the tarball), so a committed stamp would always be one release stale in the very tarball Homebrew
+and the AUR build from. A git checkout answers `hi --version` with `git describe` instead, so the
+committed line stays empty. `tests/scripts/packaging_test.sh` guards the line and all three stampers.
 
 ## Before the first release
 
@@ -80,6 +87,35 @@ gh api repos/{owner}/{repo}/rulesets --method POST --input - <<'JSON'
 }
 JSON
 ```
+
+**Generate the apk signing key.** Without it the release apk builds unsigned and installing needs
+`--allow-untrusted`. One RSA keypair, abuild-style:
+
+```sh
+openssl genrsa -out hi.d-apk.rsa 4096
+openssl rsa -in hi.d-apk.rsa -pubout -out packaging/apk/hi.d.rsa.pub
+```
+
+Paste the private half into Settings → Secrets and variables → Actions → New repository secret, named
+`APK_SIGNING_KEY` (a plain repo secret, not a `release` environment secret: the build job also runs on
+rehearsal dispatches, and the key only signs an artifact the gated publish job still has to approve).
+Commit `packaging/apk/hi.d.rsa.pub` — the filename must stay exactly what `nfpm.yaml`'s `key_name` says,
+because apk matches signatures to `/etc/apk/keys/` by that name. Then delete the local private half; the
+secret is its only home.
+
+**Generate the minisign keypair.** The publish job signs `SHA256SUMS` with it — the offline half of
+release verification (the attestation is the online half). Passwordless, because CI has nobody to type
+one:
+
+```sh
+minisign -G -W -p minisign.pub -s minisign.key
+```
+
+Paste the contents of `minisign.key` into Settings → Environments → `release` → Environment secrets as
+`MINISIGN_SECRET_KEY` (environment-sealed, unlike the apk key: only the human-gated publish job ever
+reads it). Put the public key line from `minisign.pub` into the README's "Verifying a release download"
+section, replacing the placeholder. Then delete both local files; the secret and the README are their
+homes. Until the secret exists, releases ship unsigned sums and the publish log says so.
 
 ## Cutting a release
 
@@ -157,6 +193,21 @@ Built by `package.sh` and attached to the GitHub Release. Users install the file
 sudo apt install ./hi.d_1.0.0_all.deb
 ```
 
+The apk is signed (once the `APK_SIGNING_KEY` secret exists — see the checklist above) with a key apk
+verifies against `/etc/apk/keys/`, so Alpine users install the public key once and never pass
+`--allow-untrusted`:
+
+```sh
+wget -O /etc/apk/keys/hi.d.rsa.pub \
+  https://raw.githubusercontent.com/ivylikethevine/hi.d/main/packaging/apk/hi.d.rsa.pub
+apk add ./hi.d_1.0.0_noarch.apk
+```
+
+A quirk worth knowing: the apk's contents are enumerated per `_HI_PACKAGE_CONTENTS` member in
+`nfpm.yaml` instead of riding the `type: tree` entry deb/rpm use — nfpm 2.47.0's tree walker writes
+directory modes apk-tools rejects outright. The packaging suite keeps the copy honest, and CI's
+packaging-smoke installs the signed apk on Alpine every PR so the channel can't silently regress.
+
 No `apt upgrade` — that is the trade for not maintaining a repository. Revisit
 [OBS](https://en.opensuse.org/openSUSE:Build_Service_Debian_builds) only if people start asking for a repo
 to subscribe to.
@@ -170,6 +221,22 @@ find dist/staging \( -type f -o -type l \)
 packaging/package.sh                            # needs nfpm on PATH
 dpkg-deb -c dist/hi.d_*_all.deb
 ```
+
+### Reproducibility
+
+The same commit builds byte-identical deb/rpm/apk: `package.sh` exports `SOURCE_DATE_EPOCH` (HEAD's
+commit time, respecting a value you set per the [reproducible-builds.org](https://reproducible-builds.org/docs/source-date-epoch/)
+convention), clamps the staged tree's mtimes to it, and nfpm 2.47.0 stamps everything else it controls
+from the same variable. CI's packaging-smoke job enforces this with a double build on every PR; to check
+it locally (sequentially — nfpm.yaml hardcodes `./dist/staging`, so `--outdir` can't run two side by side):
+
+```bash
+packaging/package.sh && mv dist dist.first
+packaging/package.sh && diff dist.first/SHA256SUMS dist/SHA256SUMS
+```
+
+One caveat: CI pins nfpm 2.47.0 (`.github/actions/setup-nfpm`) while `package.sh` takes whatever nfpm is
+on PATH — a different local nfpm can produce different (still internally reproducible) bytes.
 
 The honest end-to-end check for the `/etc/profile.d` snippet, which is the part no unit test can prove:
 

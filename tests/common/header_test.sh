@@ -14,6 +14,12 @@ source "$_HI_TEST_LIB"
 # shellcheck source=../../common/header.sh
 source "$_HI_HEADER"
 
+# Pin the glyph set: most cases below match the multibyte glyphs literally,
+# and a runner without a UTF-8 locale (macOS CI) would otherwise get the
+# ASCII fallback and fail them all. The fallback has its own cases.
+_HI_ASCII=0
+_hi_choose_glyphs
+
 function test_header_row_joins_cells() {
   local out
   out="$(header_row foo bar baz)"
@@ -71,10 +77,41 @@ function test_banner_narrow_width_does_not_error() {
   [ -n "$out" ]
 }
 
+# the C-locale fallback: same banner, ASCII ^ in place of ↑ (the subshell
+# re-decides the set; the suite's pinned choice outside is untouched)
+function test_banner_ascii_fallback_uses_caret() {
+  local out
+  out="$(
+    _HI_ASCII=1
+    _hi_choose_glyphs
+    banner TestBanner
+  )"
+  [[ "$out" == *"^"* ]] && [[ "$out" != *"↑"* ]]
+}
+
+# ...and the marks swap with it, keeping check_line's width math honest
+# (the ASCII ok is two columns and declares itself as such)
+function test_marks_swap_to_ascii_with_the_set() {
+  (
+    _HI_ASCII=1
+    _hi_choose_glyphs
+    [ "$_HI_MARK_OK" = ok ] && [ "$_HI_MARK_OK_W" = 2 ] &&
+      [ "$_HI_MARK_NO" = x ] && [ "$_HI_MARK_NO_W" = 1 ]
+  )
+}
+
 function test_timestamp_runs_and_has_two_cells() {
   local out
-  out="$(timestamp)"
+  out="$(_HI_RELEASE="" timestamp)"
   [ "$(grep -o '|' <<<"$out" | wc -l)" -eq 2 ]
+}
+
+# a known version (a packager's stamp, or the resolved one the ssh preamble
+# exports into a session) earns a third cell; unset stays two, as above
+function test_timestamp_adds_a_version_cell_when_stamped() {
+  local out
+  out="$(_HI_RELEASE=1.2.3 timestamp)"
+  [ "$(grep -o '|' <<<"$out" | wc -l)" -eq 3 ] && [[ "$out" == *"hi.d 1.2.3"* ]]
 }
 
 function test_system_info_includes_static_labels() {
@@ -395,6 +432,8 @@ function run_header_tests() {
   _hi_check "Floors padding on a long hostname" test_banner_floors_padding_on_a_long_hostname
   _hi_check "Floors tilde padding on a pathologically long label" test_banner_floors_tildes_on_long_label
   _hi_check "Survives a narrow _HI_MAX_WIDTH" test_banner_narrow_width_does_not_error
+  _hi_check "ASCII fallback swaps the arrow" test_banner_ascii_fallback_uses_caret
+  _hi_check "...and the marks with it" test_marks_swap_to_ascii_with_the_set
   _hi_check "No output when _HI_HEADER_BANNER=0" test_banner_disabled_produces_no_output
   _hi_check "Still prints when the toggle is unset" test_banner_prints_when_toggle_unset
   _hi_check "Change count is computed once per session" test_banner_change_count_is_computed_once
@@ -407,6 +446,7 @@ function run_header_tests() {
 
   _hi_h2 "Testing: timestamp / system_info / identity (smoke tests)"
   _hi_check "Timestamp prints two cells" test_timestamp_runs_and_has_two_cells
+  _hi_check "A stamped version earns a third cell" test_timestamp_adds_a_version_cell_when_stamped
   _hi_check "System_info includes its static labels" test_system_info_includes_static_labels
   _hi_check "Identity includes its static labels" test_identity_includes_static_labels
 

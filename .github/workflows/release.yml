@@ -84,6 +84,25 @@ jobs:
 
       - uses: ./.github/actions/setup-nfpm
 
+      # The apk signing key, when the APK_SIGNING_KEY repo secret exists.
+      # Absent (forks, before-first-release), the apk builds unsigned exactly
+      # as a keyless local build does - nfpm skips the signature on an empty
+      # key_file. A plain repo secret rather than the release environment:
+      # this job is deliberately ungated (rehearsals run it), and the key only
+      # signs an artifact the gated publish job still has to approve.
+      - name: Write the apk signing key
+        env:
+          APK_SIGNING_KEY: ${{ secrets.APK_SIGNING_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -n "$APK_SIGNING_KEY" ]; then
+            printf '%s\n' "$APK_SIGNING_KEY" >"$RUNNER_TEMP/hi.d-apk.rsa"
+            chmod 600 "$RUNNER_TEMP/hi.d-apk.rsa"
+            echo "HI_APK_KEY=$RUNNER_TEMP/hi.d-apk.rsa" >>"$GITHUB_ENV"
+          else
+            echo "no APK_SIGNING_KEY secret - the apk will be unsigned"
+          fi
+
       # asserts one artifact per format and writes dist/SHA256SUMS itself
       - name: Build the packages
         run: packaging/package.sh
@@ -149,6 +168,29 @@ jobs:
           name: packages
           path: dist
 
+      - uses: ./.github/actions/setup-minisign
+
+      # The offline half of release verification: the attestation proves which
+      # workflow run built the artifacts but needs gh and GitHub to check; a
+      # detached minisign signature over SHA256SUMS verifies with one static
+      # public key (printed in the README) and no network. The secret is
+      # sealed to this environment - it exists only behind the approval gate,
+      # unlike the apk key, which the ungated build job needs. Generated with
+      # `minisign -G -W` (no password: nobody is at this terminal to type
+      # one). Absent the secret, the release ships unsigned sums, loudly.
+      - name: Sign SHA256SUMS
+        env:
+          MINISIGN_SECRET_KEY: ${{ secrets.MINISIGN_SECRET_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -n "$MINISIGN_SECRET_KEY" ]; then
+            printf '%s\n' "$MINISIGN_SECRET_KEY" >"$RUNNER_TEMP/minisign.key"
+            minisign -S -s "$RUNNER_TEMP/minisign.key" -m dist/SHA256SUMS \
+              -t "hi.d $GITHUB_REF_NAME"
+          else
+            echo "no MINISIGN_SECRET_KEY secret - SHA256SUMS ships unsigned"
+          fi
+
       - name: Attach everything to the release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -158,8 +200,9 @@ jobs:
             gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --generate-notes
           # The manifests ride along with the packages so that updating the AUR
           # and the tap is a copy rather than a re-derivation of the same sums.
-          gh release upload "$GITHUB_REF_NAME" --clobber \
-            dist/*.deb dist/*.rpm dist/*.apk dist/SHA256SUMS dist/manifests/*
+          files=(dist/*.deb dist/*.rpm dist/*.apk dist/SHA256SUMS dist/manifests/*)
+          [ -f dist/SHA256SUMS.minisig ] && files+=(dist/SHA256SUMS.minisig)
+          gh release upload "$GITHUB_REF_NAME" --clobber "${files[@]}"
 
       # Committing the regenerated manifests here - after the human gate - is
       # what lets the tag stay put: they are consumed from the AUR/tap repos,

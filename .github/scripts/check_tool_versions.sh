@@ -23,6 +23,7 @@ _HI_TOOLS=(
   "setup-actionlint|github|rhysd/actionlint"
   "setup-zizmor|github|zizmorcore/zizmor"
   "setup-nfpm|github|goreleaser/nfpm"
+  "setup-minisign|github|jedisct1/minisign"
   "setup-checkbashisms|gitlab|debian%2Fdevscripts"
 )
 

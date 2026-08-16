@@ -10,6 +10,46 @@ source "${_HI_HOME:-$HOME}/hi.d/common/core.sh"
 # shellcheck source=../test_lib.sh
 source "$_HI_TEST_LIB"
 
+# --- _hi_use_ascii / _hi_choose_glyphs ---------------------------------------
+
+function test_use_ascii_in_a_c_locale() {
+  (
+    unset LC_ALL LC_CTYPE LANG _HI_ASCII
+    LANG=C _hi_use_ascii
+  )
+}
+
+function test_use_ascii_not_under_utf8() {
+  (
+    unset LC_ALL LC_CTYPE LANG _HI_ASCII
+    ! LANG=en_US.UTF-8 _hi_use_ascii &&
+      ! LC_ALL=C.utf8 _hi_use_ascii # LC_ALL outranks, both spellings count
+  )
+}
+
+function test_use_ascii_override_beats_the_locale() {
+  (
+    unset LC_ALL LC_CTYPE LANG
+    LANG=en_US.UTF-8 _HI_ASCII=1 _hi_use_ascii &&
+      ! LANG=C _HI_ASCII=0 _hi_use_ascii
+  )
+}
+
+# the chooser's two sets, via the marks the header suite also matches on
+function test_choose_glyphs_picks_a_whole_set() {
+  (
+    _HI_ASCII=1
+    _hi_choose_glyphs
+    [ "$_HI_MARK_OK" = ok ] && [ "$_HI_MARK_NO" = x ] &&
+      [ "$_HI_GLYPH_AHEAD" = "^" ] && [ "$_HI_MARK_OK_W" = 2 ]
+  ) && (
+    _HI_ASCII=0
+    _hi_choose_glyphs
+    [ "$_HI_MARK_OK" = "✓" ] && [ "$_HI_MARK_NO" = "✗" ] &&
+      [ "$_HI_GLYPH_AHEAD" = "↑" ] && [ "$_HI_MARK_OK_W" = 1 ]
+  )
+}
+
 function test_sanitize_leaves_plain_text_alone() {
   [ "$(_hi_sanitize "hello world")" = "hello world" ]
 }
@@ -138,6 +178,12 @@ function run_core_tests() {
   _hi_h1 "Testing common/core.sh"
 
   _hi_suite_begin
+
+  _hi_h2 "Testing: _hi_use_ascii / _hi_choose_glyphs"
+  _hi_check "C locale means ASCII" test_use_ascii_in_a_c_locale
+  _hi_check "UTF-8 keeps the glyphs" test_use_ascii_not_under_utf8
+  _hi_check "_HI_ASCII beats the locale" test_use_ascii_override_beats_the_locale
+  _hi_check "The chooser swaps whole sets" test_choose_glyphs_picks_a_whole_set
 
   _hi_h2 "Testing: _hi_sanitize"
   _hi_check "Leaves plain text alone" test_sanitize_leaves_plain_text_alone

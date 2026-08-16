@@ -3,7 +3,7 @@
 ![CI (main)](https://github.com/ivylikethevine/hi.d/actions/workflows/ci.yml/badge.svg)
 ![CI (develop)](https://github.com/ivylikethevine/hi.d/actions/workflows/ci.yml/badge.svg?branch=develop)
 [![Coverage](https://github.com/ivylikethevine/hi.d/actions/workflows/coverage.yml/badge.svg)](https://github.com/ivylikethevine/hi.d/actions/workflows/coverage.yml)
-![ssh payload](https://img.shields.io/badge/ssh_payload-26KB_gzipped-4c1)
+![ssh payload](https://img.shields.io/badge/ssh_payload-28KB_gzipped-4c1)
 ![bash](https://img.shields.io/badge/bash-3.2%2B-4EAA25?logo=gnubash&logoColor=white)
 ![shells](https://img.shields.io/badge/shells-bash%20%7C%20zsh%20%7C%20fish%20%7C%20sh-blue)
 ![targets](https://img.shields.io/badge/targets-ssh%20%7C%20docker%20%7C%20podman%20%7C%20nomad%20%7C%20k8s-8A2BE2)
@@ -14,6 +14,9 @@
 _Don't `ssh`ush your hosts, say `hi`!_
 
 ![hi connecting to a container: banner, header, packages check, colored prompt, and the cleanup on exit](docs/demo.gif)
+
+More of these — every backend (ssh with a permanent install, docker, podman, nomad, kubernetes) across a
+variety of shells on both sides — in [docs/demos.md](docs/demos.md).
 
 The payload badge above is enforced, not aspirational: the bench suite rebuilds the real payload
 (`$_HI_PAYLOAD` only - no tests, docs or CI ever ride along) and fails CI when the badge drifts more
@@ -69,6 +72,7 @@ For ssh targets specifically, `hi` first checks (over the same connection, so it
 - reload your shell!
 - run `hi_configure` any time afterward to revisit the feature toggle prompts - header, prompt, personal settings, git status, editors, aliases, header details, terminal width, and whether hi styles this machine too or only the hosts you say `hi` to - without touching the shell rc wiring. Answers land in `~/.config/hi.d/settings.sh`; see [Configuration](#configuration) below
 - run `hi_check_configs` any time to just re-run that shell rc validation, without the rest of the install
+- run `hi --version` to see what is installed - the packaged version, or `git describe` in a checkout; the doctor and the connect header show it too
 - run `hi_doctor` (or `hi --doctor <target>`) when something is slow or failing: it reports the tree, the config overlay, every backend probed and timed with the same ceilings the header and completion use, and - with a target - which backend the name resolves to plus an ssh reachability/tooling check, all read-only
 - configure `~/.ssh/config` tags via sshm
 - [optional] pin specific colors in `~/.config/hi.d/colors` - everything else gets a color automatically. Copy `hi.d/misc/colors` there to start from the shipped defaults
@@ -78,6 +82,22 @@ For ssh targets specifically, `hi` first checks (over the same connection, so it
 - [optional] modify `~/hi.d/misc/*` and `~/hi.d/shells/*` to your liking - though anything with an overlay (`settings.sh`, `colors`, `packages`) is better edited in `~/.config/hi.d/`, which keeps the checkout clean for `hi_update`
   - tip: `~/hi.d` is just a git checkout, so if you do edit it, push it to your own fork and clone that on your next device - same setup everywhere, and `hi_update`'s `git pull` keeps them in sync
 - done with it? `hi.d/scripts/uninstall.sh` (aliased to `hi_uninstall`, and a one-line shim onto `install.sh --uninstall`) is the inverse of the install: it strips hi's lines back out of your rc files, removes the `settings.sh` it wrote, and unlinks `/usr/bin/hi`. It leaves the `hi.d` directory itself alone - and your `colors`/`packages`, which are yours - delete those yourself if you want them gone
+
+---
+
+#### Verifying a release download
+
+Releases ship a `SHA256SUMS`, signed build provenance, and a detached [minisign](https://jedisct1.github.io/minisign/)
+signature over the sums (the offline half — no `gh`, no network, one static public key):
+
+```sh
+sha256sum -c --ignore-missing SHA256SUMS                        # the bytes match the release
+minisign -Vm SHA256SUMS -P 'RWT-PLACEHOLDER-see-packaging-README-before-first-release'
+gh attestation verify hi.d_*_all.deb --repo ivylikethevine/hi.d # which CI run built them
+```
+
+<!-- The -P value above is a placeholder until the first release's keypair is
+generated - packaging/README.md's before-first-release checklist replaces it. -->
 
 ---
 
@@ -151,6 +171,8 @@ Each is **on by default**; set it to `0` to hide that line. All are ignored when
 | `_HI_TARGETS_TTL`   | `5`             | seconds `hi <TAB>` reuses its target list for; `0` disables the cache          |
 | `_HI_PROBE_TIMEOUT` | `2`             | seconds any one backend CLI gets, during completion and in the header          |
 | `_HI_SSH_CONFIG`    | `~/.ssh/config` | where ssh hosts and their `# Tags:` comments are read from                     |
+| `_HI_ASCII`         | by locale       | `1` forces ASCII stand-ins for the banner/prompt/packages glyphs (`^ ok x` for `↑ ✓ ✗`), `0` forces the glyphs; unset asks the locale, so a `LANG=C` target degrades cleanly instead of printing mojibake |
+| `_HI_TERM_FALLBACK` | `1`             | on ssh targets missing a terminfo entry for your `TERM` (ghostty's `xterm-ghostty`, typically), swap it for `xterm-256color` before the session starts; `0` keeps the original `TERM` |
 
 The last two exist because completion runs on **every TAB** and the header runs **before you get a shell**: a
 docker daemon that's down or a `kubectl` pointed at a dead cluster would otherwise hang there with no upper bound.

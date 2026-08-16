@@ -305,6 +305,77 @@ function test_overlay_tar_carries_only_what_exists() {
   [ "$(_HI_CONFIG_DIR="$dir" _hi_overlay_tar | tar tzf -)" = "colors" ]
 }
 
+# --- hi --version -----------------------------------------------------------
+#
+# The dispatch is executed, not sourced: --version lives in the trailing case
+# below the source guard, which sourcing (this suite's usual route) never
+# reaches.
+
+# a packager's stamp (here stood in for by the env seam) wins outright
+function test_version_prints_the_stamp() {
+  [ "$(_HI_RELEASE=1.2.3 bash "$_HI_LAUNCHER" --version)" = "1.2.3" ]
+}
+
+# an unstamped checkout answers with git describe (--always: a bare commit
+# hash before any tag exists), never with "unknown"
+function test_version_falls_back_to_git_describe() {
+  [ -d "$_HI_ROOT/.git" ] || return 0 # nothing to describe in a tarball tree
+  local out
+  out="$(_HI_RELEASE="" _hi_version)"
+  [ -n "$out" ] && [[ "$out" != unknown* ]]
+}
+
+# ...and with neither stamp nor git, it says so instead of printing nothing
+function test_version_is_candid_without_stamp_or_git() {
+  [[ "$(_HI_RELEASE="" _HI_ROOT="$_HI_WORKDIR" _hi_version)" == unknown* ]]
+}
+
+# the version rides the preamble so the target's header can show it
+function test_remote_preamble_exports_the_version() {
+  [[ "$(DOMAIN=host _hi_remote_preamble)" == *'export _HI_RELEASE='* ]]
+}
+
+# ...and so does the client's glyph verdict: the glyphs render in the
+# client's terminal, so the target must not re-probe its own locale
+function test_remote_preamble_ships_the_glyph_verdict() {
+  [[ "$(DOMAIN=host _HI_ASCII=1 _hi_remote_preamble)" == *'export _HI_ASCII="1"'* ]] &&
+    [[ "$(DOMAIN=host _HI_ASCII="" LC_ALL=en_US.UTF-8 _hi_remote_preamble)" == *'export _HI_ASCII="0"'* ]]
+}
+
+# --- the preamble's TERM fallback --------------------------------------------
+#
+# The generated preamble is executed under a real sh with a controlled TERM
+# and terminfo fixture, and the TERM it leaves behind is the assertion. Names
+# invented here can't exist in the host's terminfo trees, so the host's own
+# entries can't leak into the result.
+
+function _hi_preamble_final_term() { # <env assignments...> - prints $TERM after the preamble ran
+  local script
+  script="$(DOMAIN=host _hi_remote_preamble)"
+  # shellcheck disable=SC2016 # $TERM is the spawned sh's to expand, not ours
+  env "$@" sh -c "$script"'
+printf %s "$TERM"' 2>/dev/null
+}
+
+function test_term_fallback_swaps_an_unknown_term() {
+  [ "$(_hi_preamble_final_term TERM=hi-test-no-such-term)" = xterm-256color ]
+}
+
+function test_term_fallback_keeps_a_term_with_terminfo() {
+  local ti="$_HI_WORKDIR/terminfo"
+  mkdir -p "$ti/h"
+  : >"$ti/h/hi-test-present-term"
+  [ "$(_hi_preamble_final_term TERM=hi-test-present-term TERMINFO="$ti")" = hi-test-present-term ]
+}
+
+function test_term_fallback_skips_ubiquitous_names() {
+  [ "$(_hi_preamble_final_term TERM=xterm)" = xterm ]
+}
+
+function test_term_fallback_can_be_disabled() {
+  [ "$(_hi_preamble_final_term TERM=hi-test-no-such-term _HI_TERM_FALLBACK=0)" = hi-test-no-such-term ]
+}
+
 # On a target, $_HI_CONFIG_DIR is the misc/ we just unpacked over, not
 # ${XDG_CONFIG_HOME:-...}: a ~/.config/hi.d belonging to whoever we logged in as
 # is not the config this session was asked to run with.
@@ -360,6 +431,19 @@ function run_hi_tests() {
 
   _hi_h2 "Testing: the payload list"
   _hi_check "Ships exactly common/misc/shells/load.sh" test_payload_ships_exactly_the_travelled_paths
+
+  _hi_h2 "Testing: hi --version"
+  _hi_check "A stamp wins" test_version_prints_the_stamp
+  _hi_check "A checkout answers with git describe" test_version_falls_back_to_git_describe
+  _hi_check "Candid with no stamp and no git" test_version_is_candid_without_stamp_or_git
+  _hi_check "The preamble exports it" test_remote_preamble_exports_the_version
+  _hi_check "The preamble ships the glyph verdict" test_remote_preamble_ships_the_glyph_verdict
+
+  _hi_h2 "Testing: the preamble's TERM fallback"
+  _hi_check "Unknown TERM becomes xterm-256color" test_term_fallback_swaps_an_unknown_term
+  _hi_check "A TERM with terminfo is kept" test_term_fallback_keeps_a_term_with_terminfo
+  _hi_check "Ubiquitous names skip the probe" test_term_fallback_skips_ubiquitous_names
+  _hi_check "_HI_TERM_FALLBACK=0 opts out" test_term_fallback_can_be_disabled
 
   _hi_h2 "Testing: the config overlay stream"
   _hi_check "Nothing sent without an overlay" test_overlay_is_empty_without_one

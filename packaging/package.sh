@@ -69,6 +69,41 @@ function stage_tree() {
   rm -rf "$_HI_DIST/staging"
   mkdir -p "$_HI_DIST/staging"
   DESTDIR="$_HI_DIST/staging" "$installer" --prefix /usr/share
+  stamp_launcher
+  touch_epoch
+}
+
+# The staged copy answers `hi --version` with the packaged version. Stamped
+# here at build time, never in git: bump.sh only runs after the tag exists, so
+# a committed stamp would always be one release stale in the tag tarball (the
+# PKGBUILD and the Homebrew formula stamp their own copies the same way).
+# bump.sh's rewrite shape: a temp file rather than `sed -i` (BSD/GNU differ),
+# written back with cat so the staged file keeps its exec bit.
+function stamp_launcher() {
+  local file="$_HI_DIST/staging/usr/share/hi.d/hi.sh" tmp
+  tmp="$(mktemp -t hi.package.XXXXXX)"
+  sed "s/^_HI_RELEASE=.*/_HI_RELEASE=\"$_HI_VERSION\"/" "$file" >"$tmp"
+  cat "$tmp" >"$file"
+  rm -f "$tmp"
+}
+
+# Clamp every staged mtime to $SOURCE_DATE_EPOCH: install_tree's cp stamps
+# each file "now", which nfpm faithfully preserves into the package as the one
+# run-to-run difference. Files and directories only - the staged /usr/bin/hi
+# symlink points at its installed (not-yet-existing) target, and nfpm builds
+# its own symlink entry from nfpm.yaml anyway. GNU touch takes -d @epoch;
+# BSD/macOS needs -t with a stamp its own date -r builds (TZ pinned, -t reads
+# local time) - the same dual-implementation shape as bump.sh's checksums.
+function touch_epoch() {
+  local stamp
+  if touch -d "@$SOURCE_DATE_EPOCH" "$_HI_DIST/staging" 2>/dev/null; then
+    find "$_HI_DIST/staging" \( -type f -o -type d \) \
+      -exec touch -d "@$SOURCE_DATE_EPOCH" {} +
+  else
+    stamp="$(TZ=UTC date -u -r "$SOURCE_DATE_EPOCH" +%Y%m%d%H%M.%S)"
+    find "$_HI_DIST/staging" \( -type f -o -type d \) \
+      -exec env TZ=UTC touch -t "$stamp" {} +
+  fi
 }
 
 function run_nfpm() {
@@ -167,6 +202,19 @@ EOF
 done
 
 : "${_HI_VERSION:=$(pkgbuild_version)}"
+
+# Reproducible builds: nfpm stamps the timestamps it controls from
+# $SOURCE_DATE_EPOCH, and touch_epoch clamps the staged tree's mtimes to it,
+# so two runs over the same commit produce byte-identical packages. HEAD's
+# commit time (on a release checkout, the tag's), respecting a caller's value
+# per the reproducible-builds.org convention; with no git history the build
+# still works but stamps "now", and says so.
+: "${SOURCE_DATE_EPOCH:=$(git -C "$_HI_ROOT" log -1 --format=%ct 2>/dev/null || true)}"
+if [ -z "$SOURCE_DATE_EPOCH" ]; then
+  SOURCE_DATE_EPOCH="$(date +%s)"
+  _hi_cecho " no git history - SOURCE_DATE_EPOCH stamps 'now'; this build is not reproducible" "$YELLOW" >&2
+fi
+export SOURCE_DATE_EPOCH
 
 _hi_h1 "Packaging hi.d $_HI_VERSION"
 _hi_cecho " | root: $_HI_ROOT | outdir: $_HI_DIST" "$BLUE"

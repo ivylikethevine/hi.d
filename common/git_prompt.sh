@@ -79,24 +79,26 @@ _hi_git_prompt() {
   fi
 
   # shorten_branch_len 32, matching config.fish
-  ((${#ref} > 32)) && ref="${ref:0:31}…"
+  ((${#ref} > 32)) && ref="${ref:0:31}$_HI_GLYPH_ELLIPSIS"
 
   local upstream=""
-  ((ahead > 0)) && upstream+="↑${ahead}"
-  ((behind > 0)) && upstream+="↓${behind}"
+  ((ahead > 0)) && upstream+="$_HI_GLYPH_AHEAD${ahead}"
+  ((behind > 0)) && upstream+="$_HI_GLYPH_BEHIND${behind}"
 
   # one line per stash push/apply, same count `rev-list --walk-reflogs` gives
   local -a stash_lines=()
   [[ -f "$git_dir/logs/refs/stash" ]] && _hi_read_lines stash_lines <"$git_dir/logs/refs/stash"
   local stash=${#stash_lines[@]}
 
+  # glyphs (with their C-locale ASCII fallbacks) come from core.sh's
+  # _hi_choose_glyphs, one decision per session
   local flags=""
-  ((staged > 0)) && flags+="${YELLOW}●${staged}${NC}"
-  ((dirty > 0)) && flags+="${RED}✚${dirty}${NC}"
-  ((invalid > 0)) && flags+="${RED}✖${invalid}${NC}"
-  ((untracked > 0)) && flags+="${BRBLUE}…${untracked}${NC}"
-  ((${stash:-0} > 0)) && flags+="${BRBLUE}⚑${stash}${NC}"
-  [[ -z "$flags" ]] && flags="${BRGREEN}✔${NC}"
+  ((staged > 0)) && flags+="${YELLOW}${_HI_GLYPH_STAGED}${staged}${NC}"
+  ((dirty > 0)) && flags+="${RED}${_HI_GLYPH_DIRTY}${dirty}${NC}"
+  ((invalid > 0)) && flags+="${RED}${_HI_GLYPH_INVALID}${invalid}${NC}"
+  ((untracked > 0)) && flags+="${BRBLUE}${_HI_GLYPH_UNTRACKED}${untracked}${NC}"
+  ((${stash:-0} > 0)) && flags+="${BRBLUE}${_HI_GLYPH_STASH}${stash}${NC}"
+  [[ -z "$flags" ]] && flags="${BRGREEN}${_HI_GLYPH_CLEAN}${NC}"
 
   local branch_color="$BRPURPLE"
   ((detached)) && branch_color="$RED"

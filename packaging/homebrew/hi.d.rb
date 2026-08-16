@@ -32,6 +32,11 @@ class HiD < Formula
                              "hi.sh", "load.sh", "LICENSE", "README.md"
     chmod 0755, libexec/"hi.d/hi.sh"
 
+    # The keg's copy answers `hi --version` with the formula's version. The
+    # tarball itself carries no stamp - every channel seds it in at build time
+    # (see packaging/package.sh's stamp_launcher for why not in git).
+    inreplace libexec/"hi.d/hi.sh", /^_HI_RELEASE=.*$/, "_HI_RELEASE=\"#{version}\""
+
     # same page install_tree gzips into /usr/share/man for the other channels;
     # brew wants it plain and puts it on the manpath itself
     man1.install "docs/hi.1"

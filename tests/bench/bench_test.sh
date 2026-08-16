@@ -26,18 +26,39 @@ function _hi_bench_env() {
 }
 
 # _hi_bench <label> <ceiling-ms> <n> <cmd...> - average of n runs against a
-# generous ceiling, reported either way so the numbers are in every CI log
+# generous ceiling, reported either way so the numbers are in every CI log.
+# hyperfine is the preferred backend when installed (warmup run, outlier
+# detection); the plain timing loop is the fallback - and what CI measures,
+# since the runners don't install hyperfine. The output says which one ran.
 function _hi_bench() {
-  local label="$1" ceiling="$2" n="$3" i t0 t1 avg
+  local label="$1" ceiling="$2" n="$3" i t0 t1 avg="" cmd runs backend=""
   shift 3
-  t0="$(_hi_now)"
-  for ((i = 0; i < n; i++)); do "$@" >/dev/null 2>&1 || true; done
-  t1="$(_hi_now)"
-  avg="$(awk -v a="$t0" -v b="$t1" -v n="$n" 'BEGIN { printf "%.1f", (b - a) * 1000 / n }')"
+  if command -v hyperfine >/dev/null 2>&1; then
+    # hyperfine takes a command string, not an argv: %q-quote it and run it
+    # under bash, where the exported _hi_bench_env is a function again
+    printf -v cmd '%q ' "$@"
+    runs=$((n < 2 ? 2 : n))
+    if hyperfine --shell=bash --ignore-failure --warmup 1 --runs "$runs" \
+      --style none --export-json "$_HI_WORKDIR/bench.json" -- "$cmd" \
+      >/dev/null 2>&1; then
+      # "mean" is seconds in the JSON export; awk's numeric coercion drops
+      # the trailing comma, so no jq needed
+      avg="$(awk -F: '/"mean"/ { printf "%.1f", $2 * 1000; exit }' "$_HI_WORKDIR/bench.json")"
+    fi
+    if [ -n "$avg" ]; then
+      backend="hyperfine, " n="$runs"
+    fi
+  fi
+  if [ -z "$avg" ]; then
+    t0="$(_hi_now)"
+    for ((i = 0; i < n; i++)); do "$@" >/dev/null 2>&1 || true; done
+    t1="$(_hi_now)"
+    avg="$(awk -v a="$t0" -v b="$t1" -v n="$n" 'BEGIN { printf "%.1f", (b - a) * 1000 / n }')"
+  fi
   if awk -v x="$avg" -v c="$ceiling" 'BEGIN { exit !(x <= c) }'; then
-    _hi_cecho " | $label: ${avg}ms avg (ceiling ${ceiling}ms, n=$n): OK" "$GREEN"
+    _hi_cecho " | $label: ${avg}ms avg (${backend}ceiling ${ceiling}ms, n=$n): OK" "$GREEN"
   else
-    _hi_cecho " | $label: ${avg}ms avg BLEW the ${ceiling}ms ceiling (n=$n)" "$RED"
+    _hi_cecho " | $label: ${avg}ms avg BLEW the ${ceiling}ms ceiling (${backend}n=$n)" "$RED"
     return 1
   fi
 }
@@ -107,6 +128,10 @@ function bench_payload_size() {
 function run_bench_tests() {
   _hi_workdir benchtest
   mkdir -p "$_HI_WORKDIR/cfg"
+  # hyperfine reruns the benched argv in a child bash: hand that child the
+  # env wrapper and the two vars its body expands
+  export -f _hi_bench_env
+  export _HI_WORKDIR _HI_HOME
 
   _hi_suite_begin
 

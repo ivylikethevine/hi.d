@@ -28,13 +28,14 @@ checkbox is ticked.
 - [x] **bench suite** — `tests/bench/bench_test.sh`, its own `bench` runner
   group and CI job: shell startup per shell, header, git prompt per call,
   targets.sh cold/warm, all against generous ceilings.
-- [ ] **hyperfine** — statistical timing (warmup, outlier detection) as the
+- [x] **hyperfine** — statistical timing (warmup, outlier detection) as the
   bench suite's preferred backend when installed, plain timing loop otherwise.
 - [x] **payload size budget** — `bench_payload_size` builds the payload
   exactly the way `hi.sh` does (`tar` + `$_HI_PAYLOAD`) and fails over 48KB
   gzipped (~26KB today).
-- [ ] **kcov** — line coverage for the bash suites, run occasionally (not CI)
-  to find which arms of `install.sh`/`bump.sh` the ~500 cases never touch.
+- [x] **kcov** — line coverage for the bash suites, run occasionally (not CI)
+  to find which arms of `install.sh`/`bump.sh` the ~500 cases never touch -
+  `tests/coverage.sh`.
 
 ## CI & supply chain
 
@@ -101,10 +102,12 @@ checkbox is ticked.
   (bash-3.2 stand-ins, POSIX+fish constraints, BSD/GNU traps); shipped files
   carry a one-line `# GLOSSARY: <entry>` tag instead of a paragraph, and
   `docs/` never ships (`$_HI_PAYLOAD` is an allow list).
-- [ ] **SECURITY.md / threat-model note** — a tool people run against every
+- [x] **SECURITY.md / threat-model note** — a tool people run against every
   host they touch earns the questions; the answers already exist (no network
   calls, no curl|bash, cleanup traps, root-owned-tree support) and writing
-  them down is trust-building. Include a supported-versions line once v1 is
-  out.
-- [ ] **.editorconfig** — 2-space shell, tabs-in-Makefiles-style exceptions if
-  any; keeps non-Zed editors honest alongside `.zed/settings.json`.
+  them down is trust-building. Ships with a pre-v1 supported-versions line
+  (tip of `main`); swap in a version table when v1 is tagged.
+- [x] **.editorconfig** — 2-space shell, tabs-in-Makefiles-style exceptions if
+  any; keeps non-Zed editors honest alongside `.zed/settings.json`. No
+  exceptions turned out to be needed: no Makefiles, and the tree is
+  uniformly 2-space.

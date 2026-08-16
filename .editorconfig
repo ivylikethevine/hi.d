@@ -1,0 +1,14 @@
+# hi.d - keeps non-Zed editors in step with .zed/settings.json (tab_size 2).
+# No per-type exceptions on purpose: the tree is uniformly 2-space and has no
+# Makefiles; the only literal tabs are data inside sed replacements, which
+# EditorConfig never rewrites.
+# https://editorconfig.org
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 2

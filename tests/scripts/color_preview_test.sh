@@ -179,34 +179,31 @@ function _hi_write_preview_tree() {
   cp "$_HI_WORKDIR/ssh_config" "$home/.ssh/config"
 }
 
-# the tables are wide, colored and layout-heavy; asserting their exact shape
-# would test the formatting rather than the resolution, so this just proves
-# they render every group they should without erroring under set -e
-function test_tables_render_without_error() {
-  local out
-  out="$(_hi_render_preview)" || return 1
-  [[ "$out" == *pinned* ]] && [[ "$out" == *tagged* ]] && [[ "$out" == *alice* ]]
-}
+# The tables are wide, colored and layout-heavy; asserting their exact shape
+# would test the formatting rather than the resolution, so these prove they
+# render every group they should without erroring under set -e. One render
+# (the slowest thing this suite does - a full script run plus targets.sh)
+# shared by all three cases; each reads the whole output from a variable
+# rather than piping into grep, because under `set -o pipefail` an
+# early-exiting `grep -q` SIGPIPEs the script and a negated case then passes
+# no matter what the table said.
+_HI_PREVIEW_OUT=""
 
-# Both of these read the whole render into a variable first rather than piping
-# it into grep. Under `set -o pipefail` an early-exiting `grep -q` SIGPIPEs the
-# script, and the pipeline then reports *that* rather than the match - which
-# makes a negated case pass no matter what the table actually said.
+function test_tables_render_without_error() {
+  _HI_PREVIEW_OUT="$(_hi_render_preview)" || return 1
+  [[ "$_HI_PREVIEW_OUT" == *pinned* && "$_HI_PREVIEW_OUT" == *tagged* && "$_HI_PREVIEW_OUT" == *alice* ]]
+}
 
 # a host with no override and no usable tag would render identically to a bare
 # `hi`, so it's deliberately left out of the table
 function test_tables_skip_hosts_that_render_by_default() {
-  local out
-  out="$(_hi_render_preview)" || return 1
-  ! printf '%s\n' "$out" | grep -q '\bplain\b'
+  ! printf '%s\n' "$_HI_PREVIEW_OUT" | grep -q '\bplain\b'
 }
 
 # the tag column has to name the tag that actually matched, since that's the
 # line a user reads to work out which misc/colors entry to edit
 function test_tables_name_the_matching_tag() {
-  local out
-  out="$(_hi_render_preview)" || return 1
-  printf '%s\n' "$out" | grep -q 'tag:work'
+  printf '%s\n' "$_HI_PREVIEW_OUT" | grep -q 'tag:work'
 }
 
 function run_color_preview_tests() {

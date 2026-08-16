@@ -86,6 +86,34 @@ function run_nfpm() {
     (cd "$_HI_ROOT" && HI_VERSION="$_HI_VERSION" nfpm package \
       -f "$_HI_NFPM_CONFIG" -p "$packager" -t "$_HI_DIST")
   done
+  write_checksums
+}
+
+# One artifact per packager, plus a SHA256SUMS over them for release users to
+# verify downloads against. _HI_PACKAGERS is the single home of "what a
+# release consists of" - the workflows call this rather than repeating the
+# format list in YAML. shasum: mac fallback, same reasoning as bump.sh.
+function write_checksums() {
+  local packager f
+  local -a built=()
+  for packager in "${_HI_PACKAGERS[@]}"; do
+    for f in "$_HI_DIST"/*."$packager"; do
+      [ -f "$f" ] || {
+        _hi_cecho " nfpm exited 0 but built no .$packager" "$RED" >&2
+        return 1
+      }
+      built+=("${f##*/}")
+    done
+  done
+  (
+    cd "$_HI_DIST" || exit 1
+    if command -v sha256sum >/dev/null 2>&1; then
+      sha256sum -- "${built[@]}" >SHA256SUMS
+    else
+      shasum -a 256 -- "${built[@]}" >SHA256SUMS
+    fi
+  )
+  _hi_cecho " $_HI_DIST/SHA256SUMS :)" "$GREEN"
 }
 
 # sourcing stops here (tests reach the functions above) - install.sh's pattern

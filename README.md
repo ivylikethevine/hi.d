@@ -17,7 +17,7 @@ _Don't `ssh`ush your hosts, say `hi`!_
 
 ### How it works
 
-1. `hi.sh` runs on the client. It archives `hi.d/` and sends it to the target. What it leaves out is `hi.sh` itself, `.git`, `scripts/`, `tests/`, `.github/`, this README, `LICENSE` and the editor/tooling dotfiles - see `$_HI_EXCLUDE` at the top of `hi.sh` for the authoritative list. The target unpacks it into a `/tmp` directory. `_HI_ROOT` is `$INSTALL_DIR/hi.d` on the client and `$_HI_HOME/hi.d` on the target.
+1. `hi.sh` runs on the client. It archives `hi.d/` and sends it to the target. What it leaves out is `hi.sh` itself, `.git`, `scripts/`, `tests/`, `.github/`, this README, `LICENSE` and the editor/tooling dotfiles - see `$_HI_PAYLOAD` at the top of `hi.sh` for the authoritative allow list. The target unpacks it into a `/tmp` directory. `_HI_ROOT` is `$INSTALL_DIR/hi.d` on the client and `$_HI_HOME/hi.d` on the target.
    Your own `settings.sh`, `colors` and `packages` live outside the tree (see [Configuration](#configuration)), so they follow in a second, much smaller archive unpacked over the target's `misc/` - `$_HI_OVERLAY_FILES` in `hi.sh`. Nothing is sent if you haven't overridden anything.
 2. On the target, `$_HI_ROOT/hi.bashrc` sources `$_HI_ROOT/load.sh` and calls `load`.
 3. `load.sh` prints the header, appends hi's shell configs to the host's own rc files, and starts a session in the highest priority shell available (fish > zsh > bash).
@@ -207,6 +207,8 @@ tests/test_runner.sh
 | `tests/scripts/color_preview_test.sh`           | unit tests for `color_preview.sh`'s precedence, table inputs and layout helpers                                                                                        |
 | `tests/shells/hi_test.sh`                       | unit tests for `hi.sh`'s argument parsing, backend predicates and generated bootloader/fallback rc                                                                     |
 | `tests/shells/load_test.sh`                     | unit tests for `load.sh`'s rc grafting, marker stripping, and disposable-vs-permanent `$_HI_ROOT` cleanup                                                              |
+| `tests/shells/rc_test.sh`                       | behavioral tests for `bash.sh`/`zsh.zsh`/`config.fish`: prompt built, completion registered, toggles honored                                                           |
+| `tests/bench/bench_test.sh`                     | hot-path benchmarks (shell startup, header, git prompt, completion) plus the payload size budget - `--group bench`                                                     |
 | `tests/shells/shellcheck_test.sh`               | the lint gate: shellcheck over every `*.sh`, `zsh -n`/`fish --no-execute` on every file those shells parse themselves, and a grep for bash-4-only constructs           |
 | `tests/scripts/install_test.sh`                 | unit tests for `install.sh`: marker-based rc rewriting, setting defaults, config validation, packaging mode, and the `--uninstall` half incl. a round-trip             |
 | `tests/harness/lib_test.sh`                     | unit tests for `test_lib.sh` itself - the scaffolding every other suite is built on                                                                                    |

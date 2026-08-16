@@ -30,7 +30,10 @@ fi
 # complete `hi` from the same target list zsh/fish use, and make `exa` complete
 # exactly the way `eza` does, whatever bash-completion bound to it
 function _hi_complete() {
-  _hi_read_lines COMPREPLY < <(compgen -W "$(sh "$_HI_TARGETS" | cut -f1)" -- "${COMP_WORDS[COMP_CWORD]}")
+  local -a rows=()
+  _hi_read_lines rows < <(sh "$_HI_TARGETS")
+  # names are field 1; the tab strip is a builtin, sparing a `cut` per TAB
+  _hi_read_lines COMPREPLY < <(compgen -W "${rows[*]%%$'\t'*}" -- "${COMP_WORDS[COMP_CWORD]}")
 }
 complete -F _hi_complete hi
 
@@ -53,7 +56,8 @@ if [[ "${_HI_DISABLE_PROMPT:-0}" != 1 ]]; then
     # info goes through another layer of reference - expanding user provided
     # strings would be a security issue. POC: https://github.com/njhartwell/pw3nage
     if shopt -q promptvars; then
-      __powerline_git_info="$(_hi_git_prompt)"
+      _hi_git_prompt __powerline_git_info # out-var form: no $( ) fork per prompt
+      # shellcheck disable=SC2154 # assigned by the printf -v one line up
       PS1="$HI_PS1\${__powerline_git_info}$NC \$ "
     else
       PS1="$HI_PS1$(_hi_git_prompt)$NC \$ "

@@ -37,9 +37,8 @@ cache_body() {
   done <"$1"
 }
 
-# emit_backend <label> <bin> <lister...> - the kind gate, presence check and
-# timeout wrap every backend needs, in one place.
-# Listers are reached through "$@", which is what SC2329 can't see.
+# emit_backend <label> <bin> <lister...> - kind gate + presence check +
+# timeout wrap. Listers go through "$@" (hence SC2329).
 # shellcheck disable=SC2329
 emit_backend() {
   label="$1" bin="$2"

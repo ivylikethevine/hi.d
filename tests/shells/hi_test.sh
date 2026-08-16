@@ -44,11 +44,8 @@ function _hi_write_shims() {
 case "$5" in yes) printf 'true\n' ;; *) printf 'false\n' ;; esac
 EOF
 
-  cat >"$dir/podman" <<'EOF'
-#!/bin/sh
-[ "$1 $2 $3" = "container inspect -f" ] || exit 1
-case "$5" in yes) printf 'true\n' ;; *) printf 'false\n' ;; esac
-EOF
+  # podman is a drop-in for docker in hi.sh, so the shim is the same file
+  cp "$dir/docker" "$dir/podman"
 
   cat >"$dir/nomad" <<'EOF'
 #!/bin/sh
@@ -193,21 +190,13 @@ function test_bootloader_replaces_load_with_the_command() {
 # any non-zero status ending the session. That killed `source $_HI_ALIASES` on
 # any target without explicit toggles, which is the default.
 function test_bootloader_drops_strict_mode_before_the_command() {
-  local out strict cmd
-  out="$(CMDARG='echo hi' _hi_bootloader)"
-  strict="$(printf '%s\n' "$out" | grep -n 'set +euo pipefail' | head -1 | cut -d: -f1)"
-  cmd="$(printf '%s\n' "$out" | grep -n 'echo hi' | head -1 | cut -d: -f1)"
-  [ -n "$strict" ] && [ -n "$cmd" ] && [ "$strict" -lt "$cmd" ]
+  _hi_before "$(CMDARG='echo hi' _hi_bootloader)" 'set +euo pipefail' 'echo hi'
 }
 
 # ...and the strict-mode reset must land after load.sh is sourced, not before,
 # or it's simply overwritten by load.sh's own `set -euo pipefail`
 function test_bootloader_drops_strict_mode_after_sourcing_load() {
-  local out src strict
-  out="$(CMDARG='echo hi' _hi_bootloader)"
-  src="$(printf '%s\n' "$out" | grep -n 'load\.sh' | head -1 | cut -d: -f1)"
-  strict="$(printf '%s\n' "$out" | grep -n 'set +euo pipefail' | head -1 | cut -d: -f1)"
-  [ -n "$src" ] && [ -n "$strict" ] && [ "$src" -lt "$strict" ]
+  _hi_before "$(CMDARG='echo hi' _hi_bootloader)" 'load\.sh' 'set +euo pipefail'
 }
 
 function test_fallback_rc_sources_paths_and_aliases() {
@@ -225,11 +214,7 @@ function test_fallback_rc_appends_the_command() {
 # settings ahead of paths.sh - paths.sh's local-only gate reads them, so lines
 # arriving after it would be set too late to have any effect
 function test_fallback_rc_sources_settings_before_paths() {
-  local out settings_line paths_line
-  out="$(CMDARG="" _hi_fallback_rc)"
-  settings_line="$(printf '%s\n' "$out" | grep -n 'misc/settings\.sh' | head -1 | cut -d: -f1)"
-  paths_line="$(printf '%s\n' "$out" | grep -n 'common/paths\.sh' | head -1 | cut -d: -f1)"
-  [ -n "$settings_line" ] && [ -n "$paths_line" ] && [ "$settings_line" -lt "$paths_line" ]
+  _hi_before "$(CMDARG="" _hi_fallback_rc)" 'misc/settings\.sh' 'common/paths\.sh'
 }
 
 # bash reads an --rcfile only when it is interactive, and decides that from its
@@ -255,13 +240,18 @@ function test_remote_suffix_fallbacks_are_interactive() {
   [[ "$out" == *'zsh -i'* && "$out" == *'sh -i'* && "$out" == *'fish -C'* ]]
 }
 
-# the payload excludes must keep stripping the things that make a shipped tree
-# either broken (scripts/, tests/ - see paths.sh's helper aliases) or huge
-function test_exclude_list_covers_the_untravelled_paths() {
-  local want
-  for want in .git scripts tests hi.sh; do
-    [[ "${_HI_EXCLUDE[*]}" == *"$want"* ]] || {
-      _hi_cecho " | not excluded from the payload: $want" "$RED"
+# The payload is an allow list; this is its drift guard. Exact match on the
+# list (so nothing sneaks on the wire unnoticed) plus an existence check on
+# every member (so a rename can't quietly ship an empty payload).
+function test_payload_ships_exactly_the_travelled_paths() {
+  local m
+  [ "${_HI_PAYLOAD[*]}" = "common misc shells load.sh" ] || {
+    _hi_cecho " | payload list changed: ${_HI_PAYLOAD[*]} - update this guard deliberately" "$RED"
+    return 1
+  }
+  for m in "${_HI_PAYLOAD[@]}"; do
+    [ -e "$_HI_ROOT/$m" ] || {
+      _hi_cecho " | payload member missing from the tree: $m" "$RED"
       return 1
     }
   done
@@ -269,7 +259,7 @@ function test_exclude_list_covers_the_untravelled_paths() {
 
 # --- the config overlay -----------------------------------------------------
 #
-# $_HI_EXCLUDE only ever carried the *in-tree* misc/, so once the user's real
+# The payload only carries the *in-tree* misc/, so once the user's real
 # settings/colors/packages live outside the tree they need their own stream or a
 # target silently falls back to the shipped defaults. These assert the two
 # halves that can be checked without a target: that nothing is sent when there
@@ -368,8 +358,8 @@ function run_hi_tests() {
   _hi_check "The bash handoff is explicitly interactive" test_remote_suffix_forces_an_interactive_bash
   _hi_check "So is every no-bash fallback" test_remote_suffix_fallbacks_are_interactive
 
-  _hi_h2 "Testing: payload excludes"
-  _hi_check "Still strips .git/scripts/tests/hi.sh" test_exclude_list_covers_the_untravelled_paths
+  _hi_h2 "Testing: the payload list"
+  _hi_check "Ships exactly common/misc/shells/load.sh" test_payload_ships_exactly_the_travelled_paths
 
   _hi_h2 "Testing: the config overlay stream"
   _hi_check "Nothing sent without an overlay" test_overlay_is_empty_without_one

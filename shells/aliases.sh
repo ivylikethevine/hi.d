@@ -10,23 +10,15 @@
 # but these are the only patterns that are safe to use, since this file must be
 # POSIX+fish compliant.
 
-# The two toggles this file reads, defaulted here so reading them is never an
-# error whoever sourced us. No single spelling works: `${_HI_DISABLE_EDITORS-0}`
-# is a parse error in fish ("${ is not a valid variable") that aborts the whole
-# file, and a bare `$_HI_DISABLE_EDITORS` is fatal in sh/bash/zsh under `set -u`.
-# So the defaults sit inside an `eval` string the other shell never parses,
-# gated on a builtin every POSIX shell has and fish deliberately doesn't.
-# The `-` form, not `:-`, so an intentional empty value isn't quietly turned
-# back on. The entry points set these too; this is the backstop for anything
-# sourcing this file directly - which is how `hi <target> <command>` broke.
+# Backstop defaults for the two toggles this file reads (GLOSSARY: toggle
+# defaulting): ${X-0} parses in no fish, a bare read dies under set -u, so the
+# default hides in an eval gated on a builtin fish deliberately lacks. `-`,
+# not `:-`, so an intentional empty value survives.
 command -v getopts >/dev/null 2>&1 &&
   eval 'export _HI_DISABLE_EDITORS="${_HI_DISABLE_EDITORS-0}" _HI_DISABLE_ALIASES="${_HI_DISABLE_ALIASES-0}"' || true
 
-# nano, vim, cat, ls, exa and eza are all aliased further down. In zsh, dash and
-# POSIX sh (unlike bash/fish), `command -v` returns an *alias's* definition
-# rather than the real binary once that alias exists, so every fallthrough chain
-# that can reach one of those names has to resolve first. Doing them all here,
-# before this file sets any alias, keeps the chains below immune.
+# Resolve these before any alias exists: zsh/dash `command -v` returns an
+# alias's definition once one is set, poisoning later fallthrough chains.
 export _HI_EDITOR_BIN="$(command -v nano || command -v micro || command -v pico || command -v vim || command -v vi)"
 export _HI_BATCAT_BIN="$(command -v bat || command -v batcat || command -v ccat || command -v cat)"
 # exa and eza intentionally differ in preference order (exa picks exa first,

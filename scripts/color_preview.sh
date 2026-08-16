@@ -54,12 +54,23 @@ function _hi_known_usertags() {
 function _hi_preview_users() {
   local tag
   {
-    _hi_known_users
-    _hi_override_color username LOCALUSER >/dev/null 2>&1 && _hi_whoami
+    _hi_known_users # already leads with _hi_whoami, LOCALUSER-pinned or not
     while IFS= read -r tag; do
       _hi_override_color usertag "$tag" >/dev/null 2>&1 && printf '%s\n' "$tag"
     done < <(_hi_known_usertags)
   } | awk '!seen[$0]++'
+}
+
+# _hi_widen <var> <string...> - grow the width variable named <var> to the
+# longest of the strings. The measurement half of every column in both tables.
+function _hi_widen() {
+  local var="$1" s cur
+  shift
+  eval "cur=\$$var"
+  for s in "$@"; do
+    ((${#s} > cur)) && cur=${#s}
+  done
+  eval "$var=\$cur"
 }
 
 function _hi_group_preview_width() {
@@ -110,12 +121,10 @@ function _hi_print_users_table() {
   local w_item=9 w_color=5 w_source=6
   local localuser_color=""
 
-  while IFS= read -r user; do users+=("$user"); done < <(_hi_known_users)
-  while IFS= read -r tag; do usertags+=("$tag"); done < <(_hi_known_usertags)
+  _hi_read_lines users < <(_hi_known_users)
+  _hi_read_lines usertags < <(_hi_known_usertags)
 
-  for color_name in "${_HI_COLOR_NAMES[@]}"; do
-    ((${#color_name} > w_color)) && w_color=${#color_name}
-  done
+  _hi_widen w_color "${_HI_COLOR_NAMES[@]}"
   # ${a[@]+"${a[@]}"} throughout this file, not a plain "${a[@]}": on bash 3.2
   # (macOS) expanding an *empty* array under `set -u` is a fatal "unbound
   # variable", and a colors file with no usertag pins - or an ssh config with no
@@ -123,18 +132,13 @@ function _hi_print_users_table() {
   # such guard (it is already empty-safe), and must not be given one: bash 3.2
   # reads ${!a[@]+...} as expanding to nothing whatever the array holds, and
   # bash 5 reads it as an indirect reference and errors outright.
-  for user in "${users[@]}" LOCALUSER ${usertags[@]+"${usertags[@]}"}; do
-    ((${#user} > w_item)) && w_item=${#user}
-  done
+  _hi_widen w_item "${users[@]}" LOCALUSER ${usertags[@]+"${usertags[@]}"}
   for user in "${users[@]}"; do
-    source=$(_hi_color_source username "$user")
-    ((${#source} > w_source)) && w_source=${#source}
+    _hi_widen w_source "$(_hi_color_source username "$user")"
   done
-  source="local:username"
-  ((${#source} > w_source)) && w_source=${#source}
+  _hi_widen w_source "local:username"
   for tag in ${usertags[@]+"${usertags[@]}"}; do
-    source="usertag:$tag"
-    ((${#source} > w_source)) && w_source=${#source}
+    _hi_widen w_source "usertag:$tag"
   done
 
   _hi_hbar "$w_item" "$w_color" "$w_source"
@@ -189,10 +193,20 @@ function _hi_print_hosts_table() {
   local group_hosts=() group_source=() group_color=() group_tag=()
   local gidx localhostname_color=""
 
-  while IFS= read -r name; do preview_users+=("$name"); done < <(_hi_preview_users)
-  for user in "${preview_users[@]}"; do
-    ((${#user} > user_width)) && user_width=${#user}
-  done
+  _hi_read_lines preview_users < <(_hi_preview_users)
+  _hi_widen user_width ${preview_users[@]+"${preview_users[@]}"}
+
+  # The current machine renders as its own single-host group ahead of the ssh
+  # ones, so one measure/render path serves both - its key can't collide with
+  # a real group's (no _hi_color_source result reads local:hostname).
+  if localhostname_color=$(_hi_override_color hostname LOCALHOSTNAME 2>/dev/null); then
+    local_hostname=$(_hi_local_hostname)
+    group_order+=("local:hostname"$'\x1f'"$localhostname_color")
+    group_source+=("local:hostname")
+    group_color+=("$localhostname_color")
+    group_tag+=("")
+    group_hosts+=("$local_hostname")
+  fi
 
   # group hosts that share a type+source AND the actual resolved color, so
   # only hosts that would render identically collapse into one row
@@ -221,71 +235,19 @@ function _hi_print_hosts_table() {
   fi
 
   local w_item=24 w_color=5 w_source=6 w_preview=7
-  for name in "${_HI_COLOR_NAMES[@]}"; do
-    ((${#name} > w_color)) && w_color=${#name}
-  done
-
-  # LOCALHOSTNAME gets its own row further down (see below) - measure its
-  # SOURCE label here too
-  if localhostname_color=$(_hi_override_color hostname LOCALHOSTNAME 2>/dev/null); then
-    source="local:hostname"
-    ((${#source} > w_source)) && w_source=${#source}
-    local_hostname=$(_hi_local_hostname)
-    ((${#local_hostname} > w_item)) && w_item=${#local_hostname}
-    pw=$(_hi_group_preview_width "$local_hostname")
-    ((pw > w_preview)) && w_preview=$pw
-  fi
+  _hi_widen w_color "${_HI_COLOR_NAMES[@]}"
+  [[ -n "$localhostname_color" ]] && _hi_widen w_item "$local_hostname"
 
   for gidx in "${!group_order[@]}"; do
-    source="${group_source[gidx]}"
-    ((${#source} > w_source)) && w_source=${#source}
+    _hi_widen w_source "${group_source[gidx]}"
     read -ra group_names <<< "${group_hosts[gidx]}"
-    pw=$(_hi_group_preview_width "${group_names[@]}")
-    ((pw > w_preview)) && w_preview=$pw
+    _hi_widen w_preview "$(_hi_group_preview_width "${group_names[@]}")"
   done
 
   _hi_hbar "$w_item" "$w_color" "$w_source" "$w_preview"
   printf '| %-*s | %-*s | %-*s | %-*s |\n' \
     "$w_item" "HOST" "$w_color" "COLOR" "$w_source" "SOURCE" "$w_preview" "PREVIEW"
   _hi_hbar "$w_item" "$w_color" "$w_source" "$w_preview"
-
-  if [[ -n "$localhostname_color" ]]; then
-    name_escape=$(_hi_color_escape "$localhostname_color")
-    total_lines=${#preview_users[@]}
-    ((total_lines > 0)) || total_lines=1
-    pad_preview=$((w_preview - $(_hi_group_preview_width "$local_hostname")))
-
-    for ((li = 0; li < total_lines; li++)); do
-      if ((li == 0)); then
-        _hi_cell "$w_item" "$name_escape" "$local_hostname"
-        _hi_cell "$w_color" "$name_escape" "$localhostname_color"
-        _hi_cell "$w_source" "$name_escape" "local:hostname"
-      else
-        _hi_cell "$w_item" "" ""
-        _hi_cell "$w_color" "" ""
-        _hi_cell "$w_source" "" ""
-      fi
-
-      if ((li < ${#preview_users[@]})); then
-        user="${preview_users[li]}"
-        user_color=$(_hi_resolve_color username "$user" "")
-        user_escape=$(_hi_color_escape "$user_color")
-        # pad after the hostname so every row's plain-text width matches
-        # pad_preview below, regardless of that user's name length
-        previewtext="${user_escape}${user}${NC}${YELLOW}@${NC}${name_escape}${local_hostname}$(printf '%*s' $((user_width - ${#user})) '')${NC}"
-        printf '| %b%*s |\n' "$previewtext" "$pad_preview" ""
-      else
-        printf '| %*s |\n' "$w_preview" ""
-      fi
-    done
-
-    _hi_hbar "$w_item" "$w_color" "$w_source" "$w_preview"
-  fi
-
-  if [[ ! -f "$_HI_SSH_CONFIG" ]]; then
-    _hi_cecho "No ssh config found at $_HI_SSH_CONFIG" "$RED"
-    return
-  fi
 
   for gidx in "${!group_order[@]}"; do
     source="${group_source[gidx]}"
@@ -356,6 +318,8 @@ function _hi_print_hosts_table() {
 
     _hi_hbar "$w_item" "$w_color" "$w_source" "$w_preview"
   done
+
+  [[ -f "$_HI_SSH_CONFIG" ]] || _hi_cecho "No ssh config found at $_HI_SSH_CONFIG" "$RED"
 }
 
 # same hatch as scripts/install.sh: sourcing this

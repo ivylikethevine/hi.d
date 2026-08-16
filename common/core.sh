@@ -1,11 +1,7 @@
 #!/bin/bash
-# The entry point every bash/zsh script and shell uses: the environment preamble
-# (toggle defaults, settings, common/paths.sh) followed by colors and the
-# handful of primitives every hi script needs (_hi_cecho, timing, hostname).
-#
-# One file rather than two because shells/config.fish reaches this directly
-# through `bash -c "source $_HI_CORE"`, without a chance to run a separate
-# bootstrap first - which is what used to make the preamble below exist twice.
+# The entry point every bash/zsh script sources: preamble (toggles, settings,
+# paths.sh), colors, and the shared primitives. One file, because fish reaches
+# it via a bare `bash -c "source $_HI_CORE"` with no separate bootstrap.
 set -euo pipefail # must be disabled after our code (this file is part of the interactive shell - any error would close the session)
 
 # Sourced twice in one shell is a no-op; $_hi_core_loaded is deliberately not
@@ -17,34 +13,22 @@ if [ -z "${_hi_core_loaded:-}" ]; then
   # already exported (hi.sh on the client, load.sh on the target) survives
   : "${_HI_HOME:=$HOME}"
   export _HI_HOME
-  : "${_HI_DISABLE_LOCAL:=0}"
-  export _HI_DISABLE_LOCAL
-  : "${_HI_REMOTE_SESSION:=0}"
-  export _HI_REMOTE_SESSION
-  # The six feature toggles, defaulted so reading one is never an error.
-  # shells/aliases.sh and shells/config.fish read them bare - they can't use
-  # ${X:-0}, since fish has no such expansion and sources both - so an unset
-  # toggle is fatal under `set -u`. (That is what broke `hi <target> <command>`
-  # until hi.sh's bootloader stopped leaving strict mode on.)
-  # Defaulted, never assigned: the settings file is sourced next and paths.sh's
-  # local-only gate right after, and both still have to be able to win.
-  : "${_HI_DISABLE_HEADER:=0}"
-  : "${_HI_DISABLE_PROMPT:=0}"
-  : "${_HI_DISABLE_PERSONAL:=0}"
-  : "${_HI_DISABLE_GIT_STATUS:=0}"
-  : "${_HI_DISABLE_EDITORS:=0}"
-  : "${_HI_DISABLE_ALIASES:=0}"
-  export _HI_DISABLE_HEADER _HI_DISABLE_PROMPT _HI_DISABLE_PERSONAL
-  export _HI_DISABLE_GIT_STATUS _HI_DISABLE_EDITORS _HI_DISABLE_ALIASES
-  # where the user's config overlay lives. paths.sh resolves settings/colors/
-  # packages against it but can't derive it (fish has no ${X:-y}), so every entry
-  # point sets it; `:=` leaves an outer layer's value alone the way $_HI_HOME above
-  # is left alone, which is what lets hi.sh point a target at its own copy.
+  # GLOSSARY: toggle defaulting + dynamic-name assignment. Defaulted, never
+  # assigned - settings.sh and paths.sh's gate still win. List shared with
+  # _hi_fallback_rc; config.fish keeps its own copy.
+  _HI_TOGGLES=(_HI_DISABLE_LOCAL _HI_REMOTE_SESSION _HI_DISABLE_HEADER
+    _HI_DISABLE_PROMPT _HI_DISABLE_PERSONAL _HI_DISABLE_GIT_STATUS
+    _HI_DISABLE_EDITORS _HI_DISABLE_ALIASES)
+  for _hi_t in "${_HI_TOGGLES[@]}"; do
+    eval ": \"\${$_hi_t:=0}\"; export $_hi_t"
+  done
+  unset _hi_t
+  # the config overlay's home - every entry point sets it (fish can't expand
+  # this); `:=` lets hi.sh point a target at its shipped copy instead
   : "${_HI_CONFIG_DIR:=${XDG_CONFIG_HOME:-$HOME/.config}/hi.d}"
   export _HI_CONFIG_DIR
-  # the settings scripts/install.sh writes, ahead of paths.sh because its
-  # local-only gate reads them (see the note by that gate). $_HI_SETTINGS isn't
-  # defined yet - it comes *from* paths.sh - so the path is spelled out here.
+  # install.sh's settings, ahead of paths.sh whose gate reads them
+  # ($_HI_SETTINGS comes *from* paths.sh, hence the spelled-out path)
   # shellcheck source=/dev/null # user config, may not exist
   if [ -f "$_HI_CONFIG_DIR/settings.sh" ]; then
     . "$_HI_CONFIG_DIR/settings.sh"
@@ -76,17 +60,9 @@ function _hi_cecho() {
   [ $# -ge 3 ] && printf '%b' "$out" || printf '%b\n' "$out"
 }
 
-# _hi_read_lines <array-name> - stdin into that array, one element per line.
-#
-# What `mapfile -t <name>` does, except mapfile is bash 4 and macOS still ships
-# bash 3.2 - where the builtin is simply missing, so every call site would die
-# with "mapfile: command not found". Assignment goes through eval because 3.2
-# has no namerefs either; bash's dynamic scoping is what lets it reach a
-# `local -a` the caller declared. Use it exactly the way mapfile was used:
-#
-#   _hi_read_lines lines < <(some command)
-#
-# A last line with no trailing newline is kept, which is mapfile's behaviour too.
+# _hi_read_lines <array-name> - stdin into that array, one element per line;
+# `mapfile -t` for bash 3.2, unterminated last line kept. Use it the same way:
+# _hi_read_lines lines < <(cmd). GLOSSARY: _hi_read_lines.
 function _hi_read_lines() {
   local _hi_rl_var="$1" _hi_rl_line
   eval "$_hi_rl_var=()"
@@ -131,14 +107,14 @@ function _hi_elapsed() {
   awk -v a="$1" -v b="$2" 'BEGIN { printf "%.3f", b - a }'
 }
 
-# --apparent-size is a GNU-only flag, probed lazily (and cached) on first use
+# total size of the given paths; --apparent-size is GNU-only, probed once
 function _hi_du_size() {
   if [ -z "${_HI_LINUX_FLAGS+x}" ]; then
     _HI_LINUX_FLAGS=""
     du --version 2>/dev/null | grep -q "GNU coreutils" && _HI_LINUX_FLAGS="--apparent-size"
   fi
   # shellcheck disable=SC2086 # unquoted so an empty flag list disappears
-  du -sh "$@" $_HI_LINUX_FLAGS "$_HI_ROOT" | awk '{ print $1 }'
+  du -shc $_HI_LINUX_FLAGS "$@" | awk 'END { print $1 }'
 }
 
 # Memoized; `hostname`/`whoami` stay authoritative rather than $HOSTNAME/$USER,
@@ -161,10 +137,8 @@ function _hi_prime_identity() {
   _hi_hostname >/dev/null
 }
 
-# Run a backend CLI with an upper bound, so a downed daemon can't hang a path
-# the user waits on. `timeout` is GNU coreutils and absent on stock macOS, so
-# this degrades to running bare. common/targets.sh keeps its own copy
-# (standalone POSIX sh) but shares the knob.
+# Bound a backend CLI so a downed daemon can't hang a waited-on path; bare
+# when GNU `timeout` is absent (stock macOS). targets.sh keeps its own copy.
 if command -v timeout >/dev/null 2>&1; then
   function _hi_probe() { timeout "${_HI_PROBE_TIMEOUT:-2}" "$@"; }
 else

@@ -1,0 +1,33 @@
+name: Setup nfpm
+# one pinned install shared by ci.yml and release.yml - bump the default here
+# and both follow (same pattern as setup-shellcheck)
+description: Install a pinned nfpm binary, with caching
+
+inputs:
+  version:
+    description: nfpm version to install
+    required: false
+    default: "2.43.0"
+
+runs:
+  using: composite
+  steps:
+    - name: Cache nfpm
+      id: nfpm-cache
+      uses: actions/cache@v4
+      with:
+        path: /usr/local/bin/nfpm
+        key: nfpm-${{ inputs.version }}-linux-x86_64
+
+    - name: Install nfpm
+      if: steps.nfpm-cache.outputs.cache-hit != 'true'
+      shell: bash
+      env:
+        NFPM_VERSION: ${{ inputs.version }}
+      run: |
+        set -euo pipefail
+        curl -sSfL -o /tmp/nfpm.tar.gz \
+          "https://github.com/goreleaser/nfpm/releases/download/v${NFPM_VERSION}/nfpm_${NFPM_VERSION}_Linux_x86_64.tar.gz"
+        tar -xzf /tmp/nfpm.tar.gz -C /tmp nfpm
+        sudo mv /tmp/nfpm /usr/local/bin/nfpm
+        nfpm --version

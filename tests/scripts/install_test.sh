@@ -362,18 +362,14 @@ function test_config_hi_skips_chmod_when_already_executable() {
   printf '#!/bin/bash\n' >"$dir/hi.sh"
   chmod 555 "$dir/hi.sh"
   ln -sfn "$dir/hi.sh" "$link"
-  (
+  local out
+  out="$(
     function chmod() { echo "CHMOD RAN"; }
     _HI_LAUNCHER="$dir/hi.sh"
     _HI_LINK="$link"
     config_hi
-  ) | grep -q "already points at" &&
-    ! (
-      function chmod() { echo "CHMOD RAN"; }
-      _HI_LAUNCHER="$dir/hi.sh"
-      _HI_LINK="$link"
-      config_hi
-    ) | grep -q "CHMOD RAN"
+  )"
+  [[ "$out" == *"already points at"* && "$out" != *"CHMOD RAN"* ]]
 }
 
 # a writable bindir needs no sudo at all - root installs, userland prefixes
@@ -418,12 +414,19 @@ function test_config_hi_degrades_when_sudo_cannot_link() {
 # calls. It must lay the tree down under $DESTDIR and touch nothing else - no rc
 # file, no sudo, no prompt - since none of those belong to the packager.
 
-# Stand a scratch tree up and run install_tree against it, returning the DESTDIR.
-function _hi_package_fixture() {
+# the scratch source tree alone, for cases that need setup between it and the
+# install_tree run (or several runs)
+function _hi_package_src() {
   local dir="$_HI_WORKDIR/$1" item
+  mkdir -p "$dir/src/hi.d/common" "$dir/src/hi.d/misc" "$dir/src/hi.d/scripts" "$dir/src/hi.d/shells"
+  for item in hi.sh load.sh LICENSE README.md; do printf 'x\n' >"$dir/src/hi.d/$item"; done
+}
+
+# Stand a scratch tree up and run install_tree against it.
+function _hi_package_fixture() {
+  local dir="$_HI_WORKDIR/$1"
   local _HI_ROOT="$dir/src/hi.d" _HI_PREFIX="/usr/share" DESTDIR="$dir/dest"
-  mkdir -p "$_HI_ROOT/common" "$_HI_ROOT/misc" "$_HI_ROOT/scripts" "$_HI_ROOT/shells"
-  for item in hi.sh load.sh LICENSE README.md; do printf 'x\n' >"$_HI_ROOT/$item"; done
+  _hi_package_src "$1"
   install_tree >/dev/null
 }
 
@@ -434,7 +437,7 @@ function test_install_tree_copies_the_tree_under_destdir() {
     [ -f "$dest/load.sh" ] && [ -x "$dest/hi.sh" ]
 }
 
-# scripts/ is the one place this list differs from hi.sh's $_HI_EXCLUDE: a
+# scripts/ is the one place this list differs from hi.sh's $_HI_PAYLOAD: a
 # payload doesn't need it, but a packaged install does, or `hi_install` (which
 # every user of that package has to run once) would not be there to run.
 function test_install_tree_ships_scripts() {
@@ -464,25 +467,22 @@ function test_install_tree_touches_no_rc_file() {
 
 # cp -R merges, so a re-stage must clear the dest or removed files keep shipping
 function test_install_tree_clears_a_stale_destination() {
-  local dir="$_HI_WORKDIR/staledest" item
-  local _HI_ROOT="$dir/src/hi.d" _HI_PREFIX="/usr/share" DESTDIR="$dir/dest"
-  mkdir -p "$_HI_ROOT/common" "$_HI_ROOT/misc" "$_HI_ROOT/scripts" "$_HI_ROOT/shells"
-  for item in hi.sh load.sh LICENSE README.md; do printf 'x\n' >"$_HI_ROOT/$item"; done
-  install_tree >/dev/null
+  local dir="$_HI_WORKDIR/staledest"
+  _hi_package_fixture staledest
   printf 'stale\n' >"$dir/dest/usr/share/hi.d/leftover"
+  local _HI_ROOT="$dir/src/hi.d" _HI_PREFIX="/usr/share" DESTDIR="$dir/dest"
   install_tree >/dev/null
   [ ! -e "$dir/dest/usr/share/hi.d/leftover" ] && [ -f "$dir/dest/usr/share/hi.d/load.sh" ]
 }
 
 # clearing the dest removes a pre-existing symlink itself, never its target
 function test_install_tree_replaces_a_symlinked_dest_without_following() {
-  local dir="$_HI_WORKDIR/symdest" item
-  local _HI_ROOT="$dir/src/hi.d" _HI_PREFIX="/usr/share" DESTDIR="$dir/dest"
-  mkdir -p "$_HI_ROOT/common" "$_HI_ROOT/misc" "$_HI_ROOT/scripts" "$_HI_ROOT/shells"
-  for item in hi.sh load.sh LICENSE README.md; do printf 'x\n' >"$_HI_ROOT/$item"; done
+  local dir="$_HI_WORKDIR/symdest"
+  _hi_package_src symdest
   mkdir -p "$dir/dest/usr/share" "$dir/elsewhere"
   printf 'keep\n' >"$dir/elsewhere/precious"
   ln -s "$dir/elsewhere" "$dir/dest/usr/share/hi.d"
+  local _HI_ROOT="$dir/src/hi.d" _HI_PREFIX="/usr/share" DESTDIR="$dir/dest"
   install_tree >/dev/null
   [ -f "$dir/elsewhere/precious" ] && [ ! -L "$dir/dest/usr/share/hi.d" ] &&
     [ -f "$dir/dest/usr/share/hi.d/load.sh" ]

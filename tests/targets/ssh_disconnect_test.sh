@@ -165,7 +165,7 @@ function run_ssh_disconnect_test() {
   _hi_ssh_keypair
 
   _hi_h2 "Building test image"
-  _hi_sshd_image "this suite" || exit 0
+  _hi_sshd_image "this suite" || _hi_stand_down "sshd image build failed"
 
   _HI_CONTAINER="hi-sshdisconnecttest-$$"
   _hi_sshd_container "$_HI_CONTAINER" "$_HI_SSHD_IMAGE" \

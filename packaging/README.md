@@ -68,7 +68,7 @@ just created, instead of requiring a pre-tag bump and a force-retag to reconcile
    tarball, so they don't need to be in the tagged tree).
 4. Copy the manifests from the release (or from `main`) to the AUR and the tap, per the sections below.
 
-`bump.sh 1.0.0` still works by hand if CI is ever unavailable (`_HI_BUMP_TARBALL=<file>` skips the
+`bump.sh 1.0.0` still works by hand if CI is ever unavailable (`--tarball <file>` skips the
 download), and `bump.sh --check 1.0.0` stays useful locally to confirm the manifests match a cut release.
 
 ## Publishing each channel (all manual)

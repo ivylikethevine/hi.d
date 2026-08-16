@@ -46,10 +46,7 @@ _HI_NATIVE_LINT=(
 function lint_native() {
   local entry file shell flag out bad=0
   for entry in "${_HI_NATIVE_LINT[@]}"; do
-    file="${entry%%:*}"
-    shell="${entry#*:}"
-    flag="${shell#*:}"
-    shell="${shell%%:*}"
+    IFS=: read -r file shell flag <<<"$entry"
     if ! command -v "$shell" >/dev/null 2>&1; then
       _hi_skip " | $file" "no $shell to check it with"
       continue
@@ -99,16 +96,26 @@ function _hi_lint_source_lines() {
 # Flag every match outside a comment. Comments are excluded on purpose: half of
 # these constructs are *named* in the notes explaining why they aren't used.
 function lint_bash32() {
-  local entry pattern what file hits bad=0
+  local entry pattern what file hits bad=0 i blanks="$_HI_WORKDIR/bash32"
   _hi_h2 "Checking for bash-4-only constructs (macOS ships bash 3.2)"
+  # blank each file once, not once per pattern - the awk pass is the expensive
+  # half of this loop and its output is identical for every pattern
+  mkdir -p "$blanks"
+  i=0
+  for file in "${_HI_SH_FILES[@]}"; do
+    _hi_lint_source_lines "$file" >"$blanks/$i"
+    i=$((i + 1))
+  done
   for entry in "${_HI_BASH32_LINT[@]}"; do
     pattern="${entry%|*}"
     what="${entry##*|}"
     _HI_LINT_TOTAL=$((_HI_LINT_TOTAL + 1))
     hits=""
+    i=0
     for file in "${_HI_SH_FILES[@]}"; do
-      hits+="$(_hi_lint_source_lines "$file" | grep -nE "$pattern" | grep -v ':[[:space:]]*#' |
+      hits+="$(grep -nE "$pattern" "$blanks/$i" | grep -v ':[[:space:]]*#' |
         sed "s|^|${file#"$_HI_ROOT/"}:|" || true)"
+      i=$((i + 1))
     done
     if [ -z "$hits" ]; then
       _hi_cecho " | no $what: OK" "$GREEN"

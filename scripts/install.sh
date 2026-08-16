@@ -165,11 +165,15 @@ function config_shell() {
   tmpfile="$(mktemp -t hi.append.XXXXXX)"
   grep -vF "$_HI_MARKER" "$target" >"$tmpfile" || true
   printf '%s' "$desired" >>"$tmpfile"
-  # cat, not mv: mv would put mktemp's 0600 on the user's rc file and sever
-  # any hardlink/ACL on it
-  cat "$tmpfile" >"$target"
-  rm -f "$tmpfile"
+  _hi_write_back "$tmpfile" "$target"
   _hi_cecho " local $name updated :)" "$GREEN"
+}
+
+# tmp -> dest through dest's existing inode: cat, not mv, or mktemp's 0600
+# lands on the user's rc file and severs any hardlink/ACL on it
+function _hi_write_back() {
+  cat "$1" >"$2"
+  rm -f "$1"
 }
 
 # config_shell with an empty block, plus a quieter report for the common
@@ -273,7 +277,6 @@ function _hi_visible_len() {
 # functions, sized to its longest line rather than the terminal width, since
 # previews range from one short colored line to full_check's wrapped block.
 function show_preview() {
-  [ -t 0 ] || return 0
   local out label="─ preview " content_w=0 len line pad top bottom fill_top fill_bottom
   local -a lines
   out="$("$@" 2>/dev/null)" || true
@@ -313,6 +316,7 @@ function _hi_prompt_preview() {
 # so the preview shows this machine's actual status. _HI_DISABLE_GIT_STATUS is
 # unset for the call, or a previously-disabled toggle makes it return empty.
 function _hi_git_status_preview() {
+  # shellcheck disable=SC2119 # stdout form on purpose - this feeds show_preview
   (cd "$_HI_ROOT" 2>/dev/null && unset _HI_DISABLE_GIT_STATUS && _hi_git_prompt)
 }
 
@@ -438,9 +442,7 @@ function ensure_settings_shebang() {
     *) cat "$_HI_SETTINGS" >>"$tmpfile" ;;
     esac
   fi
-  # cat, not mv - same mode-preservation reasoning as config_shell
-  cat "$tmpfile" >"$_HI_SETTINGS"
-  rm -f "$tmpfile"
+  _hi_write_back "$tmpfile" "$_HI_SETTINGS"
 }
 
 # Runs $@'s syntax-check flag against an existing rc file (without executing it)
@@ -587,9 +589,9 @@ function run_uninstall() {
 }
 
 # What a package ships. Deliberately spelled out rather than derived from
-# hi.sh's $_HI_EXCLUDE: that list answers "what does a target need for one
+# hi.sh's $_HI_PAYLOAD: that list answers "what does a target need for one
 # session", this one answers "what does an installed copy need forever", and the
-# two differ on scripts/ - excluded from a payload, required here so a user of a
+# two differ on scripts/ - not in the payload, required here so a user of a
 # packaged install can still run `hi_install`/`hi_uninstall`/`hi_color_preview`
 # against it. tests/ is in neither; `hi_test` reports itself unavailable.
 _HI_PACKAGE_CONTENTS=(common misc scripts shells hi.sh load.sh LICENSE README.md)
@@ -605,15 +607,9 @@ function install_tree() {
   local profile="${DESTDIR:-}/etc/profile.d/hi.d.sh" item line
   _hi_h2 "Installing the tree"
 
-  # cp -R merges, so clear a pre-existing dest or removed files keep shipping;
-  # the basename guard keeps the rm -rf aimed only at a dir named hi.d
-  if [ -e "$dest" ]; then
-    if [ "$(basename "$dest")" != "hi.d" ]; then
-      _hi_cecho " refusing to clear $dest - not a directory named hi.d" "$RED" >&2
-      return 1
-    fi
-    rm -rf "$dest"
-  fi
+  # cp -R merges, so clear a pre-existing dest or removed files keep shipping
+  # ($dest is built two lines up and always ends in /hi.d)
+  rm -rf "$dest"
   mkdir -p "$dest"
   for item in "${_HI_PACKAGE_CONTENTS[@]}"; do
     [ -e "$_HI_ROOT/$item" ] || continue

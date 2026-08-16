@@ -25,15 +25,16 @@ export _HI_HOME
 # shellcheck source=../common/core.sh
 source "$_HI_HOME/hi.d/common/core.sh"
 
-# Overridable so the test suite can point them at fixture copies; everything
-# real goes through the defaults.
-: "${_HI_PKGBUILD:=$_HI_ROOT/packaging/aur/hi.d/PKGBUILD}"
-: "${_HI_SRCINFO:=$_HI_ROOT/packaging/aur/hi.d/.SRCINFO}"
-: "${_HI_FORMULA:=$_HI_ROOT/packaging/homebrew/hi.d.rb}"
+# One overridable seam - the test suite points it at a fixture directory with
+# the same layout; the three paths always derive from it.
+: "${_HI_PKG_DIR:=$_HI_ROOT/packaging}"
+_HI_PKGBUILD="$_HI_PKG_DIR/aur/hi.d/PKGBUILD"
+_HI_SRCINFO="$_HI_PKG_DIR/aur/hi.d/.SRCINFO"
+_HI_FORMULA="$_HI_PKG_DIR/homebrew/hi.d.rb"
 _HI_URL_BASE="https://github.com/ivylikethevine/hi.d/archive"
 # what a manifest reads before any release has been cut; --check rejects both
 _HI_PLACEHOLDER_SHA="0000000000000000000000000000000000000000000000000000000000000000"
-_HI_USAGE="Usage: bump.sh [--check] <version>"
+_HI_USAGE="Usage: bump.sh [--check] [--tarball <file>] <version>"
 
 # sha256 and blake2b of $1, each with a non-coreutils fallback so this also runs
 # on a mac (no sha256sum, no b2sum) rather than only on the Linux CI box.
@@ -54,13 +55,16 @@ function b2_of() {
   fi
 }
 
-# Rewrite one line in place. A temp file rather than `sed -i` (whose in-place
-# flag differs BSD/GNU), written back with cat, not mv - mv would put mktemp's
-# 0600 on a tracked manifest.
+# rewrite <file> <sed-expr>... - all expressions in one pass. A temp file
+# rather than `sed -i` (whose in-place flag differs BSD/GNU), written back with
+# cat, not mv - mv would put mktemp's 0600 on a tracked manifest.
 function rewrite() {
-  local file="$1" expr="$2" tmp
+  local file="$1" e tmp
+  shift
+  local -a exprs=()
+  for e in "$@"; do exprs+=(-e "$e"); done
   tmp="$(mktemp -t hi.bump.XXXXXX)"
-  sed "$expr" "$file" >"$tmp"
+  sed "${exprs[@]}" "$file" >"$tmp"
   cat "$tmp" >"$file"
   rm -f "$tmp"
 }
@@ -127,12 +131,12 @@ function check_manifests() {
   return "$bad"
 }
 
+# write_manifests [tarball] - with a tarball argument, checksum that file
+# instead of downloading: the test suite's offline path, and --tarball's
+# escape hatch when GitHub is unreachable.
 function write_manifests() {
-  local url tarball sha b2
-  # _HI_BUMP_TARBALL: checksum this local file instead of downloading - the
-  # test suite's offline path, and an escape hatch when GitHub is unreachable
-  if [ -n "${_HI_BUMP_TARBALL:-}" ]; then
-    tarball="$_HI_BUMP_TARBALL"
+  local url tarball="${1:-}" sha b2
+  if [ -n "$tarball" ]; then
     _hi_h2 "Using the local tarball $tarball"
     [ -f "$tarball" ] || {
       _hi_cecho " no such file: $tarball" "$RED" >&2
@@ -157,12 +161,14 @@ function write_manifests() {
   _hi_cecho " b2     $b2" "$BLUE"
 
   _hi_h2 "Writing the manifests"
-  rewrite "$_HI_PKGBUILD" "s/^pkgver=.*/pkgver=$_HI_VERSION/"
-  rewrite "$_HI_PKGBUILD" "s/^b2sums=.*/b2sums=('$b2')/"
+  rewrite "$_HI_PKGBUILD" \
+    "s/^pkgver=.*/pkgver=$_HI_VERSION/" \
+    "s/^b2sums=.*/b2sums=('$b2')/"
   _hi_cecho " $_HI_PKGBUILD :)" "$GREEN"
 
-  rewrite "$_HI_FORMULA" "s|^  url \".*\"|  url \"$_HI_URL_BASE/refs/tags/v$_HI_VERSION.tar.gz\"|"
-  rewrite "$_HI_FORMULA" "s/^  sha256 \".*\"/  sha256 \"$sha\"/"
+  rewrite "$_HI_FORMULA" \
+    "s|^  url \".*\"|  url \"$_HI_URL_BASE/refs/tags/v$_HI_VERSION.tar.gz\"|" \
+    "s/^  sha256 \".*\"/  sha256 \"$sha\"/"
   _hi_cecho " $_HI_FORMULA :)" "$GREEN"
 
   if command -v makepkg >/dev/null 2>&1; then
@@ -179,18 +185,29 @@ function write_manifests() {
 # \([[:space:]]*\) capture keeps .SRCINFO's leading tab.
 function rewrite_srcinfo_lines() {
   local b2="$1"
-  rewrite "$_HI_SRCINFO" "s/^\\([[:space:]]*\\)pkgver = .*/\\1pkgver = $_HI_VERSION/"
-  rewrite "$_HI_SRCINFO" "s|^\\([[:space:]]*\\)source = .*|\\1source = hi.d-$_HI_VERSION.tar.gz::$_HI_URL_BASE/v$_HI_VERSION.tar.gz|"
-  rewrite "$_HI_SRCINFO" "s/^\\([[:space:]]*\\)b2sums = .*/\\1b2sums = $b2/"
+  rewrite "$_HI_SRCINFO" \
+    "s/^\\([[:space:]]*\\)pkgver = .*/\\1pkgver = $_HI_VERSION/" \
+    "s|^\\([[:space:]]*\\)source = .*|\\1source = hi.d-$_HI_VERSION.tar.gz::$_HI_URL_BASE/v$_HI_VERSION.tar.gz|" \
+    "s/^\\([[:space:]]*\\)b2sums = .*/\\1b2sums = $b2/"
 }
 
 # sourcing stops here (tests reach the functions above) - install.sh's pattern
 [[ "${BASH_SOURCE[0]}" == "$0" ]] || return 0
 
 _HI_CHECK_ONLY=""
+_HI_TARBALL=""
 while [ $# -gt 0 ]; do
   case "$1" in
   --check) _HI_CHECK_ONLY=1 ;;
+  --tarball)
+    [ $# -ge 2 ] || {
+      echo "bump.sh: --tarball requires a path" >&2
+      exit 1
+    }
+    _HI_TARBALL="$2"
+    shift
+    ;;
+  --tarball=*) _HI_TARBALL="${1#--tarball=}" ;;
   -h | --help)
     cat <<EOF
 $_HI_USAGE
@@ -199,9 +216,13 @@ Writes <version> (no leading v) into packaging/aur/hi.d/PKGBUILD, its
 .SRCINFO, and packaging/homebrew/hi.d.rb, along with the b2sum and sha256
 of the matching GitHub release tarball.
 
-  --check   Verify the manifests already agree on <version> and carry real
-            checksums, then exit non-zero if not. Touches nothing and needs
-            no network. This is the release workflow's gate.
+  --check            Verify the manifests already agree on <version> and
+                     carry real checksums, then exit non-zero if not.
+                     Touches nothing and needs no network. This is the
+                     release workflow's gate.
+  --tarball <file>   Checksum this local tarball instead of downloading -
+                     for when GitHub is unreachable but the artifact is in
+                     hand. It must be byte-identical to the tag's tarball.
 
 packaging/aur/hi.d-git/ is untouched: its pkgver() derives from the branch.
 EOF
@@ -236,6 +257,6 @@ if [ -n "$_HI_CHECK_ONLY" ]; then
 fi
 
 _hi_h1 "Bumping hi.d to $_HI_VERSION"
-write_manifests
+write_manifests "$_HI_TARBALL"
 _hi_h1 "Bumped!"
 _hi_cecho " | review the diff, commit it - the release workflow re-derives and verifies the same sums from the tag" "$BLUE"

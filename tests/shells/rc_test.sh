@@ -57,13 +57,9 @@ function test_bash_defines_key_aliases() {
     'source "$_HI_HOME/hi.d/shells/bash.sh" 2>/dev/null; alias grep && alias mindiff' >/dev/null
 }
 
-# Per-case guards rather than _hi_require, which would stand the whole suite
-# down - a machine without fish still runs the bash and zsh cases.
+# zsh/fish presence is handled by _hi_check_requires at the registration, so a
+# machine without one still runs (and honestly reports) the rest.
 function test_zsh_prompt_is_built() {
-  command -v zsh >/dev/null 2>&1 || {
-    _hi_cecho "   zsh not installed, skipping" "$YELLOW"
-    return 0
-  }
   local out
   out="$(_hi_rc_shell xterm-256color zsh \
     'source "$_HI_HOME/hi.d/shells/zsh.zsh" 2>/dev/null; print -r -- "$PS1"')"
@@ -71,10 +67,6 @@ function test_zsh_prompt_is_built() {
 }
 
 function test_fish_registers_hi_completion() {
-  command -v fish >/dev/null 2>&1 || {
-    _hi_cecho "   fish not installed, skipping" "$YELLOW"
-    return 0
-  }
   # fish echoes the registration back without the -c flag, so match on the
   # target-list wiring instead
   _hi_rc_shell xterm-256color fish \
@@ -98,8 +90,8 @@ function run_rc_tests() {
   _hi_check "Key aliases are defined" test_bash_defines_key_aliases
 
   _hi_h2 "Testing: zsh and fish"
-  _hi_check "zsh builds its prompt" test_zsh_prompt_is_built
-  _hi_check "fish registers hi completion" test_fish_registers_hi_completion
+  _hi_check_requires zsh "zsh builds its prompt" test_zsh_prompt_is_built
+  _hi_check_requires fish "fish registers hi completion" test_fish_registers_hi_completion
 
   _hi_suite_end "rc"
 }

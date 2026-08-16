@@ -31,7 +31,7 @@ source "$_HI_TEST_LIB"
 _HI_ALPINE_OK=""
 
 function _hi_run_case() {
-  local label="$1" image="$2" login_shell="$3" cmd="$4" post="${5:-}" name out exit_code=0 t0 t1 ok=1
+  local label="$1" image="$2" login_shell="$3" cmd="$4" post="${5:-}" name exit_code=0 t0 t1 ok=0
 
   name="hi-sshtest-$label-$$"
   _hi_h3 "Testing login shell: $label ($login_shell)"
@@ -59,20 +59,15 @@ function _hi_run_case() {
   "${_HI_SSH_LAUNCH[@]}" "$cmd" <&3 >"$out_file" 2>&1 &
   _hi_wait_pid "$!" "${_HI_SSH_CASE_TIMEOUT:-90}"
   exit_code="$_HI_WAIT_EXIT"
-  out="$(cat "$out_file" 2>/dev/null)"
   t1="$(_hi_now)"
 
-  if printf '%s' "$out" | grep -q "$_HI_MARKER"; then
+  # the shared verdict, then the same post-check shape _hi_run_interactive_case uses
+  if _hi_case_result "$label" "ssh path" "$exit_code" "$t0" "$t1" "$out_file" "$_HI_TEST_MARKER"; then
+    ok=1
     if [ -n "$post" ] && ! docker exec "$name" sh -c "$post" >/dev/null 2>&1; then
-      _hi_h3 " | [$label] -- post-check FAILED: $post ($(_hi_elapsed "$t0" "$t1")s)" "$RED"
+      _hi_h3 " | [$label] -- post-check FAILED: $post" "$RED"
       ok=0
-    else
-      _hi_cecho " | [$label] -- ssh path OK ($(_hi_elapsed "$t0" "$t1")s)" "$GREEN"
     fi
-  else
-    _hi_h3 " | [$label] -- FAILED (exit $exit_code, $(_hi_elapsed "$t0" "$t1")s)" "$RED"
-    printf '%s\n' "$out" | sed 's/^/      /'
-    ok=0
   fi
 
   docker rm -f "$name" >/dev/null 2>&1
@@ -88,7 +83,7 @@ function _hi_run_interactive_case() {
   _hi_sshd_container "$name" "$image" -e "LOGIN_SHELL=$login_shell" || return 1
   _hi_ssh_launch "$_HI_SSH_PORT"
 
-  if _hi_interactive_case "$label" "ssh path" "$_HI_MARKER" 90 "${_HI_SSH_LAUNCH_BARE[@]}"; then
+  if _hi_interactive_case "$label" "ssh path" "$_HI_TEST_MARKER" 90 "${_HI_SSH_LAUNCH_BARE[@]}"; then
     ok=1
     if [ -n "$post" ] && ! docker exec "$name" sh -c "$post" >/dev/null 2>&1; then
       _hi_h3 " | [$label] -- post-check FAILED: $post" "$RED"
@@ -116,10 +111,7 @@ function run_ssh_tests() {
     _hi_ctx="$_HI_WORKDIR/$_hi_label"
     mkdir -p "$_hi_ctx"
     printf 'FROM alpine:3.20\nRUN apk add --no-cache openssh openssl %s \\\n    && adduser -D -s /bin/ash hitest\nCOPY entrypoint.sh /entrypoint.sh\nRUN chmod +x /entrypoint.sh\nENTRYPOINT ["/entrypoint.sh"]\n' "${_hi_img#*:}" >"$_hi_ctx/Dockerfile"
-    {
-      printf '#!/bin/sh\nset -e\n'
-      printf '%s\n' "$_HI_SSHD_ENTRYPOINT_BODY"
-    } >"$_hi_ctx/entrypoint.sh"
+    _hi_sshd_entrypoint "$_hi_ctx" /bin/sh
 
     if _hi_build_image "$_hi_label" "hi-sshtest-$_hi_label-$$" "its fallback case" "$_hi_ctx"; then
       _hi_kv_set _HI_ALPINE_OK "$_hi_label" 1
@@ -138,10 +130,7 @@ function run_ssh_tests() {
   _hi_ctx="$_HI_WORKDIR/bash32"
   mkdir -p "$_hi_ctx"
   printf 'FROM bash:3.2\nRUN apk add --no-cache openssh openssl \\\n    && ln -sf /usr/local/bin/bash /bin/bash \\\n    && adduser -D -s /usr/local/bin/bash hitest\nCOPY entrypoint.sh /entrypoint.sh\nRUN chmod +x /entrypoint.sh\nENTRYPOINT ["/entrypoint.sh"]\n' >"$_hi_ctx/Dockerfile"
-  {
-    printf '#!/bin/sh\nset -e\n'
-    printf '%s\n' "$_HI_SSHD_ENTRYPOINT_BODY"
-  } >"$_hi_ctx/entrypoint.sh"
+  _hi_sshd_entrypoint "$_hi_ctx" /bin/sh
   _hi_build_image bash32 "hi-sshtest-bash32-$$" "the bash 3.2 case" "$_hi_ctx" && _HI_BASH32_OK=1
 
   _HI_INSTALLED_OK=0
@@ -158,7 +147,7 @@ EOF
       -f "$_HI_WORKDIR/debian-installed/Dockerfile" "$_HI_ROOT" && _HI_INSTALLED_OK=1
   fi
 
-  _HI_MARKER="HI_SSH_TEST_OK"
+  _HI_TEST_MARKER="HI_SSH_TEST_OK"
 
   _hi_pty_stdin auto "no tty and no python3 to fake one - ssh -t may not get a real pty, results may be unreliable"
   _hi_pty_force
@@ -167,19 +156,19 @@ EOF
 
   if [ "$_HI_DEBIAN_OK" -eq 1 ]; then
     for _hi_pair in bash:/bin/bash dash:/bin/dash zsh:/usr/bin/zsh fish:/usr/bin/fish; do
-      _hi_case _hi_run_case "${_hi_pair%%:*}" "$_HI_SSHD_IMAGE" "${_hi_pair#*:}" "$(_hi_probe_cmd "$_HI_MARKER" bash)"
+      _hi_case _hi_run_case "${_hi_pair%%:*}" "$_HI_SSHD_IMAGE" "${_hi_pair#*:}" "$(_hi_probe_cmd "$_HI_TEST_MARKER" bash)"
     done
   fi
 
   for _hi_case_spec in nobash:alpine:ssh_fallback nobash-zsh:alpine-zsh:ssh_fallback nobash-fish:alpine-fish:ssh_fallback_fish; do
     IFS=: read -r _hi_label _hi_image _hi_shape <<<"$_hi_case_spec"
     if [ "$(_hi_kv_get _HI_ALPINE_OK "$_hi_image")" = 1 ]; then
-      _hi_case _hi_run_case "$_hi_label" "hi-sshtest-$_hi_image-$$" /bin/ash "$(_hi_probe_cmd "$_HI_MARKER" "$_hi_shape")"
+      _hi_case _hi_run_case "$_hi_label" "hi-sshtest-$_hi_image-$$" /bin/ash "$(_hi_probe_cmd "$_HI_TEST_MARKER" "$_hi_shape")"
     fi
   done
 
   if [ "$_HI_BASH32_OK" -eq 1 ]; then
-    _hi_case _hi_run_case bash32 "hi-sshtest-bash32-$$" /usr/local/bin/bash "$(_hi_probe_cmd "$_HI_MARKER" bash)"
+    _hi_case _hi_run_case bash32 "hi-sshtest-bash32-$$" /usr/local/bin/bash "$(_hi_probe_cmd "$_HI_TEST_MARKER" bash)"
     # The shape that matters for bash 3.2: $CMDARG replaces load() outright in
     # the bootloader, so a command-shaped case never reaches the header, the rc
     # graft, the shell handoff or clean_all - which is where every bash-4-only
@@ -195,7 +184,7 @@ EOF
   fi
 
   if [ "$_HI_INSTALLED_OK" -eq 1 ]; then
-    _hi_case _hi_run_case installed "hi-sshtest-debian-installed-$$" /bin/bash "$(_hi_probe_cmd "$_HI_MARKER" installed)" \
+    _hi_case _hi_run_case installed "hi-sshtest-debian-installed-$$" /bin/bash "$(_hi_probe_cmd "$_HI_TEST_MARKER" installed)" \
       'test -f /home/hitest/hi.d/.installed_sentinel'
     # the one case that catches load.sh's clean_all deleting the target's own
     # permanent install: a command-shaped case can't, since $CMDARG means

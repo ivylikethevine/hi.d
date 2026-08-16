@@ -74,11 +74,8 @@ function test_runs_only_the_named_suites() {
 }
 
 function test_selecting_several_suites_keeps_table_order() {
-  local first second
   _hi_run_runner $'one:green.sh\ntwo:green.sh\nthree:green.sh' three one
-  first="$(printf '%s\n' "$_HI_RUN_OUT" | grep -n "Running one" | head -1 | cut -d: -f1)"
-  second="$(printf '%s\n' "$_HI_RUN_OUT" | grep -n "Running three" | head -1 | cut -d: -f1)"
-  [ -n "$first" ] && [ -n "$second" ] && [ "$first" -lt "$second" ]
+  _hi_before "$_HI_RUN_OUT" "Running one" "Running three"
 }
 
 function test_unknown_suite_name_is_an_error() {

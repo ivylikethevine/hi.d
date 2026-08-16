@@ -2,28 +2,22 @@
 
 # === start required configuration ===
 set -q _HI_HOME; or set -gx _HI_HOME ~
-# Every toggle this file, paths.sh's local-only gate and aliases.sh read bare.
-# fish has no ${X:-0}, so the only way for those reads to be safe is for the
-# variables to always exist - defaulted here, never assigned, so the settings
-# file and the gate below can both still override.
+# GLOSSARY: toggle defaulting - defaulted (never assigned) so bare reads are
+# safe and settings.sh/the gate still override. Mirrors core.sh's _HI_TOGGLES.
 for _hi_toggle in _HI_DISABLE_LOCAL _HI_REMOTE_SESSION _HI_DISABLE_HEADER \
     _HI_DISABLE_PROMPT _HI_DISABLE_PERSONAL _HI_DISABLE_GIT_STATUS \
     _HI_DISABLE_EDITORS _HI_DISABLE_ALIASES
   set -q $_hi_toggle; or set -gx $_hi_toggle 0
 end
 set -e _hi_toggle
-# where the user's config overlay lives, which paths.sh resolves against but
-# can't derive - fish has no ${XDG_CONFIG_HOME:-...}, which is the whole reason
-# every entry point sets this itself. Only when unset, so hi.sh can point a
-# target at the copy it shipped.
+# the overlay's home (fish can't expand the XDG default, so each entry point
+# sets it); only when unset, so hi.sh can point a target at its shipped copy
 if not set -q _HI_CONFIG_DIR
   set -q XDG_CONFIG_HOME; and set -gx _HI_CONFIG_DIR $XDG_CONFIG_HOME/hi.d
   set -q _HI_CONFIG_DIR; or set -gx _HI_CONFIG_DIR ~/.config/hi.d
 end
-# the settings scripts/install.sh writes, ahead of paths.sh because paths.sh's
-# local-only gate reads them (see the note by that gate). They are plain
-# `export NAME=value` lines, which fish understands natively - and they always
-# live in the overlay, which is the one path paths.sh can't tell us yet.
+# install.sh's settings ahead of paths.sh, whose gate reads them - plain
+# `export NAME=value` lines, which fish parses natively
 if test -f $_HI_CONFIG_DIR/settings.sh
   source $_HI_CONFIG_DIR/settings.sh
 end

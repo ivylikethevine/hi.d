@@ -2,15 +2,14 @@ name: CI
 
 on:
   pull_request:
-  # the README badges report branch status - a PR-only trigger left them lying
   push:
-    branches: [main, develop]
+    branches: [main]
   workflow_dispatch:
 
 permissions:
   contents: read
 
-# superseded PR pushes cancel their in-flight run; main/develop never cancel
+# superseded PR pushes cancel their in-flight run; main never cancels
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -29,8 +28,6 @@ jobs:
       - uses: ./.github/actions/setup-shellcheck
 
       - name: Run fast test suites
-        env:
-          _HI_HOME: ${{ github.workspace }}/..
         run: "${{ github.workspace }}/tests/test_runner.sh --group fast"
 
   # The same suites on macOS: /bin/bash 3.2, BSD userland. The %e/width/sort
@@ -42,13 +39,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # zsh is macOS's own login shell, so only fish and shellcheck are missing
       - name: Install fish and shellcheck
         run: brew install fish shellcheck
 
       - name: Run fast test suites
-        env:
-          _HI_HOME: ${{ github.workspace }}/..
         run: "${{ github.workspace }}/tests/test_runner.sh --group fast"
 
   markdownlint:
@@ -62,6 +56,22 @@ jobs:
           globs: "**/*.md"
           config: ".markdownlint.yaml"
 
+  # Hot-path timings against generous ceilings - catches an order-of-magnitude
+  # regression (a fork in a loop, a probe losing its timeout), and prints the
+  # numbers into every run's log for eyeballing trends.
+  bench:
+    name: hot-path benchmarks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install zsh and fish
+        run: sudo apt-get update && sudo apt-get install -y zsh fish
+
+      - name: Run benchmarks
+        run: "${{ github.workspace }}/tests/test_runner.sh --group bench"
+
   # catches nfpm.yaml/install_tree breakage on the PR that causes it, not at
   # the next release tag
   packaging-smoke:
@@ -71,22 +81,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install nfpm
-        env:
-          NFPM_VERSION: 2.43.0
-        run: |
-          set -euo pipefail
-          curl -sSfL -o /tmp/nfpm.tar.gz \
-            "https://github.com/goreleaser/nfpm/releases/download/v${NFPM_VERSION}/nfpm_${NFPM_VERSION}_Linux_x86_64.tar.gz"
-          tar -xzf /tmp/nfpm.tar.gz -C /tmp nfpm
-          sudo mv /tmp/nfpm /usr/local/bin/nfpm
-          nfpm --version
+      - uses: ./.github/actions/setup-nfpm
 
+      # package.sh itself asserts one artifact per format and writes SHA256SUMS
       - name: Build the packages
         run: packaging/package.sh
-
-      - name: Assert all three formats were built
-        run: ls -l dist/*.deb dist/*.rpm dist/*.apk
 
   e2e:
     name: e2e (ssh, docker)
@@ -98,8 +97,6 @@ jobs:
 
       # --require-run: here a skip is a broken runner, not an optional backend
       - name: Run end-to-end suites
-        env:
-          _HI_HOME: ${{ github.workspace }}/..
         run: "${{ github.workspace }}/tests/test_runner.sh --require-run --group e2e"
 
   e2e-backends:
@@ -126,6 +123,4 @@ jobs:
           install_only: true
 
       - name: Run backend end-to-end suites
-        env:
-          _HI_HOME: ${{ github.workspace }}/..
         run: "${{ github.workspace }}/tests/test_runner.sh --require-run --group backends"

@@ -4,14 +4,16 @@
 # shells/config.fish). Requires colors.sh to already be sourced.
 set -euo pipefail # must be disabled after our code (this file is part of the interactive shell - any error would close the session)
 
+# _hi_git_prompt [outvar] - with outvar, the segment lands in that variable
+# via printf -v instead of stdout, saving bash.sh's per-prompt $( ) fork
+# (zsh has no printf -v, so its prompt_subst caller keeps the stdout form)
+# shellcheck disable=SC2120 # the argument is optional by design
 _hi_git_prompt() {
+  [[ -n "${1:-}" ]] && printf -v "$1" ''
   [[ "${_HI_DISABLE_GIT_STATUS:-0}" == 1 ]] && return
 
-  # --no-optional-locks on both git calls: without it `git status` refreshes and
-  # *rewrites* .git/index every prompt - real I/O and lock contention per
-  # keystroke-to-prompt cycle, tens to hundreds of ms on a large checkout. The
-  # output is identical. rev-parse exits non-zero outside a repo without
-  # --is-inside-work-tree too, whose answer was read and discarded.
+  # --no-optional-locks or `git status` rewrites .git/index per prompt -
+  # real I/O per keystroke on a large checkout, for identical output
   local git_dir ref="" detached=0
   git_dir=$(LANG=C git --no-optional-locks rev-parse --git-dir 2>/dev/null) || return
 
@@ -84,12 +86,9 @@ _hi_git_prompt() {
   ((behind > 0)) && upstream+="↓${behind}"
 
   # one line per stash push/apply, same count `rev-list --walk-reflogs` gives
-  local stash=0 stash_line
-  if [[ -f "$git_dir/logs/refs/stash" ]]; then
-    while IFS= read -r stash_line || [[ -n "$stash_line" ]]; do
-      ((stash++))
-    done <"$git_dir/logs/refs/stash"
-  fi
+  local -a stash_lines=()
+  [[ -f "$git_dir/logs/refs/stash" ]] && _hi_read_lines stash_lines <"$git_dir/logs/refs/stash"
+  local stash=${#stash_lines[@]}
 
   local flags=""
   ((staged > 0)) && flags+="${YELLOW}●${staged}${NC}"
@@ -105,7 +104,11 @@ _hi_git_prompt() {
   local out="(${branch_color}${ref}${NC}"
   [[ -n "$state" ]] && out+="|${state}"
   [[ -n "$upstream" ]] && out+="|${upstream}"
-  printf ' %b' "$out|${flags})"
+  if [[ -n "${1:-}" ]]; then
+    printf -v "$1" ' %b' "$out|${flags})"
+  else
+    printf ' %b' "$out|${flags})"
+  fi
 }
 
 set +euo pipefail # must be disabled after our code (this file is part of the interactive shell - any error would close the session)

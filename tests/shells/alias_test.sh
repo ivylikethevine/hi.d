@@ -36,49 +36,34 @@ function _hi_test_script() {
   fi
 }
 
+# _hi_test_shell <shell> <dir> [strict] - run the sampled-alias script in a
+# real <shell>. With `strict`, the toggles are scrubbed from the environment
+# and the shell runs under `set -u`: aliases.sh reads _HI_DISABLE_EDITORS/
+# _HI_DISABLE_ALIASES bare (fish can't parse ${X:-0}), so it must default them
+# itself - that is the shape `hi <target> <command>` runs in, and how the ssh
+# suite once broke. fish has no `set -u` (unset is always empty there), so its
+# strict run only proves the defaulting line parses.
 function _hi_test_shell() {
-  local shell="$1" script="$2/$1.test" output exit_code=0 t0 t1
-  _hi_h2 "Starting: [$shell]"
-  t0="$(_hi_now)"
+  local shell="$1" strict="${3:-}" output exit_code=0 t0 t1
+  local script="$2/$1${strict:+.strict}.test" what="Loaded aliases.sh"
+  local -a runner=("$shell")
+  if [ -n "$strict" ]; then
+    what="Loaded with the toggles unset"
+    [ "$shell" = fish ] || runner+=(-u)
+    runner=(env -u _HI_DISABLE_EDITORS -u _HI_DISABLE_ALIASES "${runner[@]}")
+  fi
 
-  _hi_cecho "  [$shell] -- Writing test script..."
+  _hi_h2 "Starting: [$shell]${strict:+ (toggles unset, strict mode)}"
+  t0="$(_hi_now)"
   _hi_test_script "$shell" >"$script"
   _hi_cecho "  [$shell] -- Running: $script"
-  output=$("$shell" "$script" 2>&1) || exit_code=$?
+  output=$("${runner[@]}" "$script" 2>&1) || exit_code=$?
   t1="$(_hi_now)"
 
   if [ "$exit_code" -eq 0 ]; then
-    _hi_h3 "[$shell] -- Loaded aliases.sh OK ($(_hi_elapsed "$t0" "$t1")s)" "$GREEN"
+    _hi_h3 "[$shell] -- $what OK ($(_hi_elapsed "$t0" "$t1")s)" "$GREEN"
   else
-    _hi_h3 "[$shell] -- FAILED ($(_hi_elapsed "$t0" "$t1")s)" "$RED"
-    [ -n "$output" ] && printf '%s\n' "$output" | sed 's/^/      /'
-  fi
-  return "$exit_code"
-}
-
-# aliases.sh reads _HI_DISABLE_EDITORS/_HI_DISABLE_ALIASES, and neither can be
-# written as ${X:-0} because fish sources this file and cannot parse that. So
-# the file defaults them itself, and this is what proves it: source it with
-# both scrubbed from the environment, under `set -u` where an unset variable is
-# fatal rather than empty. That is the shape `hi <target> <command>` runs in,
-# and it is how the ssh suite broke.
-function _hi_test_shell_strict() {
-  local shell="$1" script="$2/$1.strict" output exit_code=0
-  _hi_h2 "Starting: [$shell] (toggles unset, strict mode)"
-  _hi_test_script "$shell" >"$script"
-
-  if [ "$shell" = fish ]; then
-    # fish has no `set -u` - unset is always empty there - so what matters is
-    # that the defaulting line doesn't break parsing
-    output=$(env -u _HI_DISABLE_EDITORS -u _HI_DISABLE_ALIASES "$shell" "$script" 2>&1) || exit_code=$?
-  else
-    output=$(env -u _HI_DISABLE_EDITORS -u _HI_DISABLE_ALIASES "$shell" -u "$script" 2>&1) || exit_code=$?
-  fi
-
-  if [ "$exit_code" -eq 0 ]; then
-    _hi_h3 "[$shell] -- Loaded with the toggles unset OK" "$GREEN"
-  else
-    _hi_h3 "[$shell] -- FAILED with the toggles unset" "$RED"
+    _hi_h3 "[$shell] -- FAILED${strict:+ with the toggles unset} ($(_hi_elapsed "$t0" "$t1")s)" "$RED"
     [ -n "$output" ] && printf '%s\n' "$output" | sed 's/^/      /'
   fi
   return "$exit_code"
@@ -97,7 +82,7 @@ function run_alias_test() {
       continue
     fi
     _hi_case _hi_test_shell "$_hi_shell" "$_HI_WORKDIR"
-    _hi_case _hi_test_shell_strict "$_hi_shell" "$_HI_WORKDIR"
+    _hi_case _hi_test_shell "$_hi_shell" "$_HI_WORKDIR" strict
   done
 
   _hi_suite_end "" \

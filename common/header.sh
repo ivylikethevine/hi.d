@@ -49,7 +49,6 @@ function system_info() {
     fi
     # boost/max clock: cpufreq first (works for any driver that exposes it), falling back to lscpu
     if [ -f "$max_freq_path" ] && [ -f "$scaling_freq_path" ]; then
-      read -r khz <"$max_freq_path" 2>/dev/null || khz=0
       read -r khz <"$scaling_freq_path" 2>/dev/null || khz=0
     fi
     boost_mhz=$((khz / 1000))
@@ -133,11 +132,8 @@ function banner() {
       _HI_BANNER_CHANGES="${#lines[@]}"
     fi
     changes="$BRYELLOW$_HI_BANNER_CHANGES ↑ "
-    # Columns that prefix occupies, counted rather than measured with ${#...}:
-    # the string holds ↑, and ${#} counts *characters* in a UTF-8 locale but
-    # *bytes* in the C locale, so measuring it made the whole line two columns
-    # narrower on any machine without a UTF-8 locale (macOS CI, cron, docker
-    # exec). The count is the digits plus "␣↑␣", and ↑ is one column wide.
+    # columns counted, not ${#}-measured (GLOSSARY: bytes vs columns):
+    # digits + "␣↑␣", with ↑ one column wide
     changes_w=$((${#_HI_BANNER_CHANGES} + 3))
   fi
   local host tildes start_len end_len start_tildes end_tildes width left core
@@ -179,10 +175,8 @@ function hi_header() {
 _HI_YES=("$BRBLUE" "$BRBLUE" hide "$GREEN" "$BRGREEN" "$BRGREEN")
 _HI_NO=(hide "$BRYELLOW" "$YELLOW" hide hide "$BRRED")
 
-# The three states a checked package can be in, named rather than written
-# inline. Two of them are multibyte, and the suite has to look for the very
-# same bytes - a second literal in the test file is a copy that can drift, and
-# (worse) a copy that looks identical in an editor while differing in codepoint.
+# named so the suite matches these same bytes - a lookalike literal can
+# differ in codepoint while looking identical in an editor
 _HI_MARK_OK="✓"  # installed, and it was the preferred name
 _HI_MARK_ALT="~" # installed, but via a fallback alternative
 _HI_MARK_NO="✗"  # not installed
@@ -233,14 +227,8 @@ function full_check() {
   done <"$_HI_PACKAGES"
   ((${#visible[@]})) || return 0
 
-  # The sort feeding this loop is pinned to LC_ALL=C on the merits, not as a
-  # workaround: the key is numeric and the payload is opaque bytes joined by an
-  # ASCII control character, so locale collation has no business in the
-  # comparison - and pinning it makes the column order identical everywhere
-  # rather than varying with the user's locale. BSD sort (macOS) is the one that
-  # cares: under a UTF-8 locale it exits with "Illegal byte sequence" and prints
-  # *nothing*, so this loop ran zero iterations and the whole packages check
-  # rendered empty while still exiting 0.
+  # GLOSSARY: LC_ALL=C sort - numeric key over opaque bytes; unpinned, BSD
+  # sort under UTF-8 printed *nothing* and the whole check rendered empty.
   while IFS=$'\x1f' read -r priority width_item rendered; do
     if ((count == 0)) || ((width + width_item > ${_HI_MAX_WIDTH:-80})); then # start of a row
       ((count == 0)) || printf '\n'

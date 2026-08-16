@@ -51,7 +51,7 @@ function _hi_run_case() {
     return 1
   fi
 
-  _hi_exec_case "$label" "kube path" "$_HI_MARKER" "$timeout_s" "$name" "$cmd" && ok=1
+  _hi_exec_case "$label" "kube path" "$_HI_TEST_MARKER" "$timeout_s" "$name" "$cmd" && ok=1
   kubectl delete pod "$name" --now >/dev/null 2>&1
   [ "$ok" -eq 1 ]
 }
@@ -68,25 +68,25 @@ function run_kube_test() {
   _hi_h2 "Creating kind cluster $_HI_CLUSTER"
   if ! kind create cluster --name "$_HI_CLUSTER" --kubeconfig "$KUBECONFIG" \
     >"$_HI_WORKDIR/kind.log" 2>&1; then
-    _hi_cecho "Kind cluster never came up (see $_HI_WORKDIR/kind.log), skipping" "$YELLOW"
-    exit 0
+    _hi_stand_down "kind cluster never came up" \
+      "Kind cluster never came up (see $_HI_WORKDIR/kind.log), skipping"
   fi
   _HI_CLUSTER_UP=1
   _hi_cecho " | Cluster up" "$GREEN"
 
   if ! _hi_poll_bool 40 0.5 kubectl get serviceaccount default; then
-    _hi_cecho "default ServiceAccount never showed up, skipping" "$YELLOW"
-    exit 0
+    _hi_stand_down "no default ServiceAccount" \
+      "default ServiceAccount never showed up, skipping"
   fi
 
-  _HI_MARKER="HI_KUBE_TEST_OK"
+  _HI_TEST_MARKER="HI_KUBE_TEST_OK"
 
   _hi_pty_stdin auto "no tty and no python3 to fake one - kubectl exec -it will fail outright, results may be unreliable"
 
   _hi_suite_begin
 
-  _hi_case _hi_run_case bash debian:bookworm-slim "$(_hi_probe_cmd "$_HI_MARKER" bash)"
-  _hi_case _hi_run_case sh alpine:3.20 "$(_hi_probe_cmd "$_HI_MARKER" fallback)"
+  _hi_case _hi_run_case bash debian:bookworm-slim "$(_hi_probe_cmd "$_HI_TEST_MARKER" bash)"
+  _hi_case _hi_run_case sh alpine:3.20 "$(_hi_probe_cmd "$_HI_TEST_MARKER" fallback)"
 
   _hi_suite_end "" \
     "hi's kube path survived every shape tested ($_HI_TOTAL cases)" \

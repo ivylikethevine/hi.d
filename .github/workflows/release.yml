@@ -28,11 +28,6 @@ jobs:
       # same pinned upstream binary ci.yml uses - the distro package lags badly
       - uses: ./.github/actions/setup-shellcheck
 
-      - name: Run fast test suites
-        env:
-          _HI_HOME: ${{ github.workspace }}/..
-        run: "${{ github.workspace }}/tests/test_runner.sh --group fast"
-
       # The tarball both channels checksum only exists once the tag does, so
       # the bump runs here, not before tagging (which needed a force-retag).
       # Review happens at the environment gate, over the files this produced.
@@ -42,30 +37,16 @@ jobs:
       - name: Verify the result
         run: packaging/bump.sh --check "${GITHUB_REF_NAME#v}"
 
-      - name: Run the packaging drift guards against the fresh manifests
-        env:
-          _HI_HOME: ${{ github.workspace }}/..
-        run: "${{ github.workspace }}/tests/test_runner.sh packaging"
+      # after the bump, so the packaging drift guards in the fast group run
+      # against the manifests this release will actually ship
+      - name: Run fast test suites
+        run: "${{ github.workspace }}/tests/test_runner.sh --group fast"
 
-      - name: Install nfpm
-        env:
-          NFPM_VERSION: 2.43.0
-        run: |
-          set -euo pipefail
-          curl -sSfL -o /tmp/nfpm.tar.gz \
-            "https://github.com/goreleaser/nfpm/releases/download/v${NFPM_VERSION}/nfpm_${NFPM_VERSION}_Linux_x86_64.tar.gz"
-          tar -xzf /tmp/nfpm.tar.gz -C /tmp nfpm
-          sudo mv /tmp/nfpm /usr/local/bin/nfpm
-          nfpm --version
+      - uses: ./.github/actions/setup-nfpm
 
+      # asserts one artifact per format and writes dist/SHA256SUMS itself
       - name: Build the packages
         run: packaging/package.sh
-
-      # something to verify the downloaded .deb/.rpm/.apk against
-      - name: Write SHA256SUMS over the packages
-        run: |
-          set -euo pipefail
-          (cd dist && sha256sum -- *.deb *.rpm *.apk > SHA256SUMS)
 
       - name: Collect the manifests alongside them
         run: |

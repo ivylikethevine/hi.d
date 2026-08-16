@@ -3,11 +3,9 @@
 # Runs on the target: prints the header, grafts hi's shell configs onto the
 # host's rc files, hands over to the best shell available, then undoes it all.
 
-# `bash --rcfile` (how hi.sh hands off) skips the normal startup file chain, so
-# restore it here - before `set -euo pipefail` below, since arbitrary profile
-# scripts on the target aren't guaranteed safe under -e/-u. At source time
-# rather than from load(), because the bootloader's other shape (hi.sh's
-# $CMDARG) replaces load() and still wants the target's real PATH.
+# `bash --rcfile` skips the startup chain, so restore it - before the strict
+# mode below (profile scripts aren't -e/-u safe), and at source time, since
+# the $CMDARG bootloader shape replaces load() but still wants the real PATH.
 function _hi_restore_profile() {
   if [ -r /etc/profile ]; then source /etc/profile; fi
   # shellcheck disable=SC1090 # target-specific files, no fixed location
@@ -18,10 +16,8 @@ function _hi_restore_profile() {
   export PATH="$PATH:$_HI_ROOT"
 }
 
-# _HI_LOAD_NO_INIT=1 sources this file for its functions alone, skipping the
-# target's profile chain - the same hatch as scripts/install.sh's BASH_SOURCE
-# guard, spelled as an env var because this file is only ever sourced, never
-# executed.
+# _HI_LOAD_NO_INIT=1: functions only, no profile chain - install.sh's source
+# guard as an env var, since this file is only ever sourced
 [ "${_HI_LOAD_NO_INIT:-0}" = 1 ] || _hi_restore_profile
 
 set -euo pipefail
@@ -47,7 +43,7 @@ function configure_files() {
   local pair target block
   for pair in "${_HI_CONFIGS[@]}"; do
     target="${pair#*:}"
-    [ -d "$(dirname "$target")" ] || continue
+    [ -d "${target%/*}" ] || continue # targets are absolute; no dirname fork
     touch "$target"
     grep -q "$_HI_CONFIG_START" "$target" && continue
     block="$_HI_CONFIG_START"$'\n'"$(<"${pair%:*}")"$'\n'"$_HI_CONFIG_END"
@@ -110,10 +106,8 @@ function load() {
   fi
 
   local size
-  # no arguments on purpose: the whole shipped tree is measured here, unlike
-  # hi.sh's _hi_size, which passes $_HI_EXCLUDE
-  # shellcheck disable=SC2119
-  size="$(_hi_du_size)"
+  # the whole unpacked tree, unlike hi.sh's _hi_size (client tree has extras)
+  size="$(_hi_du_size "$_HI_ROOT")"
   _hi_cecho " $size" "$NC" 1
   if [[ "${_HI_DISABLE_HEADER:-0}" != 1 ]]; then
     banner Disconnected "$BRRED" " $size"

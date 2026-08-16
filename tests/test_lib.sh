@@ -97,6 +97,30 @@ function _hi_check() {
   _hi_case _hi_assert "$@"
 }
 
+# _hi_before <text> <first-pattern> <second-pattern> - both patterns present
+# in <text>, and the first's earliest match on an earlier line. The ordering
+# assertion several suites make about generated rc/bootloader content.
+function _hi_before() {
+  local a b
+  a="$(printf '%s\n' "$1" | grep -n "$2" | head -1 | cut -d: -f1)"
+  b="$(printf '%s\n' "$1" | grep -n "$3" | head -1 | cut -d: -f1)"
+  [ -n "$a" ] && [ -n "$b" ] && [ "$a" -lt "$b" ]
+}
+
+# _hi_check_requires <bin> <label> <predicate...> - _hi_check, unless <bin> is
+# missing, in which case the case counts as SKIPPED. The guard lives here, not
+# inside the case body, where a `return 0` would report a green OK for a case
+# that never ran.
+function _hi_check_requires() {
+  local bin="$1"
+  shift
+  if command -v "$bin" >/dev/null 2>&1; then
+    _hi_check "$@"
+  else
+    _hi_skip "$1" "no $bin"
+  fi
+}
+
 # _hi_scratch_tree <name> <dir...> - a throwaway hi.d under $_HI_WORKDIR/<name>
 # holding copies of the named top-level directories, and prints the _HI_HOME
 # that points at it. What a "minimal shipped tree" needs is one edit here
@@ -243,19 +267,26 @@ function _hi_suite_end() {
   exit "$_HI_FAILED"
 }
 
+# _hi_stand_down <reason> [message] - the whole suite stops here, honestly:
+# yellow note, SKIP reported to the runner, exit 0. _hi_require covers
+# requirements known at startup; this is also for *runtime* failures (an image
+# that didn't build, a cluster that never came up) which previously exited 0
+# unreported and painted the suite green.
+function _hi_stand_down() {
+  _hi_cecho "${2:-$1, skipping}" "$YELLOW"
+  _hi_report_skip "$1"
+  exit 0
+}
+
 function _hi_require() {
   command -v "$1" >/dev/null 2>&1 && return 0
-  _hi_cecho "$1 ${2:-not installed}, skipping" "$YELLOW"
-  _hi_report_skip "no $1"
-  exit 0
+  _hi_stand_down "no $1" "$1 ${2:-not installed}, skipping"
 }
 
 function _hi_require_backend() {
   _hi_require "$@"
   "$1" info >/dev/null 2>&1 && return 0
-  _hi_cecho "$1 not reachable, skipping" "$YELLOW"
-  _hi_report_skip "$1 unreachable"
-  exit 0
+  _hi_stand_down "$1 unreachable" "$1 not reachable, skipping"
 }
 
 # The command each e2e suite runs *on the target* to prove hi actually landed
@@ -597,6 +628,18 @@ function _hi_ssh_keypair() {
   _HI_PUBKEY="$(cat "$_HI_WORKDIR/id.pub")"
 }
 
+# _hi_sshd_entrypoint <ctx-dir> <shebang> [extra-line...] - the entrypoint.sh
+# every sshd image ships: shebang + set -e, any per-image lines, the shared body
+function _hi_sshd_entrypoint() {
+  local ctx="$1" shebang="$2"
+  shift 2
+  {
+    printf '#!%s\nset -e\n' "$shebang"
+    [ $# -eq 0 ] || printf '%s\n' "$@"
+    printf '%s\n' "$_HI_SSHD_ENTRYPOINT_BODY"
+  } >"$ctx/entrypoint.sh"
+}
+
 function _hi_sshd_image() {
   local ctx="$_HI_WORKDIR/sshd"
   mkdir -p "$ctx"
@@ -613,11 +656,8 @@ RUN chmod +x /entrypoint.sh
 ENTRYPOINT ["/entrypoint.sh"]
 EOF
 
-  {
-    # shellcheck disable=SC2016 # this is entrypoint.sh content, resolved on the container
-    printf '#!/bin/bash\nset -e\nusermod -s "${LOGIN_SHELL:-/bin/bash}" hitest\n'
-    printf '%s\n' "$_HI_SSHD_ENTRYPOINT_BODY"
-  } >"$ctx/entrypoint.sh"
+  # shellcheck disable=SC2016 # entrypoint.sh content, resolved on the container
+  _hi_sshd_entrypoint "$ctx" /bin/bash 'usermod -s "${LOGIN_SHELL:-/bin/bash}" hitest'
 
   _hi_build_image sshd "$_HI_SSHD_IMAGE" "$1" "$ctx"
 }

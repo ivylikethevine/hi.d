@@ -6,10 +6,11 @@ set -euo pipefail # must be disabled after our code (this file is part of the in
 # shellcheck source=./common/core.sh
 source "${_HI_HOME:-$HOME}/hi.d/common/core.sh"
 
-_HI_EXCLUDE=(--exclude README.md --exclude .git --exclude .gitignore --exclude scripts
-  --exclude hi.sh --exclude hi.bashrc --exclude .zed --exclude .vscode --exclude .shellcheckrc
-  --exclude tests --exclude .github --exclude .claude --exclude CLAUDE.md --exclude .devcontainer
-  --exclude .markdownlint.yaml --exclude LICENSE --exclude packaging)
+# What ships to a target, by name. An allow list, not excludes: anything new in
+# the tree (docs, CI, editor config) stays off the wire until it earns a place
+# here. install.sh's _HI_PACKAGE_CONTENTS answers the different question of
+# what an *installed* copy needs.
+_HI_PAYLOAD=(common misc shells load.sh)
 
 # The user's config overlay ($_HI_CONFIG_DIR, outside the tree), by the names it
 # has to land under in the target's misc/. Until the overlay existed these rode
@@ -135,16 +136,15 @@ EOF
 # belonging to whoever we logged in as is not the config this session is meant
 # to run with. Same reasoning as the two transports that set it.
 function _hi_fallback_rc() {
+  local t
+  # shellcheck disable=SC2016 # $_HI_ROOT is the target's to expand
+  printf 'export _HI_CONFIG_DIR=$_HI_ROOT/misc\nexport _HI_REMOTE_SESSION=1\n'
+  # the toggle list is core.sh's _HI_TOGGLES, so a new toggle can't be missed
+  # here (unset + `set -u` on a bash-less target was exactly that failure)
+  for t in "${_HI_TOGGLES[@]}"; do
+    [ "$t" = _HI_REMOTE_SESSION ] || printf 'export %s=0\n' "$t"
+  done
   cat <<EOF
-export _HI_CONFIG_DIR=\$_HI_ROOT/misc
-export _HI_REMOTE_SESSION=1
-export _HI_DISABLE_LOCAL=0
-export _HI_DISABLE_HEADER=0
-export _HI_DISABLE_PROMPT=0
-export _HI_DISABLE_PERSONAL=0
-export _HI_DISABLE_GIT_STATUS=0
-export _HI_DISABLE_EDITORS=0
-export _HI_DISABLE_ALIASES=0
 [ -f \$_HI_ROOT/misc/settings.sh ] && . \$_HI_ROOT/misc/settings.sh
 . \$_HI_ROOT/common/paths.sh 2>/dev/null
 . \$_HI_ROOT/shells/aliases.sh 2>/dev/null
@@ -153,7 +153,7 @@ EOF
 }
 
 function _hi_size() {
-  _hi_du_size "${_HI_EXCLUDE[@]}"
+  _hi_du_size "${_HI_PAYLOAD[@]/#/$_HI_ROOT/}"
 }
 
 # the bit both _say_hi branches need before anything target-specific happens
@@ -251,8 +251,8 @@ REMOTE
     )"
   else
     size="$(_hi_size)"
-    # second, tiny stream over the tree we just unpacked: $_HI_EXCLUDE only ever
-    # carried the *in-tree* misc/, so an overlay outside it has to be sent
+    # second, tiny stream over the tree we just unpacked: the payload carries
+    # only the *in-tree* misc/, so an overlay outside it has to be sent
     # explicitly. Empty (and the line omitted entirely) when there is no
     # overlay to send. _HI_CONFIG_DIR then points at the target's own misc/, so
     # paths.sh resolves against what we shipped rather than against a
@@ -273,7 +273,7 @@ REMOTE
       echo "$($_HI_ARMOR <"$0")" | $_HI_UNARMOR > "\$_HI_ROOT/hi.sh"
       chmod +x "\$_HI_ROOT/hi.sh"
       echo "$(_hi_bootloader | $_HI_ARMOR)" | $_HI_UNARMOR > "\$_hi_rc_dir/hi.bashrc"
-      echo "$(tar czf - -h -C "$_HI_HOME" "${_HI_EXCLUDE[@]}" hi.d | $_HI_ARMOR)" | $_HI_UNARMOR | tar mxzf - -C "\$_HI_HOME"
+      echo "$(tar czf - -h -C "$_HI_HOME" "${_HI_PAYLOAD[@]/#/hi.d/}" | $_HI_ARMOR)" | $_HI_UNARMOR | tar mxzf - -C "\$_HI_HOME"
       $overlay_line
       export _HI_CONNECT_PREFIX=" $size"
 REMOTE
@@ -381,7 +381,7 @@ function _say_hi_container() {
   echo -ne "$YELLOW-> bash ($label)$NC $size"
 
   # this is a failure state, so we exit early
-  if ! tar czf - -h -C "$_HI_HOME" "${_HI_EXCLUDE[@]}" hi.d |
+  if ! tar czf - -h -C "$_HI_HOME" "${_HI_PAYLOAD[@]/#/hi.d/}" |
     "${cp[@]}" sh -c "mkdir -p '$root' && tar mxzf - -C '$root'"; then
     _hi_cecho " failed to copy hi.d into [$DOMAIN]" "$BRRED"
     "${probe[@]}" rm -rf "$root" >/dev/null 2>&1

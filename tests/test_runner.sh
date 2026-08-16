@@ -7,8 +7,15 @@
 #   name ...    - run only the named suite(s), e.g. `tests/test_runner.sh docker kube`
 set -euo pipefail
 
+# Default _HI_HOME to this checkout's parent (an explicit env var still wins),
+# so a fresh clone and CI can run this with no setup - and no run ever falls
+# back to ~/hi.d by accident. Exported, so every child suite inherits it.
+if [ -z "${_HI_HOME:-}" ]; then
+  _HI_HOME="$(cd -P "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+fi
+export _HI_HOME
 # shellcheck source=../common/core.sh
-source "${_HI_HOME:-$HOME}/hi.d/common/core.sh"
+source "$_HI_HOME/hi.d/common/core.sh"
 
 # group:name:path (relative to this directory), in the order they run - fast
 # local checks first, the docker/kind/nomad-backed end-to-end tests after.
@@ -36,6 +43,7 @@ if ! declare -p _HI_TESTS >/dev/null 2>&1; then
     "fast:rc:shells/rc_test.sh"
     "fast:test_lib:harness/lib_test.sh"
     "fast:test_runner:harness/runner_test.sh"
+    "bench:bench:bench/bench_test.sh"
     "e2e:ssh:targets/ssh_test.sh"
     "e2e:ssh_disconnect:targets/ssh_disconnect_test.sh"
     "e2e:docker:targets/docker_test.sh"
@@ -103,7 +111,7 @@ rather than PASS, so a green run can't overstate what actually ran.
 Suites, in the order they run:
 $(_hi_test_listing)
 
-Needs \$_HI_HOME pointing at the parent of your hi.d checkout.
+\$_HI_HOME defaults to this checkout's parent; set it to test another tree.
 EOF
     exit 0
     ;;

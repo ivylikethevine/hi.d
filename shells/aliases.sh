@@ -15,7 +15,7 @@
 # default hides in an eval gated on a builtin fish deliberately lacks. `-`,
 # not `:-`, so an intentional empty value survives.
 command -v getopts >/dev/null 2>&1 &&
-  eval 'export _HI_DISABLE_EDITORS="${_HI_DISABLE_EDITORS-0}" _HI_DISABLE_ALIASES="${_HI_DISABLE_ALIASES-0}"' || true
+  eval 'export _HI_DISABLE_EDITORS="${_HI_DISABLE_EDITORS-0}" _HI_DISABLE_ALIASES="${_HI_DISABLE_ALIASES-0}" _HI_DISABLE_OSC52="${_HI_DISABLE_OSC52-0}" _HI_OSC52="${_HI_OSC52-}" _HI_DISABLE_TMUX="${_HI_DISABLE_TMUX-0}" _HI_TMUXCONF="${_HI_TMUXCONF-}" _HI_CLEANUP="${_HI_CLEANUP-}"' || true
 
 # Resolve these before any alias exists: zsh/dash `command -v` returns an
 # alias's definition once one is set, poisoning later fallthrough chains.
@@ -31,6 +31,22 @@ export _HI_EZA_BIN="$(command -v eza || command -v exa || command -v ls)"
 # would abort the whole shell.
 [ "$_HI_DISABLE_EDITORS" != 1 ] && alias nano="nano --rcfile $_HI_NANORC" || true
 [ "$_HI_DISABLE_EDITORS" != 1 ] && alias vim="$(command -v nvim || command -v vim) -u $_HI_VIMRC" || true
+
+# stdin -> the client's clipboard over OSC 52 (see shells/osc52.sh); the
+# non-vim half of the same feature misc/vim.rc wires to yank. Above the early
+# return with the editor aliases, since it is hi functionality rather than
+# personal taste. The `[ -f ]` is not belt and braces: the container fallback
+# path ships aliases.sh *without* paths.sh, where $_HI_OSC52 is empty and a bare
+# `sh ` alias would drop the user into an interactive shell.
+[ "$_HI_DISABLE_OSC52" != 1 ] && [ -f "$_HI_OSC52" ] && alias hi_copy="sh $_HI_OSC52" || true
+
+# tmux with hi's config (misc/tmux.conf), on two conditions. The first is the
+# usual toggle. The second is $_HI_CLEANUP, which every disposable tree exports
+# and a permanent install never does: a detached tmux outlives the ssh session,
+# so on an ephemeral target the shells inside it would wake up reading a tree
+# that was deleted on exit. Permanent installs (and your own machine) have no
+# such problem, and that is exactly where this is offered.
+[ "$_HI_DISABLE_TMUX" != 1 ] && [ -z "$_HI_CLEANUP" ] && [ -f "$_HI_TMUXCONF" ] && alias tmux="tmux -f $_HI_TMUXCONF" || true
 
 # misc/theme.yml styles eza itself, not any alias hi defines, so it goes above
 # the early return: turning personal aliases off shouldn't strip the theme from

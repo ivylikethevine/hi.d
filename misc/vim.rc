@@ -64,6 +64,27 @@ filetype plugin on
 filetype indent on
 set laststatus=1
 
+" Yank -> the *client's* clipboard, over OSC 52 (shells/osc52.sh does the
+" encoding, the tmux/screen wrapping and the /dev/tty write - this only decides
+" when to call it). Four conditions, all of which can genuinely be false:
+"   - the toggle, like every other feature
+"   - TextYankPost, which is vim 8.0.1394+; older vims just don't get it.
+"     Asked as exists('##...') rather than has('patch-...'), which neovim
+"     answers about its own merge list rather than about the event
+"   - $_HI_OSC52, empty outside a hi session (someone's own `vim -u`)
+"   - v:event.regname empty: only the unnamed register, so an explicit
+"     "ay into a named register stays local, and a delete stays a delete
+if $_HI_DISABLE_OSC52 != '1' && exists('##TextYankPost') && filereadable($_HI_OSC52)
+  augroup hi_osc52
+    autocmd!
+    autocmd TextYankPost *
+          \ if v:event.operator ==# 'y' && v:event.regname ==# '' |
+          \   silent call system('sh ' . shellescape($_HI_OSC52),
+          \                      join(v:event.regcontents, "\n")) |
+          \ endif
+  augroup END
+endif
+
 " Ctrl-X quits from any mode (overrides insert-mode completion prefix)
 nnoremap <C-x> :qa!<CR>
 inoremap <C-x> <Esc>:qa!<CR>

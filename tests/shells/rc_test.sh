@@ -19,8 +19,12 @@ source "$_HI_TEST_LIB"
 # cases can pick the color branch (xterm-256color) or the plain one (dumb)
 function _hi_rc_shell() {
   local term="$1" shell="$2" script="$3"
+  # anything after the script is NAME=VALUE for the child - `env -i` is what
+  # keeps local settings out, so extra variables have to be injected here
+  # rather than exported around the call
+  shift 3
   env -i HOME="$_HI_WORKDIR" TERM="$term" PATH="$PATH" \
-    _HI_HOME="$_HI_HOME" _HI_CONFIG_DIR="$_HI_WORKDIR/cfg" \
+    _HI_HOME="$_HI_HOME" _HI_CONFIG_DIR="$_HI_WORKDIR/cfg" "$@" \
     "$shell" -c "$script" </dev/null
 }
 
@@ -74,6 +78,77 @@ function test_fish_registers_hi_completion() {
     grep -qF '$_HI_TARGETS'
 }
 
+# --- the prompt separator -----------------------------------------------------
+#
+# The character each prompt ends with is a setting now (core.sh's
+# _hi_prompt_end, mirrored in config.fish), with three different shipped
+# defaults. Each case renders the real prompt in the real shell rather than
+# grepping the rc, since the whole risk here is a value that reaches $PS1 in a
+# form the shell then mangles.
+
+# the last non-blank characters of the prompt the shell actually built
+function _hi_prompt_tail() {
+  local shell="$1" script
+  shift
+  case "$shell" in
+  bash) script='source "$_HI_HOME/hi.d/shells/bash.sh" 2>/dev/null; ps1; printf %s "$PS1"' ;;
+  zsh) script='source "$_HI_HOME/hi.d/shells/zsh.zsh" 2>/dev/null; print -rn -- "$PS1"' ;;
+  fish) script='source $_HI_HOME/hi.d/shells/config.fish 2>/dev/null; fish_prompt' ;;
+  esac
+  _hi_rc_shell xterm-256color "$shell" "$script" "$@" | sed -E 's/\x1b\[[0-9;]*m//g'
+}
+
+# the shipped defaults, one per shell: bash's `\$` (which bash itself renders as
+# $ for a user and # for root), zsh's `>`, fish's `|`
+function test_prompt_end_default() {
+  local shell="$1" want="$2" out
+  out="$(_hi_prompt_tail "$shell")"
+  case "${out% }" in
+  *"$want") return 0 ;;
+  esac
+  return 1
+}
+
+function test_prompt_end_shell_specific() {
+  local shell="$1" var="$2" out
+  out="$(_hi_prompt_tail "$shell" "$var=@@")"
+  case "${out% }" in
+  *@@) return 0 ;;
+  esac
+  return 1
+}
+
+# the one setting that covers all three, for people who want the same character
+# everywhere - the shell-specific one still wins over it
+function test_prompt_end_global_fallback() {
+  local shell="$1" out
+  out="$(_hi_prompt_tail "$shell" _HI_PROMPT_END=%%)"
+  case "${out% }" in
+  *%%) return 0 ;;
+  esac
+  return 1
+}
+
+function test_prompt_end_specific_beats_global() {
+  local shell="$1" var="$2" out
+  out="$(_hi_prompt_tail "$shell" _HI_PROMPT_END=%% "$var=@@")"
+  case "${out% }" in
+  *@@) return 0 ;;
+  esac
+  return 1
+}
+
+# an empty value is "unset", not "no separator": a prompt ending in a bare space
+# is never what someone meant, and ' ' still expresses it
+function test_prompt_end_empty_falls_back() {
+  local shell="$1" var="$2" want="$3" out
+  out="$(_hi_prompt_tail "$shell" "$var=")"
+  case "${out% }" in
+  *"$want") return 0 ;;
+  esac
+  return 1
+}
+
 function run_rc_tests() {
   _hi_workdir rctest
   mkdir -p "$_HI_WORKDIR/cfg"
@@ -92,6 +167,20 @@ function run_rc_tests() {
   _hi_h2 "Testing: zsh and fish"
   _hi_check_requires zsh "zsh builds its prompt" test_zsh_prompt_is_built
   _hi_check_requires fish "fish registers hi completion" test_fish_registers_hi_completion
+
+  _hi_h2 "Testing: the prompt separator"
+  local row shell var default
+  for row in 'bash:_HI_PROMPT_END_BASH:$' 'zsh:_HI_PROMPT_END_ZSH:>' 'fish:_HI_PROMPT_END_FISH:|'; do
+    shell="${row%%:*}"
+    var="${row#*:}"
+    var="${var%%:*}"
+    default="${row##*:}"
+    _hi_check_requires "$shell" "[$shell] default is '$default'" test_prompt_end_default "$shell" "$default"
+    _hi_check_requires "$shell" "[$shell] $var wins" test_prompt_end_shell_specific "$shell" "$var"
+    _hi_check_requires "$shell" "[$shell] _HI_PROMPT_END covers it" test_prompt_end_global_fallback "$shell"
+    _hi_check_requires "$shell" "[$shell] the specific one beats it" test_prompt_end_specific_beats_global "$shell" "$var"
+    _hi_check_requires "$shell" "[$shell] empty falls back to '$default'" test_prompt_end_empty_falls_back "$shell" "$var" "$default"
+  done
 
   _hi_suite_end "rc"
 }

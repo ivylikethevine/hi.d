@@ -615,6 +615,52 @@ function test_uninstall_shim_delegates_to_install() {
   grep -qF -- '--uninstall' "$_HI_UNINSTALL" && grep -qF 'install.sh' "$_HI_UNINSTALL"
 }
 
+# --- config_prompt_ends ------------------------------------------------------
+#
+# Three questions, one per shell, all of which have to survive being written to
+# a file four shells source. Every case runs non-interactive (`</dev/null`, no
+# tty), which is the path that keeps whatever is already configured.
+
+# _hi_prompt_ends_lines [existing-settings-line ...] - what config_prompt_ends
+# would write, as one string
+function _hi_prompt_ends_lines() {
+  local dir="$_HI_WORKDIR/promptends"
+  local _HI_SETTINGS="$dir/settings.sh"
+  local -a _HI_SETTING_LINES=()
+  mkdir -p "$dir"
+  [ "$#" -eq 0 ] && : >"$_HI_SETTINGS" || printf '%s\n' "$@" >"$_HI_SETTINGS"
+  config_prompt_ends </dev/null
+  printf '%s' "${_HI_SETTING_LINES[*]}"
+}
+
+# the shipped defaults are core.sh's own, so writing them out would be noise
+# that then has to be kept in sync - the same rule config_max_width has for 80
+function test_prompt_ends_writes_nothing_for_the_defaults() {
+  [ -z "$(_hi_prompt_ends_lines | tr -d ' ')" ]
+}
+
+function test_prompt_ends_keeps_an_existing_override() {
+  local out
+  out="$(_hi_prompt_ends_lines "export _HI_PROMPT_END_ZSH='::'")"
+  [[ "$out" == *"export _HI_PROMPT_END_ZSH='::'"* ]]
+}
+
+# quoted on the way out: a separator is as likely to be $ or > as a letter, and
+# the file is sourced by sh, bash, zsh and fish alike
+function test_prompt_ends_quotes_what_it_writes() {
+  local out
+  out="$(_hi_prompt_ends_lines "export _HI_PROMPT_END_BASH='>'")"
+  [[ "$out" == *"_HI_PROMPT_END_BASH='>'"* ]]
+}
+
+# the prompt is off, so what it ends with is moot - the same skip
+# config_header_details makes when the header itself is off
+function test_prompt_ends_skipped_when_the_prompt_is_off() {
+  local out
+  out="$(_hi_prompt_ends_lines "export _HI_DISABLE_PROMPT=1" "export _HI_PROMPT_END_ZSH='::'")"
+  [ -z "$(printf '%s' "$out" | tr -d ' ')" ]
+}
+
 function run_install_tests() {
   _hi_workdir installtest
 
@@ -636,6 +682,12 @@ function run_install_tests() {
   _hi_check "No backup for an empty target" test_config_shell_no_backup_for_empty_target
 
   _hi_h2 "Testing: settings are sourced ahead of paths.sh"
+  _hi_h2 "Testing: config_prompt_ends"
+  _hi_check "Defaults write nothing" test_prompt_ends_writes_nothing_for_the_defaults
+  _hi_check "An existing override is kept" test_prompt_ends_keeps_an_existing_override
+  _hi_check "Written values are quoted" test_prompt_ends_quotes_what_it_writes
+  _hi_check "Skipped when the prompt is off" test_prompt_ends_skipped_when_the_prompt_is_off
+
   _hi_check "common/core.sh" test_core_sources_settings_first
   _hi_check "shells/config.fish" test_fish_config_sources_settings_first
 

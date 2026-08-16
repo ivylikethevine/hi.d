@@ -75,6 +75,28 @@ function clean_all() {
   return 0
 }
 
+# True when this session should run inside a named tmux on the target, so a
+# dropped connection detaches instead of losing the work (`hi --tmux <target>`,
+# or _HI_TMUX_ATTACH=1 in settings.sh). Both refusals below are honest ones -
+# they print and carry on rather than dropping the connection:
+#
+#   - a disposable tree ($_HI_CLEANUP) is deleted the moment this session ends,
+#     and a tmux that outlived it would be reading a directory that is gone.
+#     shells/aliases.sh withholds the `tmux` alias on exactly the same test.
+#   - no tmux on the host, which is not something the client can know.
+function _hi_tmux_wanted() {
+  [ "${_HI_TMUX_ATTACH:-0}" = 1 ] || return 1
+  if [ -n "${_HI_CLEANUP:-}" ]; then
+    _hi_cecho " --tmux needs a permanent hi.d here (scripts/install.sh) - this tree is disposable, so a detached session would outlive it. Continuing without tmux." "$YELLOW"
+    return 1
+  fi
+  if ! command -v tmux >/dev/null 2>&1; then
+    _hi_cecho " --tmux asked for, but there is no tmux on this host. Continuing without it." "$YELLOW"
+    return 1
+  fi
+  return 0
+}
+
 function load() {
   local start
   start="$(_hi_now)"
@@ -102,10 +124,20 @@ function load() {
   # keep the session's own status: `hi <target>` should report a shell that
   # exited non-zero rather than always claiming success
   local shell_ec=0
-  if [ "$shell" = fish ]; then
-    fish -C "set fish_greeting ''" -i || shell_ec=$? # the header above is our greeting
+  local -a shell_cmd=("$shell" -i)
+  # the header above is our greeting
+  [ "$shell" = fish ] && shell_cmd=(fish -C "set fish_greeting ''" -i)
+  if _hi_tmux_wanted; then
+    # -A: attach to the named session if it is there, create it if not, which
+    # is the one answer to "what if it already exists" that never loses work.
+    # The command is passed as separate arguments rather than one string, so
+    # fish's -C argument survives without a layer of quoting; tmux ignores it
+    # entirely when it attaches to an existing session, as it should.
+    # -f is read only when the *server* starts (see misc/tmux.conf).
+    tmux -f "$_HI_TMUXCONF" new-session -A -s "${_HI_TMUX_SESSION:-hi}" \
+      "${shell_cmd[@]}" || shell_ec=$?
   else
-    "$shell" -i || shell_ec=$?
+    "${shell_cmd[@]}" || shell_ec=$?
   fi
 
   local size

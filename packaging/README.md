@@ -117,6 +117,10 @@ reads it). Put the public key line from `minisign.pub` into the README's "Verify
 section, replacing the placeholder. Then delete both local files; the secret and the README are their
 homes. Until the secret exists, releases ship unsigned sums and the publish log says so.
 
+**Create the Homebrew tap token.** Only once the `homebrew-tap` repo exists. `release.yml`'s `tap` job
+opens the formula PR with it: a fine-grained PAT scoped to that repo, contents + pull-requests write, added
+as a `HOMEBREW_TAP_TOKEN` repo secret. Absent, the job prints what to copy by hand and exits 0.
+
 ## Cutting a release
 
 ```bash
@@ -136,7 +140,8 @@ just created, instead of requiring a pre-tag bump and a force-retag to reconcile
    build produced. Packages, `SHA256SUMS`, and manifests land on the release, and the regenerated
    manifests are committed back to `main` (they are consumed from the AUR/tap repos, not from inside the
    tarball, so they don't need to be in the tagged tree).
-4. Copy the manifests from the release (or from `main`) to the AUR and the tap, per the sections below.
+4. Copy the manifests from the release (or from `main`) to the AUR. The tap gets a PR opened for it
+   automatically once `HOMEBREW_TAP_TOKEN` exists — see the Homebrew section below.
 
 `bump.sh 1.0.0` still works by hand if CI is ever unavailable (`--tarball <file>` skips the
 download), and `bump.sh --check 1.0.0` stays useful locally to confirm the manifests match a cut release.
@@ -175,6 +180,13 @@ A tap is just a GitHub repo named `homebrew-tap` with a `Formula/` directory. Co
 `packaging/homebrew/hi.d.rb` to `Formula/hi.d.rb` there and `brew install ivy/tap/hi.d` works — no review,
 no approval. Before copying, all three must pass — `brew audit --strict` is a hard gate here precisely
 because nothing else reviews a tap:
+
+**The copy is automated, the checks are not.** `release.yml`'s `tap` job (behind the same `release`
+approval as `publish`) opens a PR against `<owner>/homebrew-tap` with the freshly regenerated formula and
+the three commands below as its checklist. It needs a `HOMEBREW_TAP_TOKEN` repo secret — a fine-grained PAT
+scoped to that repo with contents + pull-requests write. Without the secret the job says so and does
+nothing, which is the state until the tap repo exists. Merging the PR is still yours, and so is running
+these first:
 
 ```bash
 brew install --build-from-source ./packaging/homebrew/hi.d.rb

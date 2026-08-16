@@ -172,6 +172,62 @@ function test_resolve_color_falls_back_to_hash() {
   [ "$(_HI_COLORS="$colors" _hi_resolve_color username unknownxyz)" = "$(_hi_hash_color unknownxyz)" ]
 }
 
+# --- the per-host settings overlay -------------------------------------------
+#
+# core.sh's preamble runs once per shell and is guarded by $_hi_core_loaded, so
+# there is no function to call: every case is a fresh bash sourcing core.sh
+# against a scratch $_HI_CONFIG_DIR. The fixture writes three files that each
+# claim $_HI_PROBE, and the value that survives says which one was sourced last.
+
+function _hi_overlay_fixture() {
+  local dir="$_HI_WORKDIR/overlay"
+  [ -d "$dir/settings.d" ] && {
+    printf '%s' "$dir"
+    return
+  }
+  mkdir -p "$dir/settings.d"
+  printf 'export _HI_PROBE=global\n' >"$dir/settings.sh"
+  printf 'export _HI_PROBE=host\n' >"$dir/settings.d/myhost.sh"
+  printf 'export _HI_PROBE=tag\n' >"$dir/settings.d/tag-prod.sh"
+  printf '%s' "$dir"
+}
+
+# _hi_overlay_probe [NAME=VALUE ...] - $_HI_PROBE after a fresh core.sh
+# shellcheck disable=SC2016 # the probe expands in the child bash, not here
+function _hi_overlay_probe() {
+  local dir
+  dir="$(_hi_overlay_fixture)"
+  env -u _HI_TARGET -u _HI_TARGET_TAG -u _hi_core_loaded -u _HI_PROBE \
+    _HI_HOME="$_HI_HOME" _HI_CONFIG_DIR="$dir" "$@" \
+    bash -c 'source "$_HI_HOME/hi.d/common/core.sh"; printf "%s" "${_HI_PROBE:-unset}"'
+}
+
+function test_overlay_no_target_is_settings_only() {
+  [ "$(_hi_overlay_probe)" = global ]
+}
+
+function test_overlay_exact_host_wins_over_settings() {
+  [ "$(_hi_overlay_probe _HI_TARGET=myhost)" = host ]
+}
+
+function test_overlay_hosttag_file_applies() {
+  [ "$(_hi_overlay_probe _HI_TARGET=otherhost _HI_TARGET_TAG=prod)" = tag ]
+}
+
+# both present: the tag file is sourced first and the host file overrides it
+function test_overlay_exact_host_beats_hosttag() {
+  [ "$(_hi_overlay_probe _HI_TARGET=myhost _HI_TARGET_TAG=prod)" = host ]
+}
+
+function test_overlay_unknown_target_falls_through() {
+  [ "$(_hi_overlay_probe _HI_TARGET=nosuchhost _HI_TARGET_TAG=nosuchtag)" = global ]
+}
+
+# the target name comes from the command line; settings.d is one flat directory
+function test_overlay_refuses_a_path() {
+  [ "$(_hi_overlay_probe _HI_TARGET=../settings)" = global ]
+}
+
 function run_core_tests() {
   _hi_workdir sharedtest
 
@@ -215,6 +271,14 @@ function run_core_tests() {
   _hi_check "Hosttag via ssh config" test_resolve_color_hosttag_via_ssh_config
   _hi_check "Usertag when no exact override" test_resolve_color_usertag_when_no_exact_override
   _hi_check "Falls back to the hash" test_resolve_color_falls_back_to_hash
+
+  _hi_h2 "Testing: the per-host settings overlay"
+  _hi_check "No target loads settings.sh alone" test_overlay_no_target_is_settings_only
+  _hi_check "Exact-host file overrides settings.sh" test_overlay_exact_host_wins_over_settings
+  _hi_check "Hosttag file applies" test_overlay_hosttag_file_applies
+  _hi_check "Exact host beats the hosttag file" test_overlay_exact_host_beats_hosttag
+  _hi_check "Unknown target falls through" test_overlay_unknown_target_falls_through
+  _hi_check "A target with a slash is refused" test_overlay_refuses_a_path
 
   _hi_suite_end "core.sh"
 }

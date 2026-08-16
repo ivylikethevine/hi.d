@@ -86,3 +86,78 @@ nmcli:0
 msdnss:0
 nmap:0
 envrc:0
+
+# --- what hi itself runs -----------------------------------------------------
+# Everything below is used by hi's own code (the payload, scripts/ and the test
+# suite) rather than being a tool worth knowing you have, so it all sits at the
+# two quiet priorities:
+#
+#   2: hidden when installed, yellow when missing - hi needs it, and a target
+#      without it behaves differently, so that is worth saying once, quietly.
+#   0: blue when installed, hidden when missing - either platform-specific (no
+#      Linux box should be nagged about sw_vers) or dev-machine tooling, where
+#      absence is not news but a complete toolchain is nice to see.
+#
+# `cat`, `find`, `sed`, `tar`, `git`, `sudo`, `openssl`, `scp`, `python3`,
+# `hyperfine`, `docker`/`podman`, `nomad`, `kubectl`, `tmux` and the editor and
+# pager chains are already listed above and are not repeated here.
+
+# needed: the payload, load.sh, install.sh and the suites all break without these
+awk:2
+base64:2
+grep:2
+tr:2
+cut:2
+head:2
+sort:2
+uniq:2
+wc:2
+paste:2
+date:2
+du:2
+mkdir:2
+rm:2
+ln:2
+chmod:2
+mktemp:2
+dirname:2
+readlink:2
+hostname:2
+uname:2
+whoami:2
+ssh:2
+ssh-keygen:2
+gzip:2
+od:2
+stty:2
+# probed for, and hi carries on without them - but the session is worse for it:
+# an unbounded backend probe, or a "?" where the header's system info should be
+timeout:2
+nproc:2
+lscpu:2
+df:2
+stat:2
+
+# platform-specific by nature: each of these exists on exactly one OS, so a
+# missing one is information about the host, not about the install
+sysctl:0
+sw_vers:0
+wmic:0
+lesspipe:0
+
+# --- what the test suite and the release workflow run ------------------------
+# Dev-machine tooling. Every suite that needs one of these skips cleanly when it
+# is missing, so none of them is ever worth a warning on a target.
+shellcheck:0
+shfmt:0
+checkbashisms:0
+actionlint:0
+zizmor:0
+kcov:0
+pgrep:0
+kind:0
+nfpm:0
+minisign:0
+gh:0
+makepkg:0
+namcap:0

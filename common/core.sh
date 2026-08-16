@@ -18,7 +18,7 @@ if [ -z "${_hi_core_loaded:-}" ]; then
   # _hi_fallback_rc; config.fish keeps its own copy.
   _HI_TOGGLES=(_HI_DISABLE_LOCAL _HI_REMOTE_SESSION _HI_DISABLE_HEADER
     _HI_DISABLE_PROMPT _HI_DISABLE_PERSONAL _HI_DISABLE_GIT_STATUS
-    _HI_DISABLE_EDITORS _HI_DISABLE_ALIASES)
+    _HI_DISABLE_EDITORS _HI_DISABLE_ALIASES _HI_DISABLE_OSC52 _HI_DISABLE_TMUX)
   for _hi_t in "${_HI_TOGGLES[@]}"; do
     eval ": \"\${$_hi_t:=0}\"; export $_hi_t"
   done
@@ -33,6 +33,27 @@ if [ -z "${_hi_core_loaded:-}" ]; then
   if [ -f "$_HI_CONFIG_DIR/settings.sh" ]; then
     . "$_HI_CONFIG_DIR/settings.sh"
   fi
+  # Per-host overlay: $_HI_CONFIG_DIR/settings.d/<name>.sh, after settings.sh so
+  # a host can override a global toggle (a slow link wants _HI_HEADER_CHECK=0, a
+  # shared root box wants the prompt only). Two names, in this order: the
+  # hosttag file from the `# Tags:` comment colors already read, then the
+  # exact-host file - they stack, and the more specific one wins.
+  #
+  # $_HI_TARGET/$_HI_TARGET_TAG are set only inside a session hi opened (hi.sh's
+  # remote preamble), so every line here is a no-op on the client. A name
+  # carrying a slash is skipped rather than resolved: the value arrives from the
+  # command line, and settings.d is meant to be one flat directory.
+  # shells/config.fish keeps its own copy of this block.
+  for _hi_o in "tag-${_HI_TARGET_TAG:-}" "${_HI_TARGET:-}"; do
+    case "$_hi_o" in
+    tag- | '' | */*) continue ;;
+    esac
+    # shellcheck source=/dev/null # user config, may not exist
+    if [ -f "$_HI_CONFIG_DIR/settings.d/$_hi_o.sh" ]; then
+      . "$_HI_CONFIG_DIR/settings.d/$_hi_o.sh"
+    fi
+  done
+  unset _hi_o
   # shellcheck source=./paths.sh
   source "$_HI_HOME/hi.d/common/paths.sh"
 fi
@@ -181,6 +202,25 @@ function _hi_on_exit() {
     # shellcheck disable=SC2064 # $1 is the command we want stored, expanded now
     trap "$1" EXIT
   fi
+}
+
+# _hi_prompt_end <SHELL> <default> - the character the prompt ends with, for
+# that shell. Each shell's prompt has always closed with a different one (bash
+# `\$`, zsh `>`, fish `|`) and they were hardcoded three times; these are now
+# only the defaults.
+#
+# Precedence: the shell-specific setting, then the one that covers all three,
+# then the shipped default. An empty value counts as unset rather than as "no
+# separator" - a prompt ending in a bare space is almost never what someone
+# meant, and `_HI_PROMPT_END_ZSH=' '` still expresses it.
+#
+# The value lands in $PS1 unquoted and is *not* escaped: that is deliberate, so
+# `%#` in zsh or `\$` in bash still mean what they mean there. shells/config.fish
+# keeps its own copy of this rule, as it does for the toggle list.
+function _hi_prompt_end() {
+  local specific
+  eval "specific=\"\${_HI_PROMPT_END_$1:-}\""
+  printf '%s' "${specific:-${_HI_PROMPT_END:-$2}}"
 }
 
 function _hi_at_color() {

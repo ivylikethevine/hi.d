@@ -29,6 +29,8 @@ if ! declare -p _HI_TESTS >/dev/null 2>&1; then
   _HI_TESTS=(
     "fast:aliases:shells/alias_test.sh"
     "fast:alias_fallthrough:shells/alias_fallthrough_test.sh"
+    "fast:osc52:shells/osc52_test.sh"
+    "fast:tmux:shells/tmux_test.sh"
     "fast:shellcheck:shells/shellcheck_test.sh"
     "fast:install:scripts/install_test.sh"
     "fast:packaging:scripts/packaging_test.sh"

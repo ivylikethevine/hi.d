@@ -95,6 +95,59 @@ function _hi_run_interactive_case() {
   [ "$ok" -eq 1 ]
 }
 
+# `hi --tmux <target>`: the session runs inside a named tmux on the target, and
+# the whole point of it is that a dropped connection detaches rather than losing
+# the work. So this case does not drive an interactive session at all - it
+# starts one, waits for the tmux session to exist, *kills the client*, and
+# asserts the session is still there afterwards. Nothing short of that actually
+# tests the promise.
+#
+# The target is the pre-installed image plus tmux, since load.sh refuses --tmux
+# on a disposable tree - a detached tmux would outlive the tree it reads.
+function _hi_tmux_session_listed() {
+  docker exec -u hitest "$1" tmux ls 2>/dev/null | grep -q "^hi:"
+}
+
+function _hi_run_tmux_case() {
+  local name="hi-sshtest-tmux-$$" ok=0 session_pid out
+  local -a launch
+
+  _hi_h3 "Testing interactive session: tmux (--tmux, permanent install)"
+  _hi_sshd_container "$name" "hi-sshtest-debian-tmux-$$" -e "LOGIN_SHELL=/bin/bash" || return 1
+  _hi_ssh_launch "$_HI_SSH_PORT"
+  # --tmux goes after the launcher and before the target: _hi_parse takes hi's
+  # own flags anywhere ahead of the first bare word
+  launch=("${_HI_SSH_LAUNCH_BARE[0]}" --tmux "${_HI_SSH_LAUNCH_BARE[@]:1}")
+  out="$_HI_WORKDIR/tmux.interactive.out"
+  : >"$out"
+
+  # held open by a sleep rather than fed an `exit`: this session is meant to be
+  # interrupted, not ended politely
+  # shellcheck disable=SC2094 # separate processes; the reader only polls
+  { sleep 120; } | "${_HI_PTY_FORCED[@]}" "${launch[@]}" >"$out" 2>&1 &
+  session_pid=$!
+
+  if _hi_poll_bool 60 0.5 _hi_tmux_session_listed "$name"; then
+    kill -9 "$session_pid" 2>/dev/null || true
+    wait "$session_pid" 2>/dev/null || true
+    # the session outlived the client that started it, which is the feature
+    if _hi_poll_bool 20 0.5 _hi_tmux_session_listed "$name"; then
+      ok=1
+      _hi_cecho " | [tmux] -- the session survived the dropped connection: OK" "$GREEN"
+    else
+      _hi_h3 " | [tmux] -- the tmux session died with the client" "$RED"
+    fi
+  else
+    kill -9 "$session_pid" 2>/dev/null || true
+    wait "$session_pid" 2>/dev/null || true
+    _hi_h3 " | [tmux] -- no tmux session was ever created" "$RED"
+    sed 's/^/      /' "$out" | tail -5
+  fi
+
+  docker rm -f "$name" >/dev/null 2>&1
+  [ "$ok" -eq 1 ]
+}
+
 function run_ssh_tests() {
   _hi_require_backend docker
 
@@ -145,6 +198,18 @@ function run_ssh_tests() {
 EOF
     _hi_build_image debian-installed "hi-sshtest-debian-installed-$$" "the pre-installed case" \
       -f "$_HI_WORKDIR/debian-installed/Dockerfile" "$_HI_ROOT" && _HI_INSTALLED_OK=1
+  fi
+
+  # the same permanent install, plus tmux, for the --tmux case below
+  _HI_TMUX_OK=0
+  if [ "$_HI_INSTALLED_OK" -eq 1 ]; then
+    mkdir -p "$_HI_WORKDIR/debian-tmux"
+    cat >"$_HI_WORKDIR/debian-tmux/Dockerfile" <<EOF
+  FROM hi-sshtest-debian-installed-$$
+  RUN apt-get update -qq && apt-get install -y -qq tmux >/dev/null
+EOF
+    _hi_build_image debian-tmux "hi-sshtest-debian-tmux-$$" "the --tmux case" \
+      -f "$_HI_WORKDIR/debian-tmux/Dockerfile" "$_HI_WORKDIR/debian-tmux" && _HI_TMUX_OK=1
   fi
 
   _HI_TEST_MARKER="HI_SSH_TEST_OK"
@@ -215,6 +280,14 @@ EOF
       'test -f /home/hitest/hi.d/.installed_sentinel && test -x /home/hitest/hi.d/hi.sh && ! grep -q hi-config-start /home/hitest/.bashrc'
   fi
 
+  if [ "$_HI_TMUX_OK" -eq 1 ]; then
+    if [ "${#_HI_PTY_FORCED[@]}" -eq 0 ]; then
+      _hi_skip "[tmux]" "no python3 to drive an interactive pty"
+    else
+      _hi_case _hi_run_tmux_case
+    fi
+  fi
+
   if [ "$_HI_DEBIAN_OK" -eq 1 ]; then
     # the mirror image: a tree hi *did* ship over has to be gone afterwards,
     # so the guard above can't be satisfied by never cleaning up at all
@@ -228,7 +301,7 @@ EOF
   # *not* removed - it's shared with ssh_disconnect_test.sh so a full run
   # builds it once rather than twice.
   docker image rm -f "hi-sshtest-alpine-$$" "hi-sshtest-alpine-zsh-$$" "hi-sshtest-alpine-fish-$$" \
-    "hi-sshtest-bash32-$$" "hi-sshtest-debian-installed-$$" >/dev/null 2>&1 || true
+    "hi-sshtest-bash32-$$" "hi-sshtest-debian-installed-$$" "hi-sshtest-debian-tmux-$$" >/dev/null 2>&1 || true
 
   _hi_suite_end "" \
     "hi's ssh path survived every login shell tested ($_HI_TOTAL cases)" \

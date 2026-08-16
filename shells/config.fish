@@ -6,7 +6,7 @@ set -q _HI_HOME; or set -gx _HI_HOME ~
 # safe and settings.sh/the gate still override. Mirrors core.sh's _HI_TOGGLES.
 for _hi_toggle in _HI_DISABLE_LOCAL _HI_REMOTE_SESSION _HI_DISABLE_HEADER \
     _HI_DISABLE_PROMPT _HI_DISABLE_PERSONAL _HI_DISABLE_GIT_STATUS \
-    _HI_DISABLE_EDITORS _HI_DISABLE_ALIASES
+    _HI_DISABLE_EDITORS _HI_DISABLE_ALIASES _HI_DISABLE_OSC52 _HI_DISABLE_TMUX
   set -q $_hi_toggle; or set -gx $_hi_toggle 0
 end
 set -e _hi_toggle
@@ -21,6 +21,19 @@ end
 if test -f $_HI_CONFIG_DIR/settings.sh
   source $_HI_CONFIG_DIR/settings.sh
 end
+# the per-host overlay, mirroring core.sh's block: the hosttag file first, the
+# exact-host file last, so the more specific one wins. Both are no-ops outside a
+# session hi opened, where neither variable is set. A name with a slash in it is
+# skipped - it comes from the command line, and settings.d is one flat directory.
+for _hi_overlay in "tag-$_HI_TARGET_TAG" "$_HI_TARGET"
+  if test "$_hi_overlay" = tag-; or test -z "$_hi_overlay"; or string match -q '*/*' -- $_hi_overlay
+    continue
+  end
+  if test -f $_HI_CONFIG_DIR/settings.d/$_hi_overlay.sh
+    source $_HI_CONFIG_DIR/settings.d/$_hi_overlay.sh
+  end
+end
+set -e _hi_overlay
 source $_HI_HOME/hi.d/common/paths.sh
 source $_HI_ALIASES
 
@@ -64,6 +77,15 @@ function sudo
   end
 end
 
+# The character the prompt ends with, mirroring core.sh's _hi_prompt_end (fish
+# can't call it): the fish-specific setting, then the one covering all three
+# shells, then the shipped default. Empty counts as unset - a prompt ending in a
+# bare space is never what someone meant. The root branch in fish_prompt still
+# overrides it with '#', the way it always has.
+set -g _hi_prompt_end '|'
+set -q _HI_PROMPT_END; and test -n "$_HI_PROMPT_END"; and set -g _hi_prompt_end $_HI_PROMPT_END
+set -q _HI_PROMPT_END_FISH; and test -n "$_HI_PROMPT_END_FISH"; and set -g _hi_prompt_end $_HI_PROMPT_END_FISH
+
 # prompt: "<chroot> user@host cwd (git) [status] |", @ turning yellow over ssh
 # skipped entirely when disabled, leaving fish's own default prompt in place
 if test "$_HI_DISABLE_PROMPT" != 1
@@ -88,7 +110,7 @@ function fish_prompt --description 'Write out the prompt'
   set -l normal (set_color normal)
 
   set -l color_cwd $fish_color_cwd
-  set -l suffix ' |'
+  set -l suffix " $_hi_prompt_end"
   if functions -q fish_is_root_user; and fish_is_root_user
     set -q fish_color_cwd_root; and set color_cwd $fish_color_cwd_root
     set suffix '#'

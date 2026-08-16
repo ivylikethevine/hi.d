@@ -14,6 +14,9 @@ export GCC_COLORS='error=01;31:warning=01;35:note=01;36:caret=01;32:locus=01:quo
 
 if [[ "${_HI_DISABLE_PROMPT:-0}" != 1 ]]; then
   _hi_prime_identity
+  # the character this prompt ends with (`\$` here, which bash renders as $ for
+  # a user and # for root) - see _hi_prompt_end in common/core.sh
+  HI_PS1_END="$(_hi_prompt_end BASH '\$')"
   if _hi_has_color; then
     HI_PS1=" ${debian_chroot:-}$(_hi_user_escape)\u$(_hi_at_color)@$(_hi_host_escape)\h$NC $BRBLUE\w$NC"
   else
@@ -58,9 +61,9 @@ if [[ "${_HI_DISABLE_PROMPT:-0}" != 1 ]]; then
     if shopt -q promptvars; then
       _hi_git_prompt __powerline_git_info # out-var form: no $( ) fork per prompt
       # shellcheck disable=SC2154 # assigned by the printf -v one line up
-      PS1="$HI_PS1\${__powerline_git_info}$NC \$ "
+      PS1="$HI_PS1\${__powerline_git_info}$NC $HI_PS1_END "
     else
-      PS1="$HI_PS1$(_hi_git_prompt)$NC \$ "
+      PS1="$HI_PS1$(_hi_git_prompt)$NC $HI_PS1_END "
     fi
   }
   PROMPT_COMMAND="ps1${PROMPT_COMMAND:+; $PROMPT_COMMAND}"

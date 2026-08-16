@@ -105,6 +105,29 @@ function test_parse_handles_several_flags_before_the_target() {
 # a trailing command becomes CMDARG - suffixed with "; exit" so the target
 # shell closes after it - and never a second target. The spacing between the
 # two is incidental (_hi_parse pastes '; ' and ' exit'), so don't pin it.
+# hi's own flags are consumed by the parse, never forwarded - ssh would reject
+# --tmux outright, and the target is still the first bare word after it
+function test_parse_takes_hi_flags_without_forwarding_them() {
+  [ "$(_hi_parse_out --tmux myhost)" = "$(printf 'myhost\n\n')" ] || return 1
+  [ "$(_hi_parse_out -p 2222 --no-tmux myhost)" = "$(printf 'myhost\n\n-p\n2222\n')" ]
+}
+
+function test_parse_tmux_flags_set_the_toggle() {
+  local on off
+  on="$( (
+    unset DOMAIN CMDARG
+    _hi_parse --tmux myhost >/dev/null 2>&1
+    printf '%s' "${_HI_TMUX_ATTACH:-unset}"
+  ))"
+  off="$( (
+    unset DOMAIN CMDARG
+    _HI_TMUX_ATTACH=1
+    _hi_parse --no-tmux myhost >/dev/null 2>&1
+    printf '%s' "${_HI_TMUX_ATTACH:-unset}"
+  ))"
+  [ "$on" = 1 ] && [ "$off" = 0 ]
+}
+
 function test_parse_turns_trailing_words_into_a_command() {
   local out
   out="$(_hi_parse_out myhost echo hello)"
@@ -305,6 +328,159 @@ function test_overlay_tar_carries_only_what_exists() {
   [ "$(_HI_CONFIG_DIR="$dir" _hi_overlay_tar | tar tzf -)" = "colors" ]
 }
 
+# --- the per-host settings overlay ------------------------------------------
+#
+# settings.d/<host>.sh and settings.d/tag-<tag>.sh ride the same stream, but
+# unlike the three flat files they are *selected*: only the files matching this
+# target are sent, since another host's settings have no business on this box.
+
+# a config dir holding settings.d/{myhost,otherhost,tag-prod}.sh, plus an ssh
+# config that tags myhost as prod - enough for every selection case below
+function _hi_host_overlay_fixture() {
+  local dir="$_HI_WORKDIR/hostoverlay" f
+  [ -d "$dir/settings.d" ] || {
+    mkdir -p "$dir/settings.d"
+    for f in myhost otherhost tag-prod; do printf 'x\n' >"$dir/settings.d/$f.sh"; done
+    printf '# Tags: prod, web\nHost myhost\n' >"$dir/ssh_config"
+  }
+  printf '%s' "$dir"
+}
+
+# _hi_host_overlay_members <target> - the tar's members for that target
+function _hi_host_overlay_members() {
+  local dir
+  dir="$(_hi_host_overlay_fixture)"
+  DOMAIN="$1" _HI_CONFIG_DIR="$dir" _HI_SSH_CONFIG="$dir/ssh_config" \
+    _hi_overlay_tar | tar tzf - | sort | paste -sd, -
+}
+
+# an untagged host gets its own file and nothing else
+function test_host_overlay_sends_only_the_matching_file() {
+  [ "$(_hi_host_overlay_members otherhost)" = "settings.d/otherhost.sh" ]
+}
+
+# a tagged host gets both, and the members keep their settings.d/ prefix - they
+# are unpacked over the target's misc/, which is its $_HI_CONFIG_DIR
+function test_host_overlay_sends_the_hosttag_file_too() {
+  [ "$(_hi_host_overlay_members myhost)" = "settings.d/myhost.sh,settings.d/tag-prod.sh" ]
+}
+
+function test_host_overlay_sends_nothing_for_an_unknown_host() {
+  [ -z "$(_hi_host_overlay_members nosuchhost)" ]
+}
+
+# a settings.d file alone is still an overlay: without this, a user who only
+# configured one host would have nothing sent at all
+function test_host_overlay_counts_as_an_overlay() {
+  local dir
+  dir="$(_hi_host_overlay_fixture)"
+  (DOMAIN=otherhost _HI_CONFIG_DIR="$dir" _HI_SSH_CONFIG="$dir/ssh_config" _hi_has_overlay)
+}
+
+# the bash-less rc resolves the same files on the client, and must source them
+# after settings.sh - the specific file has to be able to override the global one
+function test_fallback_rc_sources_the_host_overlay_after_settings() {
+  local dir out
+  dir="$(_hi_host_overlay_fixture)"
+  out="$(DOMAIN=myhost _HI_CONFIG_DIR="$dir" _HI_SSH_CONFIG="$dir/ssh_config" CMDARG="" _hi_fallback_rc)"
+  _hi_before "$out" 'misc/settings\.sh' 'settings\.d/tag-prod\.sh' &&
+    _hi_before "$out" 'settings\.d/tag-prod\.sh' 'settings\.d/myhost\.sh' &&
+    _hi_before "$out" 'settings\.d/myhost\.sh' 'common/paths\.sh'
+}
+
+# --- hi --update ------------------------------------------------------------
+#
+# Three branches, all reachable without a host: no permanent install on the
+# target, one without a .git (a packaged install), and the real pull. `ssh` is
+# shadowed by a shell function - _hi_update calls the binary by name, so a
+# function of that name in this shell is what it reaches. Each case runs in a
+# subshell, since _hi_parse assigns $DOMAIN/$SSHARGS/$CMDARG globally.
+#
+# $_HI_SSH_LOG records what the stub was asked to run, so the assertions can be
+# about the command that would have reached the target rather than about our
+# own plumbing.
+
+# shellcheck disable=SC2016 # the probe's $HOME is the target's, matched literally
+function _hi_ssh_stub() {
+  # the ControlMaster teardown _hi_update always ends with
+  [ "${1:-}" = "-O" ] && return 0
+  local last="${*: -1}"
+  printf '%s\n' "$last" >>"$_HI_SSH_LOG"
+  case "$last" in
+  # the install probe: _hi_remote_root's one-liner, answered with whatever
+  # this case wants the target to look like
+  *'$HOME/hi.d'*) printf '%s' "$_HI_REMOTE_ROOT" ;;
+  # the update itself, run for real under sh so its own guard is exercised
+  *) sh -c "$last" ;;
+  esac
+}
+
+function _hi_update_case() {
+  local root="$1"
+  shift
+  _HI_SSH_LOG="$_HI_WORKDIR/ssh.log"
+  : >"$_HI_SSH_LOG"
+  (
+    # shellcheck disable=SC2317 # called through _hi_update's `ssh`
+    function ssh() { _hi_ssh_stub "$@"; }
+    _HI_REMOTE_ROOT="$root" _hi_update "$@"
+  )
+}
+
+function test_update_needs_a_target() {
+  ! _hi_update_case "" 2>/dev/null
+}
+
+function test_update_refuses_a_trailing_command() {
+  ! _hi_update_case "" myhost 'echo hi' 2>/dev/null
+}
+
+# nothing installed there: a session would ship a fresh copy anyway
+function test_update_refuses_without_a_permanent_install() {
+  local out
+  out="$(_hi_update_case "" myhost 2>&1)" && return 1
+  case "$out" in *"no permanent hi.d"*) return 0 ;; esac
+  return 1
+}
+
+# a packaged install has no .git - the same refusal hi_update makes locally
+function test_update_refuses_a_package_manager_install() {
+  local root out
+  root="$_HI_WORKDIR/packaged/hi.d"
+  mkdir -p "$root"
+  out="$(_hi_update_case "$root" myhost 2>&1)" && return 1
+  case "$out" in *"package manager"*) return 0 ;; esac
+  return 1
+}
+
+# the real branch: a checkout on the target gets `git pull` in it, and nothing
+# else - no session, no payload, no rc grafting
+function test_update_pulls_a_checkout() {
+  local root
+  root="$_HI_WORKDIR/checkout/hi.d"
+  mkdir -p "$root/.git"
+  _hi_update_case "$root" myhost >/dev/null 2>&1
+  grep -q "git -C '$root' pull" "$_HI_SSH_LOG"
+}
+
+# ssh flags still reach ssh, so `hi --update -p 2222 host` works like `hi` does
+function test_update_keeps_ssh_flags() {
+  local root
+  root="$_HI_WORKDIR/checkout/hi.d"
+  mkdir -p "$root/.git"
+  (
+    # shellcheck disable=SC2317 # called through _hi_update's `ssh`
+    function ssh() {
+      [ "${1:-}" = "-O" ] && return 0
+      printf '%s\n' "$*" >>"$_HI_WORKDIR/flags.log"
+      printf '%s' "$_HI_REMOTE_ROOT"
+    }
+    : >"$_HI_WORKDIR/flags.log"
+    _HI_REMOTE_ROOT="$root" _hi_update -p 2222 myhost >/dev/null 2>&1
+    grep -q -- "-p 2222 myhost" "$_HI_WORKDIR/flags.log"
+  )
+}
+
 # --- hi --version -----------------------------------------------------------
 #
 # The dispatch is executed, not sourced: --version lives in the trailing case
@@ -404,6 +580,8 @@ function run_hi_tests() {
   _hi_check "Trailing words become a command" test_parse_turns_trailing_words_into_a_command
   _hi_check "A plain session has no command" test_parse_leaves_cmdarg_empty_for_a_plain_session
   _hi_check "Rejects a flag missing its value" test_parse_rejects_a_flag_missing_its_value
+  _hi_check "hi's own flags aren't forwarded to ssh" test_parse_takes_hi_flags_without_forwarding_them
+  _hi_check "--tmux/--no-tmux set the toggle" test_parse_tmux_flags_set_the_toggle
   _hi_check "Names the offending flag" test_parse_names_the_offending_flag
 
   _hi_h2 "Testing: backend predicates"
@@ -451,6 +629,21 @@ function run_hi_tests() {
   _hi_check "Members are bare names" test_overlay_tar_members_are_bare_names
   _hi_check "Carries only what exists" test_overlay_tar_carries_only_what_exists
   _hi_check "Fallback rc points at the shipped tree" test_fallback_rc_points_config_dir_at_the_shipped_tree
+
+  _hi_h2 "Testing: the per-host settings overlay"
+  _hi_check "Only the matching host's file is sent" test_host_overlay_sends_only_the_matching_file
+  _hi_check "A tagged host gets its hosttag file too" test_host_overlay_sends_the_hosttag_file_too
+  _hi_check "Nothing sent for an unconfigured host" test_host_overlay_sends_nothing_for_an_unknown_host
+  _hi_check "A settings.d file alone counts as an overlay" test_host_overlay_counts_as_an_overlay
+  _hi_check "Fallback rc sources it after settings.sh" test_fallback_rc_sources_the_host_overlay_after_settings
+
+  _hi_h2 "Testing: hi --update"
+  _hi_check "Needs a target" test_update_needs_a_target
+  _hi_check "Refuses a trailing command" test_update_refuses_a_trailing_command
+  _hi_check "Refuses without a permanent install" test_update_refuses_without_a_permanent_install
+  _hi_check "Refuses a package-manager install" test_update_refuses_a_package_manager_install
+  _hi_check "Pulls a checkout on the target" test_update_pulls_a_checkout
+  _hi_check "Keeps ssh flags" test_update_keeps_ssh_flags
 
   _hi_suite_end "hi.sh"
 }

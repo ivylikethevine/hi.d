@@ -162,6 +162,45 @@ function test_this_checkout_was_never_touched() {
   [ -f "$_HI_ROOT/load.sh" ] && [ -f "$_HI_ROOT/hi.sh" ] && [ -d "$_HI_ROOT/common" ]
 }
 
+# --- _hi_tmux_wanted ----------------------------------------------------------
+#
+# The gate in front of `hi --tmux`. Every "no" here has to be a *loud* no that
+# still lets the session happen - refusing to connect because a host has no
+# tmux would be a worse answer than connecting without it.
+
+# _hi_tmux_answer <NAME=VALUE ...> - "yes"/"no", plus whatever it printed
+# shellcheck disable=SC2016 # the probe expands in the child bash, not here
+function _hi_tmux_answer() {
+  local out rc=0
+  out="$(env "$@" bash -c '
+    _HI_LOAD_NO_INIT=1
+    source "$_HI_HOME/hi.d/common/core.sh"
+    source "$_HI_HOME/hi.d/load.sh"
+    if _hi_tmux_wanted; then echo yes; else echo no; fi' 2>&1)" || rc=$?
+  printf '%s' "$out"
+  return "$rc"
+}
+
+function test_tmux_wanted_off_by_default() {
+  [ "$(_hi_tmux_answer _HI_HOME="$_HI_HOME" PATH="$PATH")" = no ]
+}
+
+function test_tmux_wanted_on_when_asked_for() {
+  [ "$(_hi_tmux_answer _HI_HOME="$_HI_HOME" PATH="$PATH" _HI_TMUX_ATTACH=1)" = yes ]
+}
+
+# a disposable tree is deleted when this session ends; a tmux that outlived it
+# would be reading a directory that is gone - the same test shells/aliases.sh
+# makes before defining the `tmux` alias
+function test_tmux_wanted_refuses_a_disposable_tree() {
+  local out
+  out="$(_hi_tmux_answer _HI_HOME="$_HI_HOME" PATH="$PATH" _HI_TMUX_ATTACH=1 _HI_CLEANUP=/tmp/x.hi)"
+  case "$out" in
+  *permanent*no) return 0 ;;
+  esac
+  return 1
+}
+
 function run_load_tests() {
   _hi_workdir loadtest
 
@@ -186,6 +225,11 @@ function run_load_tests() {
   _hi_h2 "Testing: profile restoration"
   _hi_check "Sourcing restores the profile chain and PATH" test_source_restores_profile_and_path
   _hi_check "_HI_LOAD_NO_INIT=1 skips both" test_no_init_guard_skips_profile_and_path
+
+  _hi_h2 "Testing: _hi_tmux_wanted"
+  _hi_check "Off by default" test_tmux_wanted_off_by_default
+  _hi_check_requires tmux "On when asked for" test_tmux_wanted_on_when_asked_for
+  _hi_check_requires tmux "Refuses a disposable tree, loudly" test_tmux_wanted_refuses_a_disposable_tree
 
   _hi_h2 "Testing: this checkout"
   _hi_check "Still intact after every clean_all above" test_this_checkout_was_never_touched

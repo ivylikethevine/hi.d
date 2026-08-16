@@ -12,6 +12,11 @@ _hi_interactive_extras
 
 if [[ "${_HI_DISABLE_PROMPT:-0}" != 1 ]]; then
   _hi_prime_identity
+  # the character this prompt ends with - see _hi_prompt_end in common/core.sh.
+  # Concatenated onto the $'...' strings below rather than interpolated into
+  # them: those stay literal on purpose, so zsh's own prompt expansion (%F, %~,
+  # ${debian_chroot}) happens at render time and not at assignment.
+  HI_PS1_END="$(_hi_prompt_end ZSH '>')"
   if _hi_has_color; then
     export CLICOLOR=1
     export LSCOLORS=gafacadabaegedabagacad
@@ -20,9 +25,9 @@ if [[ "${_HI_DISABLE_PROMPT:-0}" != 1 ]]; then
     HOST_COLOR="${$(_hi_host_color)//br/}"
     _hi_at_color=plain
     [ -n "${SSH_TTY:-}" ] && _hi_at_color=yellow
-    PS1=$' ${debian_chroot:-}%F{$USER_COLOR}%n%f%F{$_hi_at_color}@%f%F{$HOST_COLOR}%m%f%F{cyan} %~%f%F{plain}%{$(_hi_git_prompt)%} > '
+    PS1=$' ${debian_chroot:-}%F{$USER_COLOR}%n%f%F{$_hi_at_color}@%f%F{$HOST_COLOR}%m%f%F{cyan} %~%f%F{plain}%{$(_hi_git_prompt)%} '"$HI_PS1_END"' '
   else
-    PS1=$' ${debian_chroot:-}%n@%m %~%{$(_hi_git_prompt)%} > '
+    PS1=$' ${debian_chroot:-}%n@%m %~%{$(_hi_git_prompt)%} '"$HI_PS1_END"' '
   fi
 fi
 

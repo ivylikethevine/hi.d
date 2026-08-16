@@ -329,6 +329,15 @@ function _hi_editors_preview() {
   printf 'vim  -> %s -u %s\n' "$(command -v nvim || command -v vim)" "$_HI_VIMRC"
 }
 
+function _hi_osc52_preview() {
+  printf 'vim yank -> \\e]52;c;<base64> -> your local clipboard\n'
+  printf 'hi_copy  -> %s\n' "$_HI_OSC52"
+}
+
+function _hi_tmux_preview() {
+  printf 'tmux -> tmux -f %s\n' "$_HI_TMUXCONF"
+}
+
 # alias count plus a handful of names, read straight from shells/aliases.sh
 # rather than duplicating its fallthrough logic here
 function _hi_aliases_preview() {
@@ -355,6 +364,8 @@ _HI_FEATURE_PROMPTS=(
   "_HI_DISABLE_GIT_STATUS|1|_hi_git_status_preview| Enable git status in the prompt?"
   "_HI_DISABLE_EDITORS|1|_hi_editors_preview| Enable the vim/nano config overrides?"
   "_HI_DISABLE_ALIASES|1|_hi_aliases_preview| Enable the personal aliases in shells/aliases.sh (sudo, cat/eza, git, docker, pacman/apt, etc)?"
+  "_HI_DISABLE_OSC52|1|_hi_osc52_preview| Enable the OSC 52 clipboard (a yank on a target lands in your local clipboard)?"
+  "_HI_DISABLE_TMUX|1|_hi_tmux_preview| Enable hi's tmux config (permanent installs only - a detached tmux would outlive a disposable tree)?"
   "_HI_DISABLE_LOCAL|1|| Enable all of the above on this machine (the one hi.d is installed on), not just when you hi elsewhere?"
 )
 
@@ -420,6 +431,45 @@ function config_max_width() {
   fi
   [ "$value" = 80 ] && value=""
   _HI_SETTING_LINES+=("${value:+export _HI_MAX_WIDTH=$value}")
+}
+
+# Ask what each shell's prompt should end with. One question per shell, because
+# that is the entire point of the setting: bash, zsh and fish have never agreed
+# here, and the shipped defaults (`\$`, `>`, `|`) are three different answers.
+# Skipped when the prompt itself is off, like config_header_details. Entering
+# nothing keeps what is configured; entering the shipped default clears the
+# override rather than writing it out, exactly as config_max_width does with 80.
+#
+# The written value is single-quoted, since a separator is as likely to be `$`
+# or `>` as it is a letter, and $_HI_SETTINGS is sourced by four shells. `'` is
+# the one character that cannot survive that, so it is refused.
+_HI_PROMPT_END_ROWS=("bash:BASH:\\\$" "zsh:ZSH:>" "fish:FISH:|")
+
+function config_prompt_ends() {
+  setting_off _HI_DISABLE_PROMPT "$_HI_SETTINGS" 1 && return 0
+  local row name shell default var current value reply
+  for row in "${_HI_PROMPT_END_ROWS[@]}"; do
+    name="${row%%:*}"
+    shell="${row#*:}"
+    shell="${shell%%:*}"
+    default="${row##*:}"
+    var="_HI_PROMPT_END_$shell"
+    reply=""
+    current="$(grep -oE "^export $var='.*'\$" "$_HI_SETTINGS" 2>/dev/null | sed -E "s/^export $var='//; s/'\$//")"
+    value="${current:-$default}"
+    if [ -t 0 ]; then
+      read -r -p " Character to end the $name prompt with? [$value] " reply || reply=""
+      if [ -n "$reply" ]; then
+        case "$reply" in
+        *\'*) _hi_cecho " a single quote can't be written to settings.sh, leaving it at $value" "$YELLOW" ;;
+        *) value="$reply" ;;
+        esac
+      fi
+    fi
+    [ "$value" = "$default" ] && value=""
+    # shellcheck disable=SC2016 # the quotes are written to the file, not read here
+    _HI_SETTING_LINES+=("${value:+export $var='$value'}")
+  done
 }
 
 # $_HI_SETTINGS is hi's own file, not one of the user's rc files, and it
@@ -700,6 +750,7 @@ fi
 config_features
 config_header_details
 config_max_width
+config_prompt_ends
 # One write for all three groups above, for the reason _HI_SETTING_LINES
 # documents: config_shell rewrites the whole marker block in its target, so
 # three separate calls against one file would each wipe the other two.

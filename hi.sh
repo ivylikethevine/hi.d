@@ -24,7 +24,7 @@ _HI_PAYLOAD=(common misc shells load.sh)
 # The user's config overlay ($_HI_CONFIG_DIR, outside the tree), by the names it
 # has to land under in the target's misc/. Until the overlay existed these rode
 # along inside the payload above for free; now they need their own stream.
-_HI_OVERLAY_FILES=(settings.sh colors packages)
+_HI_OVERLAY_FILES=(settings.sh colors packages tmux.conf)
 
 # base64, not openssl: the armor is pure ASCII transport encoding (no crypto),
 # and base64 ships on strictly more targets - coreutils, busybox, macOS/BSD,
@@ -40,11 +40,28 @@ _HI_UNARMOR="tr -s ' ' '\n' | { base64 -d 2>/dev/null || base64 -D; }"
 # true when the user has any overlay at all. Both transports ask first rather
 # than piping an empty archive at `tar mxzf -`, which is an "unexpected EOF"
 # error rather than a no-op - an unconfigured user must pay nothing for this.
+# The per-host settings this target gets, by their names under $_HI_CONFIG_DIR:
+# the hosttag file, then the exact-host file. core.sh sources them in that order
+# (the more specific one wins); only the ones that exist are printed, and only
+# the files matching *this* target are ever sent - another host's settings have
+# no business on this box. $DOMAIN is unset while hi.sh is merely sourced (the
+# test hatch), which is what the guard is for.
+function _hi_overlay_host_files() {
+  local tag f
+  [ -n "${DOMAIN:-}" ] || return 0
+  tag="$(_hi_ssh_host_tag "$DOMAIN" 2>/dev/null || true)"
+  for f in ${tag:+"settings.d/tag-$tag.sh"} "settings.d/$DOMAIN.sh"; do
+    [ -f "$_HI_CONFIG_DIR/$f" ] && printf '%s\n' "$f"
+  done
+  return 0
+}
+
 function _hi_has_overlay() {
   local f
   for f in "${_HI_OVERLAY_FILES[@]}"; do
     [ -f "$_HI_CONFIG_DIR/$f" ] && return 0
   done
+  [ -n "$(_hi_overlay_host_files)" ] && return 0
   return 1
 }
 
@@ -58,6 +75,11 @@ function _hi_overlay_tar() {
   for f in "${_HI_OVERLAY_FILES[@]}"; do
     [ -f "$_HI_CONFIG_DIR/$f" ] && present+=("$f")
   done
+  # the per-host files ride the same stream, keeping their settings.d/ prefix so
+  # they land where core.sh looks for them on the target
+  while IFS= read -r f; do
+    [ -n "$f" ] && present+=("$f")
+  done < <(_hi_overlay_host_files)
   ((${#present[@]})) || return 0
   tar czf - -h -C "$_HI_CONFIG_DIR" "${present[@]}"
 }
@@ -113,6 +135,68 @@ function _hi_remote_root() {
   printf '%s' "$out"
 }
 
+# `hi --update <target>` - bring a *permanent* hi.d on the target up to date
+# without opening a session on it, so a fleet is one command per host rather
+# than one login per host.
+#
+# The scope is deliberately narrow, and matches paths.sh's `hi_update` alias
+# exactly - this is that alias, run over ssh: `git pull` in the tree
+# scripts/install.sh laid down, and nothing else. The two refusals are the
+# same two, for the same reasons. An ephemeral session has nothing to update
+# (every connect ships a fresh copy and deletes it on exit), and a
+# package-manager install belongs to the package manager.
+function _hi_update() {
+  local root ctl_path ec=0
+  local -a ctl_opts
+
+  [ $# -gt 0 ] || {
+    _hi_cecho "hi --update needs a target" "$RED" >&2
+    return 1
+  }
+  # the same parse the connection paths use, so ssh flags still work
+  # (`hi --update -p 2222 host`); a trailing command does not, since this
+  # runs one specific command of its own
+  _hi_parse "$@"
+  [ -z "${CMDARG:-}" ] && [ -n "${DOMAIN:-}" ] || {
+    _hi_cecho "hi --update takes a target and ssh flags, nothing else" "$RED" >&2
+    return 1
+  }
+
+  # containers, allocs and pods never have a permanent install: they get a
+  # fresh tree per session and take it with them when they stop
+  if _hi_is_docker_container "$DOMAIN" || _hi_is_podman_container "$DOMAIN" ||
+    _hi_is_nomad_alloc "$DOMAIN" || _hi_is_k8s_pod "$DOMAIN"; then
+    _hi_cecho "hi --update is for ssh targets with a permanent hi.d; [$DOMAIN] gets a fresh copy every session" "$YELLOW" >&2
+    return 1
+  fi
+
+  # one connection for the probe and the pull, exactly as _say_hi multiplexes
+  # its probe and its session - two authentications for one command would be
+  # the wrong price for a convenience
+  ctl_path="$(mktemp -u -t hi.cm.XXXXXX)"
+  ctl_opts=(-o ControlMaster=auto -o ControlPath="$ctl_path" -o ControlPersist=30)
+  root="$(_hi_remote_root "${ctl_opts[@]}")"
+
+  if [ -z "$root" ]; then
+    # the probe answers the same empty string for "reachable, nothing installed"
+    # and "never reached at all", so the message has to own both cases rather
+    # than assert the one it can't tell from the other
+    _hi_cecho "hi --update: no permanent hi.d on [$DOMAIN], or the host could not be reached. A hi session ships a fresh copy every connect, so there is nothing there to update" "$YELLOW" >&2
+    ec=1
+  else
+    _hi_cecho " updating $root on [$DOMAIN]" "$BRBLUE"
+    # .git as the test, the same one hi_update makes locally: it is absent both
+    # from a payload and from a packaged install
+    # shellcheck disable=SC2029 # $root is the client's to expand - it is what we probed for
+    ssh "${ctl_opts[@]}" "${SSHARGS[@]}" "$DOMAIN" \
+      "[ -d '$root/.git' ] || { echo 'hi --update: no .git in $root - if a package manager installed hi.d there, update it with that package manager' >&2; exit 1; }; git -C '$root' pull" || ec=$?
+  fi
+
+  ssh -O exit "${ctl_opts[@]}" "$DOMAIN" >/dev/null 2>&1 || true
+  rm -rf "$ctl_path" 2>/dev/null || true
+  return "$ec"
+}
+
 function _hi_copy_time() {
   awk -v now="$(_hi_now)" -v a="$1" -v b="$2" -v c="$3" 'BEGIN { printf "%.3f", (now - a) - (c - b) }'
 }
@@ -161,8 +245,18 @@ function _hi_fallback_rc() {
   for t in "${_HI_TOGGLES[@]}"; do
     [ "$t" = _HI_REMOTE_SESSION ] || printf 'export %s=0\n' "$t"
   done
+  # shellcheck disable=SC2016 # $_HI_ROOT is the target's to expand
+  printf '[ -f $_HI_ROOT/misc/settings.sh ] && . $_HI_ROOT/misc/settings.sh\n'
+  # The per-host overlay, resolved on the client rather than on the target: this
+  # rc has no $_HI_TARGET to test, and core.sh - which does the resolving
+  # everywhere else - is never reached on a bash-less host. Same order (hosttag
+  # then exact host), and after settings.sh for the same reason: the specific
+  # file has to be able to override the global one.
+  for t in $(_hi_overlay_host_files); do
+    # shellcheck disable=SC2016 # $_HI_ROOT is the target's to expand
+    printf '[ -f $_HI_ROOT/misc/%s ] && . $_HI_ROOT/misc/%s\n' "$t" "$t"
+  done
   cat <<EOF
-[ -f \$_HI_ROOT/misc/settings.sh ] && . \$_HI_ROOT/misc/settings.sh
 . \$_HI_ROOT/common/paths.sh 2>/dev/null
 . \$_HI_ROOT/shells/aliases.sh 2>/dev/null
 ${CMDARG:-}
@@ -187,7 +281,17 @@ function _hi_version() {
   fi
 }
 
-# the bit both _say_hi branches need before anything target-specific happens
+# the bit both _say_hi branches need before anything target-specific happens.
+#
+# Note what the two tmux lines do and don't decide: the client settles *whether
+# it was asked for* (the --tmux flag, or _HI_TMUX_ATTACH in settings.sh) and
+# nothing else. Whether this target has tmux at all, and whether its tree is
+# permanent enough for a detached session to be a good idea, are the target's
+# own questions - load.sh's _hi_tmux_wanted asks them there.
+#
+# Every line here is expanded on the client, so nothing in this heredoc may
+# carry a backtick or an unescaped $( ): they run here, now. (A comment is not
+# a comment yet - the shell has not seen it.)
 function _hi_remote_preamble() {
   cat <<REMOTE
       _hi_now() { d=\$(date +%s.%N 2>/dev/null); case "\$d" in *N*|'') date +%s ;; *) printf '%s' "\$d" ;; esac; }
@@ -198,6 +302,8 @@ function _hi_remote_preamble() {
       export _HI_LOCAL_USER="$(whoami)"
       export _HI_LOCAL_HOSTNAME="$(_hi_hostname)"
       export _HI_RELEASE="$(_hi_version)"
+      export _HI_TMUX_ATTACH="${_HI_TMUX_ATTACH:-0}"
+      export _HI_TMUX_SESSION="${_HI_TMUX_SESSION:-hi}"
       # the client's glyph verdict, not the target's: see _hi_ascii_flag
       export _HI_ASCII="${_HI_ASCII:-$(_hi_ascii_flag)}"
       # ssh forwards the client TERM verbatim, and a TERM the target has no
@@ -467,7 +573,7 @@ function _say_hi_container() {
 
   # _HI_CLEANUP marks this tree as disposable for load.sh's clean_all - the
   # `rm -rf "$root"` below is the client-side belt to its braces
-  "${attach[@]}" sh -c "export _HI_HOME='$root' _HI_ROOT='$root/hi.d' _HI_CONFIG_DIR='$root/hi.d/misc' _HI_CLEANUP='$root' _HI_COPY_TIME='$(_hi_copy_time "$copy_start" "$_HI_SHELL_START" "$shell_end")' _HI_CONNECT_PREFIX='$prefix' _HI_ASCII='${_HI_ASCII:-$(_hi_ascii_flag)}' _HI_RELEASE='$(_hi_version)'; exec bash --rcfile '$root/hi.d/hi.bashrc'"
+  "${attach[@]}" sh -c "export _HI_TARGET='$DOMAIN' _HI_HOME='$root' _HI_ROOT='$root/hi.d' _HI_CONFIG_DIR='$root/hi.d/misc' _HI_CLEANUP='$root' _HI_COPY_TIME='$(_hi_copy_time "$copy_start" "$_HI_SHELL_START" "$shell_end")' _HI_CONNECT_PREFIX='$prefix' _HI_ASCII='${_HI_ASCII:-$(_hi_ascii_flag)}' _HI_RELEASE='$(_hi_version)'; exec bash --rcfile '$root/hi.d/hi.bashrc'"
   exit_code=$?
 
   "${probe[@]}" rm -rf "$root" >/dev/null 2>&1
@@ -490,6 +596,11 @@ function _hi_parse() {
       SSHARGS+=("$1" "$2")
       shift
       ;;
+    # hi's own flags that can appear anywhere before the target, unlike
+    # --doctor/--version/--update, which replace the connection outright and
+    # are dispatched on $1 alone below. Never forwarded to ssh.
+    --tmux) _HI_TMUX_ATTACH=1 ;;
+    --no-tmux) _HI_TMUX_ATTACH=0 ;;
     -*) SSHARGS+=("$1") ;;
     *)
       if [ -z "${DOMAIN:-}" ]; then
@@ -571,6 +682,14 @@ case "${1:-}" in
   [ -f "$_HI_DOCTOR" ] && exec "$_HI_DOCTOR" "$@"
   _hi_cecho "hi --doctor needs the full hi.d checkout - not available in a hi session" "$RED" >&2
   exit 1
+  ;;
+# `hi --update <target>` updates a permanent hi.d on that target instead of
+# connecting to it. Caught here for the same reason --doctor is: _hi_parse
+# would otherwise hand --update to ssh.
+--update)
+  shift
+  _hi_update "$@"
+  exit $?
   ;;
 --version)
   _hi_version

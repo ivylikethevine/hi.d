@@ -17,8 +17,13 @@ jobs:
   build:
     name: build packages
     runs-on: ubuntu-latest
+    # the provenance attestation below needs these two; contents stays read
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -59,7 +64,19 @@ jobs:
           cp packaging/aur/hi.d-git/.SRCINFO dist/manifests/.SRCINFO.git
           cp packaging/homebrew/hi.d.rb dist/manifests/hi.d.rb
 
-      - uses: actions/upload-artifact@v4
+      # Signed build provenance for everything the release will carry - pairs
+      # with SHA256SUMS: the sums say what the bytes are, the attestation says
+      # which workflow run built them. Anyone can check with:
+      #   gh attestation verify <file> --repo <owner>/<repo>
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: |
+            dist/*.deb
+            dist/*.rpm
+            dist/*.apk
+            dist/SHA256SUMS
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: packages
           path: |
@@ -86,11 +103,11 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: packages
           path: dist
@@ -112,7 +129,7 @@ jobs:
       # not from inside the tarball, so they needn't be in the tagged tree.
       # the one checkout that keeps its credentials: the step below pushes to
       # main with them (every other checkout sets persist-credentials: false)
-      - uses: actions/checkout@v4 # zizmor: ignore[artipacked]
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1 # zizmor: ignore[artipacked]
         with:
           ref: main
           path: main

@@ -114,6 +114,12 @@ rather than PASS, so a green run can't overstate what actually ran.
                    skip means the runner is broken, not the backend optional
   -h, --help       this text
 
+A passing suite's transcript is collapsed to one status line; failures and
+skips replay in full, and every failing case is repeated under the summary.
+Set _HI_VERBOSE=1 to stream every transcript live instead. Under GitHub
+Actions, passing transcripts fold into ::group:: blocks and failing cases
+are emitted as ::error annotations.
+
 Suites, in the order they run:
 $(_hi_test_listing)
 
@@ -195,17 +201,38 @@ function _hi_restore_tty() {
 _HI_COUNTS_FILE="$(mktemp -t hi.counts.XXXXXX)"
 export _HI_COUNTS_FILE
 
-# shellcheck disable=SC2064 # _HI_COUNTS_FILE is fixed by now; expand it here
-trap "_hi_restore_tty; rm -f '$_HI_COUNTS_FILE'" EXIT
+# The failing cases' labels ride the same per-suite channel (_hi_note_failure
+# appends, the runner truncates between suites), repeated under the summary so
+# finding what broke never means scrolling the whole transcript. The suite log
+# is where a suite's output lands when it is being collapsed - see the output
+# modes below.
+_HI_FAILS_FILE="$(mktemp -t hi.fails.XXXXXX)"
+export _HI_FAILS_FILE
+_HI_SUITE_LOG="$(mktemp -t hi.suitelog.XXXXXX)"
 
-# One row per suite, tab-joined: <name>\t<status>\t<pass>\t<fail>\t<duration>.
-# Five arrays appended in lockstep from two places meant a missed append in one
+# shellcheck disable=SC2064 # the paths are fixed by now; expand them here
+trap "_hi_restore_tty; rm -f '$_HI_COUNTS_FILE' '$_HI_FAILS_FILE' '$_HI_SUITE_LOG'" EXIT
+
+# Output modes. Default: a passing suite's transcript collapses to one status
+# line and the full text replays only on failure or skip, so a green run fits
+# on a screen. _HI_VERBOSE=1 streams everything live - the old behavior. Under
+# GitHub Actions a passing transcript is kept but folded into a ::group::
+# block (complete logs, bench numbers included, failures never the thing
+# folded), and every failing case gets an ::error annotation under the summary.
+_HI_VERBOSE="${_HI_VERBOSE:-0}"
+_HI_CI="${GITHUB_ACTIONS:-}"
+
+# One row per suite, tab-joined:
+# <name>\t<status>\t<pass>\t<fail>\t<skip>\t<duration>.
+# Six arrays appended in lockstep from two places meant a missed append in one
 # of them silently shifted every later row's data.
 declare -a _HI_ROWS=()
+declare -a _HI_FAIL_NOTES=()
 _HI_SUITE_FAILED=0
 _HI_SUITE_SKIPPED=0
 _HI_CASES_PASSED=0
 _HI_CASES_FAILED=0
+_HI_CASES_SKIPPED=0
 _HI_RUN_T0="$(_hi_now)"
 
 for _hi_t in "${_HI_SELECTED[@]}"; do
@@ -214,18 +241,20 @@ for _hi_t in "${_HI_SELECTED[@]}"; do
 
   if [ ! -f "$_hi_path" ]; then
     _hi_cecho " | $_hi_name: script missing ($_hi_path), skipping" "$YELLOW"
-    _HI_ROWS+=("$_hi_name"$'\t'MISSING$'\t'-$'\t'-$'\t'-)
+    _HI_ROWS+=("$_hi_name"$'\t'MISSING$'\t'-$'\t'-$'\t'-$'\t'-)
+    _HI_FAIL_NOTES+=("$_hi_name: script missing ($_hi_path)")
     _HI_SUITE_FAILED=$((_HI_SUITE_FAILED + 1))
     continue
   fi
 
   _hi_h2 "Running $_hi_name ($_hi_path)"
   : >"$_HI_COUNTS_FILE"
+  : >"$_HI_FAILS_FILE"
   _hi_t0="$(_hi_now)"
-  if "$_hi_path"; then
-    _hi_code=0
+  if [ "$_HI_VERBOSE" = 1 ]; then
+    if "$_hi_path"; then _hi_code=0; else _hi_code=$?; fi
   else
-    _hi_code=$?
+    if "$_hi_path" >"$_HI_SUITE_LOG" 2>&1; then _hi_code=0; else _hi_code=$?; fi
   fi
   _hi_dur="$(_hi_elapsed "$_hi_t0" "$(_hi_now)")s"
   _hi_restore_tty
@@ -234,18 +263,24 @@ for _hi_t in "${_HI_SELECTED[@]}"; do
   # way contributes no cases. A leading SKIP instead of a tally is _hi_require's
   # doing: the suite stood down (no backend, no binary) without running a case,
   # and exits 0 doing it, so only this tells the two apart from a real pass.
+  # The tally is "<total> <failed> [skipped]"; the SKIP reason is read whole
+  # rather than through the same fields, since it may contain spaces.
   _hi_pass="-"
   _hi_fail="-"
+  _hi_skipcnt="-"
   _hi_skip=""
   if [ -s "$_HI_COUNTS_FILE" ]; then
-    read -r _hi_cases _hi_bad <"$_HI_COUNTS_FILE"
+    read -r _hi_cases _hi_rest <"$_HI_COUNTS_FILE"
     if [ "$_hi_cases" = SKIP ]; then
-      _hi_skip="${_hi_bad:-skipped}"
+      _hi_skip="${_hi_rest:-skipped}"
     else
+      read -r _hi_bad _hi_skipcnt <<<"$_hi_rest"
+      _hi_skipcnt="${_hi_skipcnt:-0}"
       _hi_pass=$((_hi_cases - _hi_bad))
       _hi_fail="$_hi_bad"
       _HI_CASES_PASSED=$((_HI_CASES_PASSED + _hi_pass))
       _HI_CASES_FAILED=$((_HI_CASES_FAILED + _hi_bad))
+      _HI_CASES_SKIPPED=$((_HI_CASES_SKIPPED + _hi_skipcnt))
     fi
   fi
 
@@ -258,7 +293,43 @@ for _hi_t in "${_HI_SELECTED[@]}"; do
     _hi_status="FAILED ($_hi_code)"
     _HI_SUITE_FAILED=$((_HI_SUITE_FAILED + 1))
   fi
-  _HI_ROWS+=("$_hi_name"$'\t'"$_hi_status"$'\t'"$_hi_pass"$'\t'"$_hi_fail"$'\t'"$_hi_dur")
+  _HI_ROWS+=("$_hi_name"$'\t'"$_hi_status"$'\t'"$_hi_pass"$'\t'"$_hi_fail"$'\t'"$_hi_skipcnt"$'\t'"$_hi_dur")
+
+  # collect the failing case labels the suite noted; a suite that failed
+  # without noting any still gets one line, so the recap can't be empty for a
+  # red run
+  if [ "$_hi_status" != PASS ] && [ "$_hi_status" != SKIPPED ]; then
+    if [ -s "$_HI_FAILS_FILE" ]; then
+      while IFS= read -r _hi_line; do
+        [ -n "$_hi_line" ] && _HI_FAIL_NOTES+=("$_hi_name: $_hi_line")
+      done <"$_HI_FAILS_FILE"
+    else
+      _HI_FAIL_NOTES+=("$_hi_name: suite exited $_hi_code with no per-case detail")
+    fi
+  fi
+
+  # collapsed mode: a passing transcript folds away (into a ::group:: on CI,
+  # dropped locally - the status line and summary carry the result); anything
+  # else replays in full, so failure context is never the thing collapsed
+  if [ "$_HI_VERBOSE" != 1 ]; then
+    if [ "$_hi_status" = PASS ]; then
+      if [ -n "$_HI_CI" ]; then
+        printf '::group::%s\n' "$_hi_name"
+        cat "$_HI_SUITE_LOG"
+        printf '::endgroup::\n'
+      fi
+    else
+      cat "$_HI_SUITE_LOG"
+    fi
+    _hi_cases_note=""
+    [ "$_hi_pass" != - ] && _hi_cases_note="$_hi_pass passed, "
+    [ "$_hi_skipcnt" != - ] && [ "$_hi_skipcnt" != 0 ] && _hi_cases_note="$_hi_cases_note$_hi_skipcnt skipped, "
+    case "$_hi_status" in
+    PASS) _hi_cecho " | $_hi_name: PASS ($_hi_cases_note$_hi_dur)" "$GREEN" ;;
+    SKIPPED) _hi_cecho " | $_hi_name: SKIPPED ($_hi_skip)" "$YELLOW" ;;
+    *) _hi_cecho " | $_hi_name: $_hi_status ($_hi_cases_note$_hi_dur)" "$RED" ;;
+    esac
+  fi
 done
 
 _hi_h1 "Summary"
@@ -269,12 +340,12 @@ for _hi_row in "${_HI_ROWS[@]}"; do
 done
 
 # Stretch the name column so a row spans exactly _HI_MAX_WIDTH, lining the
-# table up with the _hi_h1 rules above and below it. 47 is everything a row
-# spends outside that column: the " | " prefix (3), the four fixed columns
-# (14 + 6 + 6 + 10) and the two-space gap between each pair (8). A width too
-# narrow to fit the names leaves the column at its natural size and lets the
-# row overflow, rather than truncating a suite name into ambiguity.
-_HI_SUMMARY_FIXED=47
+# table up with the _hi_h1 rules above and below it. 55 is everything a row
+# spends outside that column: the " | " prefix (3), the five fixed columns
+# (14 + 6 + 6 + 6 + 10) and the two-space gap between each pair (10). A width
+# too narrow to fit the names leaves the column at its natural size and lets
+# the row overflow, rather than truncating a suite name into ambiguity.
+_HI_SUMMARY_FIXED=55
 _hi_avail=$((${_HI_MAX_WIDTH:-80} - _HI_SUMMARY_FIXED))
 ((_hi_avail > _hi_width)) && _hi_width=$_hi_avail
 
@@ -282,33 +353,43 @@ _hi_avail=$((${_HI_MAX_WIDTH:-80} - _HI_SUMMARY_FIXED))
 # columns can't drift apart; cases are right-aligned to read as numbers
 # shellcheck disable=SC2059 # _hi_width is a computed field-width, not user data
 function _hi_summary_row() {
-  printf " | %-${_hi_width}s  %-14s  %6s  %6s  %10s" "$1" "$2" "$3" "$4" "$5"
+  printf " | %-${_hi_width}s  %-14s  %6s  %6s  %6s  %10s" "$1" "$2" "$3" "$4" "$5" "$6"
 }
 
-_hi_cecho "$(_hi_summary_row SUITE STATUS PASS FAIL TIME)" "$BRBLUE"
+_hi_cecho "$(_hi_summary_row SUITE STATUS PASS FAIL SKIP TIME)" "$BRBLUE"
 
 for _hi_row in "${_HI_ROWS[@]}"; do
-  IFS=$'\t' read -r _hi_name _hi_status _hi_pass _hi_fail _hi_dur <<<"$_hi_row"
+  IFS=$'\t' read -r _hi_name _hi_status _hi_pass _hi_fail _hi_skipcnt _hi_dur <<<"$_hi_row"
   case "$_hi_status" in
   PASS) _hi_color="$GREEN" ;;
   SKIPPED) _hi_color="$YELLOW" ;; # ran nothing: neither a pass nor a failure
   *) _hi_color="$RED" ;;
   esac
-  _hi_cecho "$(_hi_summary_row "$_hi_name" "$_hi_status" "$_hi_pass" "$_hi_fail" "$_hi_dur")" "$_hi_color"
+  _hi_cecho "$(_hi_summary_row "$_hi_name" "$_hi_status" "$_hi_pass" "$_hi_fail" "$_hi_skipcnt" "$_hi_dur")" "$_hi_color"
 done
 
 _HI_TOTAL_DUR="$(_hi_elapsed "$_HI_RUN_T0" "$(_hi_now)")s"
 
-# totals row: suites across the status column, summed cases across pass/fail
+# totals row: suites across the status column, summed cases across the rest
 _hi_cecho "$(_hi_summary_row TOTAL "${#_HI_SELECTED[@]} suite(s)" \
-  "$_HI_CASES_PASSED" "$_HI_CASES_FAILED" "$_HI_TOTAL_DUR")" "$BRBLUE"
+  "$_HI_CASES_PASSED" "$_HI_CASES_FAILED" "$_HI_CASES_SKIPPED" "$_HI_TOTAL_DUR")" "$BRBLUE"
+
+# every failing case again, in one place - the transcript above may be
+# thousands of lines and the table only says how many broke, not which
+if [ "${#_HI_FAIL_NOTES[@]}" -gt 0 ]; then
+  _hi_h2 "Failing cases" "$RED"
+  for _hi_note in "${_HI_FAIL_NOTES[@]}"; do
+    _hi_cecho " | $_hi_note" "$RED"
+    [ -n "$_HI_CI" ] && printf '::error title=%s::%s\n' "test failure" "$_hi_note"
+  done
+fi
 
 _HI_SKIP_NOTE=""
 [ "$_HI_SUITE_SKIPPED" -gt 0 ] && _HI_SKIP_NOTE=", $_HI_SUITE_SKIPPED skipped"
 
 if [ "$_HI_SUITE_FAILED" -eq 0 ]; then
   # never claim the skipped ones passed - that's the whole point of the status
-  _hi_h1 "$((${#_HI_SELECTED[@]} - _HI_SUITE_SKIPPED))/${#_HI_SELECTED[@]} test suites passed ($_HI_TOTAL_DUR$_HI_SKIP_NOTE)"
+  _hi_h1 "$((${#_HI_SELECTED[@]} - _HI_SUITE_SKIPPED))/${#_HI_SELECTED[@]} test suites passed ($_HI_TOTAL_DUR$_HI_SKIP_NOTE)" "$BRGREEN"
 else
   _hi_h1 "$_HI_SUITE_FAILED/${#_HI_SELECTED[@]} test suites FAILED ($_HI_TOTAL_DUR$_HI_SKIP_NOTE)" "$RED"
 fi

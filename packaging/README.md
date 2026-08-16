@@ -47,6 +47,40 @@ Optionally also set *Deployment branches and tags* to `v*` so nothing but a tag 
 
 Until that exists, a pushed `v*` tag publishes without asking.
 
+**Protect `main`.** Also a repo setting. Required checks are the fast suites; the wrinkle is that
+`release.yml`'s `publish` job pushes the regenerated manifests straight to `main` as
+`github-actions[bot]`, so the protection has to let that App through — a ruleset with a bypass actor
+does, classic branch protection does not. One command with the [`gh` CLI](https://cli.github.com/)
+(bypass actor 15368 is the GitHub Actions App's ID):
+
+```sh
+gh api repos/{owner}/{repo}/rulesets --method POST --input - <<'JSON'
+{
+  "name": "protect-main",
+  "target": "branch",
+  "enforcement": "active",
+  "conditions": { "ref_name": { "include": ["~DEFAULT_BRANCH"], "exclude": [] } },
+  "bypass_actors": [
+    { "actor_id": 15368, "actor_type": "Integration", "bypass_mode": "always" }
+  ],
+  "rules": [
+    { "type": "deletion" },
+    { "type": "non_fast_forward" },
+    {
+      "type": "required_status_checks",
+      "parameters": {
+        "strict_required_status_checks_policy": false,
+        "required_status_checks": [
+          { "context": "fast suites (ubuntu-latest)" },
+          { "context": "fast suites (macos-latest)" }
+        ]
+      }
+    }
+  ]
+}
+JSON
+```
+
 ## Cutting a release
 
 ```bash
@@ -71,16 +105,25 @@ just created, instead of requiring a pre-tag bump and a force-retag to reconcile
 `bump.sh 1.0.0` still works by hand if CI is ever unavailable (`--tarball <file>` skips the
 download), and `bump.sh --check 1.0.0` stays useful locally to confirm the manifests match a cut release.
 
+**Release notes are the PR titles.** The publish job's `gh release create --generate-notes` drafts the
+notes from the PR titles merged since the last tag — there is no separate notes file to write. The
+discipline that makes this good enough: title PRs the way you'd want them read in release notes, and skim
+`gh pr list --state merged` before tagging to retitle anything that wouldn't. Revisit git-cliff only if
+the generated notes start needing curation.
+
 ## Publishing each channel (all manual)
 
 ### AUR
 
-Not done yet — no account, no submission. When you do:
+Not done yet — no account, no submission. When you do, run the pre-submit gate below for **each**
+package — `aur/hi.d-git` today, and `aur/hi.d` once v1.0.0 exists. namcap is the hard step, not a
+suggestion: push nothing while either its `PKGBUILD` or its built-package run has complaints.
 
 ```bash
-cd packaging/aur/hi.d-git
+cd packaging/aur/hi.d-git        # then again in packaging/aur/hi.d
 makepkg -f                       # builds it
-namcap PKGBUILD ./*.pkg.tar.zst  # catches hardcoded paths and bad permissions
+namcap PKGBUILD                  # lints the recipe itself
+namcap ./*.pkg.tar.zst           # catches hardcoded paths and bad permissions
 pacman -Qlp ./*.pkg.tar.zst      # /usr/share/hi.d/..., /usr/bin/hi, /etc/profile.d/hi.d.sh
 ```
 
@@ -94,7 +137,8 @@ Never submit with `b2sums=('SKIP')` on the versioned package. `SKIP` is correct 
 
 A tap is just a GitHub repo named `homebrew-tap` with a `Formula/` directory. Copy
 `packaging/homebrew/hi.d.rb` to `Formula/hi.d.rb` there and `brew install ivy/tap/hi.d` works — no review,
-no approval. Before copying:
+no approval. Before copying, all three must pass — `brew audit --strict` is a hard gate here precisely
+because nothing else reviews a tap:
 
 ```bash
 brew install --build-from-source ./packaging/homebrew/hi.d.rb
@@ -102,7 +146,8 @@ brew test hi.d
 brew audit --strict --new hi.d
 ```
 
-Only reachable from a mac (or Homebrew on Linux); none of it can be verified from this repo's CI.
+Only reachable from a mac (or Homebrew on Linux); none of it can be verified from this repo's CI, which
+is why the checklist is the enforcement.
 
 ### deb / rpm / apk
 

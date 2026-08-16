@@ -55,6 +55,7 @@
 !theme.yml
 !.github/workflows/*.yml
 !.github/actions/**/*.yml
+!.github/dependabot.yml
 !packaging/nfpm/nfpm.yaml
 
 *docker*

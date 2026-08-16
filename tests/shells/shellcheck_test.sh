@@ -59,6 +59,7 @@ function lint_native() {
     else
       _hi_cecho " | $file ($shell $flag): FAILED" "$RED"
       printf '%s\n' "$out" | sed 's/^/      /'
+      _hi_note_failure "$file ($shell $flag)"
       bad=$((bad + 1))
     fi
   done
@@ -125,6 +126,7 @@ function lint_bash32() {
     fi
     _hi_cecho " | $what: FOUND" "$RED"
     printf '%s\n' "$hits" | sed 's/^/      /'
+    _hi_note_failure "bash-4 construct: $what"
     bad=$((bad + 1))
   done
   return "$bad"
@@ -147,6 +149,7 @@ function lint_shfmt() {
   else
     _hi_cecho " | shfmt: files need reformatting (fix with: shfmt -w .)" "$RED"
     printf '%s\n' "$out" | sed 's/^/      /'
+    _hi_note_failure "shfmt formatting (fix with: shfmt -w .)"
     return 1
   fi
 }
@@ -173,6 +176,7 @@ function lint_checkbashisms() {
     else
       _hi_cecho " | $rel: FAILED" "$RED"
       printf '%s\n' "$out" | sed 's/^/      /'
+      _hi_note_failure "$rel (checkbashisms)"
       bad=$((bad + 1))
     fi
   done
@@ -213,6 +217,7 @@ function run_shellcheck() {
     # -Calways leaves ANSI codes in $_HI_SC_LOG (needed for the live colorized
     # stream above), so they have to be stripped before "^In " can match
     _HI_SC_FAILED=$(sed 's/\x1b\[[0-9;]*m//g' "$_HI_SC_LOG" | grep -oE '^In .* line [0-9]+:' | sed -E 's/^In (.*) line [0-9]+:/\1/' | sort -u | wc -l)
+    _hi_note_failure "shellcheck: $_HI_SC_FAILED file(s) with findings"
   fi
 
   _hi_h2 "Syntax-checking the files shellcheck can't parse"
@@ -229,12 +234,12 @@ function run_shellcheck() {
   lint_checkbashisms || _HI_CB_FAILED=$?
 
   _HI_LINT_FAILED=$((_HI_SC_FAILED + _HI_NATIVE_FAILED + _HI_BASH32_FAILED + _HI_SHFMT_FAILED + _HI_CB_FAILED))
-  _hi_report_counts "$_HI_LINT_TOTAL" "$_HI_LINT_FAILED"
+  _hi_report_counts "$_HI_LINT_TOTAL" "$_HI_LINT_FAILED" "$_HI_SKIPPED"
 
   local skipped=""
   [ "$_HI_SKIPPED" -gt 0 ] && skipped=", $_HI_SKIPPED skipped"
   if [ "$_HI_LINT_FAILED" -eq 0 ]; then
-    _hi_h1 "Found no issues ($_HI_LINT_TOTAL files$skipped, $(_hi_elapsed "$_HI_T0" "$(_hi_now)")s)"
+    _hi_h1 "Found no issues ($_HI_LINT_TOTAL files$skipped, $(_hi_elapsed "$_HI_T0" "$(_hi_now)")s)" "$BRGREEN"
   else
     _hi_h1 "Found issues: $_HI_LINT_FAILED/$_HI_LINT_TOTAL files$skipped ($(_hi_elapsed "$_HI_T0" "$(_hi_now)")s)" "$RED"
     exit "$_HI_LINT_FAILED"

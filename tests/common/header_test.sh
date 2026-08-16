@@ -141,6 +141,93 @@ function test_banner_omits_the_count_without_a_git_dir() {
   [[ "$out" == *"TestBanner"* ]] && [[ "$out" != *"↑"* ]]
 }
 
+# A tiny checkout for the branch-indicator cases: one commit on main, so HEAD
+# can be moved to a working branch or detached per case.
+function _hi_banner_repo() {
+  local dir
+  dir="$(mktemp -d "$_HI_WORKDIR/branch.XXXXXX")"
+  git -C "$dir" init -q
+  git -C "$dir" symbolic-ref HEAD refs/heads/main
+  git -C "$dir" config user.email test@example.com
+  git -C "$dir" config user.name "Test"
+  git -C "$dir" commit -q --allow-empty -m initial
+  printf '%s' "$dir"
+}
+
+# the roadmap contract: the Online banner on a working branch names it, in
+# parentheses, right after the change count
+function test_banner_online_names_an_off_main_branch() {
+  local dir out
+  dir="$(_hi_banner_repo)"
+  git -C "$dir" checkout -qb feature-x
+  out="$(
+    _HI_ROOT="$dir"
+    unset _HI_BANNER_CHANGES _HI_BANNER_BRANCH
+    banner Online
+  )"
+  [[ "$out" == *"(feature-x)"* ]]
+}
+
+# ...but main is the expected state and earns no callout
+function test_banner_online_stays_quiet_on_main() {
+  local dir out
+  dir="$(_hi_banner_repo)"
+  out="$(
+    _HI_ROOT="$dir"
+    unset _HI_BANNER_CHANGES _HI_BANNER_BRANCH
+    banner Online
+  )"
+  [[ "$out" == *"↑"* && "$out" != *"("* ]]
+}
+
+# ...nor does a detached HEAD, which is what a release-tag checkout is
+function test_banner_online_stays_quiet_when_detached() {
+  local dir out
+  dir="$(_hi_banner_repo)"
+  git -C "$dir" checkout -q --detach
+  out="$(
+    _HI_ROOT="$dir"
+    unset _HI_BANNER_CHANGES _HI_BANNER_BRANCH
+    banner Online
+  )"
+  [[ "$out" == *"↑"* && "$out" != *"("* ]]
+}
+
+# Online only: the same branch stays out of the Connected and Disconnected
+# banners a session prints
+function test_banner_branch_stays_out_of_remote_banners() {
+  local dir out label
+  dir="$(_hi_banner_repo)"
+  git -C "$dir" checkout -qb feature-x
+  for label in Connected Disconnected; do
+    out="$(
+      _HI_ROOT="$dir"
+      unset _HI_BANNER_CHANGES _HI_BANNER_BRANCH
+      banner "$label"
+    )"
+    [[ "$out" == *"↑"* && "$out" != *"("* ]] || return 1
+  done
+}
+
+# the branch spends the tilde budget, not line width: same label, same repo,
+# fewer tildes once the indicator is on the line
+function test_banner_branch_shrinks_padding() {
+  local dir plain branched _HI_HOSTNAME_CACHE="pinned-host"
+  dir="$(_hi_banner_repo)"
+  plain="$(
+    _HI_ROOT="$dir"
+    unset _HI_BANNER_CHANGES _HI_BANNER_BRANCH
+    banner Online
+  )"
+  git -C "$dir" checkout -qb feature-x
+  branched="$(
+    _HI_ROOT="$dir"
+    unset _HI_BANNER_CHANGES _HI_BANNER_BRANCH
+    banner Online
+  )"
+  [ "$(tr -dc '~' <<<"$branched" | wc -c)" -lt "$(tr -dc '~' <<<"$plain" | wc -c)" ]
+}
+
 # the regression this toggle exists for: silencing the banner must leave the
 # rest of the header alone, unlike _HI_DISABLE_HEADER which kills all of it
 function test_hi_header_banner_off_keeps_detail_lines() {
@@ -312,6 +399,11 @@ function run_header_tests() {
   _hi_check "Still prints when the toggle is unset" test_banner_prints_when_toggle_unset
   _hi_check "Change count is computed once per session" test_banner_change_count_is_computed_once
   _hi_check "No count without a .git dir" test_banner_omits_the_count_without_a_git_dir
+  _hi_check "Online names an off-main branch" test_banner_online_names_an_off_main_branch
+  _hi_check "Online stays quiet on main" test_banner_online_stays_quiet_on_main
+  _hi_check "Online stays quiet when detached" test_banner_online_stays_quiet_when_detached
+  _hi_check "Branch stays out of Connected/Disconnected" test_banner_branch_stays_out_of_remote_banners
+  _hi_check "Branch spends tilde budget, not width" test_banner_branch_shrinks_padding
 
   _hi_h2 "Testing: timestamp / system_info / identity (smoke tests)"
   _hi_check "Timestamp prints two cells" test_timestamp_runs_and_has_two_cells

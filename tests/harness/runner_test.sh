@@ -25,9 +25,11 @@ function _hi_fixture() {
   chmod +x "$_HI_FIXTURES/$1.sh"
 }
 
-# A suite reporting a case tally: "<total> <failed>", exiting with the fail count.
+# A suite reporting a case tally: "<total> <failed> [skipped]", exiting with
+# the fail count. The third field is what _hi_report_counts writes now; leaving
+# it off (as an older suite would) must still parse, so one fixture below does.
 function _hi_counting_fixture() {
-  _hi_fixture "$1" "$3" "$2 $3"
+  _hi_fixture "$1" "$3" "$2 $3${4:+ $4}"
 }
 
 # a suite that stood down without running anything - what _hi_require does
@@ -53,7 +55,13 @@ function _hi_run_runner() {
   done <<<"$table"
 
   _HI_RUN_EXIT=0
+  # The environment is scrubbed so a fixture run behaves the same under the
+  # real CI (which exports GITHUB_ACTIONS) as locally; a case that *wants* one
+  # of those modes sets it back via _HI_RUN_WITH="VAR=VALUE" on the call.
   _HI_RUN_OUT="$(
+    unset GITHUB_ACTIONS _HI_VERBOSE
+    # shellcheck disable=SC2163 # the var=value pair is the caller's to pick
+    [ -n "${_HI_RUN_WITH:-}" ] && export "${_HI_RUN_WITH?}"
     _HI_TESTS=("${entries[@]}")
     _HI_TESTS_DIR="$_HI_FIXTURES"
     export _HI_TESTS_DIR
@@ -105,7 +113,9 @@ function test_runner_exits_with_the_failed_suite_count() {
 
 function test_a_failure_does_not_stop_later_suites() {
   _hi_run_runner $'a:red.sh\nb:green.sh'
-  [[ "$_HI_RUN_OUT" == *"ran:red"* && "$_HI_RUN_OUT" == *"ran:green"* ]]
+  # the passing suite's body is collapsed, so its status line is the evidence
+  [[ "$_HI_RUN_OUT" == *"ran:red"* ]] &&
+    printf '%s\n' "$_HI_RUN_OUT" | grep -qE 'b: PASS \('
 }
 
 function test_failure_summary_counts_failed_over_total() {
@@ -125,7 +135,7 @@ function test_a_missing_script_counts_as_a_failed_suite() {
 
 function test_a_missing_script_does_not_stop_the_run() {
   _hi_run_runner $'gone:not-a-real-fixture.sh\nok:green.sh'
-  [[ "$_HI_RUN_OUT" == *"ran:green"* ]]
+  printf '%s\n' "$_HI_RUN_OUT" | grep -qE 'ok: PASS \('
 }
 
 function test_summary_lists_every_suite_with_a_duration() {
@@ -188,7 +198,22 @@ function test_summary_narrow_width_does_not_truncate_names() {
 
 function test_summary_has_a_column_header() {
   _hi_run_runner $'a:green.sh'
-  printf '%s\n' "$_HI_RUN_OUT" | grep -qE 'SUITE .*STATUS .*PASS .*FAIL .*TIME'
+  printf '%s\n' "$_HI_RUN_OUT" | grep -qE 'SUITE .*STATUS .*PASS .*FAIL .*SKIP .*TIME'
+}
+
+# a suite's yellow in-suite skips land in their own column, so a non-run can
+# never read as a pass even at the summary level
+function test_summary_shows_suite_skip_counts() {
+  _hi_counting_fixture skippy 6 1 2
+  _hi_run_runner $'skippy:skippy.sh'
+  printf '%s\n' "$_HI_RUN_OUT" | grep -qE 'skippy +FAILED \(1\) +5 +1 +2 '
+}
+
+function test_summary_totals_sum_skip_counts() {
+  _hi_counting_fixture skippy2 6 0 2
+  _hi_counting_fixture skippy3 4 0 1
+  _hi_run_runner $'skippy2:skippy2.sh\nskippy3:skippy3.sh'
+  printf '%s\n' "$_HI_RUN_OUT" | grep -qE 'TOTAL +2 suite\(s\) +10 +0 +3 '
 }
 
 # 7 cases, 2 of them failing, must render as 5 passed / 2 failed
@@ -273,9 +298,58 @@ function test_a_skipping_suite_contributes_no_cases() {
     printf '%s\n' "$_HI_RUN_OUT" | grep -qE 'stood_down4 +SKIPPED +- +- '
 }
 
-function test_each_suites_own_output_still_streams() {
+# a passing suite's transcript collapses to one status line...
+function test_passing_suite_output_is_collapsed() {
   _hi_run_runner $'a:green.sh'
+  [[ "$_HI_RUN_OUT" != *"ran:green"* ]] &&
+    printf '%s\n' "$_HI_RUN_OUT" | grep -qE 'a: PASS \('
+}
+
+# ...a failing suite's replays in full, so its context is never the thing lost
+function test_failing_suite_output_replays() {
+  _hi_run_runner $'a:red.sh'
+  [[ "$_HI_RUN_OUT" == *"ran:red"* ]]
+}
+
+# ...and _HI_VERBOSE=1 streams everything, the pre-collapse behavior
+function test_verbose_streams_passing_output() {
+  _HI_RUN_WITH="_HI_VERBOSE=1" _hi_run_runner $'a:green.sh'
   [[ "$_HI_RUN_OUT" == *"ran:green"* ]]
+}
+
+# under GitHub Actions a passing transcript is kept, folded into a group...
+function test_ci_folds_passing_output_into_a_group() {
+  _HI_RUN_WITH="GITHUB_ACTIONS=1" _hi_run_runner $'a:green.sh'
+  [[ "$_HI_RUN_OUT" == *"::group::a"* && "$_HI_RUN_OUT" == *"ran:green"* &&
+    "$_HI_RUN_OUT" == *"::endgroup::"* ]]
+}
+
+# ...while a failing suite prints unfolded and annotates every failing case
+function test_ci_annotates_failures_unfolded() {
+  _HI_RUN_WITH="GITHUB_ACTIONS=1" _hi_run_runner $'a:red.sh'
+  [[ "$_HI_RUN_OUT" == *"ran:red"* && "$_HI_RUN_OUT" != *"::group::a"* &&
+    "$_HI_RUN_OUT" == *"::error title=test failure::"* ]]
+}
+
+# the recap under the summary: a suite that noted its failing cases gets them
+# listed by name, one that failed silently still gets one line
+function test_failing_cases_are_recapped_under_the_summary() {
+  {
+    printf '#!/bin/bash\nprintf "ran:noted\\n"\n'
+    # shellcheck disable=SC2016 # $_HI_FAILS_FILE resolves when the fixture runs
+    printf 'printf "%%s\\n" "case-x" >>"$_HI_FAILS_FILE"\n'
+    printf 'exit 1\n'
+  } >"$_HI_FIXTURES/noted.sh"
+  chmod +x "$_HI_FIXTURES/noted.sh"
+  _hi_run_runner $'noted:noted.sh\nquiet:red.sh'
+  [[ "$_HI_RUN_OUT" == *"Failing cases"* &&
+    "$_HI_RUN_OUT" == *"noted: case-x"* &&
+    "$_HI_RUN_OUT" == *"quiet: suite exited 3"* ]]
+}
+
+function test_a_green_run_has_no_recap() {
+  _hi_run_runner $'a:green.sh'
+  [[ "$_HI_RUN_OUT" != *"Failing cases"* ]]
 }
 
 # The shipped table, straight from --list: "<group> <name>" per suite. This
@@ -404,13 +478,23 @@ function run_runner_tests() {
   _hi_check "Rows span _HI_MAX_WIDTH" test_summary_rows_span_hi_max_width
   _hi_check "Tracks a wider _HI_MAX_WIDTH" test_summary_tracks_a_wider_hi_max_width
   _hi_check "A narrow width doesn't truncate names" test_summary_narrow_width_does_not_truncate_names
-  _hi_check "Each suite's own output still streams" test_each_suites_own_output_still_streams
+
+  _hi_h2 "Testing: collapsed output and the recap"
+  _hi_check "A passing suite's output is collapsed" test_passing_suite_output_is_collapsed
+  _hi_check "A failing suite's output replays" test_failing_suite_output_replays
+  _hi_check "_HI_VERBOSE=1 streams passing output" test_verbose_streams_passing_output
+  _hi_check "CI folds passing output into a ::group::" test_ci_folds_passing_output_into_a_group
+  _hi_check "CI annotates failures, unfolded" test_ci_annotates_failures_unfolded
+  _hi_check "Failing cases recapped under the summary" test_failing_cases_are_recapped_under_the_summary
+  _hi_check "A green run has no recap" test_a_green_run_has_no_recap
 
   _hi_h2 "Testing: summary case counts"
   _hi_check "Has a column header" test_summary_has_a_column_header
   _hi_check "Shows each suite's pass/fail counts" test_summary_shows_each_suites_case_counts
+  _hi_check "Shows each suite's skip count" test_summary_shows_suite_skip_counts
   _hi_check "Shows - when a suite reported no counts" test_summary_shows_dashes_when_no_counts_were_reported
   _hi_check "Totals sum every suite's cases" test_summary_totals_sum_every_suites_cases
+  _hi_check "Totals sum the skip counts" test_summary_totals_sum_skip_counts
   _hi_check "Totals ignore suites without counts" test_summary_totals_ignore_suites_without_counts
 
   _hi_h2 "Testing: skipped suites"

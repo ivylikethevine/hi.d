@@ -88,6 +88,7 @@ function _hi_assert() {
     _hi_cecho " | $label: OK" "$GREEN"
   else
     _hi_cecho " | $label: FAILED" "$RED"
+    _hi_note_failure "$label"
     return 1
   fi
 }
@@ -204,6 +205,7 @@ function _hi_transcript_is_clean() {
   fi
   _hi_h3 " | [$label] -- FAILED: the session printed shell errors" "$RED"
   printf '%s\n' "$hits" | sed 's/^/      /'
+  _hi_note_failure "[$label] transcript has shell errors"
   return 1
 }
 
@@ -232,17 +234,26 @@ function _hi_skip() {
   _hi_cecho " | $1: SKIPPED${2:+ ($2)}" "$YELLOW"
 }
 
-# _hi_report_counts <total> <failed> - hand this suite's tally up to
-# test_runner.sh, which sums every suite's into the pass/fail columns of its
-# summary table. $_HI_COUNTS_FILE is only set when running under the runner,
-# so a suite executed on its own is a no-op here. A suite that exits before
-# reporting (_hi_require's skip path) contributes nothing, which is why the
-# runner renders "-" rather than 0 for those. _hi_suite_end calls this for
+# _hi_report_counts <total> <failed> [skipped] - hand this suite's tally up to
+# test_runner.sh, which sums every suite's into the pass/fail/skip columns of
+# its summary table. $_HI_COUNTS_FILE is only set when running under the
+# runner, so a suite executed on its own is a no-op here. A suite that exits
+# before reporting (_hi_require's skip path) contributes nothing, which is why
+# the runner renders "-" rather than 0 for those. _hi_suite_end calls this for
 # every suite built on the standard counters; shellcheck_test.sh, whose unit
 # is files rather than cases, calls it directly.
 function _hi_report_counts() {
   [ -n "${_HI_COUNTS_FILE:-}" ] || return 0
-  printf '%s %s\n' "$1" "$2" >"$_HI_COUNTS_FILE"
+  printf '%s %s %s\n' "$1" "$2" "${3:-0}" >"$_HI_COUNTS_FILE"
+}
+
+# _hi_note_failure <label> - the failing case's name, up to the runner, which
+# repeats every suite's under its summary table so finding what broke never
+# means scrolling back through the whole transcript. Same no-op-when-standalone
+# rule as _hi_report_counts.
+function _hi_note_failure() {
+  [ -n "${_HI_FAILS_FILE:-}" ] || return 0
+  printf '%s\n' "$1" >>"$_HI_FAILS_FILE"
 }
 
 # _hi_report_skip <reason> - the same channel, saying "this suite ran nothing"
@@ -258,9 +269,9 @@ function _hi_report_skip() {
 function _hi_suite_end() {
   local subject="$1" skipped=""
   [ "${_HI_SKIPPED:-0}" -gt 0 ] && skipped=", ${_HI_SKIPPED} skipped"
-  _hi_report_counts "$_HI_TOTAL" "$_HI_FAILED"
+  _hi_report_counts "$_HI_TOTAL" "$_HI_FAILED" "${_HI_SKIPPED:-0}"
   if [ "$_HI_FAILED" -eq 0 ]; then
-    _hi_h1 "${2:-All $subject checks passed ($_HI_TOTAL cases$skipped)}"
+    _hi_h1 "${2:-All $subject checks passed ($_HI_TOTAL cases$skipped)}" "$BRGREEN"
   else
     _hi_h1 "${3:-$_HI_FAILED/$_HI_TOTAL $subject checks FAILED}" "$RED"
   fi
@@ -505,6 +516,7 @@ function _hi_case_result() {
   fi
   _hi_h3 " | [$label] -- FAILED (exit $exit_code, $(_hi_elapsed "$t0" "$t1")s)" "$RED"
   sed 's/^/      /' "$out_file" 2>/dev/null
+  _hi_note_failure "[$label] $what (exit $exit_code)"
   return 1
 }
 

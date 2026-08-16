@@ -7,31 +7,37 @@ checkbox is ticked.
 
 ## CI & supply chain
 
-- [ ] **Pin actions by commit SHA** — mutable tags (`actions/checkout@v4`) are
-      the standard supply-chain gap for public repos. Pin each `uses:` to a full
-      SHA with the tag in a trailing comment.
-- [ ] **Dependabot** — `.github/dependabot.yml` with
-      `package-ecosystem: github-actions`; keeps the SHA pins above (and the
-      composite actions' tool versions) moving via PRs instead of memory.
 - [ ] **Branch protection on `main`** once the release flow is live: required
       checks = the fast suites; note the release workflow's publish job pushes
       manifests to `main`, so either allow its bot or switch that step to opening
-      a PR at the same time.
+      a PR at the same time. The ready-to-run ruleset (bypass for the
+      github-actions App, both fast-suite checks) is in `packaging/README.md`'s
+      before-first-release checklist - a repo setting `gh api` applies in one
+      command; run it alongside the `release` environment setup. Ticks when
+      the ruleset is actually active on the repo.
 
 ## Release & packaging
 
-- [ ] **namcap in the AUR checklist** — already named in
+- [x] **namcap in the AUR checklist** — already named in
       `packaging/README.md`'s verification steps; make it a hard pre-submit step
-      for both PKGBUILDs.
-- [ ] **brew audit --strict** in the tap-publish checklist (only runnable from
-      a mac / Homebrew-on-Linux; cannot be CI here).
-- [ ] **Release-notes discipline** — `gh release create --generate-notes`
+      for both PKGBUILDs. The AUR section now runs the gate per package
+      (`namcap PKGBUILD` and `namcap ./*.pkg.tar.zst` both), with "push nothing
+      while either run has complaints" spelled out.
+- [x] **brew audit --strict** in the tap-publish checklist (only runnable from
+      a mac / Homebrew-on-Linux; cannot be CI here). Reworded from example to
+      hard gate - the checklist is the enforcement precisely because no CI can
+      reach it.
+- [x] **Release-notes discipline** — `gh release create --generate-notes`
       drafts from PR titles; keeping PR titles release-worthy is the cheap
       alternative to conventional-commits tooling. Revisit git-cliff only if
-      notes start needing curation.
-- [ ] **Artifact attestation** — `actions/attest-build-provenance` on the
+      notes start needing curation. Written into `packaging/README.md`'s
+      cutting-a-release section: title PRs for the notes, skim merged titles
+      before tagging.
+- [x] **Artifact attestation** — `actions/attest-build-provenance` on the
       deb/rpm/apk once there are real users; cheap to add, pairs with the
-      existing SHA256SUMS.
+      existing SHA256SUMS. Added early instead (it's cheap): the release build
+      job attests deb/rpm/apk + SHA256SUMS (SHA-pinned, v4.2.2), verifiable
+      with `gh attestation verify <file> --repo <owner>/<repo>`.
 
 ## Product
 
@@ -55,11 +61,3 @@ checkbox is ticked.
       detached tmux outlives the ssh session, which conflicts with "remove
       everything on exit" - probably only offered when the target has a
       permanent ~/hi.d.
-- [ ] **Branch indicator in the Online header** — when the installed `~/hi.d`
-      is neither a release checkout nor on `main`, append the branch name in
-      parentheses after the banner's up-arrow/changes indicator (the
-      `_HI_BANNER_CHANGES` block in `common/header.sh`). Online header only —
-      the disconnect banner stays as-is. Derivable via
-      `git -C "$_HI_ROOT" symbolic-ref --short -q HEAD` (empty on a detached
-      release tag), cached alongside the existing `_HI_BANNER_CHANGES` memo so
-      it stays one git call per session.

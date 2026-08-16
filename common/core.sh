@@ -79,23 +79,37 @@ function _hi_repeat() {
   printf -v "$1" '%s' "${_hi_pad// /$3}"
 }
 
-function _hi_h1() {
-  local label=" $1 " width=$((${_HI_MAX_WIDTH:-80} - 1)) total left right lbar rbar
+# _hi_hrule <label> <bar-char> <inset> <color> - the worker behind the three
+# heading levels: a full _HI_MAX_WIDTH rule of <bar-char> with the label
+# centered in it, inset by <inset> spaces a side - deeper levels get more
+# breathing room around the label. Colors are one per level, with green
+# reserved for success banners and yellow/red for warnings and failures -
+# callers meaning one of those pass the color explicitly.
+function _hi_hrule() {
+  local pad label width=$((${_HI_MAX_WIDTH:-80} - 1)) total left right lbar rbar
+  _hi_repeat pad "$3" ' '
+  label="$pad$1$pad"
   total=$((width - ${#label}))
-  ((total < 0)) && total=0
+  # a label longer than the width keeps a 4-bar rule each side (same floor as
+  # the banner's tildes) and overflows, rather than losing the rule entirely
+  ((total < 8)) && total=8
   left=$((total / 2))
   right=$((total - left))
-  _hi_repeat lbar "$left" '='
-  _hi_repeat rbar "$right" '='
-  _hi_cecho " $lbar$label$rbar" "${2:-$BRGREEN}"
+  _hi_repeat lbar "$left" "$2"
+  _hi_repeat rbar "$right" "$2"
+  _hi_cecho " $lbar$label$rbar" "$4"
+}
+
+function _hi_h1() {
+  _hi_hrule "$1" '=' 1 "${2:-$BRBLUE}"
 }
 
 function _hi_h2() {
-  _hi_cecho " -------- $1 -------- " "${2:-$BRBLUE}"
+  _hi_hrule "$1" '-' 2 "${2:-$BRCYAN}"
 }
 
 function _hi_h3() {
-  _hi_cecho " ~~~~ $1 ~~~~ " "${2:-$BRCYAN}"
+  _hi_hrule "$1" '~' 3 "${2:-$BRPURPLE}"
 }
 
 # high-res-ish timestamp that falls back to whole seconds on bash <5

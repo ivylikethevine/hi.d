@@ -71,13 +71,6 @@ meantime.
       `sh -c` round trips) to be worth writing. The zsh/fish/ksh arms still
       exist twice; whether that duplication is worth a shared renderer is now
       an open question rather than an assumed yes.
-- [ ] **Parallelize the independent probes** — header.sh's `identity()` runs
-      its docker/nomad/kubectl probes serially (worst case the *sum* of three
-      2s timeouts while the user waits at connect), and `_hi`'s dispatch
-      walks the backend predicates the same way before a kube target
-      connects. Background jobs + `wait` turns both into max(probes). Same
-      family: bash/zsh completion could keep the target list in a shell
-      variable for `$_HI_TARGETS_TTL` seconds so repeat TABs fork nothing.
 - [ ] **Single-home the remaining hand-synced rosters** — the prompt-end
       defaults (install.sh's rows vs each shell rc's literal), the
       shell↔rc-file pairing (install.sh's `_HI_RC_TABLE`, load.sh's

@@ -54,14 +54,25 @@ else
   compinit -C
 fi
 promptinit
+# The in-shell TTL cache bash.sh's _hi_complete explains, in zsh's dialect.
+# (( )) rather than [ ]: zsh's SECONDS is a float once anything typeset -F's it.
+# GLOSSARY: completion probe knobs
+_HI_TARGET_ROWS=()
+_HI_TARGET_DESCS=()
+_HI_TARGET_ROWS_AT=-1
+
 _hi() {
-  local -a targets descs
   local name kind
-  while IFS=$'\t' read -r name kind; do
-    targets+=("$name")
-    descs+=("$kind - $name")
-  done < <(sh "$_HI_TARGETS")
-  compadd -d descs -a targets
+  if (( _HI_TARGET_ROWS_AT < 0 || SECONDS - _HI_TARGET_ROWS_AT >= ${_HI_TARGETS_TTL:-5} )); then
+    _HI_TARGET_ROWS=()
+    _HI_TARGET_DESCS=()
+    while IFS=$'\t' read -r name kind; do
+      _HI_TARGET_ROWS+=("$name")
+      _HI_TARGET_DESCS+=("$kind - $name")
+    done < <(sh "$_HI_TARGETS")
+    _HI_TARGET_ROWS_AT=$SECONDS
+  fi
+  compadd -d _HI_TARGET_DESCS -a _HI_TARGET_ROWS
 }
 compdef _hi hi
 compdef exa=eza

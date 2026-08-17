@@ -3,7 +3,7 @@
 ![CI (main)](https://github.com/ivylikethevine/hi.d/actions/workflows/ci.yml/badge.svg)
 ![CI (develop)](https://github.com/ivylikethevine/hi.d/actions/workflows/ci.yml/badge.svg?branch=develop)
 [![Coverage](https://github.com/ivylikethevine/hi.d/actions/workflows/coverage.yml/badge.svg)](https://github.com/ivylikethevine/hi.d/actions/workflows/coverage.yml)
-![ssh payload](https://img.shields.io/badge/ssh_payload-35KB_gzipped-4c1)
+![ssh payload](https://img.shields.io/badge/ssh_payload-37KB_gzipped-4c1)
 ![bash](https://img.shields.io/badge/bash-3.2%2B-4EAA25?logo=gnubash&logoColor=white)
 ![shells](https://img.shields.io/badge/shells-bash%20%7C%20zsh%20%7C%20fish%20%7C%20nu%20%7C%20sh-blue)
 ![targets](https://img.shields.io/badge/targets-ssh%20%7C%20docker%20%7C%20podman%20%7C%20nomad%20%7C%20k8s-8A2BE2)
@@ -333,7 +333,7 @@ choice of terminal.
 | Target OS | Linux (glibc + musl), macOS/BSD, Windows via WSL/Git Bash | broad | Linux x86_64 | Linux, macOS | broad |
 | Installs on target | nothing | nothing | a portable shell + plugins under `~/.xxh` | nothing | nothing |
 | Cleans up on exit | yes, automatically | leaves `/tmp` dir | no — delete `~/.xxh` yourself | yes, automatically | leaves files |
-| Size ceiling | ~35KB gzipped, enforced by CI | **~64KB and the server may block you** | large — it uploads whole shells | small | none (that is its point) |
+| Size ceiling | ~37KB gzipped, enforced by CI | **~64KB and the server may block you** | large — it uploads whole shells | small | none (that is its point) |
 | Non-ssh targets | **docker, podman, nomad, k8s** | no | no | no | no |
 | Can give you a shell the host lacks | no | no | **yes** | no | no |
 | Maturity | pre-1.0, not yet published to any channel | **original deleted from GitHub**; [cdown's] fork is the maintained line, argv ceiling inherited | mature, active | quiet | quiet |
@@ -386,7 +386,7 @@ not. Its plugin model is also more principled than copying dotfiles blind.
 - **Reach.** xxh's target support is "Linux on x86_64" — no ARM, no macOS, no
   BSD. hi.d's floor is bash 3.2 (what macOS still ships) and `base64`, and its
   test suite runs real Debian, Alpine/musl and bash-3.2 targets on every run.
-- **Weight.** xxh uploads shells; hi.d uploads ~35KB and a CI job fails if that
+- **Weight.** xxh uploads shells; hi.d uploads ~37KB and a CI job fails if that
   number drifts more than a kilobyte from the badge.
 - **Footprint.** xxh is hermetic but persistent — `~/.xxh` stays until you
   delete it. hi.d removes itself when the session ends.
@@ -672,7 +672,7 @@ Each is **on by default**; set it to `0` to hide that line. All are ignored when
 | `_HI_SSH_CONFIG`    | `~/.ssh/config` | where ssh hosts and their `# Tags:` comments are read from                     |
 | `_HI_ASCII`         | by locale       | `1` forces ASCII stand-ins for the banner/prompt/packages glyphs (`^ ok x` for `↑ ✓ ✗`), `0` forces the glyphs; unset asks the locale, so a `LANG=C` target degrades cleanly instead of printing mojibake |
 | `NO_COLOR`          | unset           | not hi's variable but [the convention](https://no-color.org): any non-empty value renders everything - header, prompts, git segment - without color, and hi ships your client-side choice to the target next to `_HI_ASCII` |
-| `_HI_PROMPT`        | unset           | `starship` hands the prompt to [starship](https://starship.rs) when the target has it, keeping hi's header and aliases (bash/zsh/fish; nu keeps hi's prompt). Never auto-detected, and a target without starship silently keeps hi's own. hi does not ship starship - a multi-MB binary against a 35KB payload |
+| `_HI_PROMPT`        | unset           | `starship` hands the prompt to [starship](https://starship.rs) when the target has it, keeping hi's header and aliases (bash/zsh/fish; nu keeps hi's prompt). Never auto-detected, and a target without starship silently keeps hi's own. hi does not ship starship - a multi-MB binary against a 37KB payload |
 | `_HI_SHELL_PREFERENCE` | `login fish zsh bash` | which shell a session runs in: an ordered list of `bash`/`zsh`/`fish`/`nu`, plus `login` for "your own login shell". First one installed on the target wins; `bash` is the floor, since that is what `load.sh` needs to run at all. `nu` is never picked unless it is your login shell or you name it here |
 | `_HI_PROMPT_END`    | per shell       | the character each prompt ends with, when you want the same one everywhere; the three below win over it |
 | `_HI_PROMPT_END_BASH` | `\$`         | bash's prompt separator (`\$` is bash's own escape for "`$`, or `#` for root")                          |

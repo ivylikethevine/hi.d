@@ -156,6 +156,40 @@ function test_predicates_are_false_without_their_cli() {
     ! PATH="$empty" _hi_is_k8s_pod yes
 }
 
+# --- _hi_resolve_backend ------------------------------------------------------
+#
+# The predicates run together now, so the guarantee worth pinning is that the
+# *answer* is still the roster's first match rather than whichever CLI
+# happened to reply first. The shims answer for target "yes", so a target
+# every backend claims must still resolve to docker - the row at the top of
+# $_HI_BACKENDS.
+
+function test_resolve_backend_picks_the_first_matching_row() {
+  [ "$(PATH="$_HI_SHIM_PATH" _hi_resolve_backend yes)" = docker ]
+}
+
+# ...and the roster order is the thing being asserted, not "docker": prove it
+# moves with the table rather than being baked into the resolver
+function test_resolve_backend_follows_the_roster_order() {
+  local out
+  out="$(
+    _HI_BACKENDS=("${_HI_BACKENDS[1]}" "${_HI_BACKENDS[0]}")
+    PATH="$_HI_SHIM_PATH" _hi_resolve_backend yes
+  )"
+  [ "$out" = podman ]
+}
+
+function test_resolve_backend_prints_nothing_for_a_stranger() {
+  [ -z "$(PATH="$_HI_SHIM_PATH" _hi_resolve_backend no)" ]
+}
+
+# no CLI at all: every predicate is false, and _hi falls through to ssh
+function test_resolve_backend_prints_nothing_without_any_cli() {
+  local empty="$_HI_WORKDIR/empty"
+  mkdir -p "$empty"
+  [ -z "$(PATH="$empty" _hi_resolve_backend yes)" ]
+}
+
 # an interactive session chainloads load.sh then calls load()
 function test_bootloader_calls_load_for_a_session() {
   local out
@@ -749,6 +783,12 @@ function run_hi_tests() {
   _hi_check "kube: running" test_is_k8s_pod_accepts_a_running_one
   _hi_check "kube: pending" test_is_k8s_pod_rejects_a_pending_one
   _hi_check "All false with no CLI installed" test_predicates_are_false_without_their_cli
+
+  _hi_h2 "Testing: _hi_resolve_backend"
+  _hi_check "Picks the roster's first match" test_resolve_backend_picks_the_first_matching_row
+  _hi_check "The roster decides, not the resolver" test_resolve_backend_follows_the_roster_order
+  _hi_check "Nothing for an unknown target" test_resolve_backend_prints_nothing_for_a_stranger
+  _hi_check "Nothing with no backend CLI at all" test_resolve_backend_prints_nothing_without_any_cli
 
   _hi_h2 "Testing: bootloader / fallback rc"
   _hi_check "A session calls load" test_bootloader_calls_load_for_a_session

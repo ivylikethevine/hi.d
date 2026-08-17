@@ -111,27 +111,6 @@ meantime.
   - **Do:** set _Source_ to **GitHub Actions**. Only exists once the repo is public.
   - **Ticks when:** that is set and a dispatch of `pages.yml` has deployed once, with the README rendering as the index and the docs cross-links resolving.
 
-### Tests
-
-- [ ] **the relay e2e** — prove `hi` can be chained: from machine A (has
-      hi.d) to machine B (doesn't), then *from inside that session* on to
-      machine C — the config landing intact on the final hop, and the
-      cleanup traps firing on **both** B and C, on clean exit and on an
-      error/kill mid-relay alike. Harness-wise this is two sshd containers on
-      one docker network, a key authorized from B to C, and the existing pty
-      feeder typing the second `hi` into the first session; the
-      disconnect-trap assertion already exists in `ssh_disconnect_test.sh`
-      to crib from. The test will immediately surface the real design
-      question, which should be answered on purpose rather than by accident:
-      **`hi.sh` itself is deliberately not in `$_HI_PAYLOAD`**, so a
-      disposable session on B has no launcher to relay with — the `hi` alias
-      points at `$_HI_LAUNCHER`, which only exists where hi.d is permanently
-      installed. So either the relay is documented as
-      permanent-install-only (and the test proves that path), or an opt-in
-      (`_HI_RELAY=1`?) ships `hi.sh` in the payload for hop-capable
-      sessions and the test proves the disposable path too — weigh the
-      payload cost against the badge before choosing the second.
-
 ## Human actions
 
 ### GitHub repo settings

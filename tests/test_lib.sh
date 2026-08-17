@@ -991,6 +991,95 @@ function _hi_sshd_container() {
   fi
 }
 
+# --- freezing a live session ---------------------------------------------------
+#
+# Proving a cleanup trap fires on a *dropped* link means killing the link from
+# outside, and doing that takes two SIGSTOPs: _say_hi multiplexes, so a
+# backgrounded ControlPersist master holds the socket beside the visible
+# `ssh -t`, and it is the master that answers sshd's ClientAlive probes.
+# Freeze only the client and sshd correctly keeps the session - that is a hung
+# terminal, not a dead link. Hence _hi_ssh_mux_pids, and hence both ssh
+# suites treating a missing master as a hard failure rather than carrying on.
+
+# Clients of the throwaway sshd on $_HI_SSH_PORT - the port is what keeps a
+# concurrent hi session on this machine out of the match.
+function _hi_ssh_client_pids() {
+  pgrep -f -- "ssh .*-p $_HI_SSH_PORT .*hitest@127.0.0.1" 2>/dev/null || true
+}
+
+# hi.sh's ControlPath, read back out of the session client's own argv - the
+# mux master is found by that exact path rather than by a `hi.cm.*` glob, so a
+# concurrent hi session on the same machine (or one still persisting from an
+# earlier case) can't be matched by mistake.
+function _hi_ssh_ctl_path() {
+  local args
+  if [ -r "/proc/$1/cmdline" ]; then
+    args="$(tr '\0' ' ' <"/proc/$1/cmdline")"
+  else
+    args="$(ps -ww -o args= -p "$1" 2>/dev/null)"
+  fi
+  printf '%s' "$args" | grep -oE 'ControlPath=[^[:space:]]+' | head -1 | cut -d= -f2-
+}
+
+# The ControlPersist master renames itself to `ssh: <ControlPath> [mux]` via
+# setproctitle, so its argv is gone and the client pattern above can never
+# reach it.
+function _hi_ssh_mux_pids() {
+  local ctl="${1//./\\.}"
+  pgrep -f -- "ssh: $ctl \[mux\]" 2>/dev/null || true
+}
+
+# Every local pid a suite has SIGSTOPped, so its exit trap can undo it. The
+# window between the freeze and the kill is tens of seconds of polling: an
+# abort in there (^C, a runner timeout, `set -e` upstream) would otherwise
+# leave stopped ssh clients and a mux master holding a socket open
+# indefinitely. Suites that freeze pass _hi_thaw_frozen to _hi_workdir.
+_HI_FROZEN_PIDS=()
+
+function _hi_freeze() {
+  local pid
+  for pid in "$@"; do
+    _HI_FROZEN_PIDS+=("$pid")
+    kill -STOP "$pid" 2>/dev/null || true
+  done
+}
+
+# CONT before KILL: a SIGSTOPped process can't act on SIGKILL's cleanup path
+# until it is scheduled again, so thawing first is what makes the kill land.
+function _hi_thaw_frozen() {
+  local pid
+  for pid in "${_HI_FROZEN_PIDS[@]:-}"; do
+    [ -n "$pid" ] || continue
+    kill -CONT "$pid" 2>/dev/null || true
+    kill -9 "$pid" 2>/dev/null || true
+  done
+  _HI_FROZEN_PIDS=()
+  return 0
+}
+
+# _hi_freeze_session - freezes the live session's client *and* its mux master,
+# named for the report if either is missing. Returns 1 without freezing
+# anything when there is nothing to freeze, or when hi has stopped
+# multiplexing - which would make freezing the client alone prove nothing, and
+# is worth failing on deliberately rather than passing quietly.
+function _hi_freeze_session() {
+  local ctl
+  local -a pids=() mux=()
+  _hi_read_lines pids < <(_hi_ssh_client_pids)
+  if [ "${#pids[@]}" -eq 0 ]; then
+    _hi_cecho " | no local ssh process found to freeze" "$RED"
+    return 1
+  fi
+  ctl="$(_hi_ssh_ctl_path "${pids[0]}")"
+  [ -n "$ctl" ] && _hi_read_lines mux < <(_hi_ssh_mux_pids "$ctl")
+  if [ "${#mux[@]}" -eq 0 ]; then
+    _hi_cecho " | no ControlPersist mux master found - freezing the client alone proves nothing" "$RED"
+    return 1
+  fi
+  pids+=(${mux[@]+"${mux[@]}"})
+  _hi_freeze ${pids[@]+"${pids[@]}"}
+}
+
 # The client-side launcher invocation both ssh suites make: hi.sh pointed at
 # the throwaway sshd on 127.0.0.1:$1, with the keypair and flags the fixtures
 # above set up. Left in the array $_HI_SSH_LAUNCH rather than run here, since

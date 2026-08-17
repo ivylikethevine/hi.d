@@ -36,12 +36,34 @@ if ! shopt -oq posix; then
 fi
 
 # complete `hi` from the same target list zsh/fish use, and make `exa` complete
-# exactly the way `eza` does, whatever bash-completion bound to it
-function _hi_complete() {
+# exactly the way `eza` does, whatever bash-completion bound to it.
+#
+# targets.sh file-caches its answer for $_HI_TARGETS_TTL seconds, so a repeat
+# TAB is cheap - but finding that out is still a fork and an exec. Holding the
+# names in the shell for the same window makes it free, and means the same
+# thing: a container started inside the window was already invisible until the
+# file cache turned over. $SECONDS is the stamp because it is a builtin (a
+# `date +%s` would cost the fork it saves); -1 is "never filled", and a TTL of
+# 0 refreshes every time, the "no cache wanted" targets.sh reads it as.
+# GLOSSARY: completion probe knobs
+_HI_TARGET_NAMES=""
+_HI_TARGET_NAMES_AT=-1
+
+function _hi_target_names() {
   local -a rows=()
+  if [ "$_HI_TARGET_NAMES_AT" -ge 0 ] &&
+    [ "$((SECONDS - _HI_TARGET_NAMES_AT))" -lt "${_HI_TARGETS_TTL:-5}" ]; then
+    return 0
+  fi
   _hi_read_lines rows < <(sh "$_HI_TARGETS")
   # names are field 1; the tab strip is a builtin, sparing a `cut` per TAB
-  _hi_read_lines COMPREPLY < <(compgen -W "${rows[*]%%$'\t'*}" -- "${COMP_WORDS[COMP_CWORD]}")
+  _HI_TARGET_NAMES="${rows[*]%%$'\t'*}"
+  _HI_TARGET_NAMES_AT="$SECONDS"
+}
+
+function _hi_complete() {
+  _hi_target_names
+  _hi_read_lines COMPREPLY < <(compgen -W "$_HI_TARGET_NAMES" -- "${COMP_WORDS[COMP_CWORD]}")
 }
 complete -F _hi_complete hi
 

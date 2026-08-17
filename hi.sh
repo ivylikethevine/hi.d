@@ -704,8 +704,39 @@ function _hi_parse() {
   }
 }
 
+# Which backend is $DOMAIN, printed - or nothing, for "hand it to ssh". The
+# roster's predicates are independent of each other and each is a CLI call
+# against a daemon that may be down, so they are started together and read
+# back **in roster order**: the answer is still the first row that matches,
+# exactly as walking the list gave, but a kube target no longer pays docker's
+# and podman's and nomad's timeouts on the way there. `wait <pid>` yields that
+# job's status, which is all a predicate returns, so no temp files are needed.
+# (`wait -n` would be the obvious tool and is bash 4.3 - the lint suite greps
+# for it, because macOS ships 3.2.)
+# Rows whose CLI isn't installed answer immediately (every predicate leads
+# with `command -v`), so the cost of starting all of them is the cost of the
+# ones that could have matched anyway. What does change: a target that is a
+# docker container now also gets asked of the backends after it in the roster,
+# and their answers are simply not waited for once a row ahead has matched.
+function _hi_resolve_backend() {
+  local target="$1" row i=0
+  local -a pids=()
+  for row in "${_HI_BACKENDS[@]}"; do
+    "${row##*|}" "$target" &
+    pids+=("$!")
+  done
+  for row in "${_HI_BACKENDS[@]}"; do
+    if wait "${pids[$i]}"; then
+      printf '%s' "${row%%|*}"
+      return 0
+    fi
+    i=$((i + 1))
+  done
+  return 0
+}
+
 function _hi() {
-  local copy_start tmp exit_code errors backend row
+  local copy_start tmp exit_code errors backend
 
   [ -d "$_HI_ROOT" ] || {
     _hi_cecho "No such directory: $_HI_ROOT" "$RED" >&2
@@ -729,13 +760,10 @@ function _hi() {
   # writes it under this same redirect on purpose (one error log per run)
   {
     backend=""
+    # ssh's own predicate stays first and on its own: it is fork-free (a walk
+    # of the ssh config), so there is nothing to overlap it with
     if ! _hi_is_ssh_host "$DOMAIN"; then
-      for row in "${_HI_BACKENDS[@]}"; do
-        if "${row##*|}" "$DOMAIN"; then
-          backend="${row%%|*}"
-          break
-        fi
-      done
+      backend="$(_hi_resolve_backend "$DOMAIN")"
     fi
     if [ -n "$backend" ]; then
       _say_hi_container "$backend" "$tmp" "$copy_start"

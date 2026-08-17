@@ -297,6 +297,71 @@ function test_complete_is_empty_for_an_unmatched_prefix() {
   [ -z "$(_hi_completions_for zzz-no-such-target)" ]
 }
 
+# The in-shell TTL cache: targets.sh's own file cache already makes a repeat
+# TAB cheap, and this makes it free. What is counted is the *fork* - `sh
+# $_HI_TARGETS` - because that is the thing being avoided, and counting it
+# from outside is the only honest way to see it. paths.sh re-exports
+# $_HI_TARGETS over anything the environment says, so the counter is a shim
+# `sh` on $PATH rather than a fake script path; it only counts the runs that
+# are the target list, and execs the real sh either way.
+#
+# _hi_complete_forks <ttl> - how many times two back-to-back completions in
+# one shell actually run the target list.
+function _hi_complete_forks() {
+  local dir="$_HI_WORKDIR/shcount" counter="$_HI_WORKDIR/sh.calls"
+  mkdir -p "$dir"
+  : >"$counter"
+  cat >"$dir/sh" <<EOF
+#!/bin/sh
+case "\$1" in
+*targets.sh) echo ran >>"$counter" ;;
+esac
+exec $(command -v sh) "\$@"
+EOF
+  chmod +x "$dir/sh"
+  PATH="$dir:$_HI_SHIM_PATH" _HI_TARGETS_TTL="$1" \
+    _HI_DISABLE_ALIASES=1 _HI_DISABLE_PERSONAL=1 _HI_DISABLE_PROMPT=1 \
+    bash -c '
+      # shellcheck source=../../shells/bash.sh
+      source "$_HI_BASHRC"
+      COMP_WORDS=(hi "")
+      COMP_CWORD=1
+      COMPREPLY=()
+      _hi_complete
+      COMPREPLY=()
+      _hi_complete
+    ' >/dev/null 2>&1
+  grep -c . "$counter" || true
+}
+
+function test_complete_reuses_the_list_inside_the_ttl() {
+  [ "$(_hi_complete_forks 5)" = 1 ]
+}
+
+# ...and TTL 0 means no cache at all - the same thing it means to targets.sh
+function test_complete_refetches_when_the_ttl_is_zero() {
+  [ "$(_hi_complete_forks 0)" = 2 ]
+}
+
+# the cached path must still produce completions, not just skip the fork
+function test_complete_still_answers_from_the_cache() {
+  local out
+  out="$(
+    PATH="$_HI_SHIM_PATH" _HI_DISABLE_ALIASES=1 _HI_DISABLE_PERSONAL=1 _HI_DISABLE_PROMPT=1 \
+      bash -c '
+        source "$_HI_BASHRC"
+        COMP_WORDS=(hi "")
+        COMP_CWORD=1
+        COMPREPLY=()
+        _hi_complete
+        COMPREPLY=()
+        _hi_complete
+        printf "%s\n" ${COMPREPLY[@]+"${COMPREPLY[@]}"}
+      '
+  )"
+  printf '%s\n' "$out" | grep -qx alpha
+}
+
 function run_targets_tests() {
   _hi_workdir targetstest
 
@@ -339,6 +404,9 @@ function run_targets_tests() {
   _hi_check "Filters by the typed prefix" test_complete_filters_by_the_typed_prefix
   _hi_check "Drops the kind column" test_complete_drops_the_kind_column
   _hi_check "Empty for an unmatched prefix" test_complete_is_empty_for_an_unmatched_prefix
+  _hi_check "A repeat TAB inside the TTL forks nothing" test_complete_reuses_the_list_inside_the_ttl
+  _hi_check "TTL 0 refetches every time" test_complete_refetches_when_the_ttl_is_zero
+  _hi_check "The cached answer is still an answer" test_complete_still_answers_from_the_cache
 
   _hi_suite_end "targets.sh"
 }

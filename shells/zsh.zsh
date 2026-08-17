@@ -17,6 +17,11 @@ if [[ "${_HI_DISABLE_PROMPT:-0}" != 1 ]]; then
     eval "$(starship init zsh)"
   else
     _hi_prime_identity
+    # git info through a precmd out-var reference, never a $( ) in PS1: the
+    # same fork-free, pw3nage-safe form bash.sh's ps1() uses (prompt_subst
+    # expands the reference at render time)
+    __hi_git_precmd() { _hi_git_prompt __hi_git_info; }
+    precmd_functions+=(__hi_git_precmd)
     # concatenated onto the $'...' strings, not interpolated - those stay
     # literal so zsh's prompt expansion happens at render time, not assignment
     HI_PS1_END="$(_hi_prompt_end ZSH '>')"
@@ -28,9 +33,9 @@ if [[ "${_HI_DISABLE_PROMPT:-0}" != 1 ]]; then
       HOST_COLOR="${$(_hi_host_color)//br/}"
       _hi_at_color=plain
       [ -n "${SSH_TTY:-}" ] && _hi_at_color=yellow
-      PS1=$' ${debian_chroot:-}%F{$USER_COLOR}%n%f%F{$_hi_at_color}@%f%F{$HOST_COLOR}%m%f%F{cyan} %~%f%F{plain}%{$(_hi_git_prompt)%} '"$HI_PS1_END"' '
+      PS1=$' ${debian_chroot:-}%F{$USER_COLOR}%n%f%F{$_hi_at_color}@%f%F{$HOST_COLOR}%m%f%F{cyan} %~%f%F{plain}%{${__hi_git_info}%} '"$HI_PS1_END"' '
     else
-      PS1=$' ${debian_chroot:-}%n@%m %~%{$(_hi_git_prompt)%} '"$HI_PS1_END"' '
+      PS1=$' ${debian_chroot:-}%n@%m %~%{${__hi_git_info}%} '"$HI_PS1_END"' '
     fi
   fi
 fi
@@ -42,6 +47,9 @@ autoload -Uz compinit promptinit
 # between. (#qN.mh+24): N tolerates a missing dump, .mh+24 = older than 24h.
 if [[ -n ${ZDOTDIR:-$HOME}/.zcompdump(#qN.mh+24) ]]; then
   compinit
+  # compinit leaves an unchanged dump's mtime alone, which would make this
+  # branch permanent once the dump turns a day old - touch restarts the clock
+  touch "${ZDOTDIR:-$HOME}/.zcompdump" 2>/dev/null || true
 else
   compinit -C
 fi

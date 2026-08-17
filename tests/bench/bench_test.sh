@@ -116,7 +116,7 @@ function bench_payload_size() {
   set -- # hi.sh reads "$@"; make sure it sees none (same as hi_test.sh)
   # shellcheck source=../../hi.sh
   source "$_HI_LAUNCHER"
-  bytes="$(tar czf - -h -C "$_HI_HOME" "${_HI_PAYLOAD[@]/#/hi.d/}" | wc -c)"
+  bytes="$(_hi_payload_tar | wc -c)"
   if ((bytes <= budget)); then
     _hi_cecho " | payload: $bytes bytes gzipped (budget $budget): OK" "$GREEN"
   else
@@ -134,7 +134,7 @@ function bench_payload_readme_badge() {
   set -- # hi.sh reads "$@"; make sure it sees none (same as hi_test.sh)
   # shellcheck source=../../hi.sh
   source "$_HI_LAUNCHER"
-  bytes="$(tar czf - -h -C "$_HI_HOME" "${_HI_PAYLOAD[@]/#/hi.d/}" | wc -c)"
+  bytes="$(_hi_payload_tar | wc -c)"
   kb=$(((bytes + 512) / 1024))
   badge="$(sed -n 's/.*ssh_payload-\([0-9]*\)KB_gzipped.*/\1/p' "$_HI_ROOT/README.md" | head -1)"
   if [ -z "$badge" ]; then

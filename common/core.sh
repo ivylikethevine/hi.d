@@ -121,14 +121,13 @@ function _hi_elapsed() {
   awk -v a="$1" -v b="$2" 'BEGIN { printf "%.3f", b - a }'
 }
 
-# total size of the given paths; --apparent-size is GNU-only, probed once
+# total size of the given paths; --apparent-size is GNU-only, probed per call
+# - no caller runs this twice in one shell, so a memo here could never hit
 function _hi_du_size() {
-  if [ -z "${_HI_LINUX_FLAGS+x}" ]; then
-    _HI_LINUX_FLAGS=""
-    du --version 2>/dev/null | grep -q "GNU coreutils" && _HI_LINUX_FLAGS="--apparent-size"
-  fi
+  local flags=""
+  du --version 2>/dev/null | grep -q "GNU coreutils" && flags="--apparent-size"
   # shellcheck disable=SC2086 # unquoted so an empty flag list disappears
-  du -shc $_HI_LINUX_FLAGS "$@" | awk 'END { print $1 }'
+  du -shc $flags "$@" | awk 'END { print $1 }'
 }
 
 # Memoized; the binaries stay authoritative over $HOSTNAME/$USER - the exact
@@ -335,8 +334,12 @@ function _hi_override_color() {
 }
 
 # The "# Tags: a, b" comment directly above a "Host <alias>" line in
-# ~/.ssh/config; unknown host returns 1. `case` over `[[ =~ ]]`: zsh fills
-# $match, not $BASH_REMATCH, so regex captures returned nothing there.
+# ~/.ssh/config; unknown host returns 1, a known host with no tag returns 2 -
+# which is what lets hi.sh's _hi_is_ssh_host ride this walker instead of
+# keeping a fourth copy of the Host grammar. `Host` matches case-insensitively
+# (ssh reads its keywords that way; the awks in targets.sh already agree).
+# `case` over `[[ =~ ]]`: zsh fills $match, not $BASH_REMATCH, so regex
+# captures returned nothing there.
 function _hi_ssh_host_tag() {
   local line trimmed rest tag="" aliases
   [ -f "$_HI_SSH_CONFIG" ] || return 1
@@ -356,8 +359,8 @@ function _hi_ssh_host_tag() {
         ;;
       esac
       ;;
-    Host[[:space:]]*)
-      aliases="${trimmed#Host}"
+    [Hh][Oo][Ss][Tt][[:space:]]*)
+      aliases="${trimmed#[Hh][Oo][Ss][Tt]}"
       aliases="${aliases%%#*}" # a trailing comment is not an alias
       # padded substring, not a loop: zsh doesn't word-split unquoted, so a
       # loop never matched. Tabs folded first; literal names only.
@@ -365,7 +368,7 @@ function _hi_ssh_host_tag() {
       case " $aliases " in
       *" $1 "*)
         [ -n "$tag" ] && printf '%s\n' "$tag" && return 0
-        return 1
+        return 2
         ;;
       esac
       tag=""
@@ -398,5 +401,12 @@ function _hi_host_color() { printf '%s\n' "${_HI_TARGET_COLOR:-$(_hi_resolve_col
 function _hi_user_color() { _hi_resolve_color username "$(_hi_whoami)" "${_HI_TARGET_TAG:-}"; }
 function _hi_host_escape() { _hi_color_escape "$(_hi_host_color)"; }
 function _hi_user_escape() { _hi_color_escape "$(_hi_user_color)"; }
+
+# The literal colored " user@host" fragment (@ yellow over ssh) that nu's
+# prompt and install.sh's preview both render; bash.sh/zsh.zsh keep their
+# escape-based (\u/%n) forms, which are a different substrate on purpose.
+function _hi_userhost() {
+  printf '%b' " $(_hi_user_escape)$(_hi_whoami)$(_hi_at_color)@$(_hi_host_escape)$(_hi_hostname)$NC"
+}
 
 set +euo pipefail # must be disabled after our code (this file is part of the interactive shell - any error would close the session)

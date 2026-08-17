@@ -39,12 +39,16 @@ export _HI_SHELL_LADDER="zsh fish ksh mksh sh"
 _HI_SIZE_TOKEN="@@SIZE@@"
 
 _HI_ARMOR="base64"
-_HI_UNARMOR="tr -s ' ' '\n' | { base64 -d 2>/dev/null || base64 -D; }"
+# the decode ladder alone (what the stdin transport interpolates - armor
+# arrives there byte for byte, needing no fold), and the general shape with
+# the tr fold in front of it
+_HI_UNARMOR_RAW="{ base64 -d 2>/dev/null || base64 -D; }"
+_HI_UNARMOR="tr -s ' ' '\n' | $_HI_UNARMOR_RAW"
 
-# _hi_armored_line <redir> <dest> - armor stdin here on the client and print
-# the one-line remote command that unarmors it into <dest> ('>' or '>>').
-# The write-a-file armor idiom has one home instead of a copy per site; the
-# stdin transport in _say_hi keeps its own shape (no tr fold, raw pipe).
+# _hi_armored_line <sink> <dest> - armor stdin here on the client and print
+# the one-line remote command that unarmors it through <sink> ('>', '>>' or
+# '|') into <dest>. The armor idiom has one home instead of a copy per site;
+# the stdin transport in _say_hi keeps its own shape (raw pipe, no echo).
 function _hi_armored_line() {
   printf 'echo "%s" | %s %s %s' "$($_HI_ARMOR)" "$_HI_UNARMOR" "$1" "$2"
 }
@@ -57,7 +61,7 @@ function _hi_armored_line() {
 function _hi_session_env() {
   printf '_HI_TARGET\t%s\n' "$DOMAIN"
   printf '_HI_TARGET_COLOR\t%s\n' "$(_hi_target_color)"
-  printf '_HI_TARGET_TAG\t%s\n' "$(_hi_target_tag)"
+  printf '_HI_TARGET_TAG\t%s\n' "$(_hi_ssh_host_tag "$DOMAIN" 2>/dev/null || true)"
   printf '_HI_LOCAL_USER\t%s\n' "$(_hi_whoami)"
   printf '_HI_LOCAL_HOSTNAME\t%s\n' "$(_hi_hostname)"
   printf '_HI_RELEASE\t%s\n' "$(_hi_version)"
@@ -71,56 +75,53 @@ function _hi_session_env() {
   return 0
 }
 
-# The target's tag and color, memoized: resolution walks ~/.ssh/config and
-# three callers want the same answer per run.
-function _hi_target_tag() {
-  [ -n "${_HI_TARGET_TAG_CACHE+x}" ] ||
-    _HI_TARGET_TAG_CACHE="$(_hi_ssh_host_tag "$DOMAIN" 2>/dev/null || true)"
-  printf '%s' "$_HI_TARGET_TAG_CACHE"
+# The target's color. Stateless on purpose: both callers sit inside command
+# substitutions, where a memo assigned here dies with the subshell before any
+# second call could read it.
+function _hi_target_color() {
+  _hi_resolve_color hostname "${DOMAIN##*@}"
 }
 
-function _hi_target_color() {
-  [ -n "${_HI_TARGET_COLOR_CACHE:-}" ] ||
-    _HI_TARGET_COLOR_CACHE="$(_hi_resolve_color hostname "${DOMAIN##*@}")"
-  printf '%s' "$_HI_TARGET_COLOR_CACHE"
+# The overlay files actually present in $_HI_CONFIG_DIR, one per line - the
+# one home of the presence scan _hi_has_overlay and _hi_overlay_tar share.
+function _hi_overlay_files() {
+  local f
+  for f in "${_HI_OVERLAY_FILES[@]}"; do
+    [ -f "$_HI_CONFIG_DIR/$f" ] && printf '%s\n' "$f"
+  done
+  return 0
 }
 
 # True when any overlay exists - asked first, because an empty archive is an
 # "unexpected EOF" to tar, and an unconfigured user must pay nothing.
 function _hi_has_overlay() {
-  local f
-  for f in "${_HI_OVERLAY_FILES[@]}"; do
-    [ -f "$_HI_CONFIG_DIR/$f" ] && return 0
-  done
-  return 1
+  [ -n "$(_hi_overlay_files)" ]
 }
 
 # The overlay tar, unpacked over the target's misc/: explicit member names
 # rather than GNU --transform, so bsdtar works and members land where
 # paths.sh already looks.
 function _hi_overlay_tar() {
-  local f
   local -a present=()
-  for f in "${_HI_OVERLAY_FILES[@]}"; do
-    [ -f "$_HI_CONFIG_DIR/$f" ] && present+=("$f")
-  done
+  _hi_read_lines present < <(_hi_overlay_files)
   ((${#present[@]})) || return 0
   tar czf - -h -C "$_HI_CONFIG_DIR" "${present[@]}"
 }
 
-# Reads ~/.ssh/config directly - targets.sh would cost three forks and the
-# cache for a static file. Same rule: literal names, no wildcards.
+# The payload tar - "what a session ships", in one spelling for both
+# transports, the wire estimate and the size tests, so the estimate and the
+# bytes actually sent can't quietly diverge.
+function _hi_payload_tar() {
+  tar czf - -h -C "$_HI_HOME" "${_HI_PAYLOAD[@]/#/hi.d/}"
+}
+
+# Membership through core.sh's tag walker - the same "literal Host alias"
+# grammar, fork-free (the awk this replaces cost an exec per dispatch and was
+# a third copy of the rule; targets.sh keeps the one dialect-forced awk).
+# The walker's rc 2 means "known host, no tag"; only 1 means not in the config.
 function _hi_is_ssh_host() {
-  [ -f "$_HI_SSH_CONFIG" ] &&
-    awk -v want="$1" '
-      tolower($1) == "host" {
-        for (i = 2; i <= NF; i++) {
-          if ($i ~ /^#/) break
-          if ($i !~ /[*?]/ && $i == want) { found = 1; exit }
-        }
-      }
-      END { exit !found }
-    ' "$_HI_SSH_CONFIG"
+  _hi_ssh_host_tag "$1" >/dev/null 2>&1
+  [ $? -ne 1 ]
 }
 
 # podman's CLI is a drop-in for docker's here, so only the binary differs. Both
@@ -145,6 +146,19 @@ function _hi_is_k8s_pod() {
     [ "$(kubectl get pod "$1" -o jsonpath='{.status.phase}' 2>/dev/null)" = Running ]
 }
 
+# The backend roster, in resolution order:
+# "<name>|<what a target resolves as>|<liveness probe>|<predicate>".
+# _hi's dispatch walks name and predicate; scripts/doctor.sh probes and
+# prints the other columns. One list, so a backend added here reaches the
+# dispatch and both halves of `hi --doctor` together - doctor's own copy of
+# this chain had already drifted from the dispatch once.
+_HI_BACKENDS=(
+  "docker|docker container|docker ps -q|_hi_is_docker_container"
+  "podman|podman container|podman ps -q|_hi_is_podman_container"
+  "nomad|nomad allocation|nomad job status|_hi_is_nomad_alloc"
+  "kube|kubernetes pod|kubectl get pods -o name|_hi_is_k8s_pod"
+)
+
 # Run <script> on $DOMAIN through `sh -c`, with ssh's own flags in "$@" ahead
 # of it - callers write plain sh and never count quotes.
 # GLOSSARY: sh -c wrapping - fish-shaped login shells, and quoting over %q
@@ -153,6 +167,23 @@ function _hi_ssh_sh() {
   shift
   # shellcheck disable=SC2029 # the script is ours to expand, here, on purpose
   ssh "$@" "${SSHARGS[@]}" "$DOMAIN" "sh -c '${script//\'/\'\\\'\'}'"
+}
+
+# _hi_ctl_open <persist-secs> [ssh-opts...] - a fresh ControlMaster socket
+# into the caller's ctl_path/ctl_opts, so an install probe and the session
+# that follows multiplex one authentication; _hi_ctl_close tears it down.
+# One home for the idiom: scripts/doctor.sh's probe must behave exactly like
+# a real session, which two hand-kept copies of this dance can't promise.
+function _hi_ctl_open() {
+  ctl_path="$(mktemp -u -t hi.cm.XXXXXX)"
+  ctl_opts=(-o ControlMaster=auto -o ControlPath="$ctl_path" -o "ControlPersist=$1")
+  shift
+  ctl_opts+=("$@")
+}
+
+function _hi_ctl_close() {
+  ssh -O exit "${ctl_opts[@]}" "$DOMAIN" >/dev/null 2>&1 || true
+  rm -f "$ctl_path" 2>/dev/null || true
 }
 
 # Prints the path of a permanent hi.d on $DOMAIN, if any; rides the
@@ -214,6 +245,16 @@ function _hi_fallback_rc() {
   return 0
 }
 
+# The fallback-shell probe both transports interpolate: one sh loop over
+# $_HI_SHELL_LADDER, running $1 (with $_hi_s naming the hit) at the first
+# shell found. Emitted on the client, so the loop's shape can't drift between
+# the transports the way the ladder itself once did.
+function _hi_ladder_probe() {
+  # shellcheck disable=SC2016 # $_hi_s is the target's to expand, on purpose
+  printf 'for _hi_s in %s; do command -v "$_hi_s" >/dev/null 2>&1 && { %s; break; }; done' \
+    "$_HI_SHELL_LADDER" "$1"
+}
+
 # A prompt for the bash-less tiers (sh, ash, dash, ksh, mksh - fish and zsh
 # get their own rc), baked on the client; $1 = "git" adds the live segment
 # only the ksh/mksh arm of _hi_remote_suffix asks for.
@@ -256,7 +297,7 @@ function _hi_wire_estimate() {
   # $_HI_LAUNCHER, not $0 - reached by *sourcing*, where $0 is the sourcer;
   # _say_hi keeps $0 because there it is the running, shipped copy
   for part in "$($_HI_ARMOR <"$_HI_LAUNCHER")" "$(_hi_bootloader | $_HI_ARMOR)" \
-    "$(tar czf - -h -C "$_HI_HOME" "${_HI_PAYLOAD[@]/#/hi.d/}" | $_HI_ARMOR)"; do
+    "$(_hi_payload_tar | $_HI_ARMOR)"; do
     total=$((total + ${#part}))
   done
   # the outer armor, which every one of these streams also passes through
@@ -342,7 +383,7 @@ function _hi_remote_suffix() {
         bash --rcfile "\$_hi_rc_dir/hi.bashrc" -i
       else
         _hi_fallback=sh
-        for _hi_s in $_HI_SHELL_LADDER; do command -v "\$_hi_s" >/dev/null 2>&1 && { _hi_fallback="\$_hi_s"; break; }; done
+        $(_hi_ladder_probe '_hi_fallback="$_hi_s"')
         printf '%s no bash on [$DOMAIN], dropping into plain %s w/ aliases only %s\n' "$hi_esc" "\$_hi_fallback" "$nc_esc" >&2
         $(_hi_fallback_rc | _hi_armored_line '>' '"$_hi_rc_dir/.hi_fallback_rc"')
         case "\$_hi_fallback" in
@@ -375,7 +416,7 @@ REMOTE
 # chainloads bash when it's there.
 function _say_hi() {
   local size hi_esc nc_esc script middle b64 boot_tmp remote_root tmp_root ctl_path ec=0
-  local launcher="" bootloader="" tree="" overlay="" overlay_line=""
+  local launcher="" bootloader="" tree="" overlay_line=""
   local -a ctl_opts
 
   # only this path armors (containers stream via their CLI); no base64 probe
@@ -390,8 +431,7 @@ function _say_hi() {
 
   # multiplex the install-probe and the real session over one ssh connection,
   # so checking for an existing install never costs a second authentication
-  ctl_path="$(mktemp -u -t hi.cm.XXXXXX)"
-  ctl_opts=(-o ControlMaster=auto -o ControlPath="$ctl_path" -o ControlPersist=30)
+  _hi_ctl_open 30
   remote_root="$(_hi_remote_root "${ctl_opts[@]}")"
 
   if [ -n "$remote_root" ]; then
@@ -415,20 +455,20 @@ REMOTE
     # the bytes that actually go out
     launcher="$($_HI_ARMOR <"$0")"
     bootloader="$(_hi_bootloader | $_HI_ARMOR)"
-    tree="$(tar czf - -h -C "$_HI_HOME" "${_HI_PAYLOAD[@]/#/hi.d/}" | $_HI_ARMOR)"
+    tree="$(_hi_payload_tar | $_HI_ARMOR)"
     # second, tiny stream: the overlay lives outside the tree, so it cannot
     # ride the payload; omitted entirely when empty. _HI_CONFIG_DIR then
     # points at the shipped misc/, not the login user's ~/.config/hi.d.
+    # shellcheck disable=SC2016 # $_HI_ROOT is the target's to expand
     if _hi_has_overlay; then
-      overlay="$(_hi_overlay_tar | $_HI_ARMOR)"
-      overlay_line="echo \"$overlay\" | $_HI_UNARMOR | tar mxzf - -C \"\$_HI_ROOT/misc\""
+      overlay_line="$(_hi_overlay_tar | _hi_armored_line '|' 'tar mxzf - -C "$_HI_ROOT/misc"')"
     fi
     # not known yet: everything above is armored again with the rest of the
     # script, so the figure can only be measured once it is assembled
     size="$_HI_SIZE_TOKEN"
     middle="$(
       cat <<REMOTE
-      export _HI_HOME=\$(mktemp -d -t $(whoami).hi.XXXXXX) # busybox mktemp needs exactly six X
+      export _HI_HOME=\$(mktemp -d -t $(_hi_whoami).hi.XXXXXX) # busybox mktemp needs exactly six X
       export _HI_ROOT=\$_HI_HOME/hi.d
       export _HI_CONFIG_DIR=\$_HI_ROOT/misc
       export _HI_CLEANUP=\$_HI_HOME
@@ -472,7 +512,7 @@ $(_hi_remote_suffix)"
   # GLOSSARY: stdin transport - the argv cap, and why it must be two calls
   # shellcheck disable=SC2029 # $boot_tmp is ours to expand, into the target's shell
   if printf '%s' "$b64" | ssh "${ctl_opts[@]}" "${SSHARGS[@]}" "$DOMAIN" \
-    "sh -c 'mkdir -m 700 $boot_tmp && { base64 -d 2>/dev/null || base64 -D; } > $boot_tmp/bootloader'" 2>/dev/null; then
+    "sh -c 'mkdir -m 700 $boot_tmp && $_HI_UNARMOR_RAW > $boot_tmp/bootloader'" 2>/dev/null; then
     # shellcheck disable=SC2029
     ssh -t "${ctl_opts[@]}" "${SSHARGS[@]}" "$DOMAIN" \
       "sh $boot_tmp/bootloader; rm -rf $boot_tmp" || ec=$?
@@ -482,8 +522,7 @@ $(_hi_remote_suffix)"
       "Write-Host 'hi from PowerShell - no bash or sh on this host, hi.d colors/aliases are unavailable' -ForegroundColor Yellow" || ec=$?
   fi
 
-  ssh -O exit "${ctl_opts[@]}" "$DOMAIN" >/dev/null 2>&1 || true
-  rm -rf "$ctl_path" 2>/dev/null || true
+  _hi_ctl_close
   return "$ec"
 }
 
@@ -516,13 +555,13 @@ function _say_hi_container() {
     ;;
   esac
 
-  root="/tmp/$(whoami).hi.log.$$"
+  root="/tmp/$(_hi_whoami).hi.log.$$"
   shell_end="$(_hi_now)"
 
   # no bash on the target means no fancy stuff, just our aliases
   if ! "${probe[@]}" sh -c 'command -v bash' >/dev/null 2>"$tmp"; then
-    # shellcheck disable=SC2016
-    fallback=$("${probe[@]}" sh -c "for s in $_HI_SHELL_LADDER; do command -v \"\$s\" >/dev/null 2>&1 && { echo \"\$s\"; break; }; done" 2>"$tmp")
+    # shellcheck disable=SC2016 # the probe's $_hi_s is the target's to expand
+    fallback=$("${probe[@]}" sh -c "$(_hi_ladder_probe 'echo "$_hi_s"')" 2>"$tmp")
     [ -n "$fallback" ] || return 1
     _hi_cecho " no bash in [$DOMAIN], skipping hi config -> plain $fallback w/ aliases" "$YELLOW"
 
@@ -567,7 +606,7 @@ function _say_hi_container() {
   # staged to a file so the announced size is the one actually sent; no
   # armor - `exec -i` takes raw bytes
   tarball="$tmp.tar.gz"
-  if ! tar czf "$tarball" -h -C "$_HI_HOME" "${_HI_PAYLOAD[@]/#/hi.d/}"; then
+  if ! _hi_payload_tar >"$tarball"; then
     _hi_cecho " failed to archive hi.d for [$DOMAIN]" "$BRRED"
     return 1
   fi
@@ -646,7 +685,7 @@ function _hi_parse() {
 }
 
 function _hi() {
-  local copy_start tmp exit_code errors
+  local copy_start tmp exit_code errors backend row
 
   [ -d "$_HI_ROOT" ] || {
     _hi_cecho "No such directory: $_HI_ROOT" "$RED" >&2
@@ -661,22 +700,25 @@ function _hi() {
   # parse the args and determine the target type
   _hi_parse "$@"
   _HI_SHELL_START="$(_hi_now)"
-  # one redirect around the whole dispatch, not one per arm a new backend could
-  # be added without. The predicates' stderr lands in $tmp too; each already
-  # sends its probe to /dev/null, and $tmp only prints when the session failed.
+  # one redirect around the whole dispatch, not one per arm. The predicates'
+  # stderr lands in $tmp too; each already sends its probe to /dev/null, and
+  # $tmp only prints when the session failed. ssh leads (its predicate isn't
+  # a backend row), then _HI_BACKENDS in order; no match falls through to
+  # ssh, so any name ssh can reach still works.
   # shellcheck disable=SC2094 # $tmp rides as an argument; the container path
   # writes it under this same redirect on purpose (one error log per run)
   {
-    if _hi_is_ssh_host "$DOMAIN"; then
-      _say_hi
-    elif _hi_is_docker_container "$DOMAIN"; then
-      _say_hi_container docker "$tmp" "$copy_start"
-    elif _hi_is_podman_container "$DOMAIN"; then
-      _say_hi_container podman "$tmp" "$copy_start"
-    elif _hi_is_nomad_alloc "$DOMAIN"; then
-      _say_hi_container nomad "$tmp" "$copy_start"
-    elif _hi_is_k8s_pod "$DOMAIN"; then
-      _say_hi_container kube "$tmp" "$copy_start"
+    backend=""
+    if ! _hi_is_ssh_host "$DOMAIN"; then
+      for row in "${_HI_BACKENDS[@]}"; do
+        if "${row##*|}" "$DOMAIN"; then
+          backend="${row%%|*}"
+          break
+        fi
+      done
+    fi
+    if [ -n "$backend" ]; then
+      _say_hi_container "$backend" "$tmp" "$copy_start"
     else
       _say_hi
     fi

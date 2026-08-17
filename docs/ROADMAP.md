@@ -52,6 +52,60 @@ done; this file is only ever what's left.
     has no `$ENV` equivalent to hook. Decide per shell whether that is worth
     it — as a *login* shell they all work today.
 
+### Cleanup & structure
+
+Deferred on purpose from the Aug 2026 simplification passes — each is real,
+none urgent, and the drift-prone spots have test pins holding them in the
+meantime.
+
+- [ ] **Unify the two fallback-launch recipes** — `_hi_remote_suffix` (ssh)
+      and `_say_hi_container` each hand-write the per-shell launch case. The
+      ladder and its probe loop are single-homed now, but the zsh/fish/ksh
+      arms still exist twice, and the ksh/mksh arm exists only on the ssh
+      side — a mksh *container* target silently gets the plain-sh treatment.
+      One per-shell recipe function rendered by both transports closes the
+      duplication and that gap at once.
+- [ ] **Parallelize the independent probes** — header.sh's `identity()` runs
+      its docker/nomad/kubectl probes serially (worst case the *sum* of three
+      2s timeouts while the user waits at connect), and `_hi`'s dispatch
+      walks the backend predicates the same way before a kube target
+      connects. Background jobs + `wait` turns both into max(probes). Same
+      family: bash/zsh completion could keep the target list in a shell
+      variable for `$_HI_TARGETS_TTL` seconds so repeat TABs fork nothing.
+- [ ] **Single-home the remaining hand-synced rosters** — the prompt-end
+      defaults (install.sh's rows vs each shell rc's literal), the
+      shell↔rc-file pairing (install.sh's `_HI_RC_TABLE`, load.sh's
+      `_HI_CONFIGS`, paths.sh's path vars, doctor's shell loop), and the
+      glyph/palette tables (core.sh / config.fish / ksh.sh, agreement-pinned
+      by tests today). Each is a lockstep edit; the dialect boundaries mean
+      data-file or generation approaches rather than shared functions.
+- [ ] **One git-segment implementation** — `shells/ksh.sh`'s POSIX segment
+      could serve the bash tier too and retire `common/git_prompt.sh` (~150
+      payload lines, the largest size win available). Weigh the per-prompt
+      cost of losing bash-only builtins before starting.
+- [ ] **`--version` stamping through one entry point** — the four
+      per-channel sed pairs (mkpkg.sh, both PKGBUILDs, the Homebrew formula)
+      re-implement the same stamp.
+- [ ] **CI tooling consolidation** — one parameterized `setup-tool` action
+      plus a tools manifest could replace the eight composite actions, their
+      eight install scripts, and `check_tool_versions.sh`'s roster;
+      release.yml's artifact/manifest lists could read a mkpkg-emitted file.
+- [ ] **Runner parallelism** — `test_runner.sh --jobs N`. New machinery, so
+      it waits until the serial wall clock actually hurts.
+
+### Docs
+
+- [ ] **Jekyll GitHub Pages action** — _Unblocked to write; publishing waits
+      on the repo being public._ A `pages.yml` workflow that renders the
+      repo's markdown (`README.md` as the index, plus `docs/` — comparison,
+      packaging, architecture, windows already interlink with relative
+      links `link-check.yml` keeps honest) into a GitHub Pages site via the
+      stock `actions/jekyll-build-pages` → `actions/deploy-pages` pair,
+      SHA-pinned and minimal-permission like every other workflow here,
+      plus a small `_config.yml` choosing a theme and excluding the
+      non-docs tree. The human half is one click — Settings → Pages →
+      Source: GitHub Actions — which only exists once the repo is public.
+
 ### Tests
 
 - [ ] **the relay e2e** — prove `hi` can be chained: from machine A (has

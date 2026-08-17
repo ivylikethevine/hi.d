@@ -47,7 +47,7 @@ if $_hi_live {
     # "one writing rule" in GLOSSARY: nu session tier).
     let _hi_id = (^bash -c ("source " + $env._HI_CORE + '
     _hi_prime_identity
-    printf "%b\n" " $(_hi_user_escape)$(_hi_whoami)$(_hi_at_color)@$(_hi_host_escape)$(_hi_hostname)$NC"
+    printf "%s\n" "$(_hi_userhost)"
     _hi_prompt_end NU ">"') | lines)
     $env._HI_NU_USERHOST = ($_hi_id | get 0)
     $env._HI_NU_END = ($_hi_id | get 1)

@@ -85,7 +85,7 @@ function doctor_local() {
   # once it lands. The first is the one people mean by "what does hi cost".
   doctor_row payload "$(_hi_wire_estimate) over the wire per ssh session, $(_hi_size) unpacked (${_HI_PAYLOAD[*]})"
   local s have=""
-  for s in bash zsh fish; do
+  for s in bash zsh fish nu; do
     command -v "$s" >/dev/null 2>&1 && have="$have$s "
   done
   doctor_row shells "local: ${have:-none?!}"
@@ -105,7 +105,10 @@ function doctor_config() {
   else
     doctor_row settings.sh "none - defaults apply (hi_configure writes one)"
   fi
-  for f in colors packages; do
+  # every overlay file hi ships (hi.sh's _HI_OVERLAY_FILES is the contract),
+  # minus settings.sh, which got its richer parse-checked row above
+  for f in "${_HI_OVERLAY_FILES[@]}"; do
+    [ "$f" = settings.sh ] && continue
     if [ -f "$_HI_CONFIG_DIR/$f" ]; then
       doctor_row "$f" "overridden ($(grep -c . "$_HI_CONFIG_DIR/$f") lines)"
     else
@@ -129,16 +132,10 @@ function doctor_config() {
   [ "$any" = 1 ] || doctor_row toggles "all defaults (every feature on)"
 }
 
-# The one backend roster both halves of this report walk:
-# <name>|<what a target resolves as>|<liveness probe>|<hi.sh predicate>.
-# doctor_backends probes column 3, doctor_target times column 4 - the same
-# chain _hi dispatches on, stated once instead of once per section.
-_HI_DOC_BACKENDS=(
-  "docker|docker container|docker ps -q|_hi_is_docker_container"
-  "podman|podman container|podman ps -q|_hi_is_podman_container"
-  "nomad|nomad allocation|nomad job status|_hi_is_nomad_alloc"
-  "kube|kubernetes pod|kubectl get pods -o name|_hi_is_k8s_pod"
-)
+# The backend roster both halves of this report walk is hi.sh's _HI_BACKENDS
+# (sourced above) - the very rows _hi dispatches on, so this report can't
+# drift from the dispatch the way a copy here once did. doctor_backends
+# probes column 3, doctor_target times column 4.
 
 # doctor_backend <name> <cli> <probe...> - installed, answering, and how long
 # the answer took; the same _hi_probe ceiling the header and completion use
@@ -163,13 +160,15 @@ function doctor_backends() {
   local hosts t0 t1
   _hi_h2 "Backends (probes capped at ${_HI_PROBE_TIMEOUT:-2}s each, like the header)"
   if [ -f "$_HI_SSH_CONFIG" ]; then
-    hosts="$(awk 'tolower($1) == "host" { for (i = 2; i <= NF; i++) { if ($i ~ /^#/) break; if ($i !~ /[*?]/) n++ } } END { print n + 0 }' "$_HI_SSH_CONFIG")"
+    # counted through targets.sh, whose awk owns the "literal Host" rule for
+    # completion (hi.sh keeps a documented hot-path copy) - not a third copy
+    hosts="$(_HI_TARGETS_TTL=0 sh "$_HI_TARGETS" ssh 2>/dev/null | grep -c . || true)"
     doctor_row ssh "$hosts literal host(s) in $_HI_SSH_CONFIG"
   else
     doctor_row ssh "no $_HI_SSH_CONFIG - names still reach ssh, just without completion or tags"
   fi
   local row name what probe predicate
-  for row in "${_HI_DOC_BACKENDS[@]}"; do
+  for row in "${_HI_BACKENDS[@]}"; do
     IFS='|' read -r name what probe predicate <<<"$row"
     # the probe column's word split is the point - it is a command line
     # shellcheck disable=SC2086
@@ -186,7 +185,7 @@ function doctor_backends() {
 function doctor_target() {
   local target="$1" kind="" pair row name what probe predicate t0 t1
   local -a chain=("ssh host:_hi_is_ssh_host")
-  for row in "${_HI_DOC_BACKENDS[@]}"; do
+  for row in "${_HI_BACKENDS[@]}"; do
     IFS='|' read -r name what probe predicate <<<"$row"
     chain+=("$what:$predicate")
   done
@@ -218,9 +217,11 @@ function doctor_ssh_target() {
   DOMAIN="$1"
   SSHARGS=()
   local ctl_path t0 t1 root tools err
-  ctl_path="$(mktemp -u -t hi.doc.XXXXXX)"
   err="$(mktemp -t hi.doc.err.XXXXXX)"
-  local -a ctl_opts=(-o ControlMaster=auto -o ControlPath="$ctl_path" -o ControlPersist=15 -o BatchMode=yes)
+  # hi.sh's own socket helper, so this probe multiplexes exactly like a real
+  # session; BatchMode keeps an unanswerable auth prompt a finding, not a hang
+  local -a ctl_opts
+  _hi_ctl_open 15 -o BatchMode=yes
   t0="$(_hi_now)"
   if ! ssh "${ctl_opts[@]}" -o ConnectTimeout=5 "$DOMAIN" true 2>"$err"; then
     t1="$(_hi_now)"
@@ -252,8 +253,7 @@ function doctor_ssh_target() {
   *" bash "*) ;;
   *) doctor_row remote "no bash - sessions fall back to ${_HI_SHELL_LADDER// / > } with aliases only" warn ;;
   esac
-  ssh -O exit "${ctl_opts[@]}" "$DOMAIN" >/dev/null 2>&1 || true
-  rm -f "$ctl_path" 2>/dev/null || true
+  _hi_ctl_close
 }
 
 # sourcing stops here (the test suite reaches the functions above); executed,

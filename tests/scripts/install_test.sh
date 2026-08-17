@@ -145,6 +145,59 @@ function test_fish_config_sources_settings_first() {
 # config_shell has written the settings block under it.
 function _hi_shebang_fresh() { ensure_settings_shebang; }
 
+# --- overlay_init / overlay_commit --------------------------------------------
+#
+# The versioning contract: init makes a repo with one (possibly empty) first
+# commit and is idempotent; overlay_commit turns settings writes into history
+# only where a repo already exists, and never creates one. Each case gets a
+# fresh scratch $_HI_CONFIG_DIR; the identity fallback keeps the commits
+# working on a machine that never ran `git config`.
+function _hi_overlay_commits() {
+  git -C "$1" rev-list --count HEAD 2>/dev/null || echo 0
+}
+
+function test_overlay_init_creates_a_repo_with_a_first_commit() {
+  local dir="$_HI_WORKDIR/ovl-init"
+  mkdir -p "$dir"
+  printf 'export X=1\n' >"$dir/settings.sh"
+  (_HI_CONFIG_DIR="$dir" overlay_init >/dev/null) &&
+    [ -d "$dir/.git" ] && [ "$(_hi_overlay_commits "$dir")" = 1 ] &&
+    git -C "$dir" ls-files | grep -qx settings.sh
+}
+
+function test_overlay_init_is_idempotent() {
+  local dir="$_HI_WORKDIR/ovl-idem"
+  mkdir -p "$dir"
+  (_HI_CONFIG_DIR="$dir" overlay_init >/dev/null) &&
+    (_HI_CONFIG_DIR="$dir" overlay_init >/dev/null) &&
+    [ "$(_hi_overlay_commits "$dir")" = 1 ]
+}
+
+function test_overlay_commit_records_a_change_when_tracked() {
+  local dir="$_HI_WORKDIR/ovl-commit"
+  mkdir -p "$dir"
+  (_HI_CONFIG_DIR="$dir" overlay_init >/dev/null) || return 1
+  printf 'export Y=2\n' >"$dir/settings.sh"
+  (_HI_CONFIG_DIR="$dir" overlay_commit) &&
+    [ "$(_hi_overlay_commits "$dir")" = 2 ]
+}
+
+function test_overlay_commit_is_a_noop_with_nothing_new() {
+  local dir="$_HI_WORKDIR/ovl-noop"
+  mkdir -p "$dir"
+  (_HI_CONFIG_DIR="$dir" overlay_init >/dev/null) || return 1
+  (_HI_CONFIG_DIR="$dir" overlay_commit) &&
+    [ "$(_hi_overlay_commits "$dir")" = 1 ]
+}
+
+function test_overlay_commit_never_creates_a_repo() {
+  local dir="$_HI_WORKDIR/ovl-untracked"
+  mkdir -p "$dir"
+  printf 'export X=1\n' >"$dir/settings.sh"
+  (_HI_CONFIG_DIR="$dir" overlay_commit) &&
+    [ ! -d "$dir/.git" ]
+}
+
 function test_shebang_is_written_to_a_new_settings_file() {
   _hi_settings_fixture shebang_new _hi_shebang_fresh
   [ "$(head -n 1 "$(_hi_fixture_settings shebang_new)")" = "#!/bin/sh" ]
@@ -417,8 +470,8 @@ function test_config_hi_degrades_when_sudo_cannot_link() {
 # install_tree run (or several runs)
 function _hi_package_src() {
   local dir="$_HI_WORKDIR/$1" item
-  mkdir -p "$dir/src/hi.d/common" "$dir/src/hi.d/misc" "$dir/src/hi.d/scripts" "$dir/src/hi.d/shells"
-  for item in hi.sh load.sh LICENSE README.md; do printf 'x\n' >"$dir/src/hi.d/$item"; done
+  mkdir -p "$dir/src/hi.d/common" "$dir/src/hi.d/misc" "$dir/src/hi.d/scripts" "$dir/src/hi.d/shells" "$dir/src/hi.d/docs"
+  for item in hi.sh load.sh docs/LICENSE.md README.md; do printf 'x\n' >"$dir/src/hi.d/$item"; done
 }
 
 # Stand a scratch tree up and run install_tree against it.
@@ -690,6 +743,13 @@ function run_install_tests() {
 
   _hi_check "common/core.sh" test_core_sources_settings_first
   _hi_check "shells/config.fish" test_fish_config_sources_settings_first
+
+  _hi_h2 "Testing: overlay_init / overlay_commit"
+  _hi_check_requires git "Init makes a repo with a first commit" test_overlay_init_creates_a_repo_with_a_first_commit
+  _hi_check_requires git "Init is idempotent" test_overlay_init_is_idempotent
+  _hi_check_requires git "A tracked overlay commits settings writes" test_overlay_commit_records_a_change_when_tracked
+  _hi_check_requires git "Nothing new, no commit" test_overlay_commit_is_a_noop_with_nothing_new
+  _hi_check_requires git "An untracked overlay never hears about git" test_overlay_commit_never_creates_a_repo
 
   _hi_h2 "Testing: ensure_settings_shebang"
   _hi_check "Written to a new settings.sh" test_shebang_is_written_to_a_new_settings_file

@@ -322,159 +322,32 @@ function test_overlay_tar_carries_only_what_exists() {
   [ "$(_HI_CONFIG_DIR="$dir" _hi_overlay_tar | tar tzf -)" = "colors" ]
 }
 
-# --- the per-host settings overlay ------------------------------------------
-#
-# settings.d/<host>.sh and settings.d/tag-<tag>.sh ride the same stream, but
-# unlike the three flat files they are *selected*: only the files matching this
-# target are sent, since another host's settings have no business on this box.
-
-# a config dir holding settings.d/{myhost,otherhost,tag-prod}.sh, plus an ssh
-# config that tags myhost as prod - enough for every selection case below
-function _hi_host_overlay_fixture() {
-  local dir="$_HI_WORKDIR/hostoverlay" f
-  [ -d "$dir/settings.d" ] || {
-    mkdir -p "$dir/settings.d"
-    for f in myhost otherhost tag-prod; do printf 'x\n' >"$dir/settings.d/$f.sh"; done
-    printf '# Tags: prod, web\nHost myhost\n' >"$dir/ssh_config"
-  }
-  printf '%s' "$dir"
-}
-
-# _hi_host_overlay_members <target> - the tar's members for that target
-function _hi_host_overlay_members() {
+# the additive personal aliases ride the same stream under their bare name,
+# which is where shells/aliases.sh's tail line looks on the target
+function test_overlay_tar_carries_aliases() {
   local dir
-  dir="$(_hi_host_overlay_fixture)"
-  DOMAIN="$1" _HI_CONFIG_DIR="$dir" _HI_SSH_CONFIG="$dir/ssh_config" \
-    _hi_overlay_tar | tar tzf - | sort | paste -sd, -
+  dir="$(_hi_overlay_fixture withaliases aliases.sh)"
+  [ "$(_HI_CONFIG_DIR="$dir" _hi_overlay_tar | tar tzf -)" = "aliases.sh" ]
 }
 
-# an untagged host gets its own file and nothing else
-function test_host_overlay_sends_only_the_matching_file() {
-  [ "$(_hi_host_overlay_members otherhost)" = "settings.d/otherhost.sh" ]
-}
-
-# a tagged host gets both, and the members keep their settings.d/ prefix - they
-# are unpacked over the target's misc/, which is its $_HI_CONFIG_DIR
-function test_host_overlay_sends_the_hosttag_file_too() {
-  [ "$(_hi_host_overlay_members myhost)" = "settings.d/myhost.sh,settings.d/tag-prod.sh" ]
-}
-
-function test_host_overlay_sends_nothing_for_an_unknown_host() {
-  [ -z "$(_hi_host_overlay_members nosuchhost)" ]
-}
-
-# a settings.d file alone is still an overlay: without this, a user who only
-# configured one host would have nothing sent at all
-function test_host_overlay_counts_as_an_overlay() {
-  local dir
-  dir="$(_hi_host_overlay_fixture)"
-  (DOMAIN=otherhost _HI_CONFIG_DIR="$dir" _HI_SSH_CONFIG="$dir/ssh_config" _hi_has_overlay)
-}
-
-# the bash-less rc resolves the same files on the client, and must source them
-# after settings.sh - the specific file has to be able to override the global one
-function test_fallback_rc_sources_the_host_overlay_after_settings() {
-  local dir out
-  dir="$(_hi_host_overlay_fixture)"
-  out="$(DOMAIN=myhost _HI_CONFIG_DIR="$dir" _HI_SSH_CONFIG="$dir/ssh_config" CMDARG="" _hi_fallback_rc)"
-  _hi_before "$out" 'misc/settings\.sh' 'settings\.d/tag-prod\.sh' &&
-    _hi_before "$out" 'settings\.d/tag-prod\.sh' 'settings\.d/myhost\.sh' &&
-    _hi_before "$out" 'settings\.d/myhost\.sh' 'common/paths\.sh'
-}
-
-# --- hi --update ------------------------------------------------------------
+# --- the basher shim (bin/hi) -------------------------------------------------
 #
-# Three branches, all reachable without a host: no permanent install on the
-# target, one without a .git (a packaged install), and the real pull. `ssh` is
-# shadowed by a shell function - _hi_update calls the binary by name, so a
-# function of that name in this shell is what it reaches. Each case runs in a
-# subshell, since _hi_parse assigns $DOMAIN/$SSHARGS/$CMDARG globally.
-#
-# $_HI_SSH_LOG records what the stub was asked to run, so the assertions can be
-# about the command that would have reached the target rather than about our
-# own plumbing.
-
-# shellcheck disable=SC2016 # the probe's $HOME is the target's, matched literally
-function _hi_ssh_stub() {
-  # the ControlMaster teardown _hi_update always ends with
-  [ "${1:-}" = "-O" ] && return 0
-  local last="${*: -1}"
-  printf '%s\n' "$last" >>"$_HI_SSH_LOG"
-  case "$last" in
-  # the install probe: _hi_remote_root's one-liner, answered with whatever
-  # this case wants the target to look like
-  *'$HOME/hi.d'*) printf '%s' "$_HI_REMOTE_ROOT" ;;
-  # the update itself, run for real under sh so its own guard is exercised
-  *) sh -c "$last" ;;
-  esac
+# basher links bin/hi onto PATH as a symlink into its cellar; the shim has to
+# resolve through that link, name the package root's parent as _HI_HOME, and
+# refuse a clone not named hi.d (every path resolves against $_HI_HOME/hi.d).
+function test_basher_shim_works_through_a_symlink() {
+  local dir="$_HI_WORKDIR/basherlink"
+  mkdir -p "$dir"
+  ln -sf "$_HI_ROOT/bin/hi" "$dir/hi"
+  [ -n "$("$dir/hi" --version)" ]
 }
 
-function _hi_update_case() {
-  local root="$1"
-  shift
-  _HI_SSH_LOG="$_HI_WORKDIR/ssh.log"
-  : >"$_HI_SSH_LOG"
-  (
-    # shellcheck disable=SC2317 # called through _hi_update's `ssh`
-    function ssh() { _hi_ssh_stub "$@"; }
-    _HI_REMOTE_ROOT="$root" _hi_update "$@"
-  )
-}
-
-function test_update_needs_a_target() {
-  ! _hi_update_case "" 2>/dev/null
-}
-
-function test_update_refuses_a_trailing_command() {
-  ! _hi_update_case "" myhost 'echo hi' 2>/dev/null
-}
-
-# nothing installed there: a session would ship a fresh copy anyway
-function test_update_refuses_without_a_permanent_install() {
-  local out
-  out="$(_hi_update_case "" myhost 2>&1)" && return 1
-  case "$out" in *"no permanent hi.d"*) return 0 ;; esac
-  return 1
-}
-
-# a packaged install has no .git - the same refusal hi_update makes locally
-function test_update_refuses_a_package_manager_install() {
-  local root out
-  root="$_HI_WORKDIR/packaged/hi.d"
-  mkdir -p "$root"
-  out="$(_hi_update_case "$root" myhost 2>&1)" && return 1
-  case "$out" in *"package manager"*) return 0 ;; esac
-  return 1
-}
-
-# the real branch: a checkout on the target gets `git pull` in it, and nothing
-# else - no session, no payload, no rc grafting
-function test_update_pulls_a_checkout() {
-  local root
-  root="$_HI_WORKDIR/checkout/hi.d"
-  mkdir -p "$root/.git"
-  _hi_update_case "$root" myhost >/dev/null 2>&1
-  # the pull and its target, not the quoting: _hi_ssh_sh runs the script
-  # through printf %q, so the literal spacing is its business, not ours
-  grep -q "git -C" "$_HI_SSH_LOG" && grep -qF "$root" "$_HI_SSH_LOG"
-}
-
-# ssh flags still reach ssh, so `hi --update -p 2222 host` works like `hi` does
-function test_update_keeps_ssh_flags() {
-  local root
-  root="$_HI_WORKDIR/checkout/hi.d"
-  mkdir -p "$root/.git"
-  (
-    # shellcheck disable=SC2317 # called through _hi_update's `ssh`
-    function ssh() {
-      [ "${1:-}" = "-O" ] && return 0
-      printf '%s\n' "$*" >>"$_HI_WORKDIR/flags.log"
-      printf '%s' "$_HI_REMOTE_ROOT"
-    }
-    : >"$_HI_WORKDIR/flags.log"
-    _HI_REMOTE_ROOT="$root" _hi_update -p 2222 myhost >/dev/null 2>&1
-    grep -q -- "-p 2222 myhost" "$_HI_WORKDIR/flags.log"
-  )
+function test_basher_shim_refuses_a_misnamed_clone() {
+  local dir="$_HI_WORKDIR/not-hid/bin" out rc=0
+  mkdir -p "$dir"
+  cp "$_HI_ROOT/bin/hi" "$dir/hi"
+  out="$("$dir/hi" --version 2>&1)" || rc=$?
+  [ "$rc" -ne 0 ] && [[ "$out" == *"not named hi.d"* ]]
 }
 
 # --- the ksh/mksh git segment -------------------------------------------------
@@ -584,7 +457,7 @@ function test_help_short_flag_prints_the_same() {
 function test_help_lists_hi_s_own_flags() {
   local out flag
   out="$(_hi_help_out --help)" || return 1
-  for flag in --doctor --update --version --tmux --no-tmux; do
+  for flag in --doctor --version --tmux --no-tmux; do
     [[ "$out" == *"$flag"* ]] || return 1
   done
   [[ "$out" == *docker* && "$out" == *podman* && "$out" == *nomad* && "$out" == *kubernetes* ]]
@@ -592,13 +465,35 @@ function test_help_lists_hi_s_own_flags() {
 
 # The same drift guard tests/test_runner.sh's suite table gets: a flag hi
 # answers itself but the man page never mentions is a flag nobody finds.
-# $_HI_USAGE's synopsis has to match the man page's .SH SYNOPSIS too.
+# $_HI_USAGE's synopsis has to match the man page's .SH SYNOPSIS too. The
+# flag list is scraped from the live --help output rather than copied here,
+# so a flag added there is guarded the moment it exists - with a floor on the
+# scrape's size, so a broken scrape can't pass as an empty loop.
 function test_help_flags_are_all_in_the_man_page() {
-  local man="$_HI_HOME/hi.d/docs/hi.1" flag
+  local man="$_HI_HOME/hi.d/docs/hi.1" out flags flag
   [ -f "$man" ] || return 1
-  for flag in -h --help --doctor --update --version --tmux --no-tmux; do
+  out="$(_hi_help_out --help)" || return 1
+  _hi_read_lines flags < <(printf '%s\n' "$out" | grep -oE -- '\-\-[a-z][a-z-]+' | sort -u)
+  [ "${#flags[@]}" -ge 4 ] || return 1
+  for flag in -h "${flags[@]}"; do
     # the man page escapes every dash as \- for roff
     grep -q -- "${flag//-/\\\\-}" "$man" || return 1
+  done
+}
+
+# The ladders drift the same way the flags do - doctor.sh once still promised
+# "zsh/fish/sh" after ksh joined (the comment above $_HI_SHELL_LADDER tells
+# it), and the man page repeated the trick with the session shells. Every
+# shell either ladder can land you in has to be named in the page. The
+# no-bash half reads the live variable; the session half is spelled out here
+# because load.sh's default ranking is a literal inside _hi_session_shell -
+# a stale copy of it fails this test the same way a stale man page would.
+function test_shell_ladders_are_in_the_man_page() {
+  local man="$_HI_HOME/hi.d/docs/hi.1" shell
+  [ -f "$man" ] || return 1
+  for shell in $_HI_SHELL_LADDER fish zsh bash nu; do
+    # nu appears in prose as "nushell"; -w keeps "sh" from riding on "ssh"
+    grep -Eqw -- "$shell(shell)?" "$man" || return 1
   done
 }
 
@@ -856,6 +751,11 @@ function run_hi_tests() {
   _hi_check "Nothing sent without an overlay" test_overlay_is_empty_without_one
   _hi_check "Seen when present" test_overlay_is_seen_when_present
   _hi_check "Members are bare names" test_overlay_tar_members_are_bare_names
+  _hi_check "aliases.sh rides the stream" test_overlay_tar_carries_aliases
+
+  _hi_h2 "Testing: the basher shim (bin/hi)"
+  _hi_check "Works through a symlink" test_basher_shim_works_through_a_symlink
+  _hi_check "Refuses a clone not named hi.d" test_basher_shim_refuses_a_misnamed_clone
   _hi_check "Carries only what exists" test_overlay_tar_carries_only_what_exists
   _hi_check "Fallback rc points at the shipped tree" test_fallback_rc_points_config_dir_at_the_shipped_tree
 
@@ -873,13 +773,6 @@ function run_hi_tests() {
   _hi_check "The wire size isn't the disk size" test_wire_size_is_not_the_disk_size
   _hi_check "The payload stays clear of the argv limit" test_payload_stays_clear_of_the_arg_limit
 
-  _hi_h2 "Testing: the per-host settings overlay"
-  _hi_check "Only the matching host's file is sent" test_host_overlay_sends_only_the_matching_file
-  _hi_check "A tagged host gets its hosttag file too" test_host_overlay_sends_the_hosttag_file_too
-  _hi_check "Nothing sent for an unconfigured host" test_host_overlay_sends_nothing_for_an_unknown_host
-  _hi_check "A settings.d file alone counts as an overlay" test_host_overlay_counts_as_an_overlay
-  _hi_check "Fallback rc sources it after settings.sh" test_fallback_rc_sources_the_host_overlay_after_settings
-
   _hi_h2 "Testing: the ksh/mksh git segment"
   _hi_check "ksh.sh's colors match core.sh" test_ksh_colors_match_core
   _hi_check "ksh.sh's glyphs match core.sh" test_ksh_glyphs_match_core
@@ -893,14 +786,7 @@ function run_hi_tests() {
   _hi_check "-h is the same text" test_help_short_flag_prints_the_same
   _hi_check "Lists hi's flags and the target ladder" test_help_lists_hi_s_own_flags
   _hi_check "Every flag is in the man page" test_help_flags_are_all_in_the_man_page
-
-  _hi_h2 "Testing: hi --update"
-  _hi_check "Needs a target" test_update_needs_a_target
-  _hi_check "Refuses a trailing command" test_update_refuses_a_trailing_command
-  _hi_check "Refuses without a permanent install" test_update_refuses_without_a_permanent_install
-  _hi_check "Refuses a package-manager install" test_update_refuses_a_package_manager_install
-  _hi_check "Pulls a checkout on the target" test_update_pulls_a_checkout
-  _hi_check "Keeps ssh flags" test_update_keeps_ssh_flags
+  _hi_check "Both shell ladders are in the man page" test_shell_ladders_are_in_the_man_page
 
   _hi_suite_end "hi.sh"
 }

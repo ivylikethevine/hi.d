@@ -2,9 +2,10 @@
 # Builds the distributable packages: stage the tree with scripts/install.sh's
 # packaging mode, then hand that staging root to nfpm for .deb/.rpm/.apk.
 #
-# Named package.sh rather than the obvious build.sh because .gitignore's
-# `**build**` rule would have silently swallowed that name - see the note at the
-# top of .gitignore.
+# Named mkpkg.sh because both obvious names are taken: .gitignore's `**build**`
+# rule would silently swallow a build.sh (see the note at the top of
+# .gitignore), and package.sh at the repo root is basher's manifest. Not to be
+# confused with Arch's makepkg - Arch is deliberately not built here (below).
 #
 # Arch is deliberately not built here even though nfpm can: packaging/aur/ makes
 # a better Arch package (real optdepends, a -git variant, AUR updates), and two
@@ -31,7 +32,7 @@ _HI_PKGBUILD="$_HI_ROOT/packaging/aur/hi.d/PKGBUILD"
 _HI_DIST="$_HI_ROOT/dist"
 _HI_STAGE_ONLY=""
 _HI_VERSION=""
-_HI_USAGE="Usage: package.sh [--version <x.y.z>] [--stage-only] [--outdir <dir>]"
+_HI_USAGE="Usage: mkpkg.sh [--version <x.y.z>] [--stage-only] [--outdir <dir>]"
 
 # The version of record lives in the PKGBUILD (bump.sh writes it there); reading
 # it back rather than keeping a second copy is what stops the two disagreeing.
@@ -70,6 +71,7 @@ function stage_tree() {
   mkdir -p "$_HI_DIST/staging"
   DESTDIR="$_HI_DIST/staging" "$installer" --prefix /usr/share
   stamp_launcher
+  stamp_manpage
   touch_epoch
 }
 
@@ -85,6 +87,26 @@ function stamp_launcher() {
   sed "s/^_HI_RELEASE=.*/_HI_RELEASE=\"$_HI_VERSION\"/" "$file" >"$tmp"
   cat "$tmp" >"$file"
   rm -f "$tmp"
+}
+
+# `man hi`'s footer answers with the packaged version too: the same build-time
+# stamp, sedded into the .TH line through the gzip install_tree produced. The
+# date is $SOURCE_DATE_EPOCH's day (GNU -d first, BSD -r second - same dual
+# shape as touch_epoch), and -9n plus the epoch clamp that follows keep the
+# reproducible-build diff empty. The PKGBUILDs and the formula stamp their own
+# copies, and tests/scripts/packaging_test.sh holds all three together.
+function stamp_manpage() {
+  local gz="$_HI_DIST/staging/usr/share/man/man1/hi.1.gz" page day tmp
+  [ -f "$gz" ] || return 0
+  page="${gz%.gz}"
+  day="$(date -u -d "@$SOURCE_DATE_EPOCH" +%Y-%m-%d 2>/dev/null ||
+    date -u -r "$SOURCE_DATE_EPOCH" +%Y-%m-%d)"
+  tmp="$(mktemp -t hi.package.XXXXXX)"
+  gzip -d "$gz"
+  sed "s/^\.TH .*/.TH HI 1 \"$day\" \"hi.d $_HI_VERSION\" \"User Commands\"/" "$page" >"$tmp"
+  cat "$tmp" >"$page"
+  rm -f "$tmp"
+  gzip -9n "$page"
 }
 
 # Clamp every staged mtime to $SOURCE_DATE_EPOCH: install_tree's cp stamps
@@ -159,7 +181,7 @@ while [ $# -gt 0 ]; do
   --stage-only) _HI_STAGE_ONLY=1 ;;
   --version)
     [ $# -ge 2 ] || {
-      echo "package.sh: --version requires a value" >&2
+      echo "mkpkg.sh: --version requires a value" >&2
       exit 1
     }
     _HI_VERSION="$2"
@@ -168,7 +190,7 @@ while [ $# -gt 0 ]; do
   --version=*) _HI_VERSION="${1#--version=}" ;;
   --outdir)
     [ $# -ge 2 ] || {
-      echo "package.sh: --outdir requires a path" >&2
+      echo "mkpkg.sh: --outdir requires a path" >&2
       exit 1
     }
     _HI_DIST="$2"
@@ -193,7 +215,7 @@ EOF
     exit 0
     ;;
   *)
-    echo "package.sh: unrecognized argument: $1" >&2
+    echo "mkpkg.sh: unrecognized argument: $1" >&2
     echo "$_HI_USAGE" >&2
     exit 1
     ;;

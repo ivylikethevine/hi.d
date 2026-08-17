@@ -101,6 +101,13 @@ function doctor_config() {
       doctor_row "$f" "tree default"
     fi
   done
+  # whether the overlay has history - hi_overlay_init's optional-and-quiet
+  # contract means untracked is a state, not a problem
+  if [ -d "$_HI_CONFIG_DIR/.git" ]; then
+    doctor_row versioning "tracked ($(git -C "$_HI_CONFIG_DIR" rev-list --count HEAD 2>/dev/null || echo 0) commits)" "$GREEN"
+  else
+    doctor_row versioning "untracked (hi_overlay_init gives it history)"
+  fi
   # only the non-default toggles: a default setup stays one quiet line
   for t in "${_HI_TOGGLES[@]}"; do
     eval "v=\${$t:-0}"

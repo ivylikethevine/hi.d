@@ -1,6 +1,8 @@
 name: Setup shellcheck
-# ubuntu's apt package lags upstream badly; one pinned install shared by
-# ci.yml and release.yml - bump the default here and both follow
+# ubuntu's apt package lags upstream badly, and a brew install floats; one
+# pinned install shared by ci.yml (both OSes) and release.yml - bump the
+# default here and all three follow. Linux and macOS runners both covered, so
+# the two fast-suite jobs lint shell with the same version and cannot disagree.
 description: Install a pinned upstream shellcheck binary, with caching
 
 inputs:
@@ -17,18 +19,14 @@ runs:
       uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: /usr/local/bin/shellcheck
-        key: shellcheck-${{ inputs.version }}-linux-x86_64
+        key: shellcheck-${{ inputs.version }}-${{ runner.os }}-${{ runner.arch }}
 
+    # the body lives in install.sh rather than inline, so the repo's own lint
+    # suite (shellcheck, shfmt) reads it - actionlint only covers run: blocks
+    # in workflows, and these scripts curl, untar and sudo mv
     - name: Install shellcheck
       if: steps.shellcheck-cache.outputs.cache-hit != 'true'
       shell: bash
       env:
         SHELLCHECK_VERSION: ${{ inputs.version }}
-      run: |
-        set -euo pipefail
-        curl -sSfL -o /tmp/shellcheck.tar.xz \
-          "https://github.com/koalaman/shellcheck/releases/download/v${SHELLCHECK_VERSION}/shellcheck-v${SHELLCHECK_VERSION}.linux.x86_64.tar.xz"
-        tar -xJf /tmp/shellcheck.tar.xz -C /tmp "shellcheck-v${SHELLCHECK_VERSION}/shellcheck"
-        sudo mv "/tmp/shellcheck-v${SHELLCHECK_VERSION}/shellcheck" /usr/local/bin/shellcheck
-        rm -rf /tmp/shellcheck.tar.xz "/tmp/shellcheck-v${SHELLCHECK_VERSION}"
-        shellcheck --version
+      run: '"$GITHUB_ACTION_PATH/install.sh"'

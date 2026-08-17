@@ -18,7 +18,7 @@ shell sources anything.
 
 `scripts/install.sh --prefix /usr/share` (with `$DESTDIR`) does all of this and is the single decider of
 what a packaged install contains — see `_HI_PACKAGE_CONTENTS` and `install_tree()` in that file. The AUR
-PKGBUILDs and `package.sh` both call it. Only the Homebrew formula repeats the list, because a formula
+PKGBUILDs and `mkpkg.sh` both call it. Only the Homebrew formula repeats the list, because a formula
 cannot: `install_tree` hardcodes `/usr/bin` and `/etc/profile.d`, neither of which exists in a brew prefix.
 `tests/scripts/packaging_test.sh` fails if that copy drifts.
 
@@ -26,7 +26,7 @@ cannot: `install_tree` hardcodes `/usr/bin` and `/etc/profile.d`, neither of whi
 
 | path | what it is |
 | --- | --- |
-| `package.sh` | stages the tree, stamps the staged `hi.sh` with the version, then builds deb/rpm/apk with nfpm |
+| `mkpkg.sh` | stages the tree, stamps the staged `hi.sh` with the version, then builds deb/rpm/apk with nfpm |
 | `bump.sh` | writes the version + real checksums into every manifest; `--check` verifies |
 | `aur/hi.d/` | the versioned AUR package (`PKGBUILD`, `.SRCINFO`) |
 | `aur/hi.d-git/` | the same package built from `main` |
@@ -35,7 +35,7 @@ cannot: `install_tree` hardcodes `/usr/bin` and `/etc/profile.d`, neither of whi
 | `windows.md` | the Windows channel assessment (nothing built) |
 
 **The version stamp.** Every channel seds `_HI_RELEASE=` into the `hi.sh` it installs, at build time:
-`package.sh` stamps the staged copy for deb/rpm/apk, the PKGBUILD's `package()` and the formula's
+`mkpkg.sh` stamps the staged copy for deb/rpm/apk, the PKGBUILD's `package()` and the formula's
 `inreplace` stamp theirs. It cannot live in git: `bump.sh` runs only after the tag exists (its checksums
 need the tarball), so a committed stamp would always be one release stale in the very tarball Homebrew
 and the AUR build from. A git checkout answers `hi --version` with `git describe` instead, so the
@@ -250,9 +250,34 @@ ship with macOS and with any Linux that would install this.
 A mac is still worth using before the first publish - the container is Linux, so it exercises Linuxbrew's
 paths rather than a keg under `/opt/homebrew` - but nothing about the formula itself is unverified now.
 
+### basher (shipped) and fisher (assessed, didn't fit)
+
+The two shell-native channels need no manifest here and nothing on release
+day - both install straight from the repo at a ref.
+
+**basher** works today: `basher install ivylikethevine/hi.d`. Its contract is
+a `package.sh` at the *repo root* - a name basher dictates, and why this
+directory's build script is `mkpkg.sh` - whose
+`BINS=bin/hi` names what links onto PATH. basher links by filename with no
+rename support, which is why `bin/hi` exists at all: a POSIX shim that
+resolves through basher's cellar symlink, exports `_HI_HOME` (a basher clone
+does not live at `~/hi.d`), and refuses a clone not named `hi.d`. The shim
+and the refusal are unit-tested in `tests/shells/hi_test.sh`.
+
+**fisher** was assessed and deliberately not shipped. fisher installs by
+copying `functions/`, `completions/` and `conf.d/` out of a repo into the
+user's fish config and ignores everything else; hi.d has none of those
+directories, and its `shells/config.fish` is a client of the whole tree - it
+reaches `common/` by `$_HI_HOME` path and shells out to bash for the header,
+palette and git segment. A fisher install would copy the fish half and leave
+every one of those paths dangling: a plugin that installs green and does
+nothing. "It didn't fit" is the recorded outcome; fish users get the same
+full setup as everyone else through `scripts/install.sh` or any package
+channel.
+
 ### deb / rpm / apk
 
-Built by `package.sh` and attached to the GitHub Release. Users install the file:
+Built by `mkpkg.sh` and attached to the GitHub Release. Users install the file:
 
 ```bash
 sudo apt install ./hi.d_1.0.0_all.deb
@@ -281,26 +306,26 @@ to subscribe to.
 
 ```bash
 tests/test_runner.sh packaging install header   # the offline drift guards
-packaging/package.sh --stage-only               # inspect exactly what ships
+packaging/mkpkg.sh --stage-only               # inspect exactly what ships
 find dist/staging \( -type f -o -type l \)
-packaging/package.sh                            # needs nfpm on PATH
+packaging/mkpkg.sh                            # needs nfpm on PATH
 dpkg-deb -c dist/hi.d_*_all.deb
 ```
 
 ### Reproducibility
 
-The same commit builds byte-identical deb/rpm/apk: `package.sh` exports `SOURCE_DATE_EPOCH` (HEAD's
+The same commit builds byte-identical deb/rpm/apk: `mkpkg.sh` exports `SOURCE_DATE_EPOCH` (HEAD's
 commit time, respecting a value you set per the [reproducible-builds.org](https://reproducible-builds.org/docs/source-date-epoch/)
 convention), clamps the staged tree's mtimes to it, and nfpm 2.47.0 stamps everything else it controls
 from the same variable. CI's packaging-smoke job enforces this with a double build on every PR; to check
 it locally (sequentially — nfpm.yaml hardcodes `./dist/staging`, so `--outdir` can't run two side by side):
 
 ```bash
-packaging/package.sh && mv dist dist.first
-packaging/package.sh && diff dist.first/SHA256SUMS dist/SHA256SUMS
+packaging/mkpkg.sh && mv dist dist.first
+packaging/mkpkg.sh && diff dist.first/SHA256SUMS dist/SHA256SUMS
 ```
 
-One caveat: CI pins nfpm 2.47.0 (`.github/actions/setup-nfpm`) while `package.sh` takes whatever nfpm is
+One caveat: CI pins nfpm 2.47.0 (`.github/actions/setup-nfpm`) while `mkpkg.sh` takes whatever nfpm is
 on PATH — a different local nfpm can produce different (still internally reproducible) bytes.
 
 The honest end-to-end check for the `/etc/profile.d` snippet, which is the part no unit test can prove:

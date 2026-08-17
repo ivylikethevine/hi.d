@@ -3,7 +3,7 @@
 ![CI (main)](https://github.com/ivylikethevine/hi.d/actions/workflows/ci.yml/badge.svg)
 ![CI (develop)](https://github.com/ivylikethevine/hi.d/actions/workflows/ci.yml/badge.svg?branch=develop)
 [![Coverage](https://github.com/ivylikethevine/hi.d/actions/workflows/coverage.yml/badge.svg)](https://github.com/ivylikethevine/hi.d/actions/workflows/coverage.yml)
-![ssh payload](https://img.shields.io/badge/ssh_payload-39KB_gzipped-4c1)
+![ssh payload](https://img.shields.io/badge/ssh_payload-35KB_gzipped-4c1)
 ![bash](https://img.shields.io/badge/bash-3.2%2B-4EAA25?logo=gnubash&logoColor=white)
 ![shells](https://img.shields.io/badge/shells-bash%20%7C%20zsh%20%7C%20fish%20%7C%20nu%20%7C%20sh-blue)
 ![targets](https://img.shields.io/badge/targets-ssh%20%7C%20docker%20%7C%20podman%20%7C%20nomad%20%7C%20k8s-8A2BE2)
@@ -34,8 +34,8 @@ than a kilobyte from the truth.
 
 ### How it works
 
-1. `hi.sh` runs on the client. It archives `hi.d/` and sends it to the target. What it leaves out is `hi.sh` itself, `.git`, `scripts/`, `tests/`, `.github/`, this README, `LICENSE` and the editor/tooling dotfiles - see `$_HI_PAYLOAD` at the top of `hi.sh` for the authoritative allow list. The target unpacks it into a `/tmp` directory. `_HI_ROOT` is `$INSTALL_DIR/hi.d` on the client and `$_HI_HOME/hi.d` on the target.
-   Your own `settings.sh`, `colors` and `packages` live outside the tree (see [Configuration](#configuration)), so they follow in a second, much smaller archive unpacked over the target's `misc/` - `$_HI_OVERLAY_FILES` in `hi.sh`, plus whichever `settings.d/` files match this target (`_hi_overlay_host_files`). Nothing is sent if you haven't overridden anything.
+1. `hi.sh` runs on the client. It archives `hi.d/` and sends it to the target. What it leaves out is `hi.sh` itself, `.git`, `scripts/`, `tests/`, `docs/`, `.github/`, this README and the editor/tooling dotfiles - see `$_HI_PAYLOAD` at the top of `hi.sh` for the authoritative allow list. The target unpacks it into a `/tmp` directory. `_HI_ROOT` is `$INSTALL_DIR/hi.d` on the client and `$_HI_HOME/hi.d` on the target.
+   Your own `settings.sh`, `colors`, `packages`, `tmux.conf` and `aliases.sh` live outside the tree (see [Configuration](#configuration)), so they follow in a second, much smaller archive unpacked over the target's `misc/` - `$_HI_OVERLAY_FILES` in `hi.sh`. Nothing is sent if you haven't overridden anything.
    The whole thing - the tar, `hi.sh` and the bootloader, each base64-armored - is assembled into one script, armored again, and written to the target over the **stdin** of the first of two calls multiplexed on a single ssh connection; the second call runs it. Not as a command-line argument, which is what it used to be: Linux caps a single argv entry at 128KB regardless of `ARG_MAX`, and the payload had grown within a few kilobytes of that. The size hi prints on connect is that armored total - what the connection actually carries, roughly 4/3 of the gzipped payload the badge above measures.
 2. On the target, `$_HI_ROOT/hi.bashrc` sources `$_HI_ROOT/load.sh` and calls `load`.
 3. `load.sh` prints the header, appends hi's shell configs to the host's own rc files, and starts a session in **your login shell** when hi styles it (bash, zsh or fish), falling back to whichever of `fish > zsh > bash` the target has. `_HI_SHELL_PREFERENCE` is that rule as a setting - see [Configuration](#configuration). The `zsh > fish > ksh > sh` order quoted elsewhere is the **no-bash fallback**, ranking what's left when bash turned out to be missing.
@@ -106,7 +106,7 @@ suite on every run · 🟡 expected to work, nobody has proven it · ⚠️ work
 | `fish` | ✅ full | `shells/config.fish` |
 | `sh`/`dash`/`ash` (no bash on the target) | ⚠️ aliases and a colored `user@host` prompt, with a warning saying so | no header and no git segment - those need bash |
 | `ksh`/`mksh` (no bash on the target) | ⚠️ aliases, the colored prompt **and a live git segment** - no header | it reads `$ENV` as the `sh` tier does, plus `shells/ksh.sh`: ksh93 and mksh expand `$( )` when the prompt is _printed_, which is what lets the segment be live where busybox `ash` cannot have one. The header needs bash. `tests/targets/ssh_test.sh` renders the segment against a real mksh |
-| `nushell` | ⚠️ header, prompt, git segment and a **subset** of the aliases | `shells/config.nu`. Needs `bash` on the target: nu can source none of `common/`, so the header, palette and git segment are rendered by shelling out to it, exactly as `config.fish` does. Chosen when nu is your _login_ shell or you name it in `_HI_SHELL_PREFERENCE` - never handed to someone whose login shell is bash. The alias subset, and what was left out, is listed at the bottom of `config.nu` |
+| `nushell` | ⚠️ header, prompt, git segment and a **subset** of the aliases | `shells/config.nu`. Needs `bash` on the target: nu can source none of `common/`, so the header, palette and git segment are rendered by shelling out to it, exactly as `config.fish` does. Chosen when nu is your _login_ shell or you name it in `_HI_SHELL_PREFERENCE` - never handed to someone whose login shell is bash. The alias subset, and what was left out and why, is the GLOSSARY's "nu alias subset" entry |
 | `elvish`, `xonsh`, `ion`, `oil`/`osh` | ❌ | see below |
 | PowerShell | ❌ | bash-only by design |
 
@@ -133,20 +133,20 @@ nor dropped their `PROMPT_COMMAND`.
 ### Installation/Usage
 
 - `hi.d/scripts/install.sh` (re-run it any time; it repairs its own lines, even if hi.d moved) - before touching your shell rc files it validates your existing `~/.bashrc`, `~/.zshrc` and `~/.config/fish/config.fish` (whichever are installed) with each shell's own syntax checker, and asks whether to continue if any of them have issues
+  - or `basher install ivylikethevine/hi.d` if [basher](https://github.com/basherpm/basher) manages your shell packages: it clones the repo and links `bin/hi` onto PATH (the shim exports `_HI_HOME` for the cellar location). The shell rc wiring, toggles and validation are still `scripts/install.sh`'s job - run it from the cloned package when you want the full setup
 - reload your shell!
 - run `hi_configure` any time afterward to revisit the feature toggle prompts - header, prompt, personal settings, git status, editors, aliases, header details, terminal width, and whether hi styles this machine too or only the hosts you say `hi` to - without touching the shell rc wiring. Answers land in `~/.config/hi.d/settings.sh`; see [Configuration](#configuration) below
 - run `hi_check_configs` any time to just re-run that shell rc validation, without the rest of the install
 - run `hi --help` (or `hi -h`) for the short version of all of this: the synopsis, the target resolution order, and every flag hi answers itself. `man hi` is the long version. Everything hi does not answer is passed to `ssh` unchanged
 - run `hi --version` to see what is installed - the packaged version, or `git describe` in a checkout; the doctor and the connect header show it too
 - run `hi --tmux <target>` to have the session live inside a named tmux on the target, so a dropped connection detaches instead of losing your work - reconnect with `hi --tmux <target>` again and you're back in it (`_HI_TMUX_ATTACH=1` makes it the default, `--no-tmux` turns it back off, `_HI_TMUX_SESSION` names the session). Offered only where hi.d is permanent on the target: a disposable tree is deleted when the session ends, and hi says so rather than leaving you a tmux pointing at nothing
-- run `hi --update <target>` to update a host that has its own permanent `~/hi.d` (`scripts/install.sh` was run there) without logging into it - it's `hi_update`'s `git pull`, run over one ssh connection, and it refuses for the same two cases the local alias does: no permanent install, or one a package manager owns
 - run `hi_doctor` (or `hi --doctor <target>`) when something is slow or failing: it reports the tree, the config overlay, every backend probed and timed with the same ceilings the header and completion use, and - with a target - which backend the name resolves to plus an ssh reachability/tooling check, all read-only
 - configure `~/.ssh/config` tags via sshm
 - [optional] pin specific colors in `~/.config/hi.d/colors` - everything else gets a color automatically. Copy `hi.d/misc/colors` there to start from the shipped defaults
   - run `hi_color_preview` to preview what every ssh host/your user resolves to
 - [optional] copy `hi.d/misc/packages` to `~/.config/hi.d/packages` and edit it to your preferences
 - say `hi`!
-- [optional] modify `~/hi.d/misc/*` and `~/hi.d/shells/*` to your liking - though anything with an overlay (`settings.sh`, `colors`, `packages`) is better edited in `~/.config/hi.d/`, which keeps the checkout clean for `hi_update`
+- [optional] modify `~/hi.d/misc/*` and `~/hi.d/shells/*` to your liking - though anything with an overlay (`settings.sh`, `colors`, `packages`, `tmux.conf`, `aliases.sh`) is better edited in `~/.config/hi.d/`, which keeps the checkout clean for `hi_update`
   - tip: `~/hi.d` is just a git checkout, so if you do edit it, push it to your own fork and clone that on your next device - same setup everywhere, and `hi_update`'s `git pull` keeps them in sync
 - done with it? `hi.d/scripts/uninstall.sh` (aliased to `hi_uninstall`, and a one-line shim onto `install.sh --uninstall`) is the inverse of the install: it strips hi's lines back out of your rc files, removes the `settings.sh` it wrote, and unlinks `/usr/bin/hi`. It leaves the `hi.d` directory itself alone - and your `colors`/`packages`, which are yours - delete those yourself if you want them gone
 
@@ -181,33 +181,23 @@ Your config lives **outside the checkout**, in `${XDG_CONFIG_HOME:-$HOME/.config
 overridden keeps tracking the default the tree ships, so `hi_update` still delivers changes to the rest.
 `settings.sh` has no in-tree counterpart at all: `hi_configure` only ever writes it here.
 
-| overlay file                 | overrides       | what it is                       |
-| ---------------------------- | --------------- | -------------------------------- |
-| `~/.config/hi.d/settings.sh` | -               | what `hi_configure` writes       |
-| `~/.config/hi.d/colors`      | `misc/colors`   | your color pins                  |
-| `~/.config/hi.d/packages`    | `misc/packages` | what the package check looks for |
-| `~/.config/hi.d/tmux.conf`   | `misc/tmux.conf`| your tmux config                 |
-| `~/.config/hi.d/settings.d/` | `settings.sh`   | per-host settings (see below)    |
+| overlay file                 | overrides        | what it is                       |
+| ---------------------------- | ---------------- | -------------------------------- |
+| `~/.config/hi.d/settings.sh` | -                | what `hi_configure` writes       |
+| `~/.config/hi.d/colors`      | `misc/colors`    | your color pins                  |
+| `~/.config/hi.d/packages`    | `misc/packages`  | what the package check looks for |
+| `~/.config/hi.d/tmux.conf`   | `misc/tmux.conf` | your tmux config                 |
+| `~/.config/hi.d/aliases.sh`  | -                | your own aliases, sourced **after** `shells/aliases.sh` so yours win - additive, never a replacement, and in the same POSIX+fish subset |
 
 This is what keeps configuring hi.d from dirtying the checkout (so `hi_update`'s `git pull` keeps applying
 cleanly), and it is why the tree never has to be writable at all - it can be root-owned, installed by a package
 manager. All of it rides along to every host you say `hi` to, in its own small archive unpacked over the
 target's `misc/`.
 
-#### Per-host settings
-
-One `settings.sh` means the same toggles everywhere, but hosts differ: a slow link wants `_HI_HEADER_CHECK=0`, a
-shared root box wants the prompt and nothing else. Anything in `~/.config/hi.d/settings.d/` is sourced **after**
-`settings.sh`, so it overrides it, and only for the host it names:
-
-| file                                     | applies to                                                        |
-| ---------------------------------------- | ----------------------------------------------------------------- |
-| `~/.config/hi.d/settings.d/<host>.sh`    | exactly that target, matched against the name you typed            |
-| `~/.config/hi.d/settings.d/tag-<tag>.sh` | every host whose `# Tags:` comment in `~/.ssh/config` leads with `<tag>` |
-
-Both stack, in that order - the tag file first, the exact-host file last, so the more specific one wins. Same
-format as `settings.sh` (`export NAME=value` lines), same `hi_configure` output you can copy from. Only the files
-matching the host you're connecting to are sent, so nothing tells `prod-db` what you configured for `laptop`.
+Want history on it? `hi_overlay_init` makes `~/.config/hi.d` a git repo *in place* - from then on
+`hi_configure` commits its own settings writes, `hi_doctor` reports the commit count, and a push remote is one
+`git remote add` away. Entirely optional: an overlay you never init never hears about git. (Keeping the same
+directory in chezmoi or yadm instead works just as well - see [docs/comparison.md](docs/comparison.md).)
 
 Everything below is an environment variable, checked at the point it's used. `hi_configure` writes your answers to
 `~/.config/hi.d/settings.sh`, which every shell sources ahead of `common/paths.sh`. It is a plain `#!/bin/sh`
@@ -227,7 +217,7 @@ Each is **on by default**; set it to `1` to turn that piece off.
 | `_HI_DISABLE_PERSONAL`   | personal shell settings - history size, keybindings, completion tweaks          |
 | `_HI_DISABLE_GIT_STATUS` | the git segment in the prompt                                                   |
 | `_HI_DISABLE_EDITORS`    | the `vim`/`nano` config overrides                                               |
-| `_HI_DISABLE_ALIASES`    | the personal aliases in `shells/aliases.sh`                                     |
+| `_HI_DISABLE_ALIASES`    | the personal aliases in `shells/aliases.sh` (not nu's subset - `alias` is parse-time there and cannot be gated; see `shells/config.nu`) |
 | `_HI_DISABLE_OSC52`      | the OSC 52 clipboard - yanks in `vim` and the `hi_copy` alias                   |
 | `_HI_DISABLE_TMUX`       | the `tmux` config override (offered on permanent installs only)                 |
 | `_HI_DISABLE_LOCAL`      | all of the above **on this machine only** - hi still styles the hosts you visit |
@@ -240,7 +230,8 @@ a local shell's own rc never does.
 target, or anything piped into `hi_copy`, is base64'd into an [OSC 52](https://invisible-island.net/xterm/ctlseqs/ctlseqs.html#h4-Operating-System-Commands)
 escape and written to the tty, so your local terminal emulator - not the host - puts it on **your** clipboard. No X11
 forwarding, no clipboard daemon, nothing installed on the target. Only the unnamed register is sent, so `"ay` stays
-local. Terminal support varies (and tmux needs `set -g allow-passthrough on`), which is why it's a toggle like
+local. Terminal support varies (tmux needs `set -g allow-passthrough on`; zellij handles OSC 52 itself, so under
+`$ZELLIJ` the escape goes through raw and unwrapped), which is why it's a toggle like
 everything else; `shells/osc52.sh` is the whole implementation if you want to read what gets emitted.
 
 #### tmux
@@ -283,7 +274,9 @@ Each is **on by default**; set it to `0` to hide that line. All are ignored when
 | `_HI_PROBE_TIMEOUT` | `2`             | seconds any one backend CLI gets, during completion and in the header          |
 | `_HI_SSH_CONFIG`    | `~/.ssh/config` | where ssh hosts and their `# Tags:` comments are read from                     |
 | `_HI_ASCII`         | by locale       | `1` forces ASCII stand-ins for the banner/prompt/packages glyphs (`^ ok x` for `↑ ✓ ✗`), `0` forces the glyphs; unset asks the locale, so a `LANG=C` target degrades cleanly instead of printing mojibake |
-| `_HI_SHELL_PREFERENCE` | `login fish zsh bash` | which shell a session runs in: an ordered list of `bash`/`zsh`/`fish`, plus `login` for "your own login shell". First one installed on the target wins; `bash` is the floor, since that is what `load.sh` needs to run at all |
+| `NO_COLOR`          | unset           | not hi's variable but [the convention](https://no-color.org): any non-empty value renders everything - header, prompts, git segment - without color, and hi ships your client-side choice to the target next to `_HI_ASCII` |
+| `_HI_PROMPT`        | unset           | `starship` hands the prompt to [starship](https://starship.rs) when the target has it, keeping hi's header and aliases (bash/zsh/fish; nu keeps hi's prompt). Never auto-detected, and a target without starship silently keeps hi's own. hi does not ship starship - a multi-MB binary against a 35KB payload |
+| `_HI_SHELL_PREFERENCE` | `login fish zsh bash` | which shell a session runs in: an ordered list of `bash`/`zsh`/`fish`/`nu`, plus `login` for "your own login shell". First one installed on the target wins; `bash` is the floor, since that is what `load.sh` needs to run at all. `nu` is never picked unless it is your login shell or you name it here |
 | `_HI_PROMPT_END`    | per shell       | the character each prompt ends with, when you want the same one everywhere; the three below win over it |
 | `_HI_PROMPT_END_BASH` | `\$`         | bash's prompt separator (`\$` is bash's own escape for "`$`, or `#` for root")                          |
 | `_HI_PROMPT_END_ZSH` | `>`            | zsh's prompt separator - zsh prompt escapes work here, so `%#` behaves as it does anywhere else in `PS1` |
@@ -326,6 +319,15 @@ export _HI_HOME=/path/to/parent-of-hi.d
 tests/test_runner.sh
 ```
 
+#### More docs
+
+- [docs/architecture.md](docs/architecture.md) - the file relations, drawn: what ships, what stays home, and the four ways files reach each other
+- [docs/GLOSSARY.md](docs/GLOSSARY.md) - the named idioms the code's `GLOSSARY:` comment tags point at; load-bearing for reading `common/`, and drift-checked by the lint suite
+- [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) - the test harness and how a change should arrive (PR titles become release notes)
+- [docs/SECURITY.md](docs/SECURITY.md) - reporting, and what hi touches on a target
+- [docs/ROADMAP.md](docs/ROADMAP.md) - what is planned, and what each item is blocked on
+- [docs/demos.md](docs/demos.md) and [docs/comparison.md](docs/comparison.md) - linked from the top too; [docs/tldr.md](docs/tldr.md) is the draft tldr-pages submission
+
 #### File list
 
 | file                                            | what it does                                                                                                                                                           |
@@ -338,7 +340,7 @@ tests/test_runner.sh
 | `common/git_prompt.sh`                          | bash/zsh git prompt, matching fish's built-in `fish_vcs_prompt`                                                                                                        |
 | `common/targets.sh`                             | every `hi` target (ssh/docker/podman/nomad/kube), for all three completions - cached and timeout-bounded                                                               |
 | `shells/aliases.sh`                             | personal aliases shared by bash, zsh and fish - freely editable, off wholesale via `_HI_DISABLE_ALIASES=1`                                                             |
-| `shells/osc52.sh`                               | stdin to the *client's* clipboard over OSC 52, tmux/screen passthrough included - behind `hi_copy` and `vim.rc`'s yank autocmd, off via `_HI_DISABLE_OSC52=1`           |
+| `shells/osc52.sh`                               | stdin to the *client's* clipboard over OSC 52 - tmux/screen passthrough, raw under zellij - behind `hi_copy` and `vim.rc`'s yank autocmd, off via `_HI_DISABLE_OSC52=1` |
 | `shells/bash.sh`                                | bash config                                                                                                                                                            |
 | `shells/zsh.zsh`                                | zsh config                                                                                                                                                             |
 | `shells/config.fish`                            | fish config                                                                                                                                                            |
@@ -352,32 +354,11 @@ tests/test_runner.sh
 | `scripts/doctor.sh`                             | pre-flight report: tree, config, timed backend probes, and a target's resolution + ssh reachability (`hi_doctor`, `hi --doctor`)                                       |
 | `tests/test_runner.sh`                          | unified runner - times and summarizes every test below (or a chosen subset) (`hi_test`)                                                                                |
 | `tests/test_lib.sh`                             | the whole suite skeleton: asserts/counters, scratch dir, skip preamble, probe commands, poll/pty helpers                                                               |
-| `tests/shells/alias_test.sh`                    | check `aliases.sh` still loads in dash/bash/zsh/fish                                                                                                                   |
-| `tests/shells/alias_fallthrough_test.sh`        | unit tests for `aliases.sh`'s `command -v a \|\| command -v b` fallthrough and `_HI_DISABLE_*` flag logic                                                              |
-| `tests/targets/framework_test.sh`               | hi against oh-my-zsh, powerlevel10k, starship and bash-it - a real session per framework, asserting no shell errors and no collision with their prompt or zsh's array base |
-| `tests/shells/tmux_test.sh`                     | unit tests for `tmux.conf` (it parses, it forwards the `_HI_*` environment, it appends to `update-environment`) and for the alias's permanent-tree-only rule            |
-| `tests/shells/osc52_test.sh`                    | unit tests for the OSC 52 escape's exact bytes (plain, tmux, screen), the size cap, the `hi_copy` alias in every shell, and `vim.rc`'s yank autocmd                     |
-| `tests/common/header_test.sh`                   | unit tests for `header.sh`: row-joining, banner padding/floor math, the `_HI_DISABLE_HEADER` gate, and the per-priority found/missing/hide logic of the packages check |
-| `tests/common/core_test.sh`                     | unit tests for `core.sh`'s color-resolution chain (hash/override/hosttag/usertag) and `_hi_sanitize`                                                                   |
-| `tests/common/git_prompt_test.sh`               | unit tests for `git_prompt.sh`'s status flags, ahead/behind, detached HEAD, and every in-progress state                                                                |
-| `tests/common/targets_test.sh`                  | unit tests for `targets.sh` and `bash.sh`'s completion, against fixture ssh configs and fake backend CLIs                                                              |
-| `tests/common/paths_test.sh`                    | unit tests for `paths.sh`'s local-only gate, both directions, and that settings reach it                                                                               |
-| `tests/scripts/color_preview_test.sh`           | unit tests for `color_preview.sh`'s precedence, table inputs and layout helpers                                                                                        |
-| `tests/scripts/doctor_test.sh`                  | unit tests for `doctor.sh` against shimmed backends and a fake ssh                                                                                                     |
-| `tests/shells/hi_test.sh`                       | unit tests for `hi.sh`'s argument parsing, backend predicates and generated bootloader/fallback rc                                                                     |
-| `tests/shells/load_test.sh`                     | unit tests for `load.sh`'s rc grafting, marker stripping, and disposable-vs-permanent `$_HI_ROOT` cleanup                                                              |
-| `tests/shells/rc_test.sh`                       | behavioral tests for `bash.sh`/`zsh.zsh`/`config.fish`: prompt built, completion registered, toggles honored                                                           |
-| `tests/bench/bench_test.sh`                     | hot-path benchmarks (shell startup, header, git prompt, completion) plus the payload size budget - `--group bench`                                                     |
-| `tests/shells/shellcheck_test.sh`               | the lint gate: shellcheck over every `*.sh`, `zsh -n`/`fish --no-execute` on every file those shells parse themselves, and a grep for bash-4-only constructs           |
-| `tests/scripts/install_test.sh`                 | unit tests for `install.sh`: marker-based rc rewriting, setting defaults, config validation, packaging mode, and the `--uninstall` half incl. a round-trip             |
-| `tests/harness/lib_test.sh`                     | unit tests for `test_lib.sh` itself - the scaffolding every other suite is built on                                                                                    |
-| `tests/harness/runner_test.sh`                  | drives the real `test_runner.sh` over fixture suites that pass/fail/are missing                                                                                        |
-| `tests/targets/ssh_test.sh`                     | end-to-end test of hi's ssh path across remote login shells, incl. a bash 3.2 target (what macOS ships)                                                                |
-| `tests/targets/ssh_disconnect_test.sh`          | end-to-end test that the target-side cleanup trap fires on an abrupt disconnect, not just a clean exit                                                                 |
-| `tests/targets/docker_test.sh`                  | end-to-end test of hi's docker path across container shell environments (thin wrapper, see `test_lib.sh`)                                                              |
-| `tests/targets/podman_test.sh`                  | end-to-end test of hi's podman path across container shell environments (thin wrapper, see `test_lib.sh`)                                                              |
-| `tests/targets/nomad_test.sh`                   | end-to-end test of hi's nomad path against a throwaway `nomad agent -dev`                                                                                              |
-| `tests/targets/kube_test.sh`                    | end-to-end test of hi's kube path against a throwaway `kind` cluster                                                                                                   |
+
+The test suites are deliberately not repeated here: each suite's opening
+comment block says exactly what it covers, and `tests/test_runner.sh --list-paths`
+prints the live list — group, name, and path — so the truth can't drift the
+way a second copy of it in this table once did.
 
 ##### Hostname, username, and group/tag colors
 
@@ -395,3 +376,12 @@ Every username and hostname gets a color automatically, deterministically derive
 Heavily inspired by: [Dictionarry/Profilarr's AI Transparency Statement](https://v2.dictionarry.dev/ai-transparency)
 
 This code originally started as entirely code written by [me](https://github.com/ivylikethevine), but I have used generative AI to write large parts of it. Regardless, all of the code in this repository is my _responsibility_. AI is a tool, not an owner of a project. I have personally understood, reviewed, and approved all of the AI generated code in this repository. _Mainline releases_ have the same level of accountability to me as any code I write and publish.
+
+###### Publishing Order
+
+1. AUR
+2. deb/rpm/apk
+3. Homebrew
+4. basher
+5. fisher?
+6. scoop?

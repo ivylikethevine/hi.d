@@ -17,15 +17,22 @@ There are two families of answer.
 [dotbot], [rcm] — or config management like Ansible. These are excellent and
 hi.d does not compete with them. They assume the machine is yours, that you will
 be back, and that leaving files behind is fine. That assumption fails for a
-shared production host, a box you touch once, or a container.
+shared production host, a box you touch once, or a container. The line has
+blurred at its edge — chezmoi's `--one-shot` applies your dotfiles to an
+ephemeral machine and then deletes chezmoi itself, and VS Code's devcontainers
+can clone a dotfiles repo into every container they build — but both need the
+*target* to reach your repo over the network, both leave the applied files
+behind, and neither does anything per-session. hi.d pushes from the client,
+needs no network on the target, and cleans up.
 
 **Carry your config with you, per session.** The tool ships your config over the
 connection, uses it for that session, and gets out. That is the family hi.d is
 in, and everything below is a member of it.
 
 A third thing that looks similar but is not: **terminal emulators that help with
-ssh**, like [kitty's ssh kitten] and wezterm's. Those solve the adjacent and very
-real problem of terminfo and shell integration — kitty's copies the
+ssh**, like [kitty's ssh kitten] and wezterm's ssh domains (which go further:
+an optional persistent `wezterm-mux-server` on the remote). Those solve the
+adjacent and very real problem of terminfo and shell integration — kitty's copies the
 `xterm-kitty` terminfo database and enables shell integration on the remote, and
 it can copy files you list too. If your pain is "backspace is broken over ssh",
 that is the fix, and it composes with hi.d rather than competing. hi.d handles
@@ -43,10 +50,10 @@ choice of terminal.
 | Target OS | Linux (glibc + musl), macOS/BSD, Windows via WSL/Git Bash | broad | Linux x86_64 | Linux, macOS | broad |
 | Installs on target | nothing | nothing | a portable shell + plugins under `~/.xxh` | nothing | nothing |
 | Cleans up on exit | yes, automatically | leaves `/tmp` dir | no — delete `~/.xxh` yourself | yes, automatically | leaves files |
-| Size ceiling | ~39KB gzipped, enforced by CI | **~64KB and the server may block you** | large — it uploads whole shells | small | none (that is its point) |
+| Size ceiling | ~35KB gzipped, enforced by CI | **~64KB and the server may block you** | large — it uploads whole shells | small | none (that is its point) |
 | Non-ssh targets | **docker, podman, nomad, k8s** | no | no | no | no |
 | Can give you a shell the host lacks | no | no | **yes** | no | no |
-| Maturity | pre-1.0, not yet published to any channel | mature, several forks, original unmaintained | mature, active | quiet | quiet |
+| Maturity | pre-1.0, not yet published to any channel | **original deleted from GitHub**; [cdown's] fork is the maintained line, argv ceiling inherited | mature, active | quiet | quiet |
 
 ## Tool by tool
 
@@ -54,7 +61,10 @@ choice of terminal.
 
 hi.d is a fork of [sshrc] (via [cdown's] and [danrabinowitz's] lines), and the
 core idea is unchanged: tar your config, base64 it, hand it to the login shell,
-source it on the far side.
+source it on the far side. Russell Stewart's original repository has since been
+deleted from GitHub outright — not archived — so the links here point at
+[cdown's] fork, which calls itself the maintained continuation and carries the
+design (64KB argv ceiling included) unchanged.
 
 **Where sshrc still wins:** it is smaller and simpler, and simplicity is a real
 feature in something that runs on every host you touch. If all you want is your
@@ -93,7 +103,7 @@ not. Its plugin model is also more principled than copying dotfiles blind.
 - **Reach.** xxh's target support is "Linux on x86_64" — no ARM, no macOS, no
   BSD. hi.d's floor is bash 3.2 (what macOS still ships) and `base64`, and its
   test suite runs real Debian, Alpine/musl and bash-3.2 targets on every run.
-- **Weight.** xxh uploads shells; hi.d uploads 39KB and a CI job fails if that
+- **Weight.** xxh uploads shells; hi.d uploads ~35KB and a CI job fails if that
   number drifts more than a kilobyte from the badge.
 - **Footprint.** xxh is hermetic but persistent — `~/.xxh` stays until you
   delete it. hi.d removes itself when the session ends.
@@ -119,6 +129,44 @@ prompt and — for ksh/mksh — a live git segment. And kyrat is ssh-only.
 command line. Narrower in scope than hi.d, and the honest summary is that it
 solves the one problem it names.
 
+## Adjacent tools, and how they compose
+
+None of these are alternatives — they touch the same session from a different
+side. Listed because people arrive here having conflated one of them with the
+family above, or because the composition has a wrinkle worth knowing.
+
+- **[mosh] / [Eternal Terminal]** replace ssh as the *transport*, to survive
+  roaming and dropped connections. hi's ssh path is two calls multiplexed on
+  one OpenSSH connection, which neither of them is, so `hi` cannot ride them.
+  The composition that works: install hi.d permanently on the target
+  (`scripts/install.sh`), then mosh in — and note `hi_copy` over mosh needs
+  mosh ≥ 1.4, its first release with OSC 52.
+- **[Warp]'s SSH extension and "Warpify"** attack the same pain from the
+  terminal side: a persistent remote component under `~/.warp*`, plus a hook
+  line you are asked to add to the remote's rc files. What it ships is Warp's
+  features, not your config. The two coexist — hi.d appends and strips only
+  its own marker-delimited lines and leaves Warp's alone.
+- **[atuin] / [hishtory]** carry the one thing hi.d deliberately does not:
+  your shell history, synced across machines you own. Complementary — and a
+  target that already runs one of them binds the same `Ctrl-R` hi's session
+  lands you at, so the framework e2e suite proves the coexistence: it boots a
+  real atuin (and fzf, zoxide, direnv, mise) target and asserts the tool's
+  hooks survive hi's session.
+- **[chezmoi]/[yadm] as the overlay's keeper.** hi.d's per-user overlay lives
+  at `~/.config/hi.d/`; keep that directory in your dotfile manager and the
+  two compose cleanly — chezmoi versions it, hi ships it to every target,
+  per-session.
+- **[sshx]** shares a terminal you already have with other people through a
+  browser — despite the name, not in this family at all. An sshx session
+  started inside a hi session simply shares the styled session.
+- **[distrobox]/toolbox** containers share your real `$HOME`, so `hi` into one
+  grafts into the same rc files your host shells read. The exit trap strips
+  them as everywhere else, and an uncleanly killed session is the one case
+  where graft lines outlive their tree in a file you care about — which is
+  why every graft is wrapped in a tree-exists guard that stands it down
+  silently (`load.sh`'s `configure_files`; the load suite proves a dead graft
+  makes no noise).
+
 ## What actually makes hi.d different
 
 Two things, and it is worth being precise because the rest is degree, not kind.
@@ -140,10 +188,11 @@ warning saying so. A Windows OpenSSH host with no POSIX shell at all gets a plai
 PowerShell session rather than an error. That is a design stance, and it is why
 the honest cells (🟡 "nobody has proven it") are in the table at all.
 
-Secondary, but real: per-host config overlays (`settings.d/`), `hi --doctor` for
-when something is slow, `--tmux` so a dropped connection detaches instead of
-losing work, and the ability to detect a permanent `~/hi.d` on the target and use
-it in place rather than shipping a copy.
+Secondary, but real: a per-user config overlay (settings, colors, packages,
+aliases) that rides along without dirtying the tree, `hi --doctor` for when
+something is slow, `--tmux` so a dropped connection detaches instead of
+losing work, and the ability to detect a permanent `~/hi.d` on the target and
+use it in place rather than shipping a copy.
 
 ## Where hi.d is the wrong choice
 
@@ -163,14 +212,16 @@ it in place rather than shipping a copy.
 
 ## Sources
 
-- [sshrc] (and the [cdown] and [danrabinowitz] forks) — hi.d's ancestor
+- [sshrc] — hi.d's ancestor; the link is [cdown's] maintained fork, the
+  original having been deleted from GitHub ([danrabinowitz's] is the other
+  line hi.d descends through)
 - [xxh] — portable shells over ssh
 - [kyrat] — bash ssh wrapper with cleanup
 - [sshdot] — sshrc without the size limit
 - [kitty's ssh kitten] — terminfo and shell integration
 - [chezmoi], [yadm], [GNU Stow], [dotbot], [rcm] — the install-it-there family
 
-[sshrc]: https://github.com/Russell91/sshrc
+[sshrc]: https://github.com/cdown/sshrc
 [cdown]: https://github.com/cdown/sshrc
 [cdown's]: https://github.com/cdown/sshrc
 [danrabinowitz]: https://github.com/danrabinowitz/sshrc
@@ -184,3 +235,10 @@ it in place rather than shipping a copy.
 [GNU Stow]: https://www.gnu.org/software/stow/
 [dotbot]: https://github.com/anishathalye/dotbot
 [rcm]: https://github.com/thoughtbot/rcm
+[mosh]: https://mosh.org/
+[Eternal Terminal]: https://eternalterminal.dev/
+[Warp]: https://docs.warp.dev/terminal/warpify/
+[atuin]: https://atuin.sh/
+[hishtory]: https://github.com/ddworken/hishtory
+[sshx]: https://sshx.io/
+[distrobox]: https://distrobox.it/

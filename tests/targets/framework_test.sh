@@ -39,6 +39,17 @@ _HI_FRAMEWORKS=(
   "p10k:/usr/bin/zsh:zsh"
   "starship:/bin/bash:bash"
   "bashit:/bin/bash:bash"
+  # The env tools, which hook the same two surfaces hi's bash half touches -
+  # each probed by the family:<needle> in its third field: bind:* is a
+  # `bind -x` key binding (fzf's and atuin's Ctrl-R), hook:* a PROMPT_COMMAND
+  # hook, the needle being the tool's handler name. zoxide's hook is
+  # _zoxide_hook in debian's 0.8 and __zoxide_hook upstream; the
+  # underscore-less needle matches both.
+  "fzf:/bin/bash:bind:fzf"
+  "zoxide:/bin/bash:hook:zoxide_hook"
+  "direnv:/bin/bash:hook:_direnv_hook"
+  "atuin:/bin/bash:bind:atuin"
+  "mise:/bin/bash:hook:mise"
 )
 
 # The line each case types into the live session, once hi and the framework are
@@ -50,6 +61,15 @@ function _hi_framework_probe() {
   case "$1" in
   zsh) printf '%s\n' "setopt | grep -q ksharrays && printf 'HI_FW-%s\\n' LEAKED || printf 'HI_FW-%s\\n' CLEAN" ;;
   bash) printf '%s\n' "[[ \$PROMPT_COMMAND == *ps1* ]] && printf 'HI_FW-%s\\n' CLEAN || printf 'HI_FW-%s\\n' LOST" ;;
+  # the tool's Ctrl-R must still be its own after hi loads - `bind -X` lists
+  # the bind -x bindings, and the handlers carry their tool's name
+  bind:*) printf '%s\n' "bind -X 2>/dev/null | grep -q ${1#bind:} && printf 'HI_FW-%s\\n' CLEAN || printf 'HI_FW-%s\\n' LOST" ;;
+  # both hooks in one PROMPT_COMMAND: the tool's (by its hook's name) still
+  # there, and hi's ps1 *chained* on rather than having replaced it. The [*]
+  # expansion reads the whole thing whether the tool appended to it as a
+  # string or as bash 5.1's array form - bare $PROMPT_COMMAND would show
+  # element 0 alone and cry LOST over a coexistence that is fine.
+  hook:*) printf '%s\n' "[[ \${PROMPT_COMMAND[*]} == *${1#hook:}* && \${PROMPT_COMMAND[*]} == *ps1* ]] && printf 'HI_FW-%s\\n' CLEAN || printf 'HI_FW-%s\\n' LOST" ;;
   esac
 }
 
@@ -96,6 +116,58 @@ USER hitest
 RUN git clone --depth=1 https://github.com/Bash-it/bash-it.git ~/.bash_it \
  && ~/.bash_it/install.sh --silent --no-modify-config \
  && printf 'export BASH_IT="$HOME/.bash_it"\nexport BASH_IT_THEME="bobby"\nsource "$BASH_IT"/bash_it.sh\n' >>~/.bashrc
+USER root
+EOF
+    ;;
+  # the three below are one apt package each; debian's fzf predates
+  # `fzf --bash`, so its packaged key-bindings file is what gets sourced -
+  # which lives under /usr/share/doc, a path the slim base image tells dpkg
+  # to drop, hence the exclusion file going first
+  fzf)
+    cat <<'EOF'
+RUN rm -f /etc/dpkg/dpkg.cfg.d/docker \
+ && apt-get update -qq && apt-get install -y -qq fzf >/dev/null
+USER hitest
+RUN printf 'source /usr/share/doc/fzf/examples/key-bindings.bash\n' >>~/.bashrc
+USER root
+EOF
+    ;;
+  zoxide)
+    cat <<'EOF'
+RUN apt-get update -qq && apt-get install -y -qq zoxide >/dev/null
+USER hitest
+RUN printf 'eval "$(zoxide init bash)"\n' >>~/.bashrc
+USER root
+EOF
+    ;;
+  direnv)
+    cat <<'EOF'
+RUN apt-get update -qq && apt-get install -y -qq direnv >/dev/null
+USER hitest
+RUN printf 'eval "$(direnv hook bash)"\n' >>~/.bashrc
+USER root
+EOF
+    ;;
+  # atuin is not packaged in debian. Its release installer, straight - the
+  # setup.atuin.sh wrapper around it exits nonzero in a container - plus
+  # bash-preexec, without which `atuin init bash` warns at every shell:
+  # noise this suite would (rightly) read as a failure, but atuin's, not hi's
+  atuin)
+    cat <<'EOF'
+RUN apt-get update -qq && apt-get install -y -qq curl ca-certificates >/dev/null
+USER hitest
+RUN curl --proto '=https' --tlsv1.2 -LsSf https://github.com/atuinsh/atuin/releases/latest/download/atuin-installer.sh | sh >/dev/null 2>&1 \
+ && curl -fsSL https://raw.githubusercontent.com/rcaloras/bash-preexec/master/bash-preexec.sh -o ~/.bash-preexec.sh \
+ && printf 'source ~/.bash-preexec.sh\n. "$HOME/.atuin/bin/env"\neval "$(atuin init bash --disable-up-arrow)"\n' >>~/.bashrc
+USER root
+EOF
+    ;;
+  mise)
+    cat <<'EOF'
+RUN apt-get update -qq && apt-get install -y -qq curl ca-certificates >/dev/null
+USER hitest
+RUN curl -fsSL https://mise.run | sh >/dev/null 2>&1 \
+ && printf 'eval "$(~/.local/bin/mise activate bash)"\n' >>~/.bashrc
 USER root
 EOF
     ;;

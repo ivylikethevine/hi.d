@@ -1,7 +1,11 @@
 #!/bin/bash
 # The two pieces of shells/aliases.sh that alias_test.sh doesn't cover: the
 # `command -v a || command -v b || ...` fallthrough chains, and the
-# _HI_DISABLE_* guards that skip parts of the file. Both run for real in zsh,
+# _HI_DISABLE_* guards that skip parts of the file. The split from
+# alias_test.sh is deliberate and considered-and-kept (2026-08): that suite
+# probes against the real machine's PATH, this one against a from-scratch
+# fake one, and the two world-setups read better apart than interleaved.
+# Both run for real in zsh,
 # sh, bash and fish against a from-scratch PATH of no-op fake binaries, so the
 # results are about resolution behaviour rather than what this machine happens
 # to have installed.
@@ -115,6 +119,51 @@ exit $fail
 EOF
 }
 
+# --- the overlay aliases.sh ---------------------------------------------------
+#
+# aliases.sh's last act is sourcing $_HI_CONFIG_DIR/aliases.sh when it exists:
+# additive, last-wins, silent when absent. One case per shell proves the
+# overlay's alias arrives AND its redefinition of a shipped alias wins; one
+# per shell proves a config-dir-less run (the container fallback's shape)
+# stays silent.
+function _hi_run_overlay_case() {
+  local shell="$1" mode="$2" shell_bin cfgdir="" script out
+  shell_bin="$(_hi_kv_get _HI_SHELL_BIN "$shell")"
+  if [ "$mode" = present ]; then
+    cfgdir="$_HI_WORKDIR/overlaycfg"
+    mkdir -p "$cfgdir"
+    printf 'alias overlay_probe="echo probe"\nalias gs="echo overlay-wins"\n' >"$cfgdir/aliases.sh"
+    if [ "$shell" = fish ]; then
+      script="source $_HI_ALIASES; functions -q overlay_probe; and functions gs | grep -q overlay-wins; and echo OVERLAY-OK"
+    else
+      script=". $_HI_ALIASES && alias overlay_probe >/dev/null 2>&1 && alias gs 2>/dev/null | grep -q overlay-wins && echo OVERLAY-OK"
+    fi
+    out="$(env -i HOME="$_HI_FAKEHOME" PATH="$PATH" _HI_ALIASES="$_HI_ALIASES" \
+      _HI_CONFIG_DIR="$cfgdir" "$shell_bin" -c "$script" 2>&1)"
+    [ "$out" = OVERLAY-OK ]
+  else
+    # no _HI_CONFIG_DIR in the environment at all - the backstop default must
+    # leave the tail line a silent no-op, with nothing on stderr
+    if [ "$shell" = fish ]; then
+      script="source $_HI_ALIASES; and echo NO-OVERLAY-OK"
+    else
+      script=". $_HI_ALIASES && echo NO-OVERLAY-OK"
+    fi
+    out="$(env -i HOME="$_HI_FAKEHOME" PATH="$PATH" _HI_ALIASES="$_HI_ALIASES" \
+      "$shell_bin" -c "$script" 2>&1)"
+    [ "$out" = NO-OVERLAY-OK ]
+  fi
+}
+
+function run_overlay_tests() {
+  _hi_h1 "The overlay aliases.sh (additive, last-wins, silent when absent)"
+  local shell
+  for shell in $_HI_INSTALLED_SHELLS; do
+    _hi_check "[$shell] overlay sourced and its redefinition wins" _hi_run_overlay_case "$shell" present
+    _hi_check "[$shell] silent without a config dir" _hi_run_overlay_case "$shell" absent
+  done
+}
+
 function _hi_run_scenario() {
   local shell="$1" fakepath="$2" label="$3"
   shift 3
@@ -215,6 +264,7 @@ function run_alias_fallthrough_test() {
   _hi_suite_begin
   run_fallthrough_tests
   run_flag_tests
+  run_overlay_tests
 
   _hi_suite_end "" \
     "All fallthrough + flag scenarios passed on every installed shell ($_HI_TOTAL scenarios)" \

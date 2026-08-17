@@ -23,6 +23,9 @@ source "$_HI_TEST_LIB"
 # associative array, which is bash 4 (macOS ships 3.2)
 _HI_ALPINE_OK=""
 
+# <label> <image> <login_shell> <cmd> [post] [extra-marker...] - anything past
+# $5 is handed to _hi_case_result as a further must-appear transcript marker
+# (the same variadic contract _hi_run_ksh_git_case uses for the branch name)
 function _hi_run_case() {
   local label="$1" image="$2" login_shell="$3" cmd="$4" post="${5:-}" name exit_code=0 t0 t1 ok=0
 
@@ -55,7 +58,7 @@ function _hi_run_case() {
   t1="$(_hi_now)"
 
   # the shared verdict, then the same post-check shape _hi_run_interactive_case uses
-  if _hi_case_result "$label" "ssh path" "$exit_code" "$t0" "$t1" "$out_file" "$_HI_TEST_MARKER"; then
+  if _hi_case_result "$label" "ssh path" "$exit_code" "$t0" "$t1" "$out_file" "$_HI_TEST_MARKER" "${@:6}"; then
     ok=1
     if [ -n "$post" ] && ! docker exec "$name" sh -c "$post" >/dev/null 2>&1; then
       _hi_h3 " | [$label] -- post-check FAILED: $post" "$RED"
@@ -208,6 +211,61 @@ function _hi_run_ksh_git_case() {
   [ "$ok" -eq 1 ]
 }
 
+# A second, plain shell opened *while* a hi session is live reads the same
+# grafted ~/.bashrc with none of the session's env - the exact shape of a VS
+# Code remote terminal or a second plain ssh landing mid-session. The crash
+# guard has to stand the graft down: the bystander asked for the host's own
+# shell, and gets it with zero errors. The session must be *interactive* (a
+# command-shaped one never grafts - $CMDARG replaces load() outright), so the
+# pty feeder holds it open, runs the probe mid-session, and only then types
+# exit. The probe rides docker exec rather than a second ssh: what is under
+# test is the rc read, not the transport.
+function _hi_run_bystander_case() {
+  local name="hi-sshtest-bystander-$$" ok=0
+  local out_file="$_HI_WORKDIR/bystander.interactive.out"
+  local by_file="$_HI_WORKDIR/bystander.by.out"
+  local graft_flag="$_HI_WORKDIR/bystander.grafted"
+  _hi_h3 "Testing a bystander shell during a live session"
+  if [ "${#_HI_PTY_FORCED[@]}" -eq 0 ]; then
+    _hi_skip "[bystander]" "no python3 to drive an interactive pty"
+    return 0
+  fi
+  _hi_sshd_container "$name" "$_HI_SSHD_IMAGE" -e "LOGIN_SHELL=/bin/bash" || return 1
+  _hi_ssh_launch "$_HI_SSH_PORT"
+  : >"$out_file"
+  rm -f "$by_file" "$graft_flag"
+  # same watch-the-transcript shape as _hi_interactive_case; SC2094 does not
+  # apply for the same reason it states. The grep is the literal marker,
+  # spelled out - this suite doesn't source load.sh, where $_HI_CONFIG_START
+  # has its one definition.
+  # shellcheck disable=SC2094
+  {
+    _hi_poll_bool "$((${_HI_INTERACTIVE_SETTLE:-4} * 4))" 0.25 _hi_session_ready "$out_file" || true
+    if _hi_poll_bool 40 0.25 docker exec "$name" grep -q '^# hi-config-start' /home/hitest/.bashrc; then
+      : >"$graft_flag"
+      docker exec -u hitest -e HOME=/home/hitest "$name" bash -ic 'echo BYSTANDER-OK' >"$by_file" 2>&1 || true
+    fi
+    printf 'exit\n'
+    _hi_poll_bool 20 0.25 grep -q "hi closing" "$out_file" || true
+  } | "${_HI_PTY_FORCED[@]}" "${_HI_SSH_LAUNCH_BARE[@]}" >"$out_file" 2>&1 &
+  _hi_wait_pid "$!" "${_HI_SSH_CASE_TIMEOUT:-90}"
+  # the error sweep is the shared vocabulary plus this case's own tells: a
+  # graft that ran anyway sources a missing tree ("No such file") or leaves
+  # its prompt variable behind (HI_PS1)
+  if [ ! -f "$graft_flag" ]; then
+    _hi_h3 " | [bystander] -- graft never appeared in ~/.bashrc" "$RED"
+  elif grep -q BYSTANDER-OK "$by_file" &&
+    ! grep -q -e "No such file" -e HI_PS1 "$by_file" &&
+    _hi_transcript_is_clean bystander "$by_file"; then
+    ok=1
+  else
+    _hi_h3 " | [bystander] -- transcript not clean:" "$RED"
+    sed 's/^/      /' "$by_file"
+  fi
+  docker rm -f "$name" >/dev/null 2>&1
+  [ "$ok" -eq 1 ]
+}
+
 function run_ssh_tests() {
   _hi_require_backend docker
 
@@ -302,6 +360,23 @@ EOF
     for _hi_pair in bash:/bin/bash dash:/bin/dash zsh:/usr/bin/zsh fish:/usr/bin/fish; do
       _hi_case _hi_run_case "${_hi_pair%%:*}" "$_HI_SSHD_IMAGE" "${_hi_pair#*:}" "$(_hi_probe_cmd "$_HI_TEST_MARKER" bash)"
     done
+
+    # The preamble's TERM fallback, all three arms: an unknown name (kitty's
+    # xterm-kitty is the common offender; ghostty's xterm-ghostty was the
+    # motivating one) swapped for xterm-256color, a ubiquitous name skipped,
+    # and a name the skip list ignores but the target's terminfo has
+    # (xterm-mono ships in debian's ncurses-base) left alone on the probe's
+    # say-so. The env prefix is the client TERM ssh's pty request carries
+    # over; the trailing marker is the assertion, matched unanchored since
+    # the pty transcript ends lines in \r\n.
+    for _hi_term_spec in swap:xterm-kitty:xterm-256color known:xterm-256color:xterm-256color \
+      terminfo:xterm-mono:xterm-mono; do
+      IFS=: read -r _hi_label _hi_client _hi_want <<<"$_hi_term_spec"
+      TERM="$_hi_client" _hi_case _hi_run_case "term-$_hi_label" "$_HI_SSHD_IMAGE" /bin/bash \
+        "echo TERMPROBE=\$TERM; echo $_HI_TEST_MARKER" "" "TERMPROBE=$_hi_want"
+    done
+
+    _hi_case _hi_run_bystander_case
   fi
 
   for _hi_case_spec in nobash:alpine:ssh_fallback nobash-zsh:alpine-zsh:ssh_fallback \

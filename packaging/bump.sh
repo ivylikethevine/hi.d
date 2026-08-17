@@ -2,7 +2,7 @@
 # Sets the release version across every manifest, with real checksums, so that
 # cutting a release is one command rather than four hand-edits that can
 # disagree. The version of record is packaging/aur/hi.d/PKGBUILD's pkgver -
-# packaging/package.sh reads it back from there.
+# packaging/mkpkg.sh reads it back from there.
 #
 # Two modes:
 #   bump.sh <version>            rewrite the manifests (downloads the tarball)

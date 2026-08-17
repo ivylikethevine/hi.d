@@ -96,6 +96,52 @@ function test_configure_files_grafts_fish_when_dir_exists() {
   grep -q '^source-for-fishconf$' "$_HI_FAKE_HOME/.config/fish/config.fish"
 }
 
+# --- the crash guard ----------------------------------------------------------
+#
+# clean_all cannot run after a hard kill, so configure_files wraps each graft
+# in a tree-exists guard (fish syntax for fish; nu carries its own guard
+# inside config.nu). The fixture content is not a command, so a guard failing
+# open shows up as "command not found" on the next shell's stderr - which is
+# exactly the user-visible symptom the guard exists to prevent.
+function test_dead_graft_is_silent_in_bash() {
+  local out
+  _hi_fake_rcs deadgraft
+  configure_files
+  out="$(env -i HOME="$_HI_FAKE_HOME" TERM=dumb PATH="$PATH" \
+    bash --rcfile "$_HI_FAKE_HOME/.bashrc" -ic 'echo probe-ok' 2>&1)"
+  # the shared error vocabulary, not just "command not found": a guard that
+  # fails open with any symptom has to fail this test
+  [[ "$out" == *probe-ok* ]] && ! grep -qE "$_HI_SHELL_ERROR_RE" <<<"$out"
+}
+
+function test_live_graft_still_runs_in_bash() {
+  local out
+  _hi_fake_rcs livegraft
+  mkdir -p "$_HI_FAKE_HOME/hi.d/common"
+  : >"$_HI_FAKE_HOME/hi.d/common/core.sh"
+  printf 'echo graft-ran\n' >"$_HI_FAKE_HOME/src.bashrc"
+  configure_files
+  out="$(env -i HOME="$_HI_FAKE_HOME" TERM=dumb PATH="$PATH" \
+    bash --rcfile "$_HI_FAKE_HOME/.bashrc" -ic 'true' 2>&1)"
+  [[ "$out" == *graft-ran* ]]
+}
+
+function test_dead_graft_is_silent_in_fish() {
+  local out
+  _hi_fake_rcs deadfish
+  mkdir -p "$_HI_FAKE_HOME/.config/fish"
+  # a source named *.fish, so the guard comes out in fish syntax
+  printf 'not-a-command\n' >"$_HI_FAKE_HOME/src.rc.fish"
+  local -a _HI_CONFIGS=("$_HI_FAKE_HOME/src.rc.fish:$_HI_FAKE_HOME/.config/fish/config.fish")
+  configure_files
+  out="$(env -i HOME="$_HI_FAKE_HOME" TERM=dumb PATH="$PATH" \
+    fish -c 'echo probe-ok' 2>&1)"
+  # fish phrases its errors its own way, so the fixture token rides alongside
+  # the shared vocabulary
+  [[ "$out" == *probe-ok* && "$out" != *not-a-command* ]] &&
+    ! grep -qE "$_HI_SHELL_ERROR_RE" <<<"$out"
+}
+
 function test_clean_all_strips_block_and_keeps_user_lines() {
   _hi_fake_rcs strip
   configure_files
@@ -272,6 +318,11 @@ function run_load_tests() {
   _hi_check "Skips fish when its config dir is absent" test_configure_files_skips_absent_fish_dir
   _hi_check "Grafts fish when its config dir exists" test_configure_files_grafts_fish_when_dir_exists
   _hi_check "Creates an rc file that doesn't exist yet" test_configure_files_creates_missing_rc_file
+
+  _hi_h2 "Testing: the crash guard"
+  _hi_check "A dead graft is silent in bash" test_dead_graft_is_silent_in_bash
+  _hi_check "A live tree still runs the graft" test_live_graft_still_runs_in_bash
+  _hi_check_requires fish "A dead graft is silent in fish" test_dead_graft_is_silent_in_fish
 
   _hi_h2 "Testing: clean_all"
   _hi_check "Strips the block, keeps user lines" test_clean_all_strips_block_and_keeps_user_lines

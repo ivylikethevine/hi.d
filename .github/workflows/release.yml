@@ -20,12 +20,20 @@ on:
 permissions:
   contents: read
 
+# Serialized, never cancelled: two tags pushed close together would otherwise
+# race the publish job's manifest push to main. Waiting on the environment
+# approval costs nothing here - that wait doesn't count against job timeouts.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
 jobs:
   # Everything that can fail, and nothing that can publish. Runs unattended so
   # that a bad tag is caught before anyone is asked to approve anything.
   build:
     name: build packages
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     # the provenance attestation below needs these two; contents stays read
     permissions:
       contents: read
@@ -105,7 +113,7 @@ jobs:
 
       # asserts one artifact per format and writes dist/SHA256SUMS itself
       - name: Build the packages
-        run: packaging/package.sh
+        run: packaging/mkpkg.sh
 
       - name: Collect the manifests alongside them
         run: |
@@ -155,6 +163,7 @@ jobs:
     # able to publish, however the environment happens to be configured
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     environment: release
     permissions:
       contents: write
@@ -247,6 +256,7 @@ jobs:
     needs: publish
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     environment: release
     permissions:
       contents: read
@@ -318,6 +328,7 @@ jobs:
     needs: publish
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     environment: release
     permissions:
       contents: read

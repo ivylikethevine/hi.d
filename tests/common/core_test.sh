@@ -71,6 +71,29 @@ function test_color_escape_unknown_name_resets() {
   [ "$(_hi_color_escape not-a-real-color)" = "$(_hi_rendered "$NC")" ]
 }
 
+# https://no-color.org - the convention is "non-empty means off", so both the
+# per-call gates and the source-time palette blanking are asserted, the second
+# through a fresh bash: this shell sourced core.sh before the variable was set.
+function test_no_color_blanks_the_escape() {
+  [ -z "$(NO_COLOR=1 _hi_color_escape red)" ]
+}
+
+function test_no_color_beats_the_terminal() {
+  ! NO_COLOR=1 TERM=xterm-256color _hi_has_color
+}
+
+function test_no_color_empty_means_on() {
+  [ -n "$(NO_COLOR='' _hi_color_escape red)" ] &&
+    NO_COLOR='' TERM=xterm-256color _hi_has_color
+}
+
+function test_no_color_blanks_the_palette_at_source_time() {
+  local out
+  out="$(env NO_COLOR=1 _HI_HOME="$_HI_HOME" bash -c \
+    '. "$_HI_HOME/hi.d/common/core.sh"; printf "%s" "$NC$RED$BRCYAN"')"
+  [ -z "$out" ]
+}
+
 function test_hash_color_deterministic() {
   [ "$(_hi_hash_color someuser)" = "$(_hi_hash_color someuser)" ]
 }
@@ -173,60 +196,18 @@ function test_resolve_color_falls_back_to_hash() {
   [ "$(_HI_COLORS="$colors" _hi_resolve_color username unknownxyz)" = "$(_hi_hash_color unknownxyz)" ]
 }
 
-# --- the per-host settings overlay -------------------------------------------
+# --- the settings overlay -----------------------------------------------------
 #
-# core.sh's preamble runs once per shell and is guarded by $_hi_core_loaded, so
-# there is no function to call: every case is a fresh bash sourcing core.sh
-# against a scratch $_HI_CONFIG_DIR. The fixture writes three files that each
-# claim $_HI_PROBE, and the value that survives says which one was sourced last.
-
-function _hi_overlay_fixture() {
-  local dir="$_HI_WORKDIR/overlay"
-  [ -d "$dir/settings.d" ] && {
-    printf '%s' "$dir"
-    return
-  }
-  mkdir -p "$dir/settings.d"
-  printf 'export _HI_PROBE=global\n' >"$dir/settings.sh"
-  printf 'export _HI_PROBE=host\n' >"$dir/settings.d/myhost.sh"
-  printf 'export _HI_PROBE=tag\n' >"$dir/settings.d/tag-prod.sh"
-  printf '%s' "$dir"
-}
-
-# _hi_overlay_probe [NAME=VALUE ...] - $_HI_PROBE after a fresh core.sh
+# core.sh's preamble runs once per shell and is guarded by $_hi_core_loaded,
+# so there is no function to call: the case is a fresh bash sourcing core.sh
+# against a scratch $_HI_CONFIG_DIR whose settings.sh claims $_HI_PROBE.
 # shellcheck disable=SC2016 # the probe expands in the child bash, not here
-function _hi_overlay_probe() {
-  local dir
-  dir="$(_hi_overlay_fixture)"
-  env -u _HI_TARGET -u _HI_TARGET_TAG -u _hi_core_loaded -u _HI_PROBE \
-    _HI_HOME="$_HI_HOME" _HI_CONFIG_DIR="$dir" "$@" \
-    bash -c 'source "$_HI_HOME/hi.d/common/core.sh"; printf "%s" "${_HI_PROBE:-unset}"'
-}
-
-function test_overlay_no_target_is_settings_only() {
-  [ "$(_hi_overlay_probe)" = global ]
-}
-
-function test_overlay_exact_host_wins_over_settings() {
-  [ "$(_hi_overlay_probe _HI_TARGET=myhost)" = host ]
-}
-
-function test_overlay_hosttag_file_applies() {
-  [ "$(_hi_overlay_probe _HI_TARGET=otherhost _HI_TARGET_TAG=prod)" = tag ]
-}
-
-# both present: the tag file is sourced first and the host file overrides it
-function test_overlay_exact_host_beats_hosttag() {
-  [ "$(_hi_overlay_probe _HI_TARGET=myhost _HI_TARGET_TAG=prod)" = host ]
-}
-
-function test_overlay_unknown_target_falls_through() {
-  [ "$(_hi_overlay_probe _HI_TARGET=nosuchhost _HI_TARGET_TAG=nosuchtag)" = global ]
-}
-
-# the target name comes from the command line; settings.d is one flat directory
-function test_overlay_refuses_a_path() {
-  [ "$(_hi_overlay_probe _HI_TARGET=../settings)" = global ]
+function test_settings_sh_is_sourced() {
+  local dir="$_HI_WORKDIR/overlay"
+  mkdir -p "$dir"
+  printf 'export _HI_PROBE=global\n' >"$dir/settings.sh"
+  [ "$(env -u _hi_core_loaded -u _HI_PROBE _HI_HOME="$_HI_HOME" _HI_CONFIG_DIR="$dir" \
+    bash -c 'source "$_HI_HOME/hi.d/common/core.sh"; printf "%s" "${_HI_PROBE:-unset}"')" = global ]
 }
 
 # --- the same primitives, in zsh ----------------------------------------------
@@ -307,6 +288,12 @@ function run_core_tests() {
   _hi_check "Brcyan matches \$BRCYAN" test_color_escape_matches_brcyan_constant
   _hi_check "Unknown name resets" test_color_escape_unknown_name_resets
 
+  _hi_h2 "Testing: NO_COLOR"
+  _hi_check "Blanks the escape" test_no_color_blanks_the_escape
+  _hi_check "Beats the terminal's yes" test_no_color_beats_the_terminal
+  _hi_check "Empty means on (non-empty rule)" test_no_color_empty_means_on
+  _hi_check "Blanks the palette at source time" test_no_color_blanks_the_palette_at_source_time
+
   _hi_h2 "Testing: _hi_hash_color"
   _hi_check "Deterministic across calls" test_hash_color_deterministic
   _hi_check "Matches hand-computed buckets" test_hash_color_matches_hand_computed_bucket
@@ -329,13 +316,8 @@ function run_core_tests() {
   _hi_check "Usertag when no exact override" test_resolve_color_usertag_when_no_exact_override
   _hi_check "Falls back to the hash" test_resolve_color_falls_back_to_hash
 
-  _hi_h2 "Testing: the per-host settings overlay"
-  _hi_check "No target loads settings.sh alone" test_overlay_no_target_is_settings_only
-  _hi_check "Exact-host file overrides settings.sh" test_overlay_exact_host_wins_over_settings
-  _hi_check "Hosttag file applies" test_overlay_hosttag_file_applies
-  _hi_check "Exact host beats the hosttag file" test_overlay_exact_host_beats_hosttag
-  _hi_check "Unknown target falls through" test_overlay_unknown_target_falls_through
-  _hi_check "A target with a slash is refused" test_overlay_refuses_a_path
+  _hi_h2 "Testing: the settings overlay"
+  _hi_check "settings.sh is sourced" test_settings_sh_is_sourced
 
   _hi_h2 "Testing: the same answers in zsh"
   _hi_check_requires zsh "_hi_hash_color agrees with bash" test_zsh_hash_color_agrees_with_bash

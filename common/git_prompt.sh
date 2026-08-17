@@ -1,12 +1,10 @@
 #!/bin/bash
-# Shared bash/zsh git status prompt segment, styled to match what fish's
-# built-in fish_vcs_prompt produces (see the __fish_git_prompt_* settings in
-# shells/config.fish). Requires colors.sh to already be sourced.
+# Shared bash/zsh git prompt segment, styled to match fish's fish_vcs_prompt
+# (see config.fish's __fish_git_prompt_* settings). Needs the palette sourced.
 set -euo pipefail # must be disabled after our code (this file is part of the interactive shell - any error would close the session)
 
-# _hi_git_prompt [outvar] - with outvar, the segment lands in that variable
-# via printf -v instead of stdout, saving bash.sh's per-prompt $( ) fork
-# (zsh has no printf -v, so its prompt_subst caller keeps the stdout form)
+# _hi_git_prompt [outvar] - with outvar, the segment lands there instead of
+# stdout, saving bash.sh's per-prompt fork. GLOSSARY: printf -v out-var
 # shellcheck disable=SC2120 # the argument is optional by design
 _hi_git_prompt() {
   [[ -n "${1:-}" ]] && printf -v "$1" ''
@@ -15,7 +13,7 @@ _hi_git_prompt() {
   # --no-optional-locks or `git status` rewrites .git/index per prompt -
   # real I/O per keystroke on a large checkout, for identical output
   local git_dir ref="" detached=0
-  git_dir=$(LANG=C git --no-optional-locks rev-parse --git-dir 2>/dev/null) || return
+  git_dir=$(LC_ALL=C git --no-optional-locks rev-parse --git-dir 2>/dev/null) || return
 
   local ahead=0 behind=0 staged=0 dirty=0 invalid=0 untracked=0 line
   while IFS= read -r line; do
@@ -36,13 +34,13 @@ _hi_git_prompt() {
     "u "*) ((invalid++)) ;;
     "? "*) ((untracked++)) ;;
     esac
-  done < <(LANG=C git --no-optional-locks status --porcelain=v2 --branch 2>/dev/null)
+  done < <(LC_ALL=C git --no-optional-locks status --porcelain=v2 --branch 2>/dev/null)
 
   if [[ -z "$ref" ]]; then
     detached=1
-    ref=$(LANG=C git describe --tags --contains HEAD 2>/dev/null)
-    [[ -z "$ref" ]] && ref=$(LANG=C git describe --tags HEAD 2>/dev/null)
-    [[ -z "$ref" ]] && ref="($(LANG=C git rev-parse --short=8 HEAD 2>/dev/null))"
+    ref=$(LC_ALL=C git describe --tags --contains HEAD 2>/dev/null)
+    [[ -z "$ref" ]] && ref=$(LC_ALL=C git describe --tags HEAD 2>/dev/null)
+    [[ -z "$ref" ]] && ref="($(LC_ALL=C git rev-parse --short=8 HEAD 2>/dev/null))"
   fi
   [[ -n "$ref" ]] || return
 

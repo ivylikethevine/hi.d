@@ -3,15 +3,75 @@
 Candidate additions for developing hi.d. Two halves, because they need two
 different kinds of attention:
 
-- **[Human actions](#human-actions)** — nothing here is code. Each entry names
-  where you go, what you do, and what ticks it. Almost all of it is gated on
-  publishing, so it can wait while the package is in development; the
-  exceptions say so.
 - **[Code work](#code-work)** — entries that are written in this repo. Each is
-  marked **Unblocked** or **Blocked on:** so it's clear at a glance which need a
-  human step first.
+  marked **Unblocked** or **Blocked on:** so it's clear at a glance which need
+  a human step first.
+- **[Human actions](#human-actions)** — nothing there is code. Each entry
+  names where you go, what you do, and what ticks it. Almost all of it is
+  gated on publishing, so it sits at the bottom: none of it blocks daily
+  development, and it can wait while the package is in development — the
+  exceptions say so.
 
-Nothing here is wired up until its checkbox is ticked.
+Nothing here is wired up until its checkbox is ticked. Finished entries are
+**removed** rather than left ticked — git history is the ledger of what was
+done; this file is only ever what's left.
+
+## Code work
+
+### Release & packaging
+
+- [ ] **Channel publish automation** — cutting a release used to end with
+      hand-copying manifests to the AUR and the tap. Both are pushes to git
+      repos, and both are now jobs behind the same manual release gate. This
+      entry ticks when both have run for real.
+
+  - **Homebrew tap PR** — _Written._ `release.yml`'s `tap` job: `needs: publish`, inside the same `environment: release` so it stays behind the one approval, opening a PR against `<owner>/homebrew-tap` with the freshly regenerated formula and the `brew install`/`test`/`audit` checklist in its body. No-ops loudly without `HOMEBREW_TAP_TOKEN`, the same shape the apk and minisign steps use — which is what makes it safe to land before the tap repo exists.
+  - **AUR push** — _Written; the account is the remaining half._ The `aur` job pushes the regenerated `PKGBUILD` and `.SRCINFO` to `ssh://aur@aur.archlinux.org/hi.d.git` behind the same gate, with the key kept in `$RUNNER_TEMP` and the host key keyscanned rather than trusted on first use. It refuses to push a checkout with untracked files, and no-ops loudly without `AUR_SSH_KEY`. What it deliberately does not do is run namcap — that needs an Arch box — so the *first* push of each package stays manual and this job is for the releases after it. `hi.d-git` is never touched: it builds from `main` and has no version to bump.
+
+- [ ] **Source tarball under the provenance chain** — *Blocked on: v1.* The
+      PKGBUILD and formula checksum GitHub's auto-generated `/archive/`
+      tarball — the one released artifact with no attestation and no minisign
+      signature over it. The release already builds the identical shape
+      (`git archive` in the rehearsal); attach it as an asset, list it in
+      `SHA256SUMS`, and point both manifests' `url=` at it. Medium: touches
+      `bump.sh`, both manifests and their tests.
+
+### Product
+
+- [ ] **Shells hi doesn't style yet** — the README's
+      [compatibility tables](../README.md#compatibility) say where each shell
+      stands today; the ksh/mksh tier (live git segment included) and the
+      nushell session tier are shipped and suite-proven, so only the open
+      halves are listed here:
+
+  - **the bash-less tier's header** — recommendation: leave it unwritten.
+    `common/header.sh` is bash, the tier exists because bash is absent, and a
+    second POSIX implementation would have to be kept in sync forever — the
+    git segment earned that cost, a header would not.
+  - **elvish and xonsh** — each needs its own language for any of it; **tcsh**
+    has no `$ENV` equivalent to hook. Decide per shell whether that is worth
+    it — as a *login* shell they all work today.
+
+### Tests
+
+- [ ] **the relay e2e** — prove `hi` can be chained: from machine A (has
+      hi.d) to machine B (doesn't), then *from inside that session* on to
+      machine C — the config landing intact on the final hop, and the
+      cleanup traps firing on **both** B and C, on clean exit and on an
+      error/kill mid-relay alike. Harness-wise this is two sshd containers on
+      one docker network, a key authorized from B to C, and the existing pty
+      feeder typing the second `hi` into the first session; the
+      disconnect-trap assertion already exists in `ssh_disconnect_test.sh`
+      to crib from. The test will immediately surface the real design
+      question, which should be answered on purpose rather than by accident:
+      **`hi.sh` itself is deliberately not in `$_HI_PAYLOAD`**, so a
+      disposable session on B has no launcher to relay with — the `hi` alias
+      points at `$_HI_LAUNCHER`, which only exists where hi.d is permanently
+      installed. So either the relay is documented as
+      permanent-install-only (and the test proves that path), or an opt-in
+      (`_HI_RELAY=1`?) ships `hi.sh` in the payload for hop-capable
+      sessions and the test proves the disposable path too — weigh the
+      payload cost against the badge before choosing the second.
 
 ## Human actions
 
@@ -101,6 +161,8 @@ All three workflows are written, committed, and dispatch-only. They need nothing
       stock sshd, sets the admin `authorized_keys` ACL, drives `hi localhost`
       from Git Bash, and asserts the PowerShell greeting — the cmd `||` fallback
       the README promises is the case to watch. Explicitly experimental.
+      (`.gitattributes` now pins LF endings repo-wide, which removes the
+      classic CRLF-checkout first-dispatch failure from the risk list.)
 
   - **Ticks when:** its first green dispatch.
 
@@ -166,91 +228,3 @@ Not GitHub-button work: these are human actions purely because no runner covers 
       clone, which is only possible once the repo is public.
 
   - **Ticks when:** run clean for both packages against the published source.
-
-## Code work
-
-### Release & packaging
-
-- [ ] **Channel publish automation** — cutting a release used to end with
-      hand-copying manifests to the AUR and the tap. Both are pushes to git
-      repos, and both are now jobs behind the same manual release gate. This
-      entry ticks when both have run for real.
-
-  - **Homebrew tap PR** — _Written._ `release.yml`'s `tap` job: `needs: publish`, inside the same `environment: release` so it stays behind the one approval, opening a PR against `<owner>/homebrew-tap` with the freshly regenerated formula and the `brew install`/`test`/`audit` checklist in its body. No-ops loudly without `HOMEBREW_TAP_TOKEN`, the same shape the apk and minisign steps use — which is what makes it safe to land before the tap repo exists.
-  - **AUR push** — _Written; the account is the remaining half._ The `aur` job pushes the regenerated `PKGBUILD` and `.SRCINFO` to `ssh://aur@aur.archlinux.org/hi.d.git` behind the same gate, with the key kept in `$RUNNER_TEMP` and the host key keyscanned rather than trusted on first use. It refuses to push a checkout with untracked files, and no-ops loudly without `AUR_SSH_KEY`. What it deliberately does not do is run namcap — that needs an Arch box — so the *first* push of each package stays manual and this job is for the releases after it. `hi.d-git` is never touched: it builds from `main` and has no version to bump.
-
-- [ ] **basher and fisher — the two shell-native channels** — every channel hi.d
-      ships to today (AUR, Homebrew, deb/rpm/apk) is an _operating system_
-      package manager, which means a manifest, a version bump and a review gate
-      per release. basher and fisher are neither: both install straight from a
-      GitHub repo at a ref, with no submission anywhere and nothing to publish
-      on release day. That makes them the cheapest reach hi.d has left — and
-      also the two most likely to need a change _in the tree_ rather than in
-      `packaging/`, which is why this is one entry and not two lines in the one
-      above. Unblocked; neither depends on a secret, an account, or v1.
-
-  - **basher** (`basher install ivylikethevine/hi.d`) — a bash package manager
-    that clones the repo and links what it finds. The fit is close: hi.d is
-    already a git-clone-and-run tree, which is exactly basher's model, and
-    `scripts/install.sh` already does the "link `hi.sh` onto PATH as `hi`" job
-    basher wants to do itself. Two things to settle before claiming support.
-    First, the binary name: what basher links by default is the filename, so an
-    unconfigured install puts `hi.sh` on PATH, not `hi` — the rename needs
-    declaring. Second, and the reason to check the mechanism before writing
-    anything: basher reads a **`package.sh` at the repo root**, and this repo
-    already has a `packaging/package.sh` that does something else entirely
-    (builds the deb/rpm/apk). Two files a directory apart with the same name and
-    unrelated jobs is a trap for the next reader, so decide the naming
-    deliberately. Neither of those is settled from memory — read basher's
-    current docs first, since the `package.sh` contract is the part most likely
-    to have moved.
-  - **fisher** (`fisher install ivylikethevine/hi.d`) — the honest entry of the
-    two, because **hi.d is not shaped like a fish plugin and pretending
-    otherwise would ship something broken.** fisher installs by copying
-    `functions/`, `completions/` and `conf.d/` out of a repo into the user's
-    fish config; files anywhere else are ignored. hi.d has none of those
-    directories — it has one `shells/config.fish` that `scripts/install.sh`
-    appends into the user's own config, plus a `common/` tree that
-    `config.fish` reaches back into by `$_HI_HOME` path (see `config.fish:37`,
-    `:48`, `:57`, which shell out to `bash -c` for the header and colors). A
-    fisher install would copy the fish files and leave every one of those paths
-    dangling. So the real question this entry asks is **whether fish support
-    should grow a plugin-shaped face at all** — a `conf.d/hi.fish` that locates
-    an existing hi.d and no-ops with a clear message when there isn't one — or
-    whether fisher is the wrong channel for a tool whose fish half is a client
-    of a larger tree. Answer that before writing a line of it. "It didn't fit"
-    is a valid outcome to record here, and a better one than a plugin that
-    installs green and does nothing.
-
-### Product
-
-- [ ] **Shells hi doesn't style yet** — the README's
-      [compatibility tables](../README.md#compatibility) say where each shell
-      stands. The bash-less tiers (sh, dash, ash, ksh, mksh) now get hi's own
-      colored `user@host` prompt as well as the aliases — resolved on the
-      client and baked in, since those shells have no readline, no git prompt,
-      and busybox ash will not expand `$( )` inside PS1.
-
-      ksh and mksh have since gone further: `shells/ksh.sh` gives that tier a
-      **live git segment**, expanded per prompt, because ksh93 and mksh do run
-      `$( )` while printing PS1 even though busybox ash does not.
-      `tests/targets/ssh_test.sh` renders it against a real mksh over real ssh.
-      What is left for that tier is the header, and the recommendation is to
-      leave it: `common/header.sh` is bash, this tier exists because bash is
-      absent, and a second POSIX implementation would have to be kept in sync
-      with the first forever. The segment earned that cost; a header would not.
-
-      nushell is done too, on a different footing: `shells/config.nu` puts nu in
-      `load.sh`'s session-shell ladder rather than `hi.sh`'s no-bash one, which
-      is what makes it tractable — `load.sh` only runs where bash exists, so nu
-      can shell out to `bash -c` for the header, the palette and the git
-      segment the way `config.fish` already does, instead of growing a second
-      implementation of each in nu's own language. It costs one fork per prompt
-      for the segment, and it ports a *subset* of the aliases: nu's structured
-      builtins (`ls`, `cat`, `grep`, `ps`, …) must not be shadowed by external
-      commands returning strings, and `config.nu` lists what was skipped and
-      why. A nu target with no bash still gets the POSIX fallback tier.
-
-      Still open: elvish and xonsh need their own language for any of it; tcsh
-      has no `$ENV` equivalent to hook. Decide per shell whether that is worth
-      it — as a *login* shell they all work today.

@@ -10,6 +10,7 @@ set -euo pipefail
 
 _HI_FEATURES_ONLY=""
 _HI_CHECK_CONFIGS_ONLY=""
+_HI_OVERLAY_INIT=""
 # _MODE, not a bare _HI_UNINSTALL: common/paths.sh exports that name as the path
 # to scripts/uninstall.sh, and it is sourced below - a flag by that name would be
 # overwritten with a non-empty path and turn every plain `install.sh` run into an
@@ -23,13 +24,14 @@ _HI_NO_LINK=""
 # tree down for someone else's package manager instead of wiring up this user's
 # shells. See install_tree below.
 _HI_PREFIX=""
-_HI_USAGE="Usage: install.sh [--features-only] [--check-configs] [--uninstall] [--yes] [--no-link] [--prefix <dir>]"
+_HI_USAGE="Usage: install.sh [--features-only] [--check-configs] [--overlay-init] [--uninstall] [--yes] [--no-link] [--prefix <dir>]"
 # one `shift` after the case, not one per arm: an arm added without its own was
 # an infinite loop
 while [ $# -gt 0 ]; do
   case "$1" in
   --features-only) _HI_FEATURES_ONLY=1 ;;
   --check-configs) _HI_CHECK_CONFIGS_ONLY=1 ;;
+  --overlay-init) _HI_OVERLAY_INIT=1 ;;
   --uninstall) _HI_UNINSTALL_MODE=1 ;;
   --no-link) _HI_NO_LINK=1 ;;
   -y | --yes) _HI_ASSUME_YES=1 ;;
@@ -64,6 +66,11 @@ its current setting when there is no tty to answer on.
                    ~/.bashrc, ~/.zshrc and ~/.config/fish/config.fish -
                    skip everything else. This is what \`hi_check_configs\`
                    calls.
+  --overlay-init   Version the config overlay: \`git init\` plus a first
+                   commit in \${XDG_CONFIG_HOME:-\$HOME/.config}/hi.d, in
+                   place. From then on \`hi_configure\` commits its own
+                   settings writes; an overlay you never init never hears
+                   about git. This is what \`hi_overlay_init\` calls.
   --uninstall      The inverse: strip hi's lines back out of those three rc
                    files, remove the settings.sh this wrote, and unlink
                    /usr/bin/hi if it points at this hi.d. Safe to re-run.
@@ -475,6 +482,47 @@ function config_prompt_ends() {
 # rather than an anonymous fragment. Any other shebang is replaced rather than
 # left alongside: dash and fish both source this, so sh is the only correct one.
 # config_shell rewrites only its own marker-tagged block, so this line stays.
+# `hi_overlay_init` - version the overlay where it lives. A repo *in*
+# $_HI_CONFIG_DIR versions exactly the files that are the user's, and dodges
+# the checkout's own .git (hi_update reads $_HI_ROOT/.git as "this is a
+# checkout"). Owns init-and-commit and no more: sync, merge and secrets are a
+# dotfile manager's job, and comparison.md says so. The initial commit is
+# --allow-empty on purpose - an unconfigured overlay still starts tracking.
+function overlay_init() {
+  command -v git >/dev/null 2>&1 || {
+    _hi_cecho " git is not installed - nothing to init with" "$RED"
+    return 1
+  }
+  mkdir -p "$_HI_CONFIG_DIR"
+  if [ -d "$_HI_CONFIG_DIR/.git" ]; then
+    _hi_cecho " $_HI_CONFIG_DIR is already tracked ($(git -C "$_HI_CONFIG_DIR" rev-list --count HEAD 2>/dev/null || echo 0) commits) :)" "$GREEN"
+    return 0
+  fi
+  git -C "$_HI_CONFIG_DIR" init -q || return 1
+  # a repo-local identity only when the user has none - a committed overlay
+  # must not fail on a fresh machine that never ran `git config`
+  git -C "$_HI_CONFIG_DIR" config user.email >/dev/null 2>&1 || {
+    git -C "$_HI_CONFIG_DIR" config user.name "hi.d"
+    git -C "$_HI_CONFIG_DIR" config user.email "hi.d@localhost"
+  }
+  git -C "$_HI_CONFIG_DIR" add -A &&
+    git -C "$_HI_CONFIG_DIR" commit -q --allow-empty -m "hi.d overlay: initial commit" || return 1
+  _hi_cecho " $_HI_CONFIG_DIR is now a git repo - push it wherever you like (git remote add ...)" "$GREEN"
+}
+
+# The quiet half of overlay_init's contract: when - and only when - the
+# overlay is a repo, every settings write becomes history. An overlay that
+# was never inited never hears about git, and a failed commit never fails
+# the configure that triggered it.
+function overlay_commit() {
+  [ -d "$_HI_CONFIG_DIR/.git" ] || return 0
+  command -v git >/dev/null 2>&1 || return 0
+  git -C "$_HI_CONFIG_DIR" add -A >/dev/null 2>&1 || return 0
+  git -C "$_HI_CONFIG_DIR" diff --cached --quiet 2>/dev/null && return 0
+  git -C "$_HI_CONFIG_DIR" commit -q -m "hi_configure: settings update" >/dev/null 2>&1 || true
+  return 0
+}
+
 function ensure_settings_shebang() {
   local shebang='#!/bin/sh' first="" tmpfile
   mkdir -p "$(dirname "$_HI_SETTINGS")"
@@ -643,7 +691,10 @@ function run_uninstall() {
 # two differ on scripts/ - not in the payload, required here so a user of a
 # packaged install can still run `hi_install`/`hi_uninstall`/`hi_color_preview`
 # against it. tests/ is in neither; `hi_test` reports itself unavailable.
-_HI_PACKAGE_CONTENTS=(common misc scripts shells hi.sh load.sh LICENSE README.md)
+# docs/LICENSE.md is the one nested entry: the license lives under docs/
+# (which is otherwise not packaged), and cp lands the file flat by basename,
+# so the installed tree still carries a top-level LICENSE.md.
+_HI_PACKAGE_CONTENTS=(common misc scripts shells hi.sh load.sh docs/LICENSE.md README.md)
 
 # Packaging mode. hi.d normally installs *in place*, which assumes the tree is
 # somewhere you own; here the tree is copied to a staging root for a package
@@ -706,6 +757,8 @@ function install_tree() {
 
 if [ -n "$_HI_CHECK_CONFIGS_ONLY" ]; then
   _hi_h1 "Checking existing shell configs!"
+elif [ -n "$_HI_OVERLAY_INIT" ]; then
+  _hi_h1 "Versioning the config overlay!"
 elif [ -n "$_HI_UNINSTALL_MODE" ]; then
   _hi_h1 "Uninstalling hi.sh!"
 elif [ -n "$_HI_FEATURES_ONLY" ]; then
@@ -739,6 +792,11 @@ if [ -n "$_HI_CHECK_CONFIGS_ONLY" ]; then
   exit $?
 fi
 
+if [ -n "$_HI_OVERLAY_INIT" ]; then
+  overlay_init
+  exit $?
+fi
+
 if [ -z "$_HI_FEATURES_ONLY" ]; then
   config_validate_shells
 fi
@@ -755,6 +813,7 @@ ensure_settings_shebang
 # *empty* array under `set -u` is a fatal "unbound variable", and answering yes
 # to every prompt leaves exactly that - no lines to write.
 config_shell settings "$_HI_SETTINGS" ${_HI_SETTING_LINES[@]+"${_HI_SETTING_LINES[@]}"}
+overlay_commit
 
 if [ -n "$_HI_FEATURES_ONLY" ]; then
   _hi_h1 "Features updated!"

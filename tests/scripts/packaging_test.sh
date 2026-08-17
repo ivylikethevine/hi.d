@@ -36,7 +36,7 @@ _HI_RELEASE_WF="$_HI_ROOT/.github/workflows/release.yml"
 source "$_HI_PKG_DIR/bump.sh"
 
 # The staging root every packager builds from, laid down exactly the way
-# packaging/package.sh lays it down. Prints the DESTDIR.
+# packaging/mkpkg.sh lays it down. Prints the DESTDIR.
 function stage_fixture() {
   local dest="$_HI_WORKDIR/stage"
   local _HI_PREFIX="/usr/share" DESTDIR="$dest"
@@ -64,7 +64,7 @@ function test_nfpm_staging_sources_all_exist() {
 }
 
 # ...and the manifest has to actually reference the staging root at all. A
-# rename of dist/staging that updated package.sh but not nfpm.yaml would leave
+# rename of dist/staging that updated mkpkg.sh but not nfpm.yaml would leave
 # every assertion above vacuously true.
 function test_nfpm_references_the_staging_root() {
   [ "$(grep -c 'src: \./dist/staging' "$_HI_NFPM")" -ge 2 ]
@@ -95,7 +95,9 @@ function test_nfpm_apk_entries_match_package_contents() {
     if [ -d "$_HI_ROOT/$m" ]; then
       src="./dist/staging/usr/share/hi.d/$m/*"
     else
-      src="./dist/staging/usr/share/hi.d/$m"
+      # install_tree's cp lands file entries flat by basename (docs/LICENSE.md
+      # stages as LICENSE.md), so the apk entry carries the flat name too
+      src="./dist/staging/usr/share/hi.d/${m##*/}"
     fi
     grep -qF -- "- src: $src" "$_HI_NFPM" || {
       _hi_cecho "   no apk entry for $m" "$RED"
@@ -279,7 +281,7 @@ function test_minisign_pin_is_drift_checked() {
 
 # --- the scripts themselves ---------------------------------------------------
 
-# the version of record has to exist where package.sh reads it back from;
+# the version of record has to exist where mkpkg.sh reads it back from;
 # the actual plumbing is covered by test_package_sh_version_flag_wins
 function test_package_sh_reads_the_version_from_the_pkgbuild() {
   [ -n "$(sed -n 's/^pkgver=//p' "$_HI_PKGBUILD" | head -1)" ]
@@ -412,7 +414,7 @@ function test_bump_rewrite_preserves_file_mode() {
 # --- the version stamp ----------------------------------------------------------
 #
 # Every channel seds `^_HI_RELEASE=` into the hi.sh it installs, at build time
-# (package.sh's stamp_launcher, the PKGBUILD's package(), the formula's
+# (mkpkg.sh's stamp_launcher, the PKGBUILD's package(), the formula's
 # inreplace) - the stamp cannot live in git because bump.sh only runs after
 # the tag exists. These keep the line and all three stampers agreeing.
 
@@ -441,21 +443,43 @@ function test_formula_stamps_the_release() {
 
 function test_package_sh_stamps_the_staged_launcher() {
   local out="$_HI_WORKDIR/pkgstamp"
-  "$_HI_PKG_DIR/package.sh" --stage-only --version 9.9.9 --outdir "$out" >/dev/null 2>&1 &&
+  "$_HI_PKG_DIR/mkpkg.sh" --stage-only --version 9.9.9 --outdir "$out" >/dev/null 2>&1 &&
     grep -qF '_HI_RELEASE="9.9.9"' "$out/staging/usr/share/hi.d/hi.sh"
 }
 
-# --- package.sh, offline half ---------------------------------------------------
+# --- the man-page stamp: the same three channels, sedding .TH instead -----------
+
+function test_pkgbuild_stamps_the_man_page() {
+  local f
+  for f in "$_HI_PKGBUILD" "$_HI_PKGBUILD_GIT"; do
+    grep -qF 's/^\.TH .*/' "$f" || return 1
+  done
+}
+
+function test_formula_stamps_the_man_page() {
+  grep -qF 'inreplace "docs/hi.1"' "$_HI_FORMULA"
+}
+
+# through the same --stage-only run shape as the launcher's check: the staged
+# gz must open to a .TH carrying the asked-for version and a real date
+function test_package_sh_stamps_the_staged_man_page() {
+  local out="$_HI_WORKDIR/manstamp"
+  "$_HI_PKG_DIR/mkpkg.sh" --stage-only --version 9.9.9 --outdir "$out" >/dev/null 2>&1 &&
+    gzip -dc "$out/staging/usr/share/man/man1/hi.1.gz" |
+    grep -qE '^\.TH HI 1 "[0-9]{4}-[0-9]{2}-[0-9]{2}" "hi\.d 9\.9\.9"'
+}
+
+# --- mkpkg.sh, offline half ---------------------------------------------------
 
 function test_package_sh_stage_only_needs_no_nfpm() {
   local out="$_HI_WORKDIR/pkgdist"
-  "$_HI_PKG_DIR/package.sh" --stage-only --outdir "$out" >/dev/null 2>&1 &&
+  "$_HI_PKG_DIR/mkpkg.sh" --stage-only --outdir "$out" >/dev/null 2>&1 &&
     [ -f "$out/staging/usr/share/hi.d/hi.sh" ]
 }
 
 function test_package_sh_version_flag_wins() {
   local out
-  out="$("$_HI_PKG_DIR/package.sh" --version 7.7.7 --stage-only --outdir "$_HI_WORKDIR/pkgdist2" 2>&1)"
+  out="$("$_HI_PKG_DIR/mkpkg.sh" --version 7.7.7 --stage-only --outdir "$_HI_WORKDIR/pkgdist2" 2>&1)"
   [[ "$out" == *"Packaging hi.d 7.7.7"* ]]
 }
 
@@ -465,8 +489,8 @@ function test_package_sh_version_flag_wins() {
 # contract. -nt/-ot rather than stat: stat's flags differ GNU/BSD.
 function test_stage_mtimes_are_clamped_and_reproducible() {
   local a="$_HI_WORKDIR/repro-a" b="$_HI_WORKDIR/repro-b" ref="$_HI_WORKDIR/repro-now"
-  SOURCE_DATE_EPOCH=946684800 "$_HI_PKG_DIR/package.sh" --stage-only --outdir "$a" >/dev/null 2>&1 &&
-    SOURCE_DATE_EPOCH=946684800 "$_HI_PKG_DIR/package.sh" --stage-only --outdir "$b" >/dev/null 2>&1 ||
+  SOURCE_DATE_EPOCH=946684800 "$_HI_PKG_DIR/mkpkg.sh" --stage-only --outdir "$a" >/dev/null 2>&1 &&
+    SOURCE_DATE_EPOCH=946684800 "$_HI_PKG_DIR/mkpkg.sh" --stage-only --outdir "$b" >/dev/null 2>&1 ||
     return 1
   a="$a/staging/usr/share/hi.d/hi.sh"
   b="$b/staging/usr/share/hi.d/hi.sh"
@@ -475,16 +499,16 @@ function test_stage_mtimes_are_clamped_and_reproducible() {
 }
 
 function test_package_sh_rejects_unknown_arguments() {
-  ! "$_HI_PKG_DIR/package.sh" --bogus >/dev/null 2>&1
+  ! "$_HI_PKG_DIR/mkpkg.sh" --bogus >/dev/null 2>&1
 }
 
 # a checkout not named hi.d (CI paths, worktrees) gets the shim
 function test_staged_launcher_shims_a_misnamed_checkout() {
   ln -sfn "$_HI_ROOT" "$_HI_WORKDIR/checkout"
   (
-    set -- # package.sh reads "$@" when executed; make sure sourcing sees none
-    # shellcheck source=../../packaging/package.sh
-    source "$_HI_PKG_DIR/package.sh"
+    set -- # mkpkg.sh reads "$@" when executed; make sure sourcing sees none
+    # shellcheck source=../../packaging/mkpkg.sh
+    source "$_HI_PKG_DIR/mkpkg.sh"
     _HI_ROOT="$_HI_WORKDIR/checkout"
     _HI_DIST="$_HI_WORKDIR/pkgdist3"
     out="$(staged_launcher)"
@@ -493,9 +517,9 @@ function test_staged_launcher_shims_a_misnamed_checkout() {
 }
 
 function test_release_workflow_uploads_sha256sums() {
-  # package.sh writes it (the artifact list's single home); the workflow only
+  # mkpkg.sh writes it (the artifact list's single home); the workflow only
   # has to carry it as an artifact and attach it to the release
-  grep -q 'SHA256SUMS' "$_HI_PKG_DIR/package.sh" &&
+  grep -q 'SHA256SUMS' "$_HI_PKG_DIR/mkpkg.sh" &&
     [ "$(grep -c 'SHA256SUMS' "$_HI_RELEASE_WF")" -ge 2 ]
 }
 
@@ -539,8 +563,8 @@ function run_packaging_tests() {
   _hi_check "The publish job signs the sums" test_publish_job_signs_the_sums
   _hi_check "The minisign pin is drift-checked" test_minisign_pin_is_drift_checked
 
-  _hi_h2 "Testing: package.sh / bump.sh"
-  _hi_check "package.sh takes its version from the PKGBUILD" test_package_sh_reads_the_version_from_the_pkgbuild
+  _hi_h2 "Testing: mkpkg.sh / bump.sh"
+  _hi_check "mkpkg.sh takes its version from the PKGBUILD" test_package_sh_reads_the_version_from_the_pkgbuild
   _hi_check "bump.sh --check rejects a mismatch" test_bump_check_rejects_a_version_the_manifests_do_not_carry
 
   _hi_h2 "Testing: bump.sh's write path (offline)"
@@ -564,9 +588,12 @@ function run_packaging_tests() {
   _hi_check "hi.sh's stamp line is unique and empty" test_launcher_release_line_is_unique_and_empty
   _hi_check "The PKGBUILD stamps it" test_pkgbuild_stamps_the_release
   _hi_check "The formula stamps it" test_formula_stamps_the_release
-  _hi_check "package.sh stamps the staged copy" test_package_sh_stamps_the_staged_launcher
+  _hi_check "mkpkg.sh stamps the staged copy" test_package_sh_stamps_the_staged_launcher
+  _hi_check "The PKGBUILDs stamp the man page" test_pkgbuild_stamps_the_man_page
+  _hi_check "The formula stamps the man page" test_formula_stamps_the_man_page
+  _hi_check "mkpkg.sh stamps the staged man page" test_package_sh_stamps_the_staged_man_page
 
-  _hi_h2 "Testing: package.sh (offline half)"
+  _hi_h2 "Testing: mkpkg.sh (offline half)"
   _hi_check "--stage-only stages without nfpm" test_package_sh_stage_only_needs_no_nfpm
   _hi_check "--version beats the PKGBUILD's" test_package_sh_version_flag_wins
   _hi_check "Staged mtimes are clamped and reproducible" test_stage_mtimes_are_clamped_and_reproducible

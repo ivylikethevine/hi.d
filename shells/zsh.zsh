@@ -5,44 +5,41 @@ source "${_HI_HOME:-$HOME}/hi.d/common/core.sh"
 source "$_HI_GIT_PROMPT"
 source "$_HI_ALIASES"
 
-# NOT setopt KSH_ARRAYS. It used to be here so that core.sh's array indexing
-# read the same in zsh as in bash - but it is a global option, hi's block is
-# appended to the *end* of ~/.zshrc, and oh-my-zsh (with essentially every
-# plugin and theme it ships) assumes zsh's own 1-based arrays. Turning it on
-# under them breaks their code, in their shell, for our convenience. core.sh
-# now picks its palette bucket by counting instead, which is right in both.
+# NOT setopt KSH_ARRAYS: it is global, hi's block runs *after* oh-my-zsh's,
+# and their code assumes zsh's 1-based arrays - core.sh counts instead.
 setopt prompt_subst
 
 _hi_interactive_extras
 
 if [[ "${_HI_DISABLE_PROMPT:-0}" != 1 ]]; then
-  _hi_prime_identity
-  # the character this prompt ends with - see _hi_prompt_end in common/core.sh.
-  # Concatenated onto the $'...' strings below rather than interpolated into
-  # them: those stay literal on purpose, so zsh's own prompt expansion (%F, %~,
-  # ${debian_chroot}) happens at render time and not at assignment.
-  HI_PS1_END="$(_hi_prompt_end ZSH '>')"
-  if _hi_has_color; then
-    export CLICOLOR=1
-    export LSCOLORS=gafacadabaegedabagacad
-    # %F{} has no bright variants, so brred/brblue/... fall back to their base color
-    USER_COLOR="${$(_hi_user_color)//br/}"
-    HOST_COLOR="${$(_hi_host_color)//br/}"
-    _hi_at_color=plain
-    [ -n "${SSH_TTY:-}" ] && _hi_at_color=yellow
-    PS1=$' ${debian_chroot:-}%F{$USER_COLOR}%n%f%F{$_hi_at_color}@%f%F{$HOST_COLOR}%m%f%F{cyan} %~%f%F{plain}%{$(_hi_git_prompt)%} '"$HI_PS1_END"' '
+  if _hi_wants_starship; then
+    # deference, chosen in settings.sh - see _hi_wants_starship in core.sh
+    eval "$(starship init zsh)"
   else
-    PS1=$' ${debian_chroot:-}%n@%m %~%{$(_hi_git_prompt)%} '"$HI_PS1_END"' '
+    _hi_prime_identity
+    # concatenated onto the $'...' strings, not interpolated - those stay
+    # literal so zsh's prompt expansion happens at render time, not assignment
+    HI_PS1_END="$(_hi_prompt_end ZSH '>')"
+    if _hi_has_color; then
+      export CLICOLOR=1
+      export LSCOLORS=gafacadabaegedabagacad
+      # %F{} has no bright variants, so brred/brblue/... fall back to their base color
+      USER_COLOR="${$(_hi_user_color)//br/}"
+      HOST_COLOR="${$(_hi_host_color)//br/}"
+      _hi_at_color=plain
+      [ -n "${SSH_TTY:-}" ] && _hi_at_color=yellow
+      PS1=$' ${debian_chroot:-}%F{$USER_COLOR}%n%f%F{$_hi_at_color}@%f%F{$HOST_COLOR}%m%f%F{cyan} %~%f%F{plain}%{$(_hi_git_prompt)%} '"$HI_PS1_END"' '
+    else
+      PS1=$' ${debian_chroot:-}%n@%m %~%{$(_hi_git_prompt)%} '"$HI_PS1_END"' '
+    fi
   fi
 fi
 
 # completion: `hi` from the shared target list, `exa` the same way as `eza`
 zmodload zsh/complist
 autoload -Uz compinit promptinit
-# A bare `compinit` re-scans and security-checks all of $fpath on every zsh
-# start - typically 50-150ms. Full check once a day, trust the dump in between
-# (-C). (#qN.mh+24): N so a missing dump isn't an error, .mh+24 for "older
-# than 24 hours".
+# bare `compinit` costs 50-150ms per start; full check once a day, -C in
+# between. (#qN.mh+24): N tolerates a missing dump, .mh+24 = older than 24h.
 if [[ -n ${ZDOTDIR:-$HOME}/.zcompdump(#qN.mh+24) ]]; then
   compinit
 else

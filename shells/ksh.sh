@@ -2,27 +2,10 @@
 # shellcheck shell=ksh
 # The git segment for the bash-less ksh/mksh tier, and the only part of hi's
 # prompt that has to be recomputed on every line.
-#
-# Why this file exists at all. Where bash is present, common/git_prompt.sh does
-# this job and shells/config.fish reaches it by shelling out to `bash -c`. This
-# tier is defined by bash being absent, so neither is available: the segment has
-# to be written again, in POSIX shell, or ksh users get the static user@host
-# prompt hi.sh's _hi_fallback_prompt bakes in and nothing else.
-#
-# Why only ksh and mksh get it. The segment is live - `$(...)` inside PS1,
-# stored single-quoted so it is expanded when the prompt is *printed* rather
-# than when it is assigned. ksh93 and mksh both do that expansion. busybox ash
-# does not do command substitution in PS1 at all, which is exactly why
-# _hi_fallback_prompt bakes everything in and leaves one escape behind, so the
-# sh/dash/ash tier keeps that prompt untouched.
-#
-# What this deliberately does NOT do is the header. That needs common/header.sh,
-# which needs bash - see the compatibility tables in the README, where the ksh
-# row says so.
+# GLOSSARY: ksh git segment - why a second implementation, and only this tier
 
-# Colors and glyphs, copied rather than shared: common/core.sh defines both, and
-# it is bash. tests/shells/hi_test.sh asserts these agree with core.sh's, so a
-# palette change there fails there rather than silently drifting here.
+# Colors and glyphs copied, not shared - core.sh is bash; hi_test asserts
+# they agree, so a palette change fails there rather than drifting here.
 _HI_KSH_NC='\033[0m'
 _HI_KSH_RED='\033[0;31m'
 _HI_KSH_YELLOW='\033[0;33m'
@@ -30,9 +13,15 @@ _HI_KSH_BRGREEN='\033[1;32m'
 _HI_KSH_BRBLUE='\033[1;34m'
 _HI_KSH_BRPURPLE='\033[1;35m'
 
-# _HI_ASCII is the client's verdict about the terminal, shipped by hi.sh's
-# _hi_remote_preamble - the same flag core.sh's _hi_choose_glyphs reads, so both
-# tiers agree about whether this session can draw multibyte glyphs.
+# the client's $NO_COLOR, shipped by hi.sh next to $_HI_ASCII: non-empty
+# blanks the palette here exactly as core.sh blanks its own
+if [ -n "${NO_COLOR:-}" ]; then
+  _HI_KSH_NC='' _HI_KSH_RED='' _HI_KSH_YELLOW='' _HI_KSH_BRGREEN='' \
+    _HI_KSH_BRBLUE='' _HI_KSH_BRPURPLE=''
+fi
+
+# _HI_ASCII is the client's verdict, shipped by the preamble - the same flag
+# _hi_choose_glyphs reads, so both tiers agree about multibyte glyphs.
 if [ "${_HI_ASCII:-0}" = 1 ]; then
   _HI_KSH_AHEAD='^' _HI_KSH_BEHIND='v' _HI_KSH_STAGED='*'
   _HI_KSH_DIRTY='+' _HI_KSH_INVALID='x' _HI_KSH_UNTRACKED='?'
@@ -43,16 +32,13 @@ else
   _HI_KSH_STASH='⚑' _HI_KSH_CLEAN='✔' _HI_KSH_ELLIPSIS='…'
 fi
 
-# _hi_ksh_git - the segment, printed to stdout, empty outside a repo.
-#
-# Two git calls per prompt and no more, the same budget common/git_prompt.sh
-# keeps: --no-optional-locks because a plain `git status` rewrites .git/index
-# every time it runs, which on a large checkout is real I/O per keystroke for
-# identical output.
+# _hi_ksh_git - the segment, to stdout, empty outside a repo. Two git calls
+# per prompt and no more (git_prompt.sh's budget); --no-optional-locks, or a
+# plain `git status` rewrites .git/index per keystroke for identical output.
 _hi_ksh_git() {
   [ "${_HI_DISABLE_GIT_STATUS:-0}" = 1 ] && return 0
 
-  _hi_kg_dir=$(LANG=C git --no-optional-locks rev-parse --git-dir 2>/dev/null) || return 0
+  _hi_kg_dir=$(LC_ALL=C git --no-optional-locks rev-parse --git-dir 2>/dev/null) || return 0
 
   _hi_kg_ref=""
   _hi_kg_ahead=0 _hi_kg_behind=0 _hi_kg_staged=0 _hi_kg_dirty=0
@@ -75,9 +61,8 @@ _hi_ksh_git() {
       _hi_kg_behind="${_hi_kg_ab##* }"
       _hi_kg_behind="${_hi_kg_behind#-}"
       ;;
-    # "1 XY ..." / "2 XY ..." - X is the staged column, Y the worktree one,
-    # "." meaning unchanged. Cut with substring removal rather than ${line:2:1},
-    # which is not POSIX.
+    # "1 XY ..." - X staged, Y worktree, "." unchanged; substring removal
+    # because ${line:2:1} is not POSIX
     "1 "* | "2 "*)
       _hi_kg_xy="${_hi_kg_line#? }"
       case "$_hi_kg_xy" in
@@ -93,22 +78,21 @@ _hi_ksh_git() {
     "? "*) _hi_kg_untracked=$((_hi_kg_untracked + 1)) ;;
     esac
   done <<EOF
-$(LANG=C git --no-optional-locks status --porcelain=v2 --branch 2>/dev/null)
+$(LC_ALL=C git --no-optional-locks status --porcelain=v2 --branch 2>/dev/null)
 EOF
 
   # detached: name the nearest tag, else the short sha in parentheses, which is
   # the ladder git_prompt.sh walks
   if [ -z "$_hi_kg_ref" ]; then
     _hi_kg_detached=1
-    _hi_kg_ref=$(LANG=C git describe --tags --contains HEAD 2>/dev/null) ||
-      _hi_kg_ref=$(LANG=C git describe --tags HEAD 2>/dev/null) ||
-      _hi_kg_ref="($(LANG=C git rev-parse --short=8 HEAD 2>/dev/null))"
+    _hi_kg_ref=$(LC_ALL=C git describe --tags --contains HEAD 2>/dev/null) ||
+      _hi_kg_ref=$(LC_ALL=C git describe --tags HEAD 2>/dev/null) ||
+      _hi_kg_ref="($(LC_ALL=C git rev-parse --short=8 HEAD 2>/dev/null))"
   fi
   [ -n "$_hi_kg_ref" ] || return 0
 
-  # in-progress operation, in the slot fish_vcs_prompt uses. File tests only -
-  # no step/total, which would cost two more reads per prompt for a line that
-  # is already telling you to look.
+  # in-progress operation, in fish_vcs_prompt's slot; file tests only - no
+  # step/total, which costs two more reads for a line already saying "look"
   _hi_kg_state=""
   if [ -d "$_hi_kg_dir/rebase-merge" ] || [ -d "$_hi_kg_dir/rebase-apply" ]; then
     _hi_kg_state="REBASE"

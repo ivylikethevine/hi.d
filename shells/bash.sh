@@ -12,7 +12,7 @@ source "$_HI_ALIASES"
 _hi_interactive_extras
 export GCC_COLORS='error=01;31:warning=01;35:note=01;36:caret=01;32:locus=01:quote=01'
 
-if [[ "${_HI_DISABLE_PROMPT:-0}" != 1 ]]; then
+if [[ "${_HI_DISABLE_PROMPT:-0}" != 1 ]] && ! _hi_wants_starship; then
   _hi_prime_identity
   # the character this prompt ends with (`\$` here, which bash renders as $ for
   # a user and # for root) - see _hi_prompt_end in common/core.sh
@@ -40,9 +40,8 @@ function _hi_complete() {
 }
 complete -F _hi_complete hi
 
-# Deferred to the first TAB after `exa`: loading eza's completion at startup
-# parses a multi-KB file in every shell for something most sessions never use.
-# Returns 124, bash-completion's "retry with the new spec".
+# Deferred to the first TAB after `exa` - startup shouldn't parse a multi-KB
+# spec most sessions never use. 124 is bash-completion's "retry".
 function _hi_load_exa_completion() {
   local spec
   command -v _completion_loader &>/dev/null && _completion_loader eza &>/dev/null
@@ -54,19 +53,23 @@ complete -F _hi_load_exa_completion exa
 
 # modified from: https://github.com/riobard/bash-powerline/blob/master/bash-powerline.sh
 if [[ "${_HI_DISABLE_PROMPT:-0}" != 1 ]]; then
-  function ps1() {
-    # Bash expands the content of PS1 unless promptvars is disabled, so the git
-    # info goes through another layer of reference - expanding user provided
-    # strings would be a security issue. POC: https://github.com/njhartwell/pw3nage
-    if shopt -q promptvars; then
-      _hi_git_prompt __powerline_git_info # out-var form: no $( ) fork per prompt
-      # shellcheck disable=SC2154 # assigned by the printf -v one line up
-      PS1="$HI_PS1\${__powerline_git_info}$NC $HI_PS1_END "
-    else
-      PS1="$HI_PS1$(_hi_git_prompt)$NC $HI_PS1_END "
-    fi
-  }
-  PROMPT_COMMAND="ps1${PROMPT_COMMAND:+; $PROMPT_COMMAND}"
+  if _hi_wants_starship; then
+    # deference, chosen in settings.sh - see _hi_wants_starship in core.sh
+    eval "$(starship init bash)"
+  else
+    function ps1() {
+      # git info through a reference, never expanded into PS1 - expanding user
+      # strings is the pw3nage class of bug (github.com/njhartwell/pw3nage)
+      if shopt -q promptvars; then
+        _hi_git_prompt __powerline_git_info # out-var form: no $( ) fork per prompt
+        # shellcheck disable=SC2154 # assigned by the printf -v one line up
+        PS1="$HI_PS1\${__powerline_git_info}$NC $HI_PS1_END "
+      else
+        PS1="$HI_PS1$(_hi_git_prompt)$NC $HI_PS1_END "
+      fi
+    }
+    PROMPT_COMMAND="ps1${PROMPT_COMMAND:+; $PROMPT_COMMAND}"
+  fi
 fi
 # === end required configuration ===
 

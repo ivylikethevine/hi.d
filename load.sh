@@ -1,11 +1,8 @@
 #!/bin/bash
-# forked from sshrc: https://github.com/danrabinowitz/sshrc
-# Runs on the target: prints the header, grafts hi's shell configs onto the
-# host's rc files, hands over to the best shell available, then undoes it all.
+# The target half (forked from sshrc): header, rc grafts, shell handoff, undo.
 
-# `bash --rcfile` skips the startup chain, so restore it - before the strict
-# mode below (profile scripts aren't -e/-u safe), and at source time, since
-# the $CMDARG bootloader shape replaces load() but still wants the real PATH.
+# `bash --rcfile` skips the startup chain; restore it before strict mode
+# (profile scripts aren't -e/-u safe), at source time ($CMDARG needs PATH too).
 function _hi_restore_profile() {
   if [ -r /etc/profile ]; then source /etc/profile; fi
   # shellcheck disable=SC1090 # target-specific files, no fixed location
@@ -25,9 +22,8 @@ function _hi_restore_profile() {
 
 set -euo pipefail
 
-# every remote/container/alloc path chainloads this file and the local
-# install's own shells never do, so this is what lets common/paths.sh tell
-# "reached via hi" from "the machine hi.d lives on".
+# only hi's remote paths chainload this file - it is how common/paths.sh
+# tells "reached via hi" from "the machine hi.d lives on"
 export _HI_REMOTE_SESSION=1
 
 # shellcheck source=./common/core.sh
@@ -38,27 +34,35 @@ source "$_HI_HEADER"
 _HI_CONFIG_START="# hi-config-start"
 _HI_CONFIG_END="# hi-config-end"
 
-# rc file <- hi config, unless a previous session already added it. Fish and nu
-# only get one if that shell is installed (their config dirs won't exist
-# otherwise - see configure_files for the wrinkle nu adds to that).
+# rc file <- hi config; fish/nu only when installed (no config dir otherwise)
 _HI_CONFIGS=("$_HI_BASHRC:$_HI_HOME_BASHRC" "$_HI_ZSHRC:$_HI_HOME_ZSHRC"
   "$_HI_FISH_CONFIG:$_HI_HOME_FISH_CONFIG" "$_HI_NU_CONFIG:$_HI_HOME_NU_CONFIG")
 
 function configure_files() {
-  local pair target block
-  # Nu is the one exception to the "the dir exists iff the shell is installed"
-  # rule the loop below relies on: nu creates its config dir on first run, not
-  # at install time, so a freshly installed nu has the binary and no
-  # ~/.config/nushell - and hi would then style every shell but the one it is
-  # about to hand over to. Making it is what nu itself would do a moment later.
+  local pair target src open body
+  # nu makes its config dir on first run, not install - so a fresh nu would
+  # dodge the loop's dir gate; making it here is what nu itself does next
   command -v nu >/dev/null 2>&1 && mkdir -p "$_HI_HOME_NU_DIR"
   for pair in "${_HI_CONFIGS[@]}"; do
     target="${pair#*:}"
+    src="${pair%:*}"
     [ -d "${target%/*}" ] || continue # targets are absolute; no dirname fork
     touch "$target"
     grep -q "$_HI_CONFIG_START" "$target" && continue
-    block="$_HI_CONFIG_START"$'\n'"$(<"${pair%:*}")"$'\n'"$_HI_CONFIG_END"
-    printf '%s\n' "$block" >>"$target"
+    # GLOSSARY: graft crash guard - why every graft wraps, and nu's exception
+    # shellcheck disable=SC2016 # single quotes are the point: the guard expands at shell start, not graft time
+    case "$src" in
+    *.fish)
+      open='set -l _hi_tree $HOME'$'\n''test -n "$_HI_HOME"; and set _hi_tree $_HI_HOME'$'\n''if test -f $_hi_tree/hi.d/common/core.sh'
+      body="$open"$'\n'"$(<"$src")"$'\n'"end"
+      ;;
+    *.nu) body="$(<"$src")" ;;
+    *)
+      open='if [ -f "${_HI_HOME:-$HOME}/hi.d/common/core.sh" ]; then'
+      body="$open"$'\n'"$(<"$src")"$'\n'"fi"
+      ;;
+    esac
+    printf '%s\n' "$_HI_CONFIG_START"$'\n'"$body"$'\n'"$_HI_CONFIG_END" >>"$target"
   done
 }
 
@@ -95,20 +99,8 @@ function _hi_login_shell() {
   printf '%s' "${shell##*/}"
 }
 
-# Which shell this session runs in. $_HI_SHELL_PREFERENCE is an ordered list of
-# names hi styles, plus the token `login` for "whatever the user's login shell
-# is"; the first entry that is installed wins, and bash is the floor because
-# load.sh only runs where bash exists.
-#
-# The default puts `login` first for a reason found by the framework matrix: the
-# old ranking handed fish to anyone whose box had it, so a user whose login
-# shell is zsh-with-oh-my-zsh never saw their own setup. hi's configs are
-# grafted onto every rc file either way; the user's are not.
-#
-# nu is in the allow-list but not in the default ranking, deliberately: it is
-# picked when it is your *login* shell (the `login` token) or when you name it
-# in $_HI_SHELL_PREFERENCE, and never handed to someone whose login shell is
-# bash. Its session is styled by shells/config.nu.
+# Which shell this session runs in.
+# GLOSSARY: session-shell ranking - login-first, and nu's allow-list-only seat
 function _hi_session_shell() {
   local want
   # the ranking is appended rather than kept as a second loop: a preference
@@ -125,12 +117,9 @@ function _hi_session_shell() {
   printf 'bash'
 }
 
-# True when this session should run inside a named tmux (`hi --tmux`, or
-# _HI_TMUX_ATTACH=1), so a dropped connection detaches instead of losing the
-# work. Both refusals print and carry on rather than dropping the connection: a
-# disposable tree ($_HI_CLEANUP) is deleted when the session ends and a detached
-# tmux would outlive it - the same test shells/aliases.sh makes - and whether
-# there is a tmux here at all is not something the client can know.
+# True when this session should run inside a named tmux (`hi --tmux` /
+# _HI_TMUX_ATTACH=1). Both refusals print and carry on: a disposable tree
+# would outlive a detached tmux, and the client can't know if tmux exists.
 function _hi_tmux_wanted() {
   [ "${_HI_TMUX_ATTACH:-0}" = 1 ] || return 1
   if [ -n "${_HI_CLEANUP:-}" ]; then
@@ -177,10 +166,8 @@ function load() {
   # the header above is our greeting
   [ "$shell" = fish ] && shell_cmd=(fish -C "set fish_greeting ''" -i)
   if _hi_tmux_wanted; then
-    # -A: attach if the session exists, create it if not - the one answer that
-    # never loses work. The command goes as separate arguments so fish's -C
-    # survives unquoted; tmux ignores it when attaching. -f is read only when
-    # the server starts (see misc/tmux.conf).
+    # -A: attach-or-create, the answer that never loses work; separate args so
+    # fish's -C survives unquoted. GLOSSARY: tmux server-start rules
     tmux -f "$_HI_TMUXCONF" new-session -A -s "${_HI_TMUX_SESSION:-hi}" \
       "${shell_cmd[@]}" || shell_ec=$?
   else

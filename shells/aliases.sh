@@ -3,19 +3,15 @@
 # parse: `alias`, `export`, `&&` chains - no if/then/fi, no $(...) conditionals.
 # shellcheck disable=SC2139 # aliases are meant to expand $_HI_* now, not later
 # shellcheck disable=SC2155
-# the following syntax resolves to the first command installed, changing order
-# changes preference (for users taste)
-# export z="$(command -v a || command -v b || command -v c)"
-# This file is an example of my personal setup. Feel free to change it to suit your needs,
-# but these are the only patterns that are safe to use, since this file must be
-# POSIX+fish compliant.
+# shellcheck disable=SC2089 # the *_OPTS quotes are literal alias text; the overlay source below makes the linter guess otherwise
+# GLOSSARY: command -v fallthrough - first-installed wins; reorder to taste
+# This file is an example of my personal setup. Feel free to change it to suit
+# your needs, but only in the POSIX+fish subset above.
 
-# Backstop defaults for the two toggles this file reads (GLOSSARY: toggle
-# defaulting): ${X-0} parses in no fish, a bare read dies under set -u, so the
-# default hides in an eval gated on a builtin fish deliberately lacks. `-`,
-# not `:-`, so an intentional empty value survives.
+# Backstop toggle defaults, in an eval gated on a builtin fish lacks; `-` not
+# `:-` so intentional empties survive. GLOSSARY: toggle defaulting
 command -v getopts >/dev/null 2>&1 &&
-  eval 'export _HI_DISABLE_EDITORS="${_HI_DISABLE_EDITORS-0}" _HI_DISABLE_ALIASES="${_HI_DISABLE_ALIASES-0}" _HI_DISABLE_OSC52="${_HI_DISABLE_OSC52-0}" _HI_OSC52="${_HI_OSC52-}" _HI_DISABLE_TMUX="${_HI_DISABLE_TMUX-0}" _HI_TMUXCONF="${_HI_TMUXCONF-}" _HI_CLEANUP="${_HI_CLEANUP-}"' || true
+  eval 'export _HI_DISABLE_EDITORS="${_HI_DISABLE_EDITORS-0}" _HI_DISABLE_ALIASES="${_HI_DISABLE_ALIASES-0}" _HI_DISABLE_OSC52="${_HI_DISABLE_OSC52-0}" _HI_OSC52="${_HI_OSC52-}" _HI_DISABLE_TMUX="${_HI_DISABLE_TMUX-0}" _HI_TMUXCONF="${_HI_TMUXCONF-}" _HI_CLEANUP="${_HI_CLEANUP-}" _HI_CONFIG_DIR="${_HI_CONFIG_DIR-}"' || true
 
 # Resolve these before any alias exists: zsh/dash `command -v` returns an
 # alias's definition once one is set, poisoning later fallthrough chains.
@@ -26,28 +22,22 @@ export _HI_BATCAT_BIN="$(command -v bat || command -v batcat || command -v ccat 
 export _HI_EXA_BIN="$(command -v exa || command -v eza || command -v ls)"
 export _HI_EZA_BIN="$(command -v eza || command -v exa || command -v ls)"
 
-# skipped when _HI_DISABLE_EDITORS=1, leaving nano/vim at their own defaults.
-# `|| true` because some sourcers run under `set -e`, where a failed `[ ]` guard
-# would abort the whole shell.
+# off on _HI_DISABLE_EDITORS=1; `|| true` keeps set -e sourcers alive when
+# the guard fails
 [ "$_HI_DISABLE_EDITORS" != 1 ] && alias nano="nano --rcfile $_HI_NANORC" || true
 [ "$_HI_DISABLE_EDITORS" != 1 ] && alias vim="$(command -v nvim || command -v vim) -u $_HI_VIMRC" || true
 
-# stdin -> the client's clipboard (shells/osc52.sh): the non-vim half of what
-# vim.rc wires to yank, so it sits above the personal-taste early return. The
-# `[ -f ]` earns its place - the container fallback ships this file without
-# paths.sh, where $_HI_OSC52 is empty and a bare `sh ` alias would open a
-# shell.
+# stdin -> the client's clipboard (shells/osc52.sh). The `[ -f ]` earns its
+# place: the container fallback ships this file without paths.sh, where an
+# empty $_HI_OSC52 would make `sh ` an alias that opens a shell.
 [ "$_HI_DISABLE_OSC52" != 1 ] && [ -f "$_HI_OSC52" ] && alias hi_copy="sh $_HI_OSC52" || true
 
-# tmux with hi's config (misc/tmux.conf), on the toggle and on $_HI_CLEANUP -
-# which every disposable tree exports and a permanent install never does. A
-# detached tmux outlives the session, so on an ephemeral target the shells
-# inside it would wake up reading a deleted tree.
+# tmux with hi's config, permanent trees only ($_HI_CLEANUP marks disposable
+# ones): a detached tmux would wake up reading a deleted tree.
 [ "$_HI_DISABLE_TMUX" != 1 ] && [ -z "$_HI_CLEANUP" ] && [ -f "$_HI_TMUXCONF" ] && alias tmux="tmux -f $_HI_TMUXCONF" || true
 
-# misc/theme.yml styles eza itself, not any alias hi defines, so it goes above
-# the early return: turning personal aliases off shouldn't strip the theme from
-# an eza the user runs directly.
+# styles eza itself, not an alias - above the early return so disabling
+# personal aliases keeps the theme for an eza run directly
 export EZA_CONFIG_DIR="$_HI_THEME_DIR"
 
 # everything below is personal preference, freely editable without touching hi's
@@ -196,3 +186,8 @@ alias fw_update="fwupdmgr update"
 alias sctl="sudo systemctl"
 alias chron="cron"
 alias chrontab="crontab"
+
+# Last on purpose: the user's own aliases.sh - ~/.config/hi.d/aliases.sh at
+# home, shipped into misc/ by the overlay stream on a target - wins over
+# anything above by coming after it. Same POSIX+fish subset as this file.
+[ -f "$_HI_CONFIG_DIR/aliases.sh" ] && . "$_HI_CONFIG_DIR/aliases.sh" || true

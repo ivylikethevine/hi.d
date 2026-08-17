@@ -1,7 +1,5 @@
-" must be first: launching as `vim -u <file>` implies 'compatible', which puts
-" < in 'cpoptions' and disables <> key notation entirely - every <C-x>, <CR>,
-" <Esc> and <Up> below would otherwise be mapped as literal text
-" using -U might work as well, but would require modifications to this file
+" must be first: `vim -u <file>` implies 'compatible', which disables <> key
+" notation - every <C-x>, <CR>, <Esc> below would map as literal text
 set nocompatible
 
 set autoread
@@ -64,12 +62,10 @@ filetype plugin on
 filetype indent on
 set laststatus=1
 
-" Yank -> the client's clipboard over OSC 52; shells/osc52.sh does the encoding,
-" the tmux/screen wrapping and the tty write, so this only decides when to call
-" it. Four conditions that can each genuinely be false: the toggle, the event
-" (vim 8.0.1394+, asked as exists('##...') because neovim answers has('patch-')
-" about its own merge list), $_HI_OSC52 (empty outside a hi session), and the
-" unnamed register - so "ay stays local and a delete stays a delete.
+" Yank -> the client's clipboard; shells/osc52.sh does the encoding/wrapping,
+" this only decides *when*. Four honest conditions: the toggle, the event
+" (exists('##...') - neovim lies to has('patch-')), $_HI_OSC52 (empty outside
+" a session), and the unnamed register - "ay stays local, a delete a delete.
 if $_HI_DISABLE_OSC52 != '1' && exists('##TextYankPost') && filereadable($_HI_OSC52)
   augroup hi_osc52
     autocmd!

@@ -1,8 +1,9 @@
 # Keeps the SHA-pinned `uses:` in the workflows AND the composite actions
 # moving via PRs instead of memory. What this does not cover: the curl-installed
 # tool versions inside the setup-* composite actions (shellcheck, shfmt,
-# checkbashisms, actionlint, nfpm) - those move by editing the action's
-# `version` default, and dependabot has no ecosystem for them.
+# checkbashisms, actionlint, zizmor, nfpm, minisign, nu) - those move by
+# editing the action's `version` default, and dependabot has no ecosystem for
+# them; the tool-versions workflow watches that drift instead.
 version: 2
 updates:
   - package-ecosystem: github-actions

@@ -3,20 +3,11 @@
 # The bash, zsh and fish completions (and `hi_colors`) all read this for
 # connection, autocomplete, and autosuggest.
 # Usage: sh targets.sh [ssh|docker|podman|nomad|kube] (no argument = all of them)
-#
-# Runs on every TAB after `hi `, the most latency-sensitive path in hi.d and the
-# slowest (four of five backends are a subprocess each). Two knobs keep it honest:
-#   _HI_PROBE_TIMEOUT  seconds any one backend CLI gets (default 2, needs GNU
-#                      `timeout`), or an unreachable daemon hangs completion
-#                      unbounded. Shared with common/core.sh's _hi_probe.
-#   _HI_TARGETS_TTL    seconds a result is reused (default 5, 0 disables). A
-#                      just-started container may not appear until it expires;
-#                      the trade for not paying ~110ms per TAB.
+# GLOSSARY: completion probe knobs - _HI_PROBE_TIMEOUT and _HI_TARGETS_TTL
 kind="${1:-all}"
 ttl="${_HI_TARGETS_TTL:-5}"
 
-# `timeout` is GNU coreutils, absent on a stock macOS, so it stays optional.
-# Called only from list_*, which SC2329 can't follow.
+# `timeout` is GNU, absent on stock macOS - optional. Called via list_*.
 # shellcheck disable=SC2329
 if command -v timeout >/dev/null 2>&1; then
   run_backend() { timeout "${_HI_PROBE_TIMEOUT:-2}" "$@"; }
@@ -69,9 +60,8 @@ emit_targets() {
 # The listers, each reached indirectly through emit_backend's "$@".
 # shellcheck disable=SC2329
 
-# docker and podman are the same call - podman's CLI is a drop-in - so only the
-# binary differs. One `sed` over the whole result rather than the CLI's format
-# string, so the tagging holds whatever the backend does with --format.
+# docker and podman are one call (drop-in CLIs); the tag rides a `sed` over
+# the result, so it holds whatever the backend does with --format
 list_ps() {
   run_backend "$1" ps --format '{{.Names}}' 2>/dev/null | sed "s/\$/	$1/"
 }
@@ -128,9 +118,8 @@ if [ -f "$cache" ] && [ -r "$cache" ]; then
   esac
 fi
 
-# Swept once into a variable, then written to a temp file and moved into place,
-# so a completion reading mid-refresh sees the old answer or the new one, never
-# half of one. A cache that can't be written is not an error - answer anyway.
+# Swept once, then temp-file-and-mv so a mid-refresh reader sees old or new,
+# never half; a cache that can't be written is not an error - answer anyway.
 out="$(emit_targets)"
 tmp="$cache.$$"
 if {

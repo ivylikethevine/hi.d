@@ -17,9 +17,14 @@ the session ends. It is sshrc, supercharged.
 With no
 .IR command ,
 .B hi
-opens an interactive session on the target, in the best shell available
-there (fish > zsh > bash, falling back to zsh/fish/sh with aliases only
-when the target has no bash). With a trailing
+opens an interactive session on the target: your login shell when hi
+styles it (bash, zsh, fish \- or nushell, when it is your login shell or
+named in
+.BR _HI_SHELL_PREFERENCE ),
+otherwise the best of fish > zsh > bash. A target with no bash at all
+falls back to the best of zsh > fish > ksh > mksh > sh, with hi's aliases
+and colored prompt \- ksh and mksh keep a live git segment \- but no
+header. With a trailing
 .IR command ,
 it runs that command on the target and exits, like
 .BR ssh (1)
@@ -91,21 +96,6 @@ turns it back off. Offered only where hi.d is permanently installed on the
 target: a disposable tree is removed when the session ends, and a detached
 tmux would outlive it \- hi says so and continues without it.
 .TP
-.B \-\-update \fItarget\fR
-update a permanent
-.B hi.d
-on
-.I target
-instead of connecting to it:
-.B git pull
-in the tree
-.B scripts/install.sh
-laid down there. Refused when the target has no permanent install (a session
-ships a fresh copy every connect) or when that install came from a package
-manager \- the same two refusals
-.B hi_update
-makes locally. ssh flags may precede the target.
-.TP
 .B \-\-version
 print the version and exit: the version stamped in at packaging time, or
 .B git describe
@@ -126,7 +116,10 @@ Configuration lives outside the tree, in
 .B ~/.config/hi.d/
 .RB ( settings.sh ,
 .BR colors ,
-.BR packages ),
+.BR packages ,
+.BR tmux.conf ,
+and additive personal
+.BR aliases.sh ),
 written by
 .B hi_configure
 and carried along to every target. Every feature is an environment
@@ -144,8 +137,11 @@ works identically).
 feature toggles, written by
 .BR hi_configure .
 .TP
-.B ~/.config/hi.d/colors, ~/.config/hi.d/packages
+.B ~/.config/hi.d/colors, ~/.config/hi.d/packages, ~/.config/hi.d/tmux.conf
 per\-user overrides of the tree's defaults.
+.TP
+.B ~/.config/hi.d/aliases.sh
+your own aliases, sourced after the shipped set so yours win.
 .SH ENVIRONMENT
 .TP
 .B _HI_HOME
@@ -154,6 +150,12 @@ the parent of the
 directory; set by
 .B /etc/profile.d/hi.d.sh
 for packaged installs.
+.TP
+.B _HI_SHELL_PREFERENCE
+ordered list of session shells to try
+.RB ( login
+means your login shell); default
+.BR "login fish zsh bash" .
 .TP
 .B _HI_DISABLE_HEADER, _HI_DISABLE_PROMPT, ...
 per\-feature opt\-outs; see the README's Configuration section for the

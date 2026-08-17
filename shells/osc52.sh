@@ -1,8 +1,7 @@
 #!/bin/sh
-# stdin -> the *client's* clipboard, over OSC 52: the escape rides the session's
-# pty back to the terminal emulator, so nothing is needed on the target. Run,
-# not sourced - by `hi_copy` (shells/aliases.sh) and misc/vim.rc's yank autocmd,
-# which is why the wrapping below lives in one file rather than in both.
+# stdin -> the *client's* clipboard over OSC 52 - the escape rides the pty
+# back, nothing needed on the target. Run, not sourced, by `hi_copy` AND
+# vim.rc's yank autocmd - one file so the wrapping isn't written twice.
 set -eu
 
 _hi_b64="$(base64 | tr -d '\r\n')"
@@ -16,17 +15,19 @@ fi
 
 _hi_esc="\033]52;c;$_hi_b64\a"
 
-# tmux and screen swallow an OSC they don't know unless it is wrapped in their
-# passthrough. $TMUX is tested first: tmux commonly leaves TERM as screen-*.
+# tmux/screen swallow unknown OSCs unless passthrough-wrapped ($TMUX first:
+# tmux leaves TERM as screen-*); zellij is the explicit opposite - it handles
+# OSC 52 itself, has no DCS passthrough, and must get the escape raw.
 if [ -n "${TMUX:-}" ]; then
   _hi_esc="\033Ptmux;\033$_hi_esc\033\\" # tmux wants the inner ESC doubled
+elif [ -n "${ZELLIJ:-}" ]; then
+  : # raw
 elif [ "${TERM#screen}" != "${TERM:-}" ]; then
   # unchunked: real screen truncates a long DCS, so a big yank under bare screen
   # can arrive clipped - visibly, and rarely enough not to earn a rejoin loop
   _hi_esc="\033P$_hi_esc\033\\"
 fi
 
-# The open is the test, not `[ -w /dev/tty ]`: that node is world-writable with
-# or without a controlling terminal, so the check passes where the redirect then
-# fails. 2>/dev/null first, so the shell's complaint doesn't reach the screen.
+# the open is the test - `[ -w /dev/tty ]` passes with no controlling
+# terminal; 2>/dev/null first so the shell's complaint stays off the screen
 printf '%b' "$_hi_esc" 2>/dev/null >/dev/tty || printf '%b' "$_hi_esc"

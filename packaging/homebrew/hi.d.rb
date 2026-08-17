@@ -35,16 +35,20 @@ class HiD < Formula
     # It must land in a directory named hi.d - every path in the project
     # resolves against $_HI_HOME/hi.d, so libexec is the _HI_HOME here.
     (libexec/"hi.d").install "common", "misc", "scripts", "shells",
-                             "hi.sh", "load.sh", "LICENSE", "README.md"
+                             "hi.sh", "load.sh", "docs/LICENSE.md", "README.md"
     chmod 0755, libexec/"hi.d/hi.sh"
 
     # The keg's copy answers `hi --version` with the formula's version. The
     # tarball itself carries no stamp - every channel seds it in at build time
-    # (see packaging/package.sh's stamp_launcher for why not in git).
+    # (see packaging/mkpkg.sh's stamp_launcher for why not in git).
     inreplace libexec/"hi.d/hi.sh", /^_HI_RELEASE=.*$/, "_HI_RELEASE=\"#{version}\""
 
     # same page install_tree gzips into /usr/share/man for the other channels;
     # brew wants it plain and puts it on the manpath itself
+    # man hi's footer answers with the formula's version, same as hi.sh's
+    # stamp above; the date field carries the version too - a formula build
+    # has no reproducible date to offer
+    inreplace "docs/hi.1", /^\.TH .*$/, ".TH HI 1 \"#{version}\" \"hi.d #{version}\" \"User Commands\""
     man1.install "docs/hi.1"
 
     # A wrapper rather than bin.install_symlink: hi.sh sources

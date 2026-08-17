@@ -25,6 +25,7 @@ _HI_TOOLS=(
   "setup-nfpm|github|goreleaser/nfpm"
   "setup-minisign|github|jedisct1/minisign"
   "setup-checkbashisms|gitlab|debian%2Fdevscripts"
+  "setup-nu|github|nushell/nushell"
 )
 
 function _hi_pinned() {

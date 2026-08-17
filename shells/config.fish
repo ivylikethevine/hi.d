@@ -21,19 +21,6 @@ end
 if test -f $_HI_CONFIG_DIR/settings.sh
   source $_HI_CONFIG_DIR/settings.sh
 end
-# the per-host overlay, mirroring core.sh's block: the hosttag file first, the
-# exact-host file last, so the more specific one wins. Both are no-ops outside a
-# session hi opened, where neither variable is set. A name with a slash in it is
-# skipped - it comes from the command line, and settings.d is one flat directory.
-for _hi_overlay in "tag-$_HI_TARGET_TAG" "$_HI_TARGET"
-  if test "$_hi_overlay" = tag-; or test -z "$_hi_overlay"; or string match -q '*/*' -- $_hi_overlay
-    continue
-  end
-  if test -f $_HI_CONFIG_DIR/settings.d/$_hi_overlay.sh
-    source $_HI_CONFIG_DIR/settings.d/$_hi_overlay.sh
-  end
-end
-set -e _hi_overlay
 source $_HI_HOME/hi.d/common/paths.sh
 source $_HI_ALIASES
 
@@ -48,9 +35,8 @@ function fish_greeting
   set -q fish_greeting; or bash -c "source $_HI_HEADER; hi_header Online"
 end
 
-# That bash call is a whole process for two color names that only change with
-# the user, host or misc/colors. Memoized in a universal variable keyed on all
-# three, so it runs on the first fish shell after a change and no others.
+# a whole process for two color names: memoized in a universal variable keyed
+# on user@host+colors-mtime, so only the first shell after a change pays it
 set -l hi_key "$USER@"(prompt_hostname)
 test -f $_HI_COLORS; and set hi_key "$hi_key:"(command stat -c %Y $_HI_COLORS 2>/dev/null; or command stat -f %m $_HI_COLORS 2>/dev/null)
 if not set -q __hi_colors_key; or test "$__hi_colors_key" != "$hi_key"
@@ -63,10 +49,8 @@ set -gx fish_color_user $__hi_color_user
 set -gx fish_color_host $__hi_color_host
 set -gx fish_color_host_remote $fish_color_host
 
-# wrapper so aliases (which are functions in fish) still work under sudo.
-# args are passed through fish's own argv mechanism (after --), never spliced
-# into a string that gets re-parsed as fish syntax - anything else invites
-# command injection via quotes/parens/semicolons in an argument.
+# wrapper so aliases (functions, in fish) work under sudo; args ride fish's
+# own argv after --, never a re-parsed string - that invites injection.
 function sudo
   if functions -q -- "$argv[1]"
     set -lx hi_sudo_fn $argv[1]
@@ -77,11 +61,9 @@ function sudo
   end
 end
 
-# The character the prompt ends with, mirroring core.sh's _hi_prompt_end (fish
-# can't call it): the fish-specific setting, then the one covering all three
-# shells, then the shipped default. Empty counts as unset - a prompt ending in a
-# bare space is never what someone meant. The root branch in fish_prompt still
-# overrides it with '#', the way it always has.
+# the prompt's end character, mirroring core.sh's _hi_prompt_end (fish can't
+# call it): fish setting, then all-three, then default; empty counts as
+# unset, and root still gets '#'.
 set -g _hi_prompt_end '|'
 set -q _HI_PROMPT_END; and test -n "$_HI_PROMPT_END"; and set -g _hi_prompt_end $_HI_PROMPT_END
 set -q _HI_PROMPT_END_FISH; and test -n "$_HI_PROMPT_END_FISH"; and set -g _hi_prompt_end $_HI_PROMPT_END_FISH
@@ -89,6 +71,21 @@ set -q _HI_PROMPT_END_FISH; and test -n "$_HI_PROMPT_END_FISH"; and set -g _hi_p
 # prompt: "<chroot> user@host cwd (git) [status] |", @ turning yellow over ssh
 # skipped entirely when disabled, leaving fish's own default prompt in place
 if test "$_HI_DISABLE_PROMPT" != 1
+
+# deference, chosen in settings.sh - the same rule core.sh's
+# _hi_wants_starship states for bash/zsh (fish can't call it); a missing
+# starship falls back to hi's prompt below, silently
+if test "$_HI_PROMPT" = starship; and command -q starship
+starship init fish | source
+else
+
+# https://no-color.org (fish has no rule of its own): non-empty $NO_COLOR
+# shadows set_color with a no-op - every call below, and fish_vcs_prompt's
+# own, renders the same prompt with no escapes in it.
+if test -n "$NO_COLOR"
+  function set_color
+  end
+end
 
 function prompt_login --description "display user name for the prompt"
   if not set -q __fish_machine
@@ -129,6 +126,7 @@ function fish_prompt --description 'Write out the prompt'
     (test "$_HI_DISABLE_GIT_STATUS" != 1; and fish_vcs_prompt) $normal " "$prompt_status $suffix " "
 end
 
+end
 end
 # === end required configuration ===
 
@@ -189,9 +187,8 @@ set -g __fish_git_prompt_color_stagedstate yellow
 set -g __fish_git_prompt_color_invalidstate red
 set -g __fish_git_prompt_color_cleanstate brgreen
 
-# the same C-locale ASCII fallback core.sh's _hi_choose_glyphs gives bash and
-# zsh - fish's informative prompt otherwise draws its own multibyte set.
-# _HI_ASCII overrides the locale probe both ways, like everywhere else.
+# the same ASCII fallback _hi_choose_glyphs gives bash/zsh, _HI_ASCII
+# overriding the locale probe both ways like everywhere else
 if test "$_HI_ASCII" = 1
     or begin
         test "$_HI_ASCII" != 0

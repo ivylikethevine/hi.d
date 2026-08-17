@@ -53,7 +53,7 @@ after Homebrew and any distro package — see `packaging/README.md`.
 
 ### WSL — the recommendation
 
-Not a channel at all, which is the point. The `.deb` built by `packaging/package.sh` installs into WSL
+Not a channel at all, which is the point. The `.deb` built by `packaging/mkpkg.sh` installs into WSL
 unchanged, `/etc/profile.d/hi.d.sh` works exactly as it does on any Debian, and the user gets the real
 thing rather than an approximation. It is also where a Windows developer who already uses `ssh`, `docker`
 and `kubectl` is most likely to be working.

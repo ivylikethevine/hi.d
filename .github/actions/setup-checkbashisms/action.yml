@@ -8,7 +8,7 @@ inputs:
   version:
     description: devscripts release tag to fetch checkbashisms from
     required: false
-    default: "v2.26.10"
+    default: "v2.26.11"
 
 runs:
   using: composite
@@ -25,10 +25,5 @@ runs:
       shell: bash
       env:
         DEVSCRIPTS_TAG: ${{ inputs.version }}
-      run: |
-        set -euo pipefail
-        curl -sSfL -o /tmp/checkbashisms \
-          "https://salsa.debian.org/debian/devscripts/-/raw/${DEVSCRIPTS_TAG}/scripts/checkbashisms.pl"
-        chmod +x /tmp/checkbashisms
-        sudo mv /tmp/checkbashisms /usr/local/bin/checkbashisms
-        checkbashisms --version
+      # body in install.sh so the lint suite reads it (see setup-shellcheck)
+      run: '"$GITHUB_ACTION_PATH/install.sh"'

@@ -183,6 +183,39 @@ function lint_checkbashisms() {
   return "$bad"
 }
 
+# Every GLOSSARY tag in the tree has to name a real `## ` heading in
+# docs/GLOSSARY.md: the tags are how shipped files point at an explanation
+# without carrying it, and a renamed entry would otherwise strand its tags
+# silently. A tag is one entry name with optional prose after it, or two
+# names joined with ` + `; each name must prefix-match some heading. Markdown
+# files are excluded from the sweep - the docs *talk about* the convention.
+function lint_glossary_tags() {
+  local pat='# GLOSSARY' glossary="$_HI_ROOT/docs/GLOSSARY.md"
+  local headings tags line tag part h ok bad=0
+  _hi_h2 "Checking GLOSSARY tags against docs/GLOSSARY.md"
+  _HI_LINT_TOTAL=$((_HI_LINT_TOTAL + 1))
+  _hi_read_lines headings < <(sed -n 's/^## //p' "$glossary")
+  _hi_read_lines tags < <(grep -rn "${pat}: " "$_HI_ROOT" \
+    --exclude-dir=.git --exclude-dir=dist --exclude='*.md' 2>/dev/null || true)
+  for line in "${tags[@]}"; do
+    [ -n "$line" ] || continue
+    tag="${line#*"${pat}": }"
+    while IFS= read -r part; do
+      ok=""
+      for h in "${headings[@]}"; do
+        case "$part" in "$h"*) ok=1 ;; esac
+      done
+      if [ -z "$ok" ]; then
+        _hi_cecho " | unknown entry in ${line%%:*}: $part" "$RED"
+        _hi_note_failure "GLOSSARY tag: $part"
+        bad=$((bad + 1))
+      fi
+    done <<<"${tag//" + "/$'\n'}"
+  done
+  [ "$bad" -eq 0 ] && _hi_cecho " | every tag names a real entry: OK" "$GREEN"
+  return "$bad"
+}
+
 function run_shellcheck() {
   # deliberately *not* _hi_require: every other suite skips cleanly when its
   # backend is missing, but this one is the lint gate - a missing shellcheck
@@ -192,12 +225,15 @@ function run_shellcheck() {
     exit 1
   fi
 
-  # dist/ alongside .git: packaging/package.sh stages a *copy* of the tree
+  # dist/ alongside .git: packaging/mkpkg.sh stages a *copy* of the tree
   # there, so a run after a local package build would lint every file twice -
   # inflating the count and reporting each finding against a path that is not
   # the source of it.
   _hi_read_lines _HI_SH_FILES < <(find "$_HI_ROOT" -name '*.sh' \
     -not -path '*/.git/*' -not -path "$_HI_ROOT/dist/*" | sort)
+  # bin/hi is sh with no .sh suffix (basher links it by filename), so the
+  # find above cannot see it - named here or it escapes every lint
+  _HI_SH_FILES+=("$_HI_ROOT/bin/hi")
   _HI_LINT_TOTAL="${#_HI_SH_FILES[@]}"
   _HI_SKIPPED=0
 
@@ -233,7 +269,10 @@ function run_shellcheck() {
   _HI_CB_FAILED=0
   lint_checkbashisms || _HI_CB_FAILED=$?
 
-  _HI_LINT_FAILED=$((_HI_SC_FAILED + _HI_NATIVE_FAILED + _HI_BASH32_FAILED + _HI_SHFMT_FAILED + _HI_CB_FAILED))
+  _HI_GLOSSARY_FAILED=0
+  lint_glossary_tags || _HI_GLOSSARY_FAILED=$?
+
+  _HI_LINT_FAILED=$((_HI_SC_FAILED + _HI_NATIVE_FAILED + _HI_BASH32_FAILED + _HI_SHFMT_FAILED + _HI_CB_FAILED + _HI_GLOSSARY_FAILED))
   _hi_report_counts "$_HI_LINT_TOTAL" "$_HI_LINT_FAILED" "$_HI_SKIPPED"
 
   local skipped=""

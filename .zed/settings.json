@@ -6,4 +6,5 @@
     "Properties": ["vim.rc", "nano.rc"],
   },
   "tab_size": 2,
+  "edit_predictions_disabled_in": ["**.md"],
 }

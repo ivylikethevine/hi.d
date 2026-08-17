@@ -63,6 +63,64 @@ function test_bash_defines_key_aliases() {
 
 # zsh/fish presence is handled by _hi_check_requires at the registration, so a
 # machine without one still runs (and honestly reports) the rest.
+# --- starship deference ---------------------------------------------------------
+#
+# _HI_PROMPT=starship hands the prompt over when starship exists; a stub on a
+# prepended PATH stands in for it, answering `init <shell>` with a line whose
+# effect the case can see. Three assertions per family: deferred when asked
+# and present, hi's prompt kept when not asked, and hi's prompt kept - with
+# no error - when asked but starship is absent.
+function _hi_starship_stub_dir() {
+  local dir="$_HI_WORKDIR/starship-bin"
+  [ -x "$dir/starship" ] || {
+    mkdir -p "$dir"
+    printf '#!/bin/sh\ncase "$2" in\nbash | zsh) echo "PS1=STARSHIP-STUB" ;;\nfish) echo "function fish_prompt; echo -n STARSHIP-STUB; end" ;;\nesac\n' >"$dir/starship"
+    chmod +x "$dir/starship"
+  }
+  printf '%s' "$dir"
+}
+
+function test_bash_defers_to_starship_when_asked() {
+  local out
+  out="$(env -i HOME="$_HI_WORKDIR" TERM=xterm-256color PATH="$(_hi_starship_stub_dir):$PATH" \
+    _HI_HOME="$_HI_HOME" _HI_CONFIG_DIR="$_HI_WORKDIR/cfg" _HI_PROMPT=starship \
+    bash -c 'source "$_HI_HOME/hi.d/shells/bash.sh" 2>/dev/null; printf "%s|%s" "$PS1" "${HI_PS1:-unset}"')"
+  [[ "$out" == "STARSHIP-STUB|unset" ]]
+}
+
+function test_bash_keeps_hi_prompt_without_the_setting() {
+  local out
+  out="$(env -i HOME="$_HI_WORKDIR" TERM=xterm-256color PATH="$(_hi_starship_stub_dir):$PATH" \
+    _HI_HOME="$_HI_HOME" _HI_CONFIG_DIR="$_HI_WORKDIR/cfg" \
+    bash -c 'source "$_HI_HOME/hi.d/shells/bash.sh" 2>/dev/null; printf %s "$HI_PS1"')"
+  [[ "$out" == *'\u'* ]]
+}
+
+# asked for, not installed: hi's prompt, and nothing on stderr
+function test_bash_falls_back_when_starship_is_absent() {
+  local out
+  out="$(env -i HOME="$_HI_WORKDIR" TERM=xterm-256color PATH="$PATH" \
+    _HI_HOME="$_HI_HOME" _HI_CONFIG_DIR="$_HI_WORKDIR/cfg" _HI_PROMPT=starship \
+    bash -c 'source "$_HI_HOME/hi.d/shells/bash.sh" 2>/dev/null; printf %s "$HI_PS1"' 2>&1)"
+  [[ "$out" == *'\u'* ]]
+}
+
+function test_zsh_defers_to_starship_when_asked() {
+  local out
+  out="$(env -i HOME="$_HI_WORKDIR" TERM=xterm-256color PATH="$(_hi_starship_stub_dir):$PATH" \
+    _HI_HOME="$_HI_HOME" _HI_CONFIG_DIR="$_HI_WORKDIR/cfg" _HI_PROMPT=starship \
+    zsh -c 'source "$_HI_HOME/hi.d/shells/zsh.zsh" 2>/dev/null; printf %s "$PS1"')"
+  [[ "$out" == STARSHIP-STUB ]]
+}
+
+function test_fish_defers_to_starship_when_asked() {
+  local out
+  out="$(env -i HOME="$_HI_WORKDIR" TERM=xterm-256color PATH="$(_hi_starship_stub_dir):$PATH" \
+    _HI_HOME="$_HI_HOME" _HI_CONFIG_DIR="$_HI_WORKDIR/cfg" _HI_PROMPT=starship \
+    fish -c 'source $_HI_HOME/hi.d/shells/config.fish 2>/dev/null; fish_prompt' </dev/null)"
+  [[ "$out" == *STARSHIP-STUB* ]]
+}
+
 function test_zsh_prompt_is_built() {
   local out
   out="$(_hi_rc_shell xterm-256color zsh \
@@ -130,6 +188,16 @@ function test_nu_git_segment_uses_git_prompt() {
   git -C "$dir" -c user.email=t@e.com -c user.name=T commit -q --allow-empty -m i
   out="$(cd "$dir" && _hi_nu_eval 'print (do $env.PROMPT_COMMAND_RIGHT)')"
   [[ "$out" == *nu-branch* ]]
+}
+
+# aliases are parse-time and block-scoped in nu, so a runtime `if` around
+# them defines them into a scope that evaporates before the prompt - which is
+# exactly how config.nu's first version shipped, with no alias ever reaching
+# the session. `which` sees aliases, so three probes cover the three groups.
+function test_nu_aliases_reach_the_session() {
+  local out
+  out="$(_hi_nu_eval 'print (which gl dcu ctar | length)')"
+  [ "$out" = "3" ]
 }
 
 function test_nu_git_segment_respects_the_toggle() {
@@ -229,10 +297,18 @@ function run_rc_tests() {
 
   _hi_h2 "Testing: zsh and fish"
   _hi_check_requires zsh "zsh builds its prompt" test_zsh_prompt_is_built
+
+  _hi_h2 "Testing: starship deference (_HI_PROMPT=starship)"
+  _hi_check "[bash] defers when asked and present" test_bash_defers_to_starship_when_asked
+  _hi_check "[bash] keeps hi's prompt without the setting" test_bash_keeps_hi_prompt_without_the_setting
+  _hi_check "[bash] falls back silently when absent" test_bash_falls_back_when_starship_is_absent
+  _hi_check_requires zsh "[zsh] defers when asked and present" test_zsh_defers_to_starship_when_asked
+  _hi_check_requires fish "[fish] defers when asked and present" test_fish_defers_to_starship_when_asked
   _hi_check_requires fish "fish registers hi completion" test_fish_registers_hi_completion
   _hi_check_requires nu "nu parses config.nu" test_nu_config_parses
   _hi_check_requires nu "nu's prompt carries user, host and cwd" test_nu_prompt_carries_user_host_and_cwd
   _hi_check_requires nu "nu's git segment comes from git_prompt.sh" test_nu_git_segment_uses_git_prompt
+  _hi_check_requires nu "nu's aliases reach the session" test_nu_aliases_reach_the_session
   _hi_check_requires nu "_HI_DISABLE_GIT_STATUS silences it" test_nu_git_segment_respects_the_toggle
 
   _hi_h2 "Testing: the prompt separator"

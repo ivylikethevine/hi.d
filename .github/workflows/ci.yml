@@ -35,6 +35,10 @@ jobs:
 
       - uses: ./.github/actions/setup-checkbashisms
 
+      # same story for the rc suite's real-nu cases: config.nu is the one
+      # shipped shell file nothing else in CI can parse
+      - uses: ./.github/actions/setup-nu
+
       - name: Run fast test suites
         run: "${{ github.workspace }}/tests/test_runner.sh --group fast"
 
@@ -52,8 +56,12 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Install fish and shellcheck
-        run: brew install fish shellcheck
+      - name: Install fish
+        run: brew install fish
+
+      # pinned rather than brewed: a floating shellcheck here could red this
+      # job with a warning the pinned ubuntu one has never seen
+      - uses: ./.github/actions/setup-shellcheck
 
       - name: Run fast test suites
         run: "${{ github.workspace }}/tests/test_runner.sh --group fast"
@@ -173,9 +181,9 @@ jobs:
           openssl rsa -in "$RUNNER_TEMP/smoke.rsa" -pubout -out "$RUNNER_TEMP/smoke.rsa.pub"
           echo "HI_APK_KEY=$RUNNER_TEMP/smoke.rsa" >>"$GITHUB_ENV"
 
-      # package.sh itself asserts one artifact per format and writes SHA256SUMS
+      # mkpkg.sh itself asserts one artifact per format and writes SHA256SUMS
       - name: Build the packages
-        run: packaging/package.sh
+        run: packaging/mkpkg.sh
 
       # the check that catches "apk-tools rejects what nfpm built" (it happened:
       # nfpm 2.47.0's tree entries) and proves the signature chain: the pubkey
@@ -196,7 +204,7 @@ jobs:
       - name: Build again and require byte-identical packages
         run: |
           mv dist dist.first
-          packaging/package.sh
+          packaging/mkpkg.sh
           diff dist.first/SHA256SUMS dist/SHA256SUMS
 
   e2e:

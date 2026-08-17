@@ -3,8 +3,11 @@
 # the `hi_copy` alias in shells/aliases.sh, and misc/vim.rc's yank autocmd.
 #
 # The emitter's whole job is producing exactly the right bytes, so every case
-# reads the bytes - captured through a pipe, which is also the script's
-# no-controlling-terminal fallback - and matches the literal sequence.
+# reads the bytes - captured through a pipe, which is the script's fallback
+# when it has no controlling terminal - and matches the literal sequence.
+# The emitter *prefers* /dev/tty over stdout (that preference is the point of
+# it), so an interactive run must detach it from the terminal or the bytes
+# land on the tester's screen - and in their clipboard - instead of the pipe.
 #
 # Nearly every function below is invoked indirectly, through _hi_check's "$@",
 # which SC2329 can't see.
@@ -19,12 +22,31 @@ source "$_HI_TEST_LIB"
 _HI_ESC=$'\033'
 _HI_BEL=$'\a'
 
-# the emitter, run with a clean-ish env and its output captured. $1 is the text
-# to copy; anything after is NAME=VALUE for the run (TMUX, TERM, ...).
+# What detaches the emitter from the controlling terminal. With a tty present
+# that has to be setsid, so the byte checks are gated on it (a skip, on the
+# rare interactive box without one - stock macOS). Without a tty there is
+# nothing to detach from, and gating on `sh` just means "always run".
+if { : </dev/tty; } 2>/dev/null; then
+  _HI_EMIT_GATE="setsid"
+else
+  _HI_EMIT_GATE="sh"
+fi
+
+function _hi_detached() {
+  if [ "$_HI_EMIT_GATE" = setsid ]; then
+    setsid -w "$@"
+  else
+    "$@"
+  fi
+}
+
+# the emitter, run with a clean-ish env, no controlling terminal, and its
+# output captured. $1 is the text to copy; anything after is NAME=VALUE for
+# the run (TMUX, TERM, ...).
 function _hi_emit() {
   local text="$1"
   shift
-  printf '%s' "$text" | env -u TMUX -u TERM "$@" sh "$_HI_OSC52"
+  printf '%s' "$text" | _hi_detached env -u TMUX -u TERM -u ZELLIJ "$@" sh "$_HI_OSC52"
 }
 
 function _hi_emits_plain() {
@@ -72,6 +94,25 @@ function _hi_wraps_for_screen() {
   local out
   out="$(_hi_emit hi TERM=screen-256color)"
   [ "$out" = "${_HI_ESC}P${_HI_ESC}]52;c;aGk=${_HI_BEL}${_HI_ESC}\\" ]
+}
+
+# zellij handles OSC 52 itself and has no DCS passthrough, so wrapping is the
+# one thing that would break it - raw even when TERM looks like screen's
+function _hi_raw_for_zellij() {
+  local out
+  out="$(_hi_emit hi ZELLIJ=0 TERM=screen-256color)"
+  [ "$out" = "${_HI_ESC}]52;c;aGk=${_HI_BEL}" ]
+}
+
+# tmux inside zellij: the inner multiplexer is the one that must see its
+# passthrough first; it unwraps and forwards, and zellij handles the rest
+function _hi_tmux_beats_zellij() {
+  local out
+  out="$(_hi_emit hi TMUX=/tmp/fake,1,0 ZELLIJ=0)"
+  case "$out" in
+  "${_HI_ESC}Ptmux;"*) return 0 ;;
+  esac
+  return 1
 }
 
 function _hi_no_wrap_for_xterm() {
@@ -147,12 +188,14 @@ function run_osc52_test() {
   _hi_suite_begin
 
   _hi_h2 "the emitter"
-  _hi_check "plain escape for a plain terminal" _hi_emits_plain
-  _hi_check "payload carries no wrap or newline" _hi_unwrapped_payload
-  _hi_check "tmux passthrough under \$TMUX" _hi_wraps_for_tmux
-  _hi_check "\$TMUX wins over a screen \$TERM" _hi_tmux_beats_screen_term
-  _hi_check "screen passthrough under TERM=screen*" _hi_wraps_for_screen
-  _hi_check "no passthrough under TERM=xterm*" _hi_no_wrap_for_xterm
+  _hi_check_requires "$_HI_EMIT_GATE" "plain escape for a plain terminal" _hi_emits_plain
+  _hi_check_requires "$_HI_EMIT_GATE" "payload carries no wrap or newline" _hi_unwrapped_payload
+  _hi_check_requires "$_HI_EMIT_GATE" "tmux passthrough under \$TMUX" _hi_wraps_for_tmux
+  _hi_check_requires "$_HI_EMIT_GATE" "\$TMUX wins over a screen \$TERM" _hi_tmux_beats_screen_term
+  _hi_check_requires "$_HI_EMIT_GATE" "screen passthrough under TERM=screen*" _hi_wraps_for_screen
+  _hi_check_requires "$_HI_EMIT_GATE" "no passthrough under TERM=xterm*" _hi_no_wrap_for_xterm
+  _hi_check_requires "$_HI_EMIT_GATE" "raw under \$ZELLIJ, whatever \$TERM says" _hi_raw_for_zellij
+  _hi_check_requires "$_HI_EMIT_GATE" "\$TMUX wins over \$ZELLIJ (inner mux first)" _hi_tmux_beats_zellij
   _hi_check "refuses a payload past the OSC 52 cap" _hi_refuses_oversize
 
   _hi_h2 "the hi_copy alias"

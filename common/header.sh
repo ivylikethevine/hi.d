@@ -1,9 +1,6 @@
 #!/bin/bash
-# The banner hi prints on connect/disconnect, and the fish greeting prints
-# locally - one implementation for every shell (fish shells out to bash here).
-# The packages check at the bottom of it (full_check, over misc/packages) lives
-# here too: the header is its only caller, and `hi_packages_preview` reaches it
-# by sourcing this file.
+# The connect/disconnect banner, one implementation for every shell (fish
+# shells out here); the packages check (full_check) lives at the bottom too.
 set -euo pipefail
 
 # shellcheck source=./core.sh
@@ -17,9 +14,8 @@ function header_row() {
 
 function timestamp() {
   local -a cells=("$BRBLUE$(date -u "$_HI_HUMAN_CENTRIC_DATE")  " "  $BRYELLOW$(date "$_HI_HUMAN_CENTRIC_DATE")")
-  # the version cell exists only when hi knows one - a packager's stamp, or
-  # the resolved version the ssh preamble exports into a session. A bare
-  # local shell has neither and keeps the two-cell row its tests pin.
+  # the version cell only when hi knows one (a stamp, or the preamble's
+  # export); a bare local shell keeps the two-cell row its tests pin
   [ -n "${_HI_RELEASE:-}" ] && cells+=("${GREEN}hi.d $(_hi_sanitize "$_HI_RELEASE")")
   header_row "${cells[@]}"
 }
@@ -35,9 +31,8 @@ function system_info() {
   if [ -f "$_HI_LINUX_RELEASE" ]; then
     # also covers WSL - it's a real Linux kernel with its own /etc/os-release
     os=$(awk -F= '$1 == "PRETTY_NAME" { gsub(/"/, "", $2); print $2 }' "$_HI_LINUX_RELEASE")
-    # every probe below ends in `|| true`: a stripped-down target (debian-slim
-    # has no procps, alpine no lscpu) must fall through to the "?" placeholders
-    # rather than abort the caller under `set -e`/pipefail
+    # every probe ends in `|| true`: a stripped-down target (no procps, no
+    # lscpu) falls through to "?" instead of aborting under set -e
     cpus=$(nproc 2>/dev/null || true)
     # straight at the file free(1) itself reads, rather than free | awk
     ram=$(awk '/^MemTotal:/ { printf "%.0fG", $2 / 1048576 }' /proc/meminfo 2>/dev/null || true)
@@ -78,9 +73,8 @@ function system_info() {
     "${CYAN}RAM: ${ram:-?}" "${BRBLUE}CPU: ${base_mhz:-?}/${boost_mhz:-?} MHz"
 }
 
-# git identity (domain masked), running containers, nomad jobs, kube pods and
-# ssh key counts. Probes go through _hi_probe (common/core.sh): this is on the
-# connect path with the user waiting, so a dead daemon must not hang it.
+# git identity (domain masked), containers/jobs/pods, ssh key counts - all
+# through _hi_probe: the user is waiting, a dead daemon must not hang this
 function identity() {
   local email="" domain user_part bullets containers="No docker/podman :(" jobs="" pods="" authorized=0 public=0
   local -a lines cells
@@ -127,17 +121,15 @@ function identity() {
 function banner() {
   [[ "${_HI_HEADER_BANNER:-1}" == 0 ]] && return 0
   local label="$1" color="${2:-$BRGREEN}" changes="" prefix="${3:-}" changes_w=0
-  # `git status --short` over the checkout costs ~10ms and banner runs twice a
-  # session (connect, then load.sh on disconnect) for a number that cannot have
-  # changed in between. Compute it once and keep it.
+  # banner runs twice a session for a count that cannot change between;
+  # ~10ms of `git status` computed once and kept
   if [ -d "$_HI_ROOT/.git" ]; then
     if [ -z "${_HI_BANNER_CHANGES+x}" ]; then
       local -a lines
       _hi_read_lines lines < <(git -C "$_HI_ROOT" status --short 2>/dev/null)
       _HI_BANNER_CHANGES="${#lines[@]}"
-      # memoized beside the count so the branch stays one git call a session
-      # too. symbolic-ref is empty on a detached HEAD - a release-tag checkout
-      # - and main is blanked here, so only an unusual branch earns a callout.
+      # memoized beside the count; symbolic-ref is empty on detached HEAD and
+      # main is blanked, so only an unusual branch earns a callout
       _HI_BANNER_BRANCH="$(_hi_sanitize "$(git -C "$_HI_ROOT" symbolic-ref --short -q HEAD 2>/dev/null || true)")"
       [ "$_HI_BANNER_BRANCH" = main ] && _HI_BANNER_BRANCH=""
     fi
@@ -194,9 +186,8 @@ _HI_NO=(hide "$BRYELLOW" "$YELLOW" hide hide "$BRRED")
 # The marks themselves (_HI_MARK_OK/_ALT/_NO) live in core.sh's
 # _hi_choose_glyphs, beside the rest of the glyph set and its ASCII fallback.
 
-# For each "cmd:priority[,...]", pick the installed package with the
-# highest priority (or the first package if none are installed), then apply the
-# proper color and mark it as installed or missing (or hide it as per above)
+# For each "cmd:priority[,...]": the highest-priority installed package (or
+# the first, if none), colored and marked installed/missing/hidden per above
 function check_line() {
   local pair cmd priority color best best_priority best_idx=0 idx=0 found=0 symbol rendered
   # word-split on the local IFS rather than `read -ra <<<`, whose here-string is

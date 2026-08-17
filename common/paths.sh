@@ -1,9 +1,7 @@
 #!/bin/sh
-# every path hi uses, in one place. Sourced by fish as well as bash/zsh, so it
-# must stay to plain `export NAME=value` lines (plus simple `[ ] && export`
-# guards) - no functions, no ${var:-...}.
-# $_HI_HOME and $_HI_CONFIG_DIR must already be set (common/core.sh does that
-# for bash/zsh); see the note above the user-configurable block below.
+# every path hi uses, in one place. Fish sources this too, so plain `export
+# NAME=value` lines only (plus `[ ] && export` guards) - no functions, no
+# ${var:-...}. $_HI_HOME and $_HI_CONFIG_DIR must already be set.
 # shellcheck disable=SC2139 # aliases are meant to expand $_HI_* now, not later
 # shellcheck disable=SC2153 # $_HI_HOME is set by whoever sources this, not here
 
@@ -23,11 +21,9 @@ export _HI_DOCTOR="$_HI_ROOT/scripts/doctor.sh"
 export _HI_TEST_LIB="$_HI_ROOT/tests/test_lib.sh"
 export _HI_TEST_RUN="$_HI_ROOT/tests/test_runner.sh"
 
-# User config lives in $_HI_CONFIG_DIR, outside the tree: no dirty checkout
-# (hi_update stays clean), no writable-tree requirement. Each entry point sets
-# $_HI_CONFIG_DIR itself (GLOSSARY: toggle defaulting - fish can't expand
-# XDG_CONFIG_HOME defaults). colors/packages are per-file pairs: unoverridden
-# files keep tracking the tree copy. settings.sh is install.sh's alone and has
+# User config lives in $_HI_CONFIG_DIR, outside the tree (no dirty checkout,
+# no writable-tree need); each entry point sets the var itself. Overridden
+# per file - unoverridden ones keep tracking the tree copy; settings.sh has
 # no in-tree half, so its path is unguarded.
 export _HI_SETTINGS="$_HI_CONFIG_DIR/settings.sh"
 export _HI_COLORS="$_HI_ROOT/misc/colors"
@@ -69,9 +65,8 @@ export _HI_HOME_NU_CONFIG="$HOME/.config/nushell/config.nu"
 export _HI_HUMAN_CENTRIC_DATE="+%a %b %e %Y %H:%M:%S %Z"
 export _HI_HUMAN_SHORT_DATE="+%b %e %y %H:%M %Z"
 
-# Helper aliases. The payload ships no scripts/tests/.git, so each says so on
-# a target instead of silently no-oping - negation tested first, since
-# `[ -f x ] && cmd || echo` would also print when cmd itself failed.
+# Helper aliases; the payload ships no scripts/tests/.git, so each says so on
+# a target. Negation first: `[ -f ] && cmd || echo` would print on cmd failure.
 export _HI_NO_CHECKOUT="needs the full hi.d checkout - not available in a hi session"
 # one message for both no-.git shapes (hi session, packaged install) - the
 # alias has room for one condition and the advice is the same
@@ -81,6 +76,7 @@ alias hi_install="[ ! -f $_HI_INSTALL ] && echo 'hi_install $_HI_NO_CHECKOUT' ||
 alias hi_uninstall="[ ! -f $_HI_UNINSTALL ] && echo 'hi_uninstall $_HI_NO_CHECKOUT' || $_HI_UNINSTALL"
 alias hi_configure="[ ! -f $_HI_INSTALL ] && echo 'hi_configure $_HI_NO_CHECKOUT' || $_HI_INSTALL --features-only"
 alias hi_check_configs="[ ! -f $_HI_INSTALL ] && echo 'hi_check_configs $_HI_NO_CHECKOUT' || $_HI_INSTALL --check-configs"
+alias hi_overlay_init="[ ! -f $_HI_INSTALL ] && echo 'hi_overlay_init $_HI_NO_CHECKOUT' || $_HI_INSTALL --overlay-init"
 # .git as the test: absent from payloads and packaged installs alike
 alias hi_update="[ ! -d $_HI_ROOT/.git ] && echo 'hi_update: $_HI_NO_GIT' || git -C $_HI_ROOT pull"
 alias hi_info="echo ' | hi_home: $_HI_HOME | hi_root: $_HI_ROOT | script: $_HI_LAUNCHER'"
@@ -90,11 +86,9 @@ alias hi_doctor="[ ! -f $_HI_DOCTOR ] && echo 'hi_doctor $_HI_NO_CHECKOUT' || $_
 alias hi_packages_preview="bash -c 'source \"$_HI_HEADER\" && full_check'"
 alias hi_test="[ ! -f $_HI_TEST_RUN ] && echo 'hi_test $_HI_NO_CHECKOUT' || $_HI_TEST_RUN"
 
-# Local-only gate. Reads the settings sourced *ahead* of this file by each
-# entry point (core.sh, config.fish, _hi_fallback_rc - no include line parses
-# in all four shells; add a fourth entry point there, not here).
-# _HI_REMOTE_SESSION comes from load.sh, which only remote paths chainload -
-# that is what tells local from remote.
+# Local-only gate, reading settings each entry point sourced *ahead* of this
+# file (no include line parses in all four shells - new entry points source
+# them there, not here); _HI_REMOTE_SESSION is what tells local from remote.
 export _HI_DISABLE_LOCAL
 export _HI_REMOTE_SESSION
 

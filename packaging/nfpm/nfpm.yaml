@@ -1,14 +1,14 @@
 # nfpm turns this one file into .deb/.rpm/.apk - the "PPA answer": users install
 # a file they downloaded from a GitHub Release rather than subscribing to a
-# repository. Driven by packaging/package.sh, which stages the tree first.
+# repository. Driven by packaging/mkpkg.sh, which stages the tree first.
 #
-# Note what is NOT here: any list of what hi.d consists of. package.sh runs
+# Note what is NOT here: any list of what hi.d consists of. mkpkg.sh runs
 # `scripts/install.sh --prefix /usr/share` with $DESTDIR pointed at dist/staging
 # first, so install_tree stays the single decider of a packaged install's
 # contents and this file only says where that staged tree lands. The packaging
 # suite fails if the paths below stop matching what install_tree produces.
 #
-# ${HI_VERSION} is expanded by nfpm from the environment; package.sh reads it
+# ${HI_VERSION} is expanded by nfpm from the environment; mkpkg.sh reads it
 # out of packaging/aur/hi.d/PKGBUILD so there is one version of record.
 
 name: hi.d
@@ -43,7 +43,7 @@ overrides:
       - bash
       - openssh-client
 
-# The apk is signed when package.sh exports HI_APK_KEY (CI does, from the
+# The apk is signed when mkpkg.sh exports HI_APK_KEY (CI does, from the
 # APK_SIGNING_KEY repo secret); with it unset nfpm builds the same apk
 # unsigned, so local builds keep working keyless. key_name is the filename
 # users drop into /etc/apk/keys/ - it is not env-expanded by nfpm, and it is
@@ -90,8 +90,8 @@ contents:
   - src: ./dist/staging/usr/share/hi.d/load.sh
     dst: /usr/share/hi.d/load.sh
     packager: apk
-  - src: ./dist/staging/usr/share/hi.d/LICENSE
-    dst: /usr/share/hi.d/LICENSE
+  - src: ./dist/staging/usr/share/hi.d/LICENSE.md
+    dst: /usr/share/hi.d/LICENSE.md
     packager: apk
   - src: ./dist/staging/usr/share/hi.d/README.md
     dst: /usr/share/hi.d/README.md

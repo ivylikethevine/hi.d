@@ -1,0 +1,26 @@
+#!/bin/sh
+# The basher-shaped face of hi.sh: basher links what BINS names (package.sh
+# at the repo root) onto PATH *by filename*, with no rename support - so the
+# launcher needs a file literally called `hi`, and that link is a symlink
+# into basher's cellar. Resolve through it by hand (readlink -f is GNU;
+# plain readlink is everywhere), then export the one thing a
+# non-~/hi.d clone can't default: _HI_HOME, the *parent* of the package
+# root. Nothing but basher needs this file - a ~/hi.d checkout, a package
+# install and a hi session all reach hi.sh directly.
+self="$0"
+while [ -L "$self" ]; do
+  dir="$(cd "$(dirname "$self")" && pwd)"
+  self="$(readlink "$self")"
+  case "$self" in /*) ;; *) self="$dir/$self" ;; esac
+done
+root="$(cd "$(dirname "$self")/.." && pwd)"
+case "$root" in
+*/hi.d) ;;
+*)
+  # every path in the project resolves against $_HI_HOME/hi.d, so a clone
+  # under any other name cannot work through this shim
+  echo "hi: this checkout is not named hi.d - run scripts/install.sh from it instead" >&2
+  exit 1
+  ;;
+esac
+_HI_HOME="$(dirname "$root")" exec "$root/hi.sh" "$@"

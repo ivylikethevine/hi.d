@@ -24,9 +24,5 @@ runs:
       shell: bash
       env:
         ZIZMOR_VERSION: ${{ inputs.version }}
-      run: |
-        set -euo pipefail
-        curl -sSfL "https://github.com/zizmorcore/zizmor/releases/download/v${ZIZMOR_VERSION}/zizmor-x86_64-unknown-linux-gnu.tar.gz" |
-          tar xz -C /tmp
-        sudo mv "$(find /tmp -maxdepth 2 -name zizmor -type f | head -1)" /usr/local/bin/zizmor
-        zizmor --version
+      # body in install.sh so the lint suite reads it (see setup-shellcheck)
+      run: '"$GITHUB_ACTION_PATH/install.sh"'

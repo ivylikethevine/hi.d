@@ -40,15 +40,17 @@ if $_hi_live {
     # hi is not styling this session's prompt; leave nu's own alone.
     $env.PROMPT_COMMAND_RIGHT = {|| "" }
   } else {
-    # user@host, resolved once - hi's hashed colors never change mid-session.
-    # Every bash body below is a plain string, never a $"..." interpolated
-    # one (see the "one writing rule" in GLOSSARY: nu session tier).
-    $env._HI_NU_USERHOST = (^bash -c ("source " + $env._HI_CORE + '
+    # user@host and the separator (the same setting every other shell reads),
+    # resolved once through a single shell-out - hi's hashed colors never
+    # change mid-session, and startup pays for one bash, not two. Every bash
+    # body below is a plain string, never a $"..." interpolated one (see the
+    # "one writing rule" in GLOSSARY: nu session tier).
+    let _hi_id = (^bash -c ("source " + $env._HI_CORE + '
     _hi_prime_identity
-    printf "%b" " $(_hi_user_escape)$(_hi_whoami)$(_hi_at_color)@$(_hi_host_escape)$(_hi_hostname)$NC"'))
-
-    # the separator, from the same setting every other shell reads
-    $env._HI_NU_END = (^bash -c ("source " + $env._HI_CORE + "; _hi_prompt_end NU '>'"))
+    printf "%b\n" " $(_hi_user_escape)$(_hi_whoami)$(_hi_at_color)@$(_hi_host_escape)$(_hi_hostname)$NC"
+    _hi_prompt_end NU ">"') | lines)
+    $env._HI_NU_USERHOST = ($_hi_id | get 0)
+    $env._HI_NU_END = ($_hi_id | get 1)
 
     # Decided once out here and captured by the closure - none of it changes
     # mid-session. $HOME rather than $nu.home-path (renamed home-dir; either

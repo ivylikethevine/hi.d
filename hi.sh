@@ -41,6 +41,36 @@ _HI_SIZE_TOKEN="@@SIZE@@"
 _HI_ARMOR="base64"
 _HI_UNARMOR="tr -s ' ' '\n' | { base64 -d 2>/dev/null || base64 -D; }"
 
+# _hi_armored_line <redir> <dest> - armor stdin here on the client and print
+# the one-line remote command that unarmors it into <dest> ('>' or '>>').
+# The write-a-file armor idiom has one home instead of a copy per site; the
+# stdin transport in _say_hi keeps its own shape (no tr fold, raw pipe).
+function _hi_armored_line() {
+  printf 'echo "%s" | %s %s %s' "$($_HI_ARMOR)" "$_HI_UNARMOR" "$1" "$2"
+}
+
+# The client-derived env both transports export into the session, one
+# NAME<TAB>value pair per line: the ssh preamble renders `export NAME="v"`
+# lines, the container path folds them into its one `sh -c "export ..."`
+# string. One list, so a var added for one transport can't silently miss the
+# other (_HI_TARGET_TAG and _HI_LOCAL_USER did exactly that).
+function _hi_session_env() {
+  printf '_HI_TARGET\t%s\n' "$DOMAIN"
+  printf '_HI_TARGET_COLOR\t%s\n' "$(_hi_target_color)"
+  printf '_HI_TARGET_TAG\t%s\n' "$(_hi_target_tag)"
+  printf '_HI_LOCAL_USER\t%s\n' "$(_hi_whoami)"
+  printf '_HI_LOCAL_HOSTNAME\t%s\n' "$(_hi_hostname)"
+  printf '_HI_RELEASE\t%s\n' "$(_hi_version)"
+  printf '_HI_TMUX_ATTACH\t%s\n' "${_HI_TMUX_ATTACH:-0}"
+  printf '_HI_TMUX_SESSION\t%s\n' "${_HI_TMUX_SESSION:-hi}"
+  # the client's glyph verdict, not the target's: see _hi_ascii_flag
+  printf '_HI_ASCII\t%s\n' "${_HI_ASCII:-$(_hi_ascii_flag)}"
+  # the client's no-color choice travels the same way (nothing when unset,
+  # which is the value https://no-color.org gives no meaning to)
+  [ -n "${NO_COLOR:-}" ] && printf 'NO_COLOR\t1\n'
+  return 0
+}
+
 # The target's tag and color, memoized: resolution walks ~/.ssh/config and
 # three callers want the same answer per run.
 function _hi_target_tag() {
@@ -152,22 +182,36 @@ EOF
 
 # The no-bash target's rc: every line valid in sh, zsh *and* fish at once.
 # GLOSSARY: fallback rc - the three-shell subset, and why each line is there
+# With --aliases-only <dir>, the container fallback's shape: that path ships
+# aliases.sh alone into <dir> - no tree, so nothing to source paths.sh or
+# settings.sh from, and no $_HI_ROOT in the environment - but the full toggle
+# list still ships (a hand-written subset here is exactly how eight of the
+# ten went missing on the container side).
 function _hi_fallback_rc() {
-  local t
-  # shellcheck disable=SC2016 # $_HI_ROOT is the target's to expand
-  printf 'export _HI_CONFIG_DIR=$_HI_ROOT/misc\nexport _HI_REMOTE_SESSION=1\n'
+  local t aliases_dir=""
+  [ "${1:-}" = --aliases-only ] && aliases_dir="$2"
+  printf 'export _HI_REMOTE_SESSION=1\n'
   # the toggle list is core.sh's _HI_TOGGLES, so a new toggle can't be missed
   # here (unset + `set -u` on a bash-less target was exactly that failure)
   for t in "${_HI_TOGGLES[@]}"; do
     [ "$t" = _HI_REMOTE_SESSION ] || printf 'export %s=0\n' "$t"
   done
-  # shellcheck disable=SC2016 # $_HI_ROOT is the target's to expand
-  printf '[ -f $_HI_ROOT/misc/settings.sh ] && . $_HI_ROOT/misc/settings.sh\n'
-  cat <<EOF
-. \$_HI_ROOT/common/paths.sh 2>/dev/null
-. \$_HI_ROOT/shells/aliases.sh 2>/dev/null
-${CMDARG:-}
-EOF
+  if [ -n "$aliases_dir" ]; then
+    # the client verdicts the ssh preamble would have exported ride the rc
+    # instead on this path
+    printf 'export _HI_ASCII=%s\n' "${_HI_ASCII:-$(_hi_ascii_flag)}"
+    [ -n "${NO_COLOR:-}" ] && printf 'export NO_COLOR=1\n'
+    printf '. %s/aliases.sh 2>/dev/null\n' "$aliases_dir"
+  else
+    # shellcheck disable=SC2016 # $_HI_ROOT is the target's to expand
+    printf 'export _HI_CONFIG_DIR=$_HI_ROOT/misc\n'
+    # shellcheck disable=SC2016 # $_HI_ROOT is the target's to expand
+    printf '[ -f $_HI_ROOT/misc/settings.sh ] && . $_HI_ROOT/misc/settings.sh\n'
+    # shellcheck disable=SC2016 # $_HI_ROOT is the target's to expand
+    printf '. $_HI_ROOT/common/paths.sh 2>/dev/null\n. $_HI_ROOT/shells/aliases.sh 2>/dev/null\n'
+  fi
+  [ -n "${CMDARG:-}" ] && printf '%s\n' "$CMDARG"
+  return 0
 }
 
 # A prompt for the bash-less tiers (sh, ash, dash, ksh, mksh - fish and zsh
@@ -189,19 +233,11 @@ function _hi_fallback_prompt() {
     "$host" "$nc" "$git" "$(_hi_prompt_end SH '\$')"
 }
 
-# The tree on disk, uncompressed - not what a session sends (see _hi_wire_size),
-# but the right answer to "how big is the thing hi would ship". doctor.sh asks.
+# The tree on disk, uncompressed - not what a session sends (that is
+# _hi_wire_estimate), but the right answer to "how big is the thing hi would
+# ship". doctor.sh asks.
 function _hi_size() {
   _hi_du_size "${_HI_PAYLOAD[@]/#/$_HI_ROOT/}"
-}
-
-# What crosses the connection, measured as *sent* (gzipped, armored) - `du`
-# over the source dirs overstated every session.
-function _hi_wire_size() {
-  local total=0 part
-  for part in "$@"; do total=$((total + ${#part})); done
-  # the outer armor, which every one of these streams also passes through
-  _hi_human_bytes "$(_hi_armored_len "$total")"
 }
 
 # base64 length of <n> bytes: four chars per three-byte group, rounded up.
@@ -213,11 +249,18 @@ function _hi_armored_len() {
 
 # What a fresh session would put on the wire, without connecting (doctor.sh
 # asks); no overlay counted - which files ride is a question about a target.
+# Measured as *sent* (each stream armored, the total armored again) - `du`
+# over the source dirs overstated every session.
 function _hi_wire_estimate() {
+  local total=0 part
   # $_HI_LAUNCHER, not $0 - reached by *sourcing*, where $0 is the sourcer;
   # _say_hi keeps $0 because there it is the running, shipped copy
-  _hi_wire_size "$($_HI_ARMOR <"$_HI_LAUNCHER")" "$(_hi_bootloader | $_HI_ARMOR)" \
-    "$(tar czf - -h -C "$_HI_HOME" "${_HI_PAYLOAD[@]/#/hi.d/}" | $_HI_ARMOR)"
+  for part in "$($_HI_ARMOR <"$_HI_LAUNCHER")" "$(_hi_bootloader | $_HI_ARMOR)" \
+    "$(tar czf - -h -C "$_HI_HOME" "${_HI_PAYLOAD[@]/#/hi.d/}" | $_HI_ARMOR)"; do
+    total=$((total + ${#part}))
+  done
+  # the outer armor, which every one of these streams also passes through
+  _hi_human_bytes "$(_hi_armored_len "$total")"
 }
 
 # a file's size in bytes; `stat`'s flags differ GNU/BSD, `wc -c` doesn't
@@ -251,6 +294,14 @@ function _hi_version() {
   fi
 }
 
+# _hi_session_env rendered for the ssh preamble: one export line per pair
+function _hi_env_exports() {
+  local n v
+  while IFS=$'\t' read -r n v; do
+    printf '      export %s="%s"\n' "$n" "$v"
+  done < <(_hi_session_env)
+}
+
 # The bit both _say_hi branches need first; tmux lines settle only "asked
 # for?" - the rest is load.sh's question. Everything expands on the client:
 # no backtick or unescaped $( ) below, not even inside a comment.
@@ -258,19 +309,7 @@ function _hi_remote_preamble() {
   cat <<REMOTE
       _hi_now() { d=\$(date +%s.%N 2>/dev/null); case "\$d" in *N*|'') date +%s ;; *) printf '%s' "\$d" ;; esac; }
       _hi_t0=\$(_hi_now)
-      export _HI_TARGET="$DOMAIN"
-      export _HI_TARGET_COLOR="$(_hi_target_color)"
-      export _HI_TARGET_TAG="$(_hi_target_tag)"
-      export _HI_LOCAL_USER="$(whoami)"
-      export _HI_LOCAL_HOSTNAME="$(_hi_hostname)"
-      export _HI_RELEASE="$(_hi_version)"
-      export _HI_TMUX_ATTACH="${_HI_TMUX_ATTACH:-0}"
-      export _HI_TMUX_SESSION="${_HI_TMUX_SESSION:-hi}"
-      # the client's glyph verdict, not the target's: see _hi_ascii_flag
-      export _HI_ASCII="${_HI_ASCII:-$(_hi_ascii_flag)}"
-      # the client's no-color choice travels the same way (empty when unset,
-      # which is the value https://no-color.org gives no meaning to)
-      ${NO_COLOR:+export NO_COLOR=1}
+$(_hi_env_exports)
       # GLOSSARY: TERM fallback probe - unknown TERM swapped for xterm-256color
       case "\${_HI_TERM_FALLBACK:-1}:\$TERM" in
       0:* | 1:xterm | 1:xterm-256color | 1:xterm-color | 1:screen | 1:screen-256color | 1:tmux | 1:tmux-256color | 1:linux | 1:vt100 | 1:vt220 | 1:dumb | 1:) ;;
@@ -296,6 +335,7 @@ REMOTE
 # \$_hi_rc_dir to point at wherever hi.bashrc/.hi_fallback_rc lives.
 # GLOSSARY: bash --rcfile -i - the flag order, and fish's -C arm
 function _hi_remote_suffix() {
+  # shellcheck disable=SC2016 # _hi_armored_line's destinations are the target's to expand
   cat <<REMOTE
       export _HI_COPY_TIME=\$(awk -v a="\$_hi_t0" -v b="\$(_hi_now)" 'BEGIN{printf "%.3f", b-a}')
       if command -v bash >/dev/null 2>&1; then
@@ -304,7 +344,7 @@ function _hi_remote_suffix() {
         _hi_fallback=sh
         for _hi_s in $_HI_SHELL_LADDER; do command -v "\$_hi_s" >/dev/null 2>&1 && { _hi_fallback="\$_hi_s"; break; }; done
         printf '%s no bash on [$DOMAIN], dropping into plain %s w/ aliases only %s\n' "$hi_esc" "\$_hi_fallback" "$nc_esc" >&2
-        echo "$(_hi_fallback_rc | $_HI_ARMOR)" | $_HI_UNARMOR > "\$_hi_rc_dir/.hi_fallback_rc"
+        $(_hi_fallback_rc | _hi_armored_line '>' '"$_hi_rc_dir/.hi_fallback_rc"')
         case "\$_hi_fallback" in
         zsh)
           cp "\$_hi_rc_dir/.hi_fallback_rc" "\$_hi_rc_dir/.zshrc"
@@ -316,13 +356,13 @@ function _hi_remote_suffix() {
         # time, which busybox ash below cannot). Header stays bash-only.
         ksh | mksh)
           printf '%s\n' '. \$_HI_ROOT/shells/ksh.sh' >> "\$_hi_rc_dir/.hi_fallback_rc"
-          echo "$(_hi_fallback_prompt git | $_HI_ARMOR)" | $_HI_UNARMOR >> "\$_hi_rc_dir/.hi_fallback_rc"
+          $(_hi_fallback_prompt git | _hi_armored_line '>>' '"$_hi_rc_dir/.hi_fallback_rc"')
           ENV="\$_hi_rc_dir/.hi_fallback_rc" "\$_hi_fallback" -i
           ;;
         # sh/dash/ash; the prompt is appended here, not in the shared rc,
         # which also feeds fish (no PS1) and zsh (different \$ escape)
         *)
-          echo "$(_hi_fallback_prompt | $_HI_ARMOR)" | $_HI_UNARMOR >> "\$_hi_rc_dir/.hi_fallback_rc"
+          $(_hi_fallback_prompt | _hi_armored_line '>>' '"$_hi_rc_dir/.hi_fallback_rc"')
           ENV="\$_hi_rc_dir/.hi_fallback_rc" "\$_hi_fallback" -i
           ;;
         esac
@@ -359,13 +399,14 @@ function _say_hi() {
     # instead of shipping one over, and never delete it. No _HI_CLEANUP here is
     # what tells load.sh's clean_all to leave $_HI_ROOT alone.
     tmp_root="${remote_root%/hi.d}"
+    # shellcheck disable=SC2016 # _hi_armored_line's destination is the target's to expand
     middle="$(
       cat <<REMOTE
       export _HI_HOME="$tmp_root"
       export _HI_ROOT="$remote_root"
       _hi_rc_dir="\$(dirname "\$0")"
       printf '%s %s%s' "$hi_esc" "$nc_esc" "-> local hi.d install"
-      echo "$(_hi_bootloader | $_HI_ARMOR)" | $_HI_UNARMOR > "\$_hi_rc_dir/hi.bashrc"
+      $(_hi_bootloader | _hi_armored_line '>' '"$_hi_rc_dir/hi.bashrc"')
       export _HI_CONNECT_PREFIX="-> local hi.d install"
 REMOTE
     )"
@@ -448,8 +489,11 @@ $(_hi_remote_suffix)"
 
 # Four backends share this: docker, podman (drop-in CLI), nomad, kube. The
 # case below picks the command shape; everything past it is identical.
+# _say_hi_container <label> <errlog> <copy_start> - the last two used to be
+# read straight out of _hi's locals, which made the coupling invisible.
 function _say_hi_container() {
-  local label="$1" shell_end root fallback exit_code shell_secs size prefix tarball
+  local label="$1" tmp="$2" copy_start="$3"
+  local shell_end root fallback exit_code shell_secs size prefix tarball env_kv n v
   local -a probe cp attach
   case "$label" in
   # one arm, since podman reuses docker's exec syntax outright
@@ -488,23 +532,17 @@ function _say_hi_container() {
       return $?
     fi
 
-    # aliases.sh plus CMDARG on its own raw line (survives quotes/spaces);
-    # toggle defaults lead because this path ships no paths.sh/settings.sh
-    # to define them, and no overlay either - nothing here would read it
+    # the shared fallback rc in its aliases-only shape (full toggle list,
+    # client verdicts, aliases.sh, CMDARG on its own raw line), plus the
+    # POSIX prompt for the shells that can parse it - the same rule as the
+    # ssh path's `*)` arm, applied while the file is being written rather
+    # than in a second `exec` round trip afterwards
     {
-      printf 'export _HI_DISABLE_EDITORS=0\nexport _HI_DISABLE_ALIASES=0\n'
-      printf 'export _HI_ASCII=%s\n' "${_HI_ASCII:-$(_hi_ascii_flag)}"
-      # the client's no-color choice, same clause as the ssh preamble's
-      [ -n "${NO_COLOR:-}" ] && printf 'export NO_COLOR=1\n'
-      printf '. %s/aliases.sh 2>/dev/null\n' "$root"
-      # the POSIX prompt, for the shells that can parse it - the same rule as
-      # the ssh path's `*)` arm, applied while the file is being written rather
-      # than in a second `exec` round trip afterwards
+      _hi_fallback_rc --aliases-only "$root"
       case "$fallback" in
       zsh | fish) ;;
       *) _hi_fallback_prompt ;;
       esac
-      [ -n "${CMDARG:-}" ] && printf '%s\n' "$CMDARG"
     } |
       "${cp[@]}" sh -c "cat > '$root/.hi_fallback_rc'" 2>"$tmp"
 
@@ -557,8 +595,12 @@ function _say_hi_container() {
   _hi_bootloader | "${cp[@]}" sh -c "cat > '$root/hi.d/hi.bashrc'"
 
   # _HI_CLEANUP marks this tree as disposable for load.sh's clean_all - the
-  # `rm -rf "$root"` below is the client-side belt to its braces
-  "${attach[@]}" sh -c "export _HI_TARGET='$DOMAIN' _HI_HOME='$root' _HI_ROOT='$root/hi.d' _HI_CONFIG_DIR='$root/hi.d/misc' _HI_CLEANUP='$root' _HI_COPY_TIME='$(_hi_copy_time "$copy_start" "$_HI_SHELL_START" "$shell_end")' _HI_CONNECT_PREFIX='$prefix' _HI_ASCII='${_HI_ASCII:-$(_hi_ascii_flag)}'${NO_COLOR:+ NO_COLOR='1'} _HI_RELEASE='$(_hi_version)'; exec bash --rcfile '$root/hi.d/hi.bashrc'"
+  # `rm -rf "$root"` below is the client-side belt to its braces. The shared
+  # client-derived vars come from _hi_session_env; the tree paths and timing
+  # are this transport's own.
+  env_kv=""
+  while IFS=$'\t' read -r n v; do env_kv+=" $n='$v'"; done < <(_hi_session_env)
+  "${attach[@]}" sh -c "export$env_kv _HI_HOME='$root' _HI_ROOT='$root/hi.d' _HI_CONFIG_DIR='$root/hi.d/misc' _HI_CLEANUP='$root' _HI_COPY_TIME='$(_hi_copy_time "$copy_start" "$_HI_SHELL_START" "$shell_end")' _HI_CONNECT_PREFIX='$prefix'; exec bash --rcfile '$root/hi.d/hi.bashrc'"
   exit_code=$?
 
   "${probe[@]}" rm -rf "$root" >/dev/null 2>&1
@@ -622,17 +664,19 @@ function _hi() {
   # one redirect around the whole dispatch, not one per arm a new backend could
   # be added without. The predicates' stderr lands in $tmp too; each already
   # sends its probe to /dev/null, and $tmp only prints when the session failed.
+  # shellcheck disable=SC2094 # $tmp rides as an argument; the container path
+  # writes it under this same redirect on purpose (one error log per run)
   {
     if _hi_is_ssh_host "$DOMAIN"; then
       _say_hi
     elif _hi_is_docker_container "$DOMAIN"; then
-      _say_hi_container docker
+      _say_hi_container docker "$tmp" "$copy_start"
     elif _hi_is_podman_container "$DOMAIN"; then
-      _say_hi_container podman
+      _say_hi_container podman "$tmp" "$copy_start"
     elif _hi_is_nomad_alloc "$DOMAIN"; then
-      _say_hi_container nomad
+      _say_hi_container nomad "$tmp" "$copy_start"
     elif _hi_is_k8s_pod "$DOMAIN"; then
-      _say_hi_container kube
+      _say_hi_container kube "$tmp" "$copy_start"
     else
       _say_hi
     fi

@@ -83,8 +83,8 @@ function identity() {
   email=$(_hi_sanitize "$email")
   if [ -n "$email" ]; then
     domain=${email#*@}
-    printf -v bullets '%*s' "${#domain}" ''
-    user_part="$YELLOW${email%%@*}@${bullets// /$_HI_GLYPH_MASK}"
+    _hi_repeat bullets "${#domain}" "$_HI_GLYPH_MASK"
+    user_part="$YELLOW${email%%@*}@$bullets"
   else
     user_part="${YELLOW}No Git ID Found..."
   fi

@@ -101,38 +101,24 @@ meantime.
 
 ### Docs
 
-- [ ] **Jekyll GitHub Pages action** — _Unblocked to write; publishing waits
-      on the repo being public._ A `pages.yml` workflow that renders the
-      repo's markdown (`README.md` as the index — it now carries the demos,
-      comparison, architecture, packaging and Windows material inline — plus
-      what is left in `docs/`: GLOSSARY, CONTRIBUTING, SECURITY, this file and
-      tldr, which interlink with relative links `link-check.yml` keeps
-      honest) into a GitHub Pages site via the
-      stock `actions/jekyll-build-pages` → `actions/deploy-pages` pair,
-      SHA-pinned and minimal-permission like every other workflow here,
-      plus a small `_config.yml` choosing a theme and excluding the
-      non-docs tree. The human half is one click — Settings → Pages →
-      Source: GitHub Actions — which only exists once the repo is public.
+- [ ] **Jekyll GitHub Pages site** — _Written; the one click is the remaining
+      half._ `.github/workflows/pages.yml` builds the repo's markdown with the
+      stock `actions/jekyll-build-pages` → `actions/upload-pages-artifact` →
+      `actions/deploy-pages` chain, SHA-pinned and minimal-permission like
+      every other workflow here (the write scopes sit on the `deploy` job
+      alone, and Pages deploys never cancel in flight). `_config.yml` picks
+      the primer theme, excludes everything that is code rather than prose,
+      and turns on the four github-pages plugins the repo's markdown needs —
+      `readme-index` (so `README.md` is the index, as it is on github.com),
+      `relative-links` (so `docs/GLOSSARY.md`-style cross-links resolve on the
+      site as well as in the repo), `optional-front-matter` and
+      `titles-from-headings`.
+
+  - **Where:** Settings → Pages
+  - **Do:** set _Source_ to **GitHub Actions**. Only exists once the repo is public.
+  - **Ticks when:** that is set and a dispatch of `pages.yml` has deployed once, with the README rendering as the index and the docs cross-links resolving.
 
 ### Tests
-
-- [ ] **a host report from the harness** — when a suite fails on someone's
-      machine and passes in CI (or the reverse), the first three questions are
-      always the same and none of them are in the output: what bash is this,
-      what userland, and is `_HI_HOME` even pointing at this checkout. A single
-      debug block, printed once at the top of a run, would answer them: bash
-      version and path, OS/kernel, whether the userland is GNU or BSD/busybox,
-      `$_HI_HOME`/`$_HI_ROOT` and whether they resolve to the tree the runner
-      was invoked from, which backends (`docker`/`podman`/`nomad`/`kubectl`/
-      `ssh`) probe available, and the lint tools' versions (`shellcheck`,
-      `shfmt`, `checkbashisms`). Natural home is `tests/test_lib.sh` — it
-      already owns the skip preamble and the probe commands — behind a flag or
-      env on `tests/test_runner.sh` so CI logs can always carry it without
-      noising up a local run. The `_HI_HOME` line alone pays for it: pointing
-      at the wrong tree is this repo's most common false result, and it
-      currently shows only as a suite quietly running fewer cases.
-
-  - **Ticks when:** a run with the flag prints the block, and CI's fast job passes it by default.
 
 - [ ] **the relay e2e** — prove `hi` can be chained: from machine A (has
       hi.d) to machine B (doesn't), then *from inside that session* on to

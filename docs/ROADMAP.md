@@ -71,13 +71,6 @@ meantime.
       `sh -c` round trips) to be worth writing. The zsh/fish/ksh arms still
       exist twice; whether that duplication is worth a shared renderer is now
       an open question rather than an assumed yes.
-- [ ] **Parallelize the independent probes** — header.sh's `identity()` runs
-      its docker/nomad/kubectl probes serially (worst case the *sum* of three
-      2s timeouts while the user waits at connect), and `_hi`'s dispatch
-      walks the backend predicates the same way before a kube target
-      connects. Background jobs + `wait` turns both into max(probes). Same
-      family: bash/zsh completion could keep the target list in a shell
-      variable for `$_HI_TARGETS_TTL` seconds so repeat TABs fork nothing.
 - [ ] **Single-home the remaining hand-synced rosters** — the prompt-end
       defaults (install.sh's rows vs each shell rc's literal), the
       shell↔rc-file pairing (install.sh's `_HI_RC_TABLE`, load.sh's
@@ -101,57 +94,22 @@ meantime.
 
 ### Docs
 
-- [ ] **Jekyll GitHub Pages action** — _Unblocked to write; publishing waits
-      on the repo being public._ A `pages.yml` workflow that renders the
-      repo's markdown (`README.md` as the index — it now carries the demos,
-      comparison, architecture, packaging and Windows material inline — plus
-      what is left in `docs/`: GLOSSARY, CONTRIBUTING, SECURITY, this file and
-      tldr, which interlink with relative links `link-check.yml` keeps
-      honest) into a GitHub Pages site via the
-      stock `actions/jekyll-build-pages` → `actions/deploy-pages` pair,
-      SHA-pinned and minimal-permission like every other workflow here,
-      plus a small `_config.yml` choosing a theme and excluding the
-      non-docs tree. The human half is one click — Settings → Pages →
-      Source: GitHub Actions — which only exists once the repo is public.
+- [ ] **Jekyll GitHub Pages site** — _Written; the one click is the remaining
+      half._ `.github/workflows/pages.yml` builds the repo's markdown with the
+      stock `actions/jekyll-build-pages` → `actions/upload-pages-artifact` →
+      `actions/deploy-pages` chain, SHA-pinned and minimal-permission like
+      every other workflow here (the write scopes sit on the `deploy` job
+      alone, and Pages deploys never cancel in flight). `_config.yml` picks
+      the primer theme, excludes everything that is code rather than prose,
+      and turns on the four github-pages plugins the repo's markdown needs —
+      `readme-index` (so `README.md` is the index, as it is on github.com),
+      `relative-links` (so `docs/GLOSSARY.md`-style cross-links resolve on the
+      site as well as in the repo), `optional-front-matter` and
+      `titles-from-headings`.
 
-### Tests
-
-- [ ] **a host report from the harness** — when a suite fails on someone's
-      machine and passes in CI (or the reverse), the first three questions are
-      always the same and none of them are in the output: what bash is this,
-      what userland, and is `_HI_HOME` even pointing at this checkout. A single
-      debug block, printed once at the top of a run, would answer them: bash
-      version and path, OS/kernel, whether the userland is GNU or BSD/busybox,
-      `$_HI_HOME`/`$_HI_ROOT` and whether they resolve to the tree the runner
-      was invoked from, which backends (`docker`/`podman`/`nomad`/`kubectl`/
-      `ssh`) probe available, and the lint tools' versions (`shellcheck`,
-      `shfmt`, `checkbashisms`). Natural home is `tests/test_lib.sh` — it
-      already owns the skip preamble and the probe commands — behind a flag or
-      env on `tests/test_runner.sh` so CI logs can always carry it without
-      noising up a local run. The `_HI_HOME` line alone pays for it: pointing
-      at the wrong tree is this repo's most common false result, and it
-      currently shows only as a suite quietly running fewer cases.
-
-  - **Ticks when:** a run with the flag prints the block, and CI's fast job passes it by default.
-
-- [ ] **the relay e2e** — prove `hi` can be chained: from machine A (has
-      hi.d) to machine B (doesn't), then *from inside that session* on to
-      machine C — the config landing intact on the final hop, and the
-      cleanup traps firing on **both** B and C, on clean exit and on an
-      error/kill mid-relay alike. Harness-wise this is two sshd containers on
-      one docker network, a key authorized from B to C, and the existing pty
-      feeder typing the second `hi` into the first session; the
-      disconnect-trap assertion already exists in `ssh_disconnect_test.sh`
-      to crib from. The test will immediately surface the real design
-      question, which should be answered on purpose rather than by accident:
-      **`hi.sh` itself is deliberately not in `$_HI_PAYLOAD`**, so a
-      disposable session on B has no launcher to relay with — the `hi` alias
-      points at `$_HI_LAUNCHER`, which only exists where hi.d is permanently
-      installed. So either the relay is documented as
-      permanent-install-only (and the test proves that path), or an opt-in
-      (`_HI_RELAY=1`?) ships `hi.sh` in the payload for hop-capable
-      sessions and the test proves the disposable path too — weigh the
-      payload cost against the badge before choosing the second.
+  - **Where:** Settings → Pages
+  - **Do:** set _Source_ to **GitHub Actions**. Only exists once the repo is public.
+  - **Ticks when:** that is set and a dispatch of `pages.yml` has deployed once, with the README rendering as the index and the docs cross-links resolving.
 
 ## Human actions
 

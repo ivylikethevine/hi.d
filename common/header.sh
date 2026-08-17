@@ -73,12 +73,36 @@ function system_info() {
     "${CYAN}RAM: ${ram:-?}" "${BRBLUE}CPU: ${base_mhz:-?}/${boost_mhz:-?} MHz"
 }
 
+# identity()'s backend probes are independent and each is capped at
+# $_HI_PROBE_TIMEOUT, so run in turn a host with three wedged daemons makes
+# the user wait the *sum* of the ceilings at connect; started together it is
+# the longest of them. Files, not process substitutions, because the probes
+# are wanted for their output and one substitution each is back to waiting on
+# each in turn. `wait <pid>` and never `wait -n`: macOS ships bash 3.2.
+declare -a _HI_PROBE_PIDS=()
+
+# _hi_probe_start <file> <cmd...> - one probe into <file>, backgrounded;
+# 2>/dev/null so a downed daemon reports to itself, not into the header
+function _hi_probe_start() {
+  local out="$1"
+  shift
+  "$@" >"$out" 2>/dev/null &
+  _HI_PROBE_PIDS+=("$!")
+}
+
+# a probe failing is a normal outcome - that is what the counts are for
+function _hi_probe_wait() {
+  local pid
+  for pid in ${_HI_PROBE_PIDS[@]+"${_HI_PROBE_PIDS[@]}"}; do wait "$pid" || true; done
+  _HI_PROBE_PIDS=()
+}
+
 # git identity (domain masked), containers/jobs/pods, ssh key counts - all
 # through _hi_probe: the user is waiting, a dead daemon must not hang this
 function identity() {
   local email="" domain user_part bullets containers="No docker/podman :(" jobs="" pods="" authorized=0 public=0
   local -a lines cells
-  local container_bin
+  local container_bin nomad_bin="" kube_bin="" dir
   command -v git &>/dev/null && email=$(git config --get user.email 2>/dev/null || true)
   email=$(_hi_sanitize "$email")
   if [ -n "$email" ]; then
@@ -88,27 +112,36 @@ function identity() {
   else
     user_part="${YELLOW}No Git ID Found..."
   fi
+
+  # which of the three this host can answer at all, then all of them at once
   container_bin="$(command -v docker || command -v podman || true)"
+  command -v nomad &>/dev/null && nomad_bin=nomad
+  command -v kubectl &>/dev/null && kube_bin=kubectl
+  dir="$(mktemp -d -t hi.probes.XXXXXX)"
+  [ -n "$container_bin" ] && _hi_probe_start "$dir/containers" _hi_probe "$container_bin" container ls -q
+  [ -n "$nomad_bin" ] && _hi_probe_start "$dir/nomad" _hi_probe nomad job status
+  # kube is a target hi can connect to (hi.sh's _hi_is_k8s_pod), so it belongs
+  # on the same count line as the other two - counted through targets.sh,
+  # whose list_kube owns the "which pods count as reachable" rule (and brings
+  # its probe timeout along). docker/nomad stay direct on purpose: their
+  # counts answer different questions than the completion listers do.
+  [ -n "$kube_bin" ] && _hi_probe_start "$dir/kube" sh "$_HI_TARGETS" kube
+  _hi_probe_wait
+
   if [ -n "$container_bin" ]; then
-    # 2>/dev/null so a daemon that's down reports its error to itself rather
-    # than into the middle of the header
-    _hi_read_lines lines < <(_hi_probe "$container_bin" container ls -q 2>/dev/null)
+    _hi_read_lines lines <"$dir/containers"
     containers="Containers: ${#lines[@]}"
   fi
-  if command -v nomad &>/dev/null; then
-    _hi_read_lines lines < <(_hi_probe nomad job status 2>/dev/null)
+  if [ -n "$nomad_bin" ]; then
+    _hi_read_lines lines <"$dir/nomad"
     lines=("${lines[@]:1}") # drop the header row
     jobs="Jobs: ${#lines[@]}"
   fi
-  # kube is a target hi can connect to (hi.sh's _hi_is_k8s_pod), so it belongs
-  # on the same count line as the other three - counted through targets.sh,
-  # whose list_kube owns the "which pods count as reachable" rule (and brings
-  # its probe timeout along). docker/nomad above stay direct on purpose:
-  # their counts answer different questions than the completion listers do.
-  if command -v kubectl &>/dev/null; then
-    _hi_read_lines lines < <(sh "$_HI_TARGETS" kube 2>/dev/null)
+  if [ -n "$kube_bin" ]; then
+    _hi_read_lines lines <"$dir/kube"
     pods="Pods: ${#lines[@]}"
   fi
+  rm -rf "$dir"
   [ -f "$_HI_SSH_AUTHORIZED_KEYS" ] && _hi_read_lines lines <"$_HI_SSH_AUTHORIZED_KEYS" && authorized=${#lines[@]}
   [ -d "$_HI_SSH_DIR" ] && _hi_read_lines lines < <(find "$_HI_SSH_DIR" -type f -name "*.pub") && public=${#lines[@]}
   cells=("$user_part" "$BLUE$containers")

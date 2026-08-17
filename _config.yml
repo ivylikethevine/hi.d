@@ -1,0 +1,51 @@
+# Jekyll config for the GitHub Pages site (.github/workflows/pages.yml).
+# Nothing else in the repo reads this file, and no Ruby is a dependency here:
+# actions/jekyll-build-pages brings the github-pages gem, which is where the
+# theme and every plugin below come from.
+
+title: hi.d
+description: >-
+  A greeting, a prompt and your aliases on every machine you ssh, docker,
+  podman, nomad or kubectl into - without installing anything there.
+
+theme: jekyll-theme-primer
+
+# Each of these earns its place against how this repo's markdown is written:
+#
+#   readme-index         - README.md becomes the site index. It is the front
+#                          door on github.com and it should be the front door
+#                          here; there is no index.md and there should not be.
+#   relative-links       - rewrites in-repo links like docs/GLOSSARY.md to the
+#                          pages they render as. Without it every cross-link in
+#                          the docs 404s on the site while staying correct in
+#                          the repo, which is the worst of both.
+#   optional-front-matter - none of these files carry YAML front matter, and
+#                          they must not have to: they are read in the repo
+#                          first and on the site second.
+#   titles-from-headings - so each page's <title> is its own H1 rather than the
+#                          site title repeated.
+plugins:
+  - jekyll-readme-index
+  - jekyll-relative-links
+  - jekyll-optional-front-matter
+  - jekyll-titles-from-headings
+
+# The site is the prose, not the program. Everything that is code, tooling or
+# packaging is excluded; docs/demos stays, because README.md embeds those gifs.
+exclude:
+  - bin/
+  - common/
+  - shells/
+  - scripts/
+  - tests/
+  - packaging/
+  - misc/
+  - docs/tapes/
+  - docs/hi.1
+  - hi.sh
+  - load.sh
+  - package.sh
+  - CLAUDE.md
+  - Gemfile
+  - Gemfile.lock
+  - vendor/

@@ -19,60 +19,6 @@ source "${_HI_HOME:-$HOME}/hi.d/common/core.sh"
 # shellcheck source=../test_lib.sh
 source "$_HI_TEST_LIB"
 
-function _hi_ssh_client_pids() {
-  pgrep -f -- "ssh .*-p $_HI_SSH_PORT .*hitest@127.0.0.1" 2>/dev/null || true
-}
-
-# hi.sh's ControlPath, read back out of the session client's own argv - the
-# mux master is found by that exact path rather than by a `hi.cm.*` glob, so a
-# concurrent hi session on the same machine (or one still persisting from the
-# clean-exit case above) can't be matched by mistake.
-function _hi_ssh_ctl_path() {
-  local args
-  if [ -r "/proc/$1/cmdline" ]; then
-    args="$(tr '\0' ' ' <"/proc/$1/cmdline")"
-  else
-    args="$(ps -ww -o args= -p "$1" 2>/dev/null)"
-  fi
-  printf '%s' "$args" | grep -oE 'ControlPath=[^[:space:]]+' | head -1 | cut -d= -f2-
-}
-
-# The ControlPersist master renames itself to `ssh: <ControlPath> [mux]` via
-# setproctitle, so its argv is gone and the client pattern above can never
-# reach it.
-function _hi_ssh_mux_pids() {
-  local ctl="${1//./\\.}"
-  pgrep -f -- "ssh: $ctl \[mux\]" 2>/dev/null || true
-}
-
-# Every local pid this suite has SIGSTOPped, so the exit trap can undo it.
-# This is the only suite that deliberately freezes processes, and the window
-# between the kill -STOP loop and the kill -9 one is ~30s of polling: an abort
-# in there (^C, a runner timeout, `set -e` upstream) would otherwise leave
-# stopped ssh clients and a mux master holding a socket open indefinitely.
-_HI_FROZEN_PIDS=()
-
-function _hi_freeze() {
-  local pid
-  for pid in "$@"; do
-    _HI_FROZEN_PIDS+=("$pid")
-    kill -STOP "$pid" 2>/dev/null || true
-  done
-}
-
-# CONT before KILL: a SIGSTOPped process can't act on SIGKILL's cleanup path
-# until it is scheduled again, so thawing first is what makes the kill land.
-function _hi_thaw_frozen() {
-  local pid
-  for pid in "${_HI_FROZEN_PIDS[@]:-}"; do
-    [ -n "$pid" ] || continue
-    kill -CONT "$pid" 2>/dev/null || true
-    kill -9 "$pid" 2>/dev/null || true
-  done
-  _HI_FROZEN_PIDS=()
-  return 0
-}
-
 function _hi_ready_dir() {
   grep -oE 'READY:[^[:space:]]*' "$1" 2>/dev/null | sed 's/^READY://' | head -1
 }
@@ -95,8 +41,7 @@ function test_clean_exit_removes_cleanup_dir() {
 }
 
 function test_sudden_disconnect_removes_cleanup_dir() {
-  local out_file="$_HI_WORKDIR/disconnect.out" cleanup_dir launcher_pid pid ctl ok=0
-  local -a pids=() mux=()
+  local out_file="$_HI_WORKDIR/disconnect.out" cleanup_dir launcher_pid ok=0
   : >"$out_file"
 
   _hi_pty_wrap 0 force "no python3 to give the launcher its own pty - ssh will raw-mode this terminal and the test kills it before it can restore, expect garbled output afterwards"
@@ -122,24 +67,11 @@ function test_sudden_disconnect_removes_cleanup_dir() {
     return 1
   fi
 
-  _hi_read_lines pids < <(_hi_ssh_client_pids)
-  if [ "${#pids[@]}" -eq 0 ]; then
-    _hi_cecho " | no local ssh process found to freeze" "$RED"
+  # client *and* mux master - see _hi_freeze_session, which says why both
+  if ! _hi_freeze_session; then
     kill -9 "$launcher_pid" 2>/dev/null || true
     return 1
   fi
-  ctl="$(_hi_ssh_ctl_path "${pids[0]}")"
-  [ -n "$ctl" ] && _hi_read_lines mux < <(_hi_ssh_mux_pids "$ctl")
-  # if hi.sh ever stops multiplexing, this is the check that says so - delete
-  # it deliberately rather than letting the suite quietly go back to freezing a
-  # client whose connection someone else is keeping alive
-  if [ "${#mux[@]}" -eq 0 ]; then
-    _hi_cecho " | no ControlPersist mux master found - freezing the client alone proves nothing" "$RED"
-    kill -9 "$launcher_pid" 2>/dev/null || true
-    return 1
-  fi
-  pids+=(${mux[@]+"${mux[@]}"})
-  _hi_freeze ${pids[@]+"${pids[@]}"}
 
   # sshd's ClientAliveInterval=2/ClientAliveCountMax=1 reaps a frozen client in
   # ~4-6s; the rest is headroom for a loaded runner

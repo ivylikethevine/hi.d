@@ -419,6 +419,153 @@ function _hi_require_backend() {
   _hi_stand_down "$1 unreachable" "$1 not reachable, skipping"
 }
 
+# --- the host report ---------------------------------------------------------
+#
+# When a suite fails on someone's machine and passes in CI (or the reverse),
+# the first three questions are always the same and none of them are in the
+# output: what bash is this, what userland, and is $_HI_HOME even pointing at
+# this checkout. This block answers them once at the top of a run, behind
+# test_runner.sh's --host-report (or _HI_HOST_REPORT=1), so CI logs can always
+# carry it without noising up a local one.
+#
+# Every probe is guarded and every substitution falls back: this is a debug
+# aid, and it must never be the thing that fails a run. A host with nothing on
+# its PATH still gets a block, reading "absent" in every row - which is itself
+# a test case (see tests/harness/lib_test.sh).
+
+# _hi_host_row <label> <text> [color]
+function _hi_host_row() {
+  _hi_cecho " | $(printf '%-9s' "$1") $2" "${3:-}"
+}
+
+# _hi_host_resolve <dir> - <dir> with symlinks resolved, empty if it is not a
+# directory. `cd -P`, not `readlink -f`: that is a GNU extension, and this
+# file has to give the same answer on the macOS job.
+function _hi_host_resolve() {
+  [ -n "${1:-}" ] || return 0
+  (cd -P "$1" 2>/dev/null && pwd) || true
+}
+
+# _hi_tool_version <cmd> - "<cmd> X.Y.Z", or "<cmd> (absent)". One extractor
+# for every tool below: the first version-shaped token anywhere in --version's
+# output, which is all shellcheck (version on line 2), checkbashisms (a
+# sentence), shfmt (a bare vX.Y.Z) and the four shells agree on. </dev/null so
+# a tool that answers --version by starting a REPL exits instead of hanging.
+function _hi_tool_version() {
+  local out
+  command -v "$1" >/dev/null 2>&1 || {
+    printf '%s (absent)' "$1"
+    return 0
+  }
+  out="$("$1" --version 2>&1 </dev/null | grep -oE '[0-9]+\.[0-9]+(\.[0-9]+)?' | head -1 || true)"
+  printf '%s %s' "$1" "${out:-?}"
+}
+
+# _hi_host_versions <cmd...> - the row body for a group of tools.
+function _hi_host_versions() {
+  local cmd out=""
+  for cmd in "$@"; do out="$out${out:+, }$(_hi_tool_version "$cmd")"; done
+  printf '%s' "$out"
+}
+
+# What the e2e suites need, reported rather than enforced: docker and podman
+# have to *answer*, not merely exist (_hi_require_backend runs the same `info`,
+# and a downed daemon is why an e2e suite skips); the rest only have to be on
+# PATH. Probed through _hi_probe, so a wedged daemon costs the same ceiling
+# here as it does in the header.
+_HI_HOST_BACKENDS=(docker podman nomad kubectl kind ssh)
+
+function _hi_host_backend_state() {
+  local bin out="" t0
+  for bin in "${_HI_HOST_BACKENDS[@]}"; do
+    if ! command -v "$bin" >/dev/null 2>&1; then
+      out="$out${out:+, }$bin: absent"
+      continue
+    fi
+    case "$bin" in
+    docker | podman)
+      t0="$(_hi_now)"
+      if _hi_probe "$bin" info >/dev/null 2>&1; then
+        out="$out${out:+, }$bin: answering ($(_hi_elapsed "$t0" "$(_hi_now)")s)"
+      else
+        out="$out${out:+, }$bin: NOT answering"
+      fi
+      ;;
+    *) out="$out${out:+, }$bin: present" ;;
+    esac
+  done
+  printf '%s' "$out"
+}
+
+# _hi_host_tree_check <reference-tree> - is $_HI_ROOT the tree this run was
+# invoked from? Silent when it is; one yellow line and a non-zero return when
+# it is not. The reference has to come from the caller, because everything
+# derived from $_HI_HOME - this file included - moves with the mistake: only
+# the script the user actually typed the path of knows which tree that was.
+#
+# A warning, never a failure: pointing a run at another tree is legal and
+# test_runner.sh --help documents it. Doing it *by accident* is the thing -
+# a login profile exporting _HI_HOME is how - and it shows up nowhere else
+# than as suites quietly running fewer cases.
+function _hi_host_tree_check() {
+  local here="${1:-}" there
+  there="$(_hi_host_resolve "${_HI_ROOT:-}")"
+  [ -n "$here" ] && [ "$here" = "$there" ] && return 0
+  _hi_cecho " | _HI_ROOT is ${there:-${_HI_ROOT:-unset} (missing)}, not the tree this run came from${here:+ ($here)} - the suites are testing another checkout" "$YELLOW"
+  return 1
+}
+
+# _hi_host_report <reference-tree> - the block itself.
+function _hi_host_report() {
+  local ref="${1:-}" kernel os userland sed_ver loc glyphs
+
+  _hi_h2 "The host"
+  _hi_host_row bash "${BASH_VERSION:-?} (${BASH:-?})"
+
+  kernel="$(uname -srm 2>/dev/null || true)"
+  os=""
+  if [ -f "${_HI_LINUX_RELEASE:-/etc/os-release}" ]; then
+    os="$(awk -F= '$1 == "PRETTY_NAME" { gsub(/"/, "", $2); print $2 }' \
+      "${_HI_LINUX_RELEASE:-/etc/os-release}" 2>/dev/null || true)"
+  elif command -v sw_vers >/dev/null 2>&1; then
+    os="macOS $(sw_vers -productVersion 2>/dev/null || true)"
+  fi
+  _hi_host_row os "${kernel:-?}${os:+ - $os}"
+
+  # GNU or not decides `sed -i`, `mktemp -t`, `base64 -D` and half the reasons
+  # a suite passes here and fails on the macOS job
+  sed_ver="$(sed --version 2>&1 </dev/null || true)"
+  case "$sed_ver" in
+  *GNU*) userland="GNU" ;;
+  *[Bb]usy[Bb]ox*) userland="busybox" ;;
+  *) userland="BSD/other (sed has no --version)" ;;
+  esac
+  if command -v timeout >/dev/null 2>&1; then
+    userland="$userland, timeout present"
+  else
+    # core.sh's _hi_probe degrades to a bare call without it, so nothing on
+    # this host is actually bounded by $_HI_PROBE_TIMEOUT
+    userland="$userland, NO timeout - probes are unbounded here"
+  fi
+  _hi_host_row userland "$userland"
+
+  loc="${LC_ALL:-${LC_CTYPE:-${LANG:-unset}}}"
+  if _hi_use_ascii; then glyphs="ASCII marks"; else glyphs="UTF-8 glyphs"; fi
+  _hi_host_row locale "$loc ($glyphs)"
+
+  _hi_host_row _HI_HOME "${_HI_HOME:-unset}"
+  # on disagreement the check prints its own line, which says more than a row
+  if _hi_host_tree_check "$ref"; then
+    _hi_host_row tree "${_HI_ROOT:-unset} - the tree this run came from" "$GREEN"
+  fi
+
+  _hi_host_row backends "$(_hi_host_backend_state)"
+  _hi_host_row harness "$(_hi_host_versions python3 pgrep git tar)"
+  _hi_host_row shells "$(_hi_host_versions bash zsh fish nu ksh mksh)"
+  _hi_host_row lint "$(_hi_host_versions shellcheck shfmt checkbashisms)"
+  return 0
+}
+
 # The command each e2e suite runs *on the target* to prove hi landed there: it
 # echoes $1 (the marker) only if the assertion holds, and the suite greps the
 # transcript for it. $2 picks the shape, which differs by what each branch has
@@ -842,6 +989,95 @@ function _hi_sshd_container() {
     _hi_cecho " | Sshd never came up" "$RED"
     return 1
   fi
+}
+
+# --- freezing a live session ---------------------------------------------------
+#
+# Proving a cleanup trap fires on a *dropped* link means killing the link from
+# outside, and doing that takes two SIGSTOPs: _say_hi multiplexes, so a
+# backgrounded ControlPersist master holds the socket beside the visible
+# `ssh -t`, and it is the master that answers sshd's ClientAlive probes.
+# Freeze only the client and sshd correctly keeps the session - that is a hung
+# terminal, not a dead link. Hence _hi_ssh_mux_pids, and hence both ssh
+# suites treating a missing master as a hard failure rather than carrying on.
+
+# Clients of the throwaway sshd on $_HI_SSH_PORT - the port is what keeps a
+# concurrent hi session on this machine out of the match.
+function _hi_ssh_client_pids() {
+  pgrep -f -- "ssh .*-p $_HI_SSH_PORT .*hitest@127.0.0.1" 2>/dev/null || true
+}
+
+# hi.sh's ControlPath, read back out of the session client's own argv - the
+# mux master is found by that exact path rather than by a `hi.cm.*` glob, so a
+# concurrent hi session on the same machine (or one still persisting from an
+# earlier case) can't be matched by mistake.
+function _hi_ssh_ctl_path() {
+  local args
+  if [ -r "/proc/$1/cmdline" ]; then
+    args="$(tr '\0' ' ' <"/proc/$1/cmdline")"
+  else
+    args="$(ps -ww -o args= -p "$1" 2>/dev/null)"
+  fi
+  printf '%s' "$args" | grep -oE 'ControlPath=[^[:space:]]+' | head -1 | cut -d= -f2-
+}
+
+# The ControlPersist master renames itself to `ssh: <ControlPath> [mux]` via
+# setproctitle, so its argv is gone and the client pattern above can never
+# reach it.
+function _hi_ssh_mux_pids() {
+  local ctl="${1//./\\.}"
+  pgrep -f -- "ssh: $ctl \[mux\]" 2>/dev/null || true
+}
+
+# Every local pid a suite has SIGSTOPped, so its exit trap can undo it. The
+# window between the freeze and the kill is tens of seconds of polling: an
+# abort in there (^C, a runner timeout, `set -e` upstream) would otherwise
+# leave stopped ssh clients and a mux master holding a socket open
+# indefinitely. Suites that freeze pass _hi_thaw_frozen to _hi_workdir.
+_HI_FROZEN_PIDS=()
+
+function _hi_freeze() {
+  local pid
+  for pid in "$@"; do
+    _HI_FROZEN_PIDS+=("$pid")
+    kill -STOP "$pid" 2>/dev/null || true
+  done
+}
+
+# CONT before KILL: a SIGSTOPped process can't act on SIGKILL's cleanup path
+# until it is scheduled again, so thawing first is what makes the kill land.
+function _hi_thaw_frozen() {
+  local pid
+  for pid in "${_HI_FROZEN_PIDS[@]:-}"; do
+    [ -n "$pid" ] || continue
+    kill -CONT "$pid" 2>/dev/null || true
+    kill -9 "$pid" 2>/dev/null || true
+  done
+  _HI_FROZEN_PIDS=()
+  return 0
+}
+
+# _hi_freeze_session - freezes the live session's client *and* its mux master,
+# named for the report if either is missing. Returns 1 without freezing
+# anything when there is nothing to freeze, or when hi has stopped
+# multiplexing - which would make freezing the client alone prove nothing, and
+# is worth failing on deliberately rather than passing quietly.
+function _hi_freeze_session() {
+  local ctl
+  local -a pids=() mux=()
+  _hi_read_lines pids < <(_hi_ssh_client_pids)
+  if [ "${#pids[@]}" -eq 0 ]; then
+    _hi_cecho " | no local ssh process found to freeze" "$RED"
+    return 1
+  fi
+  ctl="$(_hi_ssh_ctl_path "${pids[0]}")"
+  [ -n "$ctl" ] && _hi_read_lines mux < <(_hi_ssh_mux_pids "$ctl")
+  if [ "${#mux[@]}" -eq 0 ]; then
+    _hi_cecho " | no ControlPersist mux master found - freezing the client alone proves nothing" "$RED"
+    return 1
+  fi
+  pids+=(${mux[@]+"${mux[@]}"})
+  _hi_freeze ${pids[@]+"${pids[@]}"}
 }
 
 # The client-side launcher invocation both ssh suites make: hi.sh pointed at

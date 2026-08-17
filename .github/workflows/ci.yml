@@ -40,7 +40,7 @@ jobs:
       - uses: ./.github/actions/setup-nu
 
       - name: Run fast test suites
-        run: "${{ github.workspace }}/tests/test_runner.sh --group fast"
+        run: "${{ github.workspace }}/tests/test_runner.sh --host-report --group fast"
 
   # The same suites on macOS: /bin/bash 3.2, BSD userland. The %e/width/sort
   # fixes in common/ came out of this job, so it gates for real now.
@@ -64,7 +64,7 @@ jobs:
       - uses: ./.github/actions/setup-shellcheck
 
       - name: Run fast test suites
-        run: "${{ github.workspace }}/tests/test_runner.sh --group fast"
+        run: "${{ github.workspace }}/tests/test_runner.sh --host-report --group fast"
 
   # bad `needs`, invalid contexts, shellcheck over every run: block - the
   # workflows and composite actions are code too, so they get a linter
@@ -157,7 +157,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y zsh fish
 
       - name: Run benchmarks
-        run: "${{ github.workspace }}/tests/test_runner.sh --group bench"
+        run: "${{ github.workspace }}/tests/test_runner.sh --host-report --group bench"
 
   # catches nfpm.yaml/install_tree breakage on the PR that causes it, not at
   # the next release tag
@@ -219,7 +219,7 @@ jobs:
 
       # --require-run: here a skip is a broken runner, not an optional backend
       - name: Run end-to-end suites
-        run: "${{ github.workspace }}/tests/test_runner.sh --require-run --group e2e"
+        run: "${{ github.workspace }}/tests/test_runner.sh --host-report --require-run --group e2e"
 
   e2e-backends:
     name: e2e (podman, nomad, kube)
@@ -247,4 +247,4 @@ jobs:
           install_only: true
 
       - name: Run backend end-to-end suites
-        run: "${{ github.workspace }}/tests/test_runner.sh --require-run --group backends"
+        run: "${{ github.workspace }}/tests/test_runner.sh --host-report --require-run --group backends"

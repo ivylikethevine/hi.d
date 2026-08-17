@@ -32,7 +32,7 @@ jobs:
   # that a bad tag is caught before anyone is asked to approve anything.
   build:
     name: build packages
-    runs-on: self-hosted, ubuntu-latest
+    runs-on: self-hosted
     timeout-minutes: 30
     # the provenance attestation below needs these two; contents stays read
     permissions:

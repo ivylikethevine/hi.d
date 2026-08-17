@@ -66,7 +66,7 @@ function _hi_run_case() {
     fi
   fi
 
-  docker rm -f "$name" >/dev/null 2>&1
+  _hi_rm_container "$name"
   [ "$ok" -eq 1 ]
 }
 
@@ -87,7 +87,7 @@ function _hi_run_interactive_case() {
     fi
   fi
 
-  docker rm -f "$name" >/dev/null 2>&1
+  _hi_rm_container "$name"
   [ "$ok" -eq 1 ]
 }
 
@@ -140,7 +140,7 @@ function _hi_run_tmux_case() {
     sed 's/^/      /' "$out" | tail -5
   fi
 
-  docker rm -f "$name" >/dev/null 2>&1
+  _hi_rm_container "$name"
   [ "$ok" -eq 1 ]
 }
 
@@ -171,43 +171,21 @@ function _hi_run_ksh_git_case() {
     \$G commit -qm initial &&
     chown -R hitest:hitest /home/hitest" >/dev/null 2>&1; then
     _hi_h3 " | [kshgit] -- could not build the probe repo" "$RED"
-    docker rm -f "$name" >/dev/null 2>&1
+    _hi_rm_container "$name"
     return 1
   fi
 
   _hi_ssh_launch "$_HI_SSH_PORT"
 
-  # test_lib.sh's _hi_interactive_case can't drive this one: it waits for - and
-  # asserts - load.sh's "hi closing" line, and this tier never reaches load.sh
-  # at all (that is what "no bash" means here). Same shape otherwise, with the
-  # branch name as the second marker.
-  local out_file="$_HI_WORKDIR/kshgit.interactive.out" t0 t1 exit_code
-  if [ "${#_HI_PTY_FORCED[@]}" -eq 0 ]; then
-    _hi_skip "[kshgit]" "no python3 to drive an interactive pty"
-    docker rm -f "$name" >/dev/null 2>&1
-    return 0
-  fi
+  # The shared driver, with its knobs turned for this tier: no bash means the
+  # session never reaches load.sh, so there is no "hi closing" to wait for -
+  # the echoed marker is the closing line instead - and the branch name is the
+  # extra assertion: nothing types it, so it is in the transcript only because
+  # mksh expanded $(_hi_ksh_git) to draw the prompt.
+  _hi_interactive_case -c "$_HI_TEST_MARKER-INTERACTIVE" -m "$branch" \
+    kshgit "mksh git segment" "$_HI_TEST_MARKER" 90 "${_HI_SSH_LAUNCH_BARE[@]}" && ok=1
 
-  t0="$(_hi_now)"
-  : >"$out_file"
-  # shellcheck disable=SC2094 # separate processes; the left side only polls
-  {
-    _hi_poll_bool "$((${_HI_INTERACTIVE_SETTLE:-4} * 4))" 0.25 _hi_session_ready "$out_file" || true
-    printf "printf '%%s-%%s\\\\n' %s INTERACTIVE\nexit\n" "$_HI_TEST_MARKER"
-    # the hyphen-joined form only exists in real output - a pty echoes the line
-    # we typed, where printf's arguments are still space-separated
-    _hi_poll_bool 20 0.25 grep -q "$_HI_TEST_MARKER-INTERACTIVE" "$out_file" || true
-  } | "${_HI_PTY_FORCED[@]}" "${_HI_SSH_LAUNCH_BARE[@]}" >"$out_file" 2>&1 &
-  _hi_wait_pid "$!" 90 _hi_timed_out kshgit 90
-  exit_code="$_HI_WAIT_EXIT"
-  t1="$(_hi_now)"
-
-  # the branch name is the segment assertion: nothing types it, so it is in the
-  # transcript only because mksh expanded $(_hi_ksh_git) to draw the prompt
-  _hi_case_result kshgit "mksh git segment" "$exit_code" "$t0" "$t1" "$out_file" \
-    "$_HI_TEST_MARKER-INTERACTIVE" "$branch" && ok=1
-
-  docker rm -f "$name" >/dev/null 2>&1
+  _hi_rm_container "$name"
   [ "$ok" -eq 1 ]
 }
 
@@ -262,7 +240,7 @@ function _hi_run_bystander_case() {
     _hi_h3 " | [bystander] -- transcript not clean:" "$RED"
     sed 's/^/      /' "$by_file"
   fi
-  docker rm -f "$name" >/dev/null 2>&1
+  _hi_rm_container "$name"
   [ "$ok" -eq 1 ]
 }
 

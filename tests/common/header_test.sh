@@ -178,24 +178,15 @@ function test_banner_omits_the_count_without_a_git_dir() {
   [[ "$out" == *"TestBanner"* ]] && [[ "$out" != *"↑"* ]]
 }
 
-# A tiny checkout for the branch-indicator cases: one commit on main, so HEAD
-# can be moved to a working branch or detached per case.
-function _hi_banner_repo() {
-  local dir
-  dir="$(mktemp -d "$_HI_WORKDIR/branch.XXXXXX")"
-  git -C "$dir" init -q
-  git -C "$dir" symbolic-ref HEAD refs/heads/main
-  git -C "$dir" config user.email test@example.com
-  git -C "$dir" config user.name "Test"
-  git -C "$dir" commit -q --allow-empty -m initial
-  printf '%s' "$dir"
-}
+# The branch-indicator cases below each stand a tiny checkout up via
+# test_lib.sh's _hi_git_fixture (one commit on main), so HEAD can be moved to
+# a working branch or detached per case.
 
 # the roadmap contract: the Online banner on a working branch names it, in
 # parentheses, right after the change count
 function test_banner_online_names_an_off_main_branch() {
   local dir out
-  dir="$(_hi_banner_repo)"
+  dir="$(_hi_git_fixture)"
   git -C "$dir" checkout -qb feature-x
   out="$(
     _HI_ROOT="$dir"
@@ -208,7 +199,7 @@ function test_banner_online_names_an_off_main_branch() {
 # ...but main is the expected state and earns no callout
 function test_banner_online_stays_quiet_on_main() {
   local dir out
-  dir="$(_hi_banner_repo)"
+  dir="$(_hi_git_fixture)"
   out="$(
     _HI_ROOT="$dir"
     unset _HI_BANNER_CHANGES _HI_BANNER_BRANCH
@@ -220,7 +211,7 @@ function test_banner_online_stays_quiet_on_main() {
 # ...nor does a detached HEAD, which is what a release-tag checkout is
 function test_banner_online_stays_quiet_when_detached() {
   local dir out
-  dir="$(_hi_banner_repo)"
+  dir="$(_hi_git_fixture)"
   git -C "$dir" checkout -q --detach
   out="$(
     _HI_ROOT="$dir"
@@ -234,7 +225,7 @@ function test_banner_online_stays_quiet_when_detached() {
 # banners a session prints
 function test_banner_branch_stays_out_of_remote_banners() {
   local dir out label
-  dir="$(_hi_banner_repo)"
+  dir="$(_hi_git_fixture)"
   git -C "$dir" checkout -qb feature-x
   for label in Connected Disconnected; do
     out="$(
@@ -250,7 +241,7 @@ function test_banner_branch_stays_out_of_remote_banners() {
 # fewer tildes once the indicator is on the line
 function test_banner_branch_shrinks_padding() {
   local dir plain branched _HI_HOSTNAME_CACHE="pinned-host"
-  dir="$(_hi_banner_repo)"
+  dir="$(_hi_git_fixture)"
   plain="$(
     _HI_ROOT="$dir"
     unset _HI_BANNER_CHANGES _HI_BANNER_BRANCH

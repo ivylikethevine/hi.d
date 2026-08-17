@@ -67,6 +67,13 @@ function _hi_track_container() {
   _HI_STARTED+=("$1")
 }
 
+# _hi_rm_container <name> - the eager between-cases teardown, as one idiom:
+# every e2e case removes its container the moment its verdict is in rather
+# than letting them pile up until _hi_test_cleanup sweeps the stragglers.
+function _hi_rm_container() {
+  "${_HI_BACKEND:-docker}" rm -f "$1" >/dev/null 2>&1 || true
+}
+
 # Runs "$@" as one sub-case of a multi-case test file (one shell, one
 # container shape, one scenario, ...), bumping the caller's _HI_TOTAL/
 # _HI_FAILED counters accordingly. Set both to 0 via _hi_suite_begin before
@@ -143,6 +150,102 @@ function _hi_fake_path() {
     done
   fi
   printf '%s' "$dir"
+}
+
+# _hi_real_path <name> <tool...> - the real-binary half of _hi_fake_path, same
+# build-once-per-name contract: a $_HI_WORKDIR/<name> directory of symlinks to
+# the named tools as this machine resolves them, printed. For suites that
+# replace $PATH outright and still need a few real tools on it. A tool the
+# machine doesn't have is skipped, so the caller's cases fail (or skip) on the
+# missing tool itself rather than on the toolbox build.
+function _hi_real_path() {
+  local dir="$_HI_WORKDIR/$1" tool
+  shift
+  if [ ! -d "$dir" ]; then
+    mkdir -p "$dir"
+    for tool in "$@"; do
+      command -v "$tool" >/dev/null 2>&1 && ln -sf "$(command -v "$tool")" "$dir/$tool"
+    done
+  fi
+  printf '%s' "$dir"
+}
+
+# _hi_git_fixture - a fresh one-commit repo on a branch literally named "main"
+# (forced via symbolic-ref, so git's initial-branch config can't decide it),
+# printed. Built once per suite as a template, then copied per call: every
+# caller wants the identical starting point, and one `cp -r` is one process
+# where building from scratch is six git invocations. Each call still gets its
+# own private directory, so nothing leaks between cases - only the setup cost
+# is shared. The template holds one clean tracked file.txt; cases wanting
+# another branch or a dirty tree arrange that themselves.
+function _hi_git_fixture() {
+  local dir template="$_HI_WORKDIR/git-template"
+  if [ ! -d "$template" ]; then
+    mkdir -p "$template"
+    git -C "$template" init -q
+    git -C "$template" symbolic-ref HEAD refs/heads/main
+    git -C "$template" config user.email test@example.com
+    git -C "$template" config user.name "Test"
+    printf 'one\n' >"$template/file.txt"
+    git -C "$template" add file.txt
+    git -C "$template" commit -q -m initial
+  fi
+  dir="$(mktemp -d "$_HI_WORKDIR/repo.XXXXXX")"
+  cp -r "$template/." "$dir/"
+  printf '%s' "$dir"
+}
+
+# _hi_probe_shims <dir> [running-name] - fake docker/podman/nomad/kubectl in
+# <dir>, each answering only the exact invocations hi.sh's backend predicates
+# make (plus docker/podman's bare `ps`, doctor.sh's liveness probe) and
+# failing anything else, so a changed command shape shows up as a failing
+# predicate rather than a silently passing test. The target named
+# <running-name> (default "yes") is running; anything else is not. The argv
+# shapes spelled out here are the suite-side statement of that contract - one
+# home, next to _hi_probe_cmd, rather than a copy per suite.
+function _hi_probe_shims() {
+  local dir="$1" running="${2:-yes}"
+  mkdir -p "$dir"
+
+  cat >"$dir/docker" <<EOF
+#!/bin/sh
+[ "\$1" = ps ] && exit 0
+[ "\$1 \$2 \$3" = "container inspect -f" ] || exit 1
+case "\$5" in $running) printf 'true\n' ;; *) printf 'false\n' ;; esac
+EOF
+
+  # podman is a drop-in for docker in hi.sh, so the shim is the same file
+  cp "$dir/docker" "$dir/podman"
+
+  cat >"$dir/nomad" <<EOF
+#!/bin/sh
+[ "\$1 \$2 \$3" = "alloc status -t" ] || exit 1
+case "\$5" in $running) printf 'running\n' ;; *) printf 'pending\n' ;; esac
+EOF
+
+  cat >"$dir/kubectl" <<EOF
+#!/bin/sh
+[ "\$1 \$2 \$4" = "get pod -o" ] || exit 1
+case "\$3" in $running) printf 'Running\n' ;; *) printf 'Pending\n' ;; esac
+EOF
+
+  chmod +x "$dir/docker" "$dir/podman" "$dir/nomad" "$dir/kubectl"
+}
+
+# _hi_alias_probe <shell> <name> [NAME=VALUE ...] - "yes"/"no": does sourcing
+# paths.sh then aliases.sh in a real <shell> leave alias (fish: function)
+# <name> defined? The fish-vs-POSIX dialect split lives here once rather than
+# per suite. _HI_CLEANUP is scrubbed so the runner's own session state can't
+# decide a tree-lifetime-gated alias; extra NAME=VALUE pairs ride the env.
+function _hi_alias_probe() {
+  local shell="$1" name="$2" script
+  shift 2
+  if [ "$shell" = fish ]; then
+    script="source $_HI_ROOT/common/paths.sh; source $_HI_ALIASES; functions -q -- $name; and echo yes; or echo no"
+  else
+    script=". $_HI_ROOT/common/paths.sh; . $_HI_ALIASES; alias $name >/dev/null 2>&1 && echo yes || echo no"
+  fi
+  env -u _HI_CLEANUP _HI_HOME="$_HI_HOME" "$@" "$shell" -c "$script" 2>/dev/null
 }
 
 # _hi_scratch_tree <name> <dir...> - a throwaway hi.d under $_HI_WORKDIR/<name>
@@ -561,11 +664,41 @@ function _hi_session_ready() {
 # (an interactive shell really came up and ran our line) and load()'s closing
 # line (its exit path ran, rather than the session dying early).
 #
-# _hi_interactive_case <label> <what> <marker> <timeout_s> <launcher...> -
+# _hi_interactive_case [-c <closing>] [-m <marker>]... [-f <fn>] \
+#   <label> <what> <marker> <timeout_s> <launcher...> -
 # where <launcher...> is the *bare* command, with no pty prefix of its own:
 # _HI_PTY_FORCED is prepended here (see _hi_pty_force, which the suite must
-# have called first).
+# have called first). The options are what let every pty-driven suite share
+# this one driver instead of forking it:
+#   -c <closing>  the line whose appearance means the session is over - the
+#                 feeder holds the pipe open until it lands, and it is
+#                 asserted as a marker. Default: load()'s "hi closing"; a tier
+#                 that never reaches load.sh names its own (the mksh git case
+#                 waits on the echoed marker instead).
+#   -m <marker>   a further must-appear transcript marker (repeatable)
+#   -f <fn>       runs inside the feeder between the marker line and the
+#                 `exit`: its stdout is typed into the live session, and it
+#                 may also do host-side work mid-session
 function _hi_interactive_case() {
+  local closing="hi closing" feeder=""
+  local -a extra=()
+  while :; do
+    case "${1:-}" in
+    -c)
+      closing="$2"
+      shift 2
+      ;;
+    -m)
+      extra+=("$2")
+      shift 2
+      ;;
+    -f)
+      feeder="$2"
+      shift 2
+      ;;
+    *) break ;;
+    esac
+  done
   local label="$1" what="$2" marker="$3" timeout_s="$4"
   shift 4
   local out_file="$_HI_WORKDIR/$label.interactive.out" exit_code t0 t1
@@ -596,18 +729,22 @@ function _hi_interactive_case() {
   # shellcheck disable=SC2094
   {
     _hi_poll_bool "$((${_HI_INTERACTIVE_SETTLE:-4} * 4))" 0.25 _hi_session_ready "$out_file" || true
-    printf "printf '%%s-%%s\\\\n' %s INTERACTIVE\nexit\n" "$marker"
-    # ...and the same on the way out: hold the pipe open until load()'s closing
+    printf "printf '%%s-%%s\\\\n' %s INTERACTIVE\n" "$marker"
+    [ -z "$feeder" ] || "$feeder"
+    printf 'exit\n'
+    # ...and the same on the way out: hold the pipe open until the closing
     # line lands rather than for a flat two seconds
-    _hi_poll_bool 20 0.25 grep -q "hi closing" "$out_file" || true
+    _hi_poll_bool 20 0.25 grep -q "$closing" "$out_file" || true
   } | "${_HI_PTY_FORCED[@]}" "$@" >"$out_file" 2>&1 &
   _hi_wait_pid "$!" "$timeout_s" _hi_timed_out "$label" "$timeout_s"
   exit_code="$_HI_WAIT_EXIT"
   t1="$(_hi_now)"
 
   # both markers: the interactive shell really came up and ran our line, and
-  # load()'s exit path ran rather than the session dying early
-  _hi_case_result "$label" "$what" "$exit_code" "$t0" "$t1" "$out_file" "$expected" "hi closing"
+  # the session reached its closing line rather than dying early
+  # (${a[@]+...}: bash 3.2 + set -u, as above)
+  _hi_case_result "$label" "$what" "$exit_code" "$t0" "$t1" "$out_file" \
+    "$expected" "$closing" ${extra[@]+"${extra[@]}"}
 }
 
 _HI_SSHD_IMAGE=hi-test-sshd
@@ -725,6 +862,74 @@ function _hi_ssh_launch() {
   _HI_SSH_LAUNCH=(${_HI_PTY_WRAP[@]+"${_HI_PTY_WRAP[@]}"} "${_HI_SSH_LAUNCH_BARE[@]}")
 }
 
+# --- the shared container-backend case runners --------------------------------
+#
+# Top-level rather than nested in _hi_container_backend_test, so any suite that
+# boots a throwaway container around one case can use them. They read the
+# conventions the e2e suites already set: $_HI_BACKEND (the CLI to drive) and
+# $_HI_TEST_MARKER (the transcript marker _hi_probe_cmd echoes). The started
+# container's name is left in $_HI_CONTAINER.
+_HI_CONTAINER=""
+
+function _hi_container_running() {
+  [ "$("${_HI_BACKEND:-docker}" container inspect -f '{{.State.Running}}' "$1" 2>/dev/null)" = true ]
+}
+
+# _hi_start_case_container <label> <image> - boot one throwaway container for
+# a case (kept alive by `tail -f`), registered for teardown, waited until the
+# backend reports it running.
+function _hi_start_case_container() {
+  local label="$1" image="$2"
+
+  _HI_CONTAINER="hi-${_HI_BACKEND}test-$label-$$"
+  _hi_h3 "Testing shell: $label"
+
+  if ! "$_HI_BACKEND" run -d --name "$_HI_CONTAINER" "$image" tail -f /dev/null \
+    >/dev/null 2>"$_HI_WORKDIR/$label.run.log"; then
+    _hi_cecho " | Failed to start container (image: $image)" "$RED"
+    return 1
+  fi
+  _hi_track_container "$_HI_CONTAINER"
+  _hi_cecho " | Container: $_HI_CONTAINER (image: $image)"
+
+  if ! _hi_poll_bool 40 0.25 _hi_container_running "$_HI_CONTAINER"; then
+    _hi_cecho " | Container never reported running" "$RED"
+    return 1
+  fi
+}
+
+# _hi_backend_case <label> <image> <cmd> [timeout_s] - one command-shaped case:
+# boot, run hi against the container, tear down, report.
+function _hi_backend_case() {
+  local label="$1" image="$2" cmd="$3" timeout_s="${4:-30}"
+  local ok=0
+
+  _hi_start_case_container "$label" "$image" || return 1
+  _hi_exec_case "$label" "$_HI_BACKEND path" "$_HI_TEST_MARKER" "$timeout_s" "$_HI_CONTAINER" "$cmd" && ok=1
+  _hi_rm_container "$_HI_CONTAINER"
+  [ "$ok" -eq 1 ]
+}
+
+# _hi_backend_interactive_case <label> <image> [timeout_s] - the interactive
+# shape, plus the cleanup assertion: the disposable tree must be gone from the
+# container once the session ends.
+function _hi_backend_interactive_case() {
+  local label="$1" image="$2" timeout_s="${3:-60}"
+  local ok=0
+
+  _hi_start_case_container "$label" "$image" || return 1
+  if _hi_interactive_case "$label" "$_HI_BACKEND path (interactive)" "$_HI_TEST_MARKER" \
+    "$timeout_s" "$_HI_LAUNCHER" "$_HI_CONTAINER"; then
+    ok=1
+    if "$_HI_BACKEND" exec "$_HI_CONTAINER" sh -c 'ls -d /tmp/*.hi.log.* >/dev/null 2>&1'; then
+      _hi_cecho " | [$label] -- FAILED: hi.d's copy was left behind in the container" "$RED"
+      ok=0
+    fi
+  fi
+  _hi_rm_container "$_HI_CONTAINER"
+  [ "$ok" -eq 1 ]
+}
+
 # Boots throwaway containers - one per shell environment - and drives hi.sh's
 # real _say_hi_container against each of them over `<backend> exec`. Podman's
 # CLI is a full drop-in for docker's here, so
@@ -736,7 +941,7 @@ function _hi_ssh_launch() {
 # if $backend isn't installed/running. Needs network access the first time it
 # runs, to pull/build the test images.
 function _hi_container_backend_test() {
-  local backend="$1" marker _HI_CONTAINER=""
+  local backend="$1"
 
   _hi_require_backend "$backend"
   _HI_BACKEND="$backend"
@@ -757,72 +962,23 @@ function _hi_container_backend_test() {
     fi
   done
 
-  marker="HI_$(printf '%s' "$backend" | tr '[:lower:]' '[:upper:]')_TEST_OK"
+  _HI_TEST_MARKER="HI_$(printf '%s' "$backend" | tr '[:lower:]' '[:upper:]')_TEST_OK"
 
   _hi_pty_stdin auto "no tty and no python3 to fake one - $backend exec -it will fail outright, results may be unreliable"
   _hi_pty_force
 
   _hi_suite_begin
 
-  function _hi_container_running() { [ "$("$backend" container inspect -f '{{.State.Running}}' "$1" 2>/dev/null)" = true ]; }
-
-  function _hi_start_case_container() {
-    local label="$1" image="$2"
-
-    _HI_CONTAINER="hi-${backend}test-$label-$$"
-    _hi_h3 "Testing shell: $label"
-
-    if ! "$backend" run -d --name "$_HI_CONTAINER" "$image" tail -f /dev/null \
-      >/dev/null 2>"$_HI_WORKDIR/$label.run.log"; then
-      _hi_cecho " | Failed to start container (image: $image)" "$RED"
-      return 1
-    fi
-    _hi_track_container "$_HI_CONTAINER"
-    _hi_cecho " | Container: $_HI_CONTAINER (image: $image)"
-
-    if ! _hi_poll_bool 40 0.25 _hi_container_running "$_HI_CONTAINER"; then
-      _hi_cecho " | Container never reported running" "$RED"
-      return 1
-    fi
-  }
-
-  function _hi_run_case() {
-    local label="$1" image="$2" cmd="$3" timeout_s="${4:-30}"
-    local ok=0
-
-    _hi_start_case_container "$label" "$image" || return 1
-    _hi_exec_case "$label" "$backend path" "$marker" "$timeout_s" "$_HI_CONTAINER" "$cmd" && ok=1
-    "$backend" rm -f "$_HI_CONTAINER" >/dev/null 2>&1
-    [ "$ok" -eq 1 ]
-  }
-
-  function _hi_run_interactive_case() {
-    local label="$1" image="$2" timeout_s="${3:-60}"
-    local ok=0
-
-    _hi_start_case_container "$label" "$image" || return 1
-    if _hi_interactive_case "$label" "$backend path (interactive)" "$marker" \
-      "$timeout_s" "$_HI_LAUNCHER" "$_HI_CONTAINER"; then
-      ok=1
-      if "$backend" exec "$_HI_CONTAINER" sh -c 'ls -d /tmp/*.hi.log.* >/dev/null 2>&1'; then
-        _hi_cecho " | [$label] -- FAILED: hi.d's copy was left behind in the container" "$RED"
-        ok=0
-      fi
-    fi
-    "$backend" rm -f "$_HI_CONTAINER" >/dev/null 2>&1
-    [ "$ok" -eq 1 ]
-  }
-
-  _hi_case _hi_run_case bash debian:bookworm-slim "$(_hi_probe_cmd "$marker" bash)"
-  _hi_case _hi_run_interactive_case bash-interactive debian:bookworm-slim
+  _hi_case _hi_backend_case bash debian:bookworm-slim "$(_hi_probe_cmd "$_HI_TEST_MARKER" bash)"
+  _hi_case _hi_backend_interactive_case bash-interactive debian:bookworm-slim
   local spec
   for spec in zsh:fallback fish:fallback_fish mksh:fallback; do
     shell="${spec%%:*}"
     if [ "$(_hi_kv_get shell_ok "$shell")" = 1 ]; then
-      _hi_case _hi_run_case "$shell" "hi-${backend}test-$shell-$$" "$(_hi_probe_cmd "$marker" "${spec#*:}")"
+      _hi_case _hi_backend_case "$shell" "hi-${backend}test-$shell-$$" "$(_hi_probe_cmd "$_HI_TEST_MARKER" "${spec#*:}")"
     fi
   done
-  _hi_case _hi_run_case sh alpine:3.20 "$(_hi_probe_cmd "$marker" fallback)"
+  _hi_case _hi_backend_case sh alpine:3.20 "$(_hi_probe_cmd "$_HI_TEST_MARKER" fallback)"
 
   # $$-suffixed like the container names: without it a second run of this
   # suite on the same host removes the images the first is still running from

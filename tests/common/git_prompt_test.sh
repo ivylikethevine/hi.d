@@ -24,10 +24,9 @@ _hi_choose_glyphs
 
 # the fallback direction, one case: with ASCII chosen, a clean repo renders
 # "ok" and no multibyte ✔ - the set swap itself is core_test's business
-# (defined here, registered at the bottom; needs _hi_git_new_repo below)
 function test_prompt_ascii_fallback_renders_ok() {
   local dir out
-  dir="$(_hi_git_new_repo)"
+  dir="$(_hi_git_fixture)"
   out="$(
     cd "$dir"
     _HI_ASCII=1
@@ -37,31 +36,8 @@ function test_prompt_ascii_fallback_renders_ok() {
   [[ "$out" == *"ok"* ]] && ! printf '%s' "$out" | LC_ALL=C grep -qF "✔"
 }
 
-# fresh repo, one commit, always on a branch literally named "main" -
-# forced via symbolic-ref before the first commit, so this doesn't depend on
-# git version/config defaults for the initial branch name.
-#
-# Built exactly once, then copied per case: every case wants the identical
-# starting point, and a plain `cp -r` of the whole tree (.git included) is one
-# process instead of the six git invocations building it from scratch takes.
-# Each case still gets its own private directory, so nothing leaks between
-# them - only the setup cost is shared.
-function _hi_git_new_repo() {
-  local dir template="$_HI_WORKDIR/template"
-  if [ ! -d "$template" ]; then
-    mkdir -p "$template"
-    git -C "$template" init -q
-    git -C "$template" symbolic-ref HEAD refs/heads/main
-    git -C "$template" config user.email test@example.com
-    git -C "$template" config user.name "Test"
-    printf 'one\n' >"$template/file.txt"
-    git -C "$template" add file.txt
-    git -C "$template" commit -q -m initial
-  fi
-  dir="$(mktemp -d "$_HI_WORKDIR/repo.XXXXXX")"
-  cp -r "$template/." "$dir/"
-  printf '%s' "$dir"
-}
+# Every case starts from test_lib.sh's _hi_git_fixture: a fresh copy of the
+# suite's one-commit template repo, always on a branch literally named "main".
 
 # Gives repo $1 a branch $2 that conflicts with main: one commit on each,
 # both rewriting the same line of file.txt, so merging/rebasing/cherry-picking
@@ -87,21 +63,21 @@ function test_outside_a_repo_produces_no_output() {
 
 function test_disabled_flag_produces_no_output() {
   local dir out
-  dir="$(_hi_git_new_repo)"
+  dir="$(_hi_git_fixture)"
   out="$(cd "$dir" && _HI_DISABLE_GIT_STATUS=1 _hi_git_prompt)"
   [ -z "$out" ]
 }
 
 function test_clean_repo_shows_branch_and_checkmark() {
   local dir out
-  dir="$(_hi_git_new_repo)"
+  dir="$(_hi_git_fixture)"
   out="$(cd "$dir" && _hi_git_prompt)"
   [[ "$out" == *"main"* ]] && _hi_has_rendered "$out" "${BRGREEN}✔${NC}"
 }
 
 function test_staged_change_shows_bullet_count() {
   local dir out
-  dir="$(_hi_git_new_repo)"
+  dir="$(_hi_git_fixture)"
   printf 'two\n' >"$dir/staged.txt"
   git -C "$dir" add staged.txt
   out="$(cd "$dir" && _hi_git_prompt)"
@@ -110,7 +86,7 @@ function test_staged_change_shows_bullet_count() {
 
 function test_dirty_change_shows_plus_count() {
   local dir out
-  dir="$(_hi_git_new_repo)"
+  dir="$(_hi_git_fixture)"
   printf 'modified\n' >"$dir/file.txt"
   out="$(cd "$dir" && _hi_git_prompt)"
   _hi_has_rendered "$out" "${RED}✚1${NC}"
@@ -118,7 +94,7 @@ function test_dirty_change_shows_plus_count() {
 
 function test_untracked_file_shows_ellipsis_count() {
   local dir out
-  dir="$(_hi_git_new_repo)"
+  dir="$(_hi_git_fixture)"
   printf 'x\n' >"$dir/untracked.txt"
   out="$(cd "$dir" && _hi_git_prompt)"
   _hi_has_rendered "$out" "${BRBLUE}…1${NC}"
@@ -126,7 +102,7 @@ function test_untracked_file_shows_ellipsis_count() {
 
 function test_merge_conflict_shows_invalid_and_merging() {
   local dir out
-  dir="$(_hi_git_new_repo)"
+  dir="$(_hi_git_fixture)"
   _hi_git_diverge "$dir" other
   git -C "$dir" merge -q other >/dev/null 2>&1 || true
   out="$(cd "$dir" && _hi_git_prompt)"
@@ -135,7 +111,7 @@ function test_merge_conflict_shows_invalid_and_merging() {
 
 function test_ahead_and_behind_show_arrows() {
   local dir out
-  dir="$(_hi_git_new_repo)"
+  dir="$(_hi_git_fixture)"
   git -C "$dir" checkout -q -b feature
   git -C "$dir" branch -q --set-upstream-to=main feature
   printf 'f1\n' >>"$dir/file.txt"
@@ -152,7 +128,7 @@ function test_ahead_and_behind_show_arrows() {
 
 function test_detached_head_shows_short_sha_and_red() {
   local dir sha out
-  dir="$(_hi_git_new_repo)"
+  dir="$(_hi_git_fixture)"
   sha="$(git -C "$dir" rev-parse HEAD)"
   git -C "$dir" -c advice.detachedHead=false checkout -q "$sha"
   out="$(cd "$dir" && _hi_git_prompt)"
@@ -161,7 +137,7 @@ function test_detached_head_shows_short_sha_and_red() {
 
 function test_long_branch_name_is_truncated() {
   local dir long_name out
-  dir="$(_hi_git_new_repo)"
+  dir="$(_hi_git_fixture)"
   long_name="$(printf 'x%.0s' {1..40})"
   git -C "$dir" checkout -q -b "$long_name"
   out="$(cd "$dir" && _hi_git_prompt)"
@@ -171,7 +147,7 @@ function test_long_branch_name_is_truncated() {
 function _hi_rebase_case() {
   local branch="$1" expected="$2" dir out
   shift 2
-  dir="$(_hi_git_new_repo)"
+  dir="$(_hi_git_fixture)"
   _hi_git_diverge "$dir" "$branch"
   git -C "$dir" checkout -q "$branch"
   GIT_SEQUENCE_EDITOR=true git -C "$dir" "$@" >/dev/null 2>&1 || true
@@ -189,7 +165,7 @@ function test_rebase_interactive_shows_state() {
 
 function test_cherry_pick_conflict_shows_state() {
   local dir out target_sha
-  dir="$(_hi_git_new_repo)"
+  dir="$(_hi_git_fixture)"
   _hi_git_diverge "$dir" source-branch
   target_sha="$(git -C "$dir" rev-parse source-branch)"
   git -C "$dir" cherry-pick "$target_sha" >/dev/null 2>&1 || true
@@ -199,7 +175,7 @@ function test_cherry_pick_conflict_shows_state() {
 
 function test_revert_conflict_shows_state() {
   local dir out commit_a
-  dir="$(_hi_git_new_repo)"
+  dir="$(_hi_git_fixture)"
   printf 'A\n' >"$dir/file.txt"
   git -C "$dir" commit -qam commit-A
   commit_a="$(git -C "$dir" rev-parse HEAD)"
@@ -212,7 +188,7 @@ function test_revert_conflict_shows_state() {
 
 function test_bisect_shows_state() {
   local dir old_sha out
-  dir="$(_hi_git_new_repo)"
+  dir="$(_hi_git_fixture)"
   old_sha="$(git -C "$dir" rev-parse HEAD)"
   printf 'two\n' >"$dir/file.txt"
   git -C "$dir" commit -qam second
@@ -226,7 +202,7 @@ function test_bisect_shows_state() {
 
 function test_stash_shows_flag_count() {
   local dir out
-  dir="$(_hi_git_new_repo)"
+  dir="$(_hi_git_fixture)"
   printf 'stashed-change\n' >"$dir/file.txt"
   git -C "$dir" stash push -q -m teststash >/dev/null 2>&1
   out="$(cd "$dir" && _hi_git_prompt)"

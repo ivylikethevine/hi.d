@@ -25,41 +25,23 @@ source "$_HI_DOCTOR"
 # case installs. Nothing else, so a backend "not installed" case is real
 # even on a machine with every backend.
 function _hi_doctor_path() {
-  local dir="$_HI_WORKDIR/toolbox" tool
-  if [ ! -d "$dir" ]; then
-    mkdir -p "$dir"
-    for tool in sh bash awk grep sed printf mktemp rm cat wc tr sleep timeout du date; do
-      command -v "$tool" >/dev/null 2>&1 && ln -sf "$(command -v "$tool")" "$dir/$tool"
-    done
-  fi
-  printf '%s' "$dir"
+  _hi_real_path toolbox sh bash awk grep sed printf mktemp rm cat wc tr sleep timeout du date
 }
 
 function _hi_doctor_shims() {
   local dir="$_HI_WORKDIR/shims"
-  mkdir -p "$dir"
+  if [ ! -d "$dir" ]; then
+    # the docker half is test_lib.sh's predicate-shape shims, with
+    # "runningbox" as the one running target; nomad/kubectl stay off this
+    # PATH (the report's "not installed" rows are part of what's asserted)
+    # and podman is replaced by a dead CLI for the "not answering" case
+    _hi_probe_shims "$dir" runningbox
+    rm -f "$dir/nomad" "$dir/kubectl"
+    printf '#!/bin/sh\nexit 1\n' >"$dir/podman"
 
-  cat >"$dir/docker" <<'EOF'
-#!/bin/sh
-case "$1" in
-ps) exit 0 ;;
-container)
-  # docker container inspect -f '{{.State.Running}}' <name> puts the name 5th
-  [ "$5" = runningbox ] && { printf 'true\n'; exit 0; }
-  exit 1
-  ;;
-esac
-exit 1
-EOF
-
-  cat >"$dir/podman" <<'EOF'
-#!/bin/sh
-exit 1
-EOF
-
-  # connect ok; -O teardown ok; the install probe answers per $HI_FAKE_ROOT;
-  # the tool-inventory loop answers per $HI_FAKE_TOOLS
-  cat >"$dir/ssh" <<'EOF'
+    # connect ok; -O teardown ok; the install probe answers per $HI_FAKE_ROOT;
+    # the tool-inventory loop answers per $HI_FAKE_TOOLS
+    cat >"$dir/ssh" <<'EOF'
 #!/bin/sh
 for a in "$@"; do
   [ "$a" = -O ] && exit 0
@@ -71,8 +53,8 @@ for a in "$@"; do
 done
 exit 0
 EOF
-
-  chmod +x "$dir/docker" "$dir/podman" "$dir/ssh"
+    chmod +x "$dir/podman" "$dir/ssh"
+  fi
   printf '%s' "$dir"
 }
 

@@ -67,13 +67,7 @@ EOF
 # A PATH with the commands targets.sh runs and nothing else - no docker,
 # podman, nomad or kubectl to find.
 function _hi_write_toolbox() {
-  local dir="$_HI_WORKDIR/toolbox" tool resolved
-  mkdir -p "$dir"
-  for tool in sh awk sed; do
-    resolved="$(command -v "$tool")" || return 1
-    ln -sf "$resolved" "$dir/$tool"
-  done
-  _HI_TOOLBOX_PATH="$dir"
+  _HI_TOOLBOX_PATH="$(_hi_real_path toolbox sh awk sed)"
 }
 
 function _hi_write_configs() {

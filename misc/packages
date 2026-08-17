@@ -15,6 +15,7 @@ kubectl:4
 nomad:4
 # 4: bright green if installed and hidden if not
 python3:4,python2:4,python:4
+# TODO: Determine how to differentiate between tldr and teeldear
 tldr:4,man:3
 act:4
 # 3: green if installed and hidden if not

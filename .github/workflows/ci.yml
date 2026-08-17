@@ -2,8 +2,6 @@ name: CI
 
 on:
   pull_request:
-  push:
-    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -17,7 +15,7 @@ concurrency:
 jobs:
   test:
     name: fast suites (ubuntu-latest)
-    runs-on: ubuntu-latest
+    runs-on: self-hosted, ubuntu-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -70,7 +68,7 @@ jobs:
   # workflows and composite actions are code too, so they get a linter
   actionlint:
     name: actionlint
-    runs-on: ubuntu-latest
+    runs-on: self-hosted, ubuntu-latest
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -91,7 +89,7 @@ jobs:
   # credentialed release checkout) is suppressed inline where it happens.
   zizmor:
     name: zizmor
-    runs-on: ubuntu-latest
+    runs-on: self-hosted, ubuntu-latest
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -116,7 +114,7 @@ jobs:
   # do not add this job to the required checks - it is designed to be ignorable.
   markdownlint:
     name: markdownlint (advisory)
-    runs-on: ubuntu-latest
+    runs-on: self-hosted, ubuntu-latest
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -146,7 +144,7 @@ jobs:
   # numbers into every run's log for eyeballing trends.
   bench:
     name: hot-path benchmarks
-    runs-on: ubuntu-latest
+    runs-on: self-hosted, ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -163,7 +161,7 @@ jobs:
   # the next release tag
   packaging-smoke:
     name: package build (deb, rpm, apk)
-    runs-on: ubuntu-latest
+    runs-on: self-hosted, ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -209,7 +207,7 @@ jobs:
 
   e2e:
     name: e2e (ssh, docker)
-    runs-on: ubuntu-latest
+    runs-on: self-hosted, ubuntu-latest
     needs: test
     timeout-minutes: 25
     steps:
@@ -223,7 +221,7 @@ jobs:
 
   e2e-backends:
     name: e2e (podman, nomad, kube)
-    runs-on: ubuntu-latest
+    runs-on: self-hosted, ubuntu-latest
     needs: test
     timeout-minutes: 40
     steps:

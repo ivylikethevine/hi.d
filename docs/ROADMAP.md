@@ -58,13 +58,19 @@ Deferred on purpose from the Aug 2026 simplification passes — each is real,
 none urgent, and the drift-prone spots have test pins holding them in the
 meantime.
 
-- [ ] **Unify the two fallback-launch recipes** — `_hi_remote_suffix` (ssh)
-      and `_say_hi_container` each hand-write the per-shell launch case. The
-      ladder and its probe loop are single-homed now, but the zsh/fish/ksh
-      arms still exist twice, and the ksh/mksh arm exists only on the ssh
-      side — a mksh *container* target silently gets the plain-sh treatment.
-      One per-shell recipe function rendered by both transports closes the
-      duplication and that gap at once.
+- [ ] **Unify the two fallback-launch recipes** — _the gap is closed; the
+      duplication is what's left._ `_say_hi_container` now gives ksh/mksh the
+      live git segment the ssh path always granted them (it ships
+      `shells/ksh.sh` beside `aliases.sh` and sources it by absolute path,
+      since that transport lands no tree), pinned by
+      `test_container_fallback_gives_ksh_the_git_segment`. What that work
+      showed is that the *launch* idiom was already common — the container
+      `*)` arm's `ENV=… exec $fallback -i` is the ssh ksh arm verbatim — so
+      only the rc **contents** diverge, and a shared recipe function would
+      have to render into two different mechanisms (armored heredoc vs.
+      `sh -c` round trips) to be worth writing. The zsh/fish/ksh arms still
+      exist twice; whether that duplication is worth a shared renderer is now
+      an open question rather than an assumed yes.
 - [ ] **Parallelize the independent probes** — header.sh's `identity()` runs
       its docker/nomad/kubectl probes serially (worst case the *sum* of three
       2s timeouts while the user waits at connect), and `_hi`'s dispatch

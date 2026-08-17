@@ -533,6 +533,7 @@ $(_hi_remote_suffix)"
 function _say_hi_container() {
   local label="$1" tmp="$2" copy_start="$3"
   local shell_end root fallback exit_code shell_secs size prefix tarball env_kv n v
+  local ksh_git=""
   local -a probe cp attach
   case "$label" in
   # one arm, since podman reuses docker's exec syntax outright
@@ -571,6 +572,18 @@ function _say_hi_container() {
       return $?
     fi
 
+    # ksh/mksh get the live git segment, as they do on the ssh path - but that
+    # path already has the whole tree on the target, and this one ships
+    # aliases.sh alone, so the segment has to be copied too. Self-contained
+    # (shells/ksh.sh sources nothing and reads only the verdicts the rc sets),
+    # so it is one extra file and only for the two shells that can use it.
+    case "$fallback" in
+    ksh | mksh)
+      "${cp[@]}" sh -c "cat > '$root/ksh.sh'" <"$_HI_ROOT/shells/ksh.sh" 2>"$tmp" &&
+        ksh_git=1
+      ;;
+    esac
+
     # the shared fallback rc in its aliases-only shape (full toggle list,
     # client verdicts, aliases.sh, CMDARG on its own raw line), plus the
     # POSIX prompt for the shells that can parse it - the same rule as the
@@ -578,10 +591,17 @@ function _say_hi_container() {
     # than in a second `exec` round trip afterwards
     {
       _hi_fallback_rc --aliases-only "$root"
-      case "$fallback" in
-      zsh | fish) ;;
-      *) _hi_fallback_prompt ;;
-      esac
+      if [ -n "$ksh_git" ]; then
+        # the source line lands after the rc's verdict exports, which is what
+        # shells/ksh.sh reads for its glyphs and colors
+        printf '. %s/ksh.sh\n' "$root"
+        _hi_fallback_prompt git
+      else
+        case "$fallback" in
+        zsh | fish) ;;
+        *) _hi_fallback_prompt ;;
+        esac
+      fi
     } |
       "${cp[@]}" sh -c "cat > '$root/.hi_fallback_rc'" 2>"$tmp"
 

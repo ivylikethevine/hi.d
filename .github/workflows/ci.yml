@@ -1,49 +1,250 @@
 name: CI
 
 on:
-  push:
-    branches: [main, develop]
   pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# superseded PR pushes cancel their in-flight run; main never cancels
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   test:
+    name: fast suites (ubuntu-latest)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Install zsh and fish
         run: sudo apt-get update && sudo apt-get install -y zsh fish
 
-      # ubuntu-latest's apt package lags upstream badly so we install
-      # the latest upstream binary
-      - name: Install shellcheck
-        env:
-          SHELLCHECK_VERSION: 0.11.0
-        run: |
-          set -euo pipefail
-          curl -sSfL -o /tmp/shellcheck.tar.xz \
-            "https://github.com/koalaman/shellcheck/releases/download/v${SHELLCHECK_VERSION}/shellcheck-v${SHELLCHECK_VERSION}.linux.x86_64.tar.xz"
-          tar -xJf /tmp/shellcheck.tar.xz -C /tmp "shellcheck-v${SHELLCHECK_VERSION}/shellcheck"
-          sudo mv "/tmp/shellcheck-v${SHELLCHECK_VERSION}/shellcheck" /usr/local/bin/shellcheck
-          rm -rf /tmp/shellcheck.tar.xz "/tmp/shellcheck-v${SHELLCHECK_VERSION}"
-          shellcheck --version
+      - uses: ./.github/actions/setup-shellcheck
+
+      # the lint suite's shfmt/checkbashisms halves skip yellow when the tools
+      # are absent - these pinned installs are what make them enforce here
+      - uses: ./.github/actions/setup-shfmt
+
+      - uses: ./.github/actions/setup-checkbashisms
+
+      # same story for the rc suite's real-nu cases: config.nu is the one
+      # shipped shell file nothing else in CI can parse
+      - uses: ./.github/actions/setup-nu
 
       - name: Run fast test suites
-        env:
-          _HI_HOME: ${{ github.workspace }}/..
-        run: "${{ github.workspace }}/tests/test_runner.sh aliases alias_fallthrough shellcheck install uninstall check header shared git_prompt targets load test_lib test_runner"
+        run: "${{ github.workspace }}/tests/test_runner.sh --group fast"
 
-  # e2e tests, excluding podman/nomad/kube.
-  # they'd need extra tooling to cover code paths docker and ssh already reach
-  # (_say_hi_container is one function behind four command shapes).
+  # The same suites on macOS: /bin/bash 3.2, BSD userland. The %e/width/sort
+  # fixes in common/ came out of this job, so it gates for real now.
+  # (shfmt/checkbashisms aren't installed here on purpose: the ubuntu job
+  # already enforces both against pinned versions, and a second, brew-floating
+  # shfmt could disagree with the pinned one about formatting.)
+  test-macos:
+    name: fast suites (macos-latest)
+    runs-on: macos-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install fish
+        run: brew install fish
+
+      # pinned rather than brewed: a floating shellcheck here could red this
+      # job with a warning the pinned ubuntu one has never seen
+      - uses: ./.github/actions/setup-shellcheck
+
+      - name: Run fast test suites
+        run: "${{ github.workspace }}/tests/test_runner.sh --group fast"
+
+  # bad `needs`, invalid contexts, shellcheck over every run: block - the
+  # workflows and composite actions are code too, so they get a linter
+  actionlint:
+    name: actionlint
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # actionlint shells out to shellcheck for run: blocks when it is on
+      # PATH - pin it so both jobs lint shell with the same version
+      - uses: ./.github/actions/setup-shellcheck
+
+      - uses: ./.github/actions/setup-actionlint
+
+      - name: Lint the workflows
+        run: actionlint -color
+
+  # GitHub Actions security audit. Promoted to CI once the SHA pinning made it
+  # quiet, per the roadmap's condition; the one deliberate exception (the
+  # credentialed release checkout) is suppressed inline where it happens.
+  zizmor:
+    name: zizmor
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: ./.github/actions/setup-zizmor
+
+      - name: Audit the workflows
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: zizmor --no-progress .github/
+
+  # Advisory, not a gate. A heading level or a stray hard tab in a doc is worth
+  # seeing and has never shipped a bug, so this job reports and does not block:
+  # the lint step keeps its exit code (`continue-on-error` on the *step*, so the
+  # findings still annotate the diff), and the job then restates them as a
+  # warning in the run summary. Note the difference from `continue-on-error` on
+  # the job, which would paint the job green and hide the result entirely.
+  #
+  # The corollary, for whenever branch protection goes on (see docs/ROADMAP.md):
+  # do not add this job to the required checks - it is designed to be ignorable.
+  markdownlint:
+    name: markdownlint (advisory)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - id: lint
+        continue-on-error: true
+        uses: DavidAnson/markdownlint-cli2-action@21c1be1b93ad9ed58fa840aacc3f279cde2a72ff # v24.2.0
+        with:
+          globs: "**/*.md"
+          config: ".markdownlint.yaml"
+
+      - name: Say so, without failing
+        if: steps.lint.outcome == 'failure'
+        run: |
+          set -euo pipefail
+          echo "::warning title=markdownlint::Markdown lint findings above - advisory, not blocking"
+          {
+            echo "### markdownlint found something"
+            echo
+            echo "Advisory only: this job never blocks a merge. See the step above for the findings,"
+            echo "or run \`markdownlint-cli2 '**/*.md'\` locally."
+          } >>"$GITHUB_STEP_SUMMARY"
+
+  # Hot-path timings against generous ceilings - catches an order-of-magnitude
+  # regression (a fork in a loop, a probe losing its timeout), and prints the
+  # numbers into every run's log for eyeballing trends.
+  bench:
+    name: hot-path benchmarks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install zsh and fish
+        run: sudo apt-get update && sudo apt-get install -y zsh fish
+
+      - name: Run benchmarks
+        run: "${{ github.workspace }}/tests/test_runner.sh --group bench"
+
+  # catches nfpm.yaml/install_tree breakage on the PR that causes it, not at
+  # the next release tag
+  packaging-smoke:
+    name: package build (deb, rpm, apk)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: ./.github/actions/setup-nfpm
+
+      # a throwaway key so the smoke covers the signed shape end to end - the
+      # real key is the APK_SIGNING_KEY secret, release.yml's business only
+      - name: Generate a throwaway apk signing key
+        run: |
+          set -euo pipefail
+          openssl genrsa -out "$RUNNER_TEMP/smoke.rsa" 4096
+          openssl rsa -in "$RUNNER_TEMP/smoke.rsa" -pubout -out "$RUNNER_TEMP/smoke.rsa.pub"
+          echo "HI_APK_KEY=$RUNNER_TEMP/smoke.rsa" >>"$GITHUB_ENV"
+
+      # mkpkg.sh itself asserts one artifact per format and writes SHA256SUMS
+      - name: Build the packages
+        run: packaging/mkpkg.sh
+
+      # the check that catches "apk-tools rejects what nfpm built" (it happened:
+      # nfpm 2.47.0's tree entries) and proves the signature chain: the pubkey
+      # lands in /etc/apk/keys under the name nfpm.yaml stamps into the
+      # signature, and apk add must accept the package with NO --allow-untrusted
+      - name: Install the signed apk on Alpine
+        run: |
+          set -euo pipefail
+          docker run --rm -v "$PWD/dist:/dist:ro" \
+            -v "$RUNNER_TEMP/smoke.rsa.pub:/etc/apk/keys/hi.d.rsa.pub:ro" \
+            alpine:3.20 sh -c 'apk add /dist/hi.d_*_noarch.apk && sh -lc "hi --version" && ls /usr/share/hi.d/common/core.sh'
+
+      # the reproducibility contract: the same commit builds byte-identical
+      # deb/rpm/apk (SOURCE_DATE_EPOCH from HEAD plus clamped staging mtimes),
+      # so SHA256SUMS means the artifact, not the build that happened to make
+      # it. nfpm.yaml hardcodes ./dist/staging, so the runs are sequential
+      # with the first moved aside rather than parallel via --outdir.
+      - name: Build again and require byte-identical packages
+        run: |
+          mv dist dist.first
+          packaging/mkpkg.sh
+          diff dist.first/SHA256SUMS dist/SHA256SUMS
+
   e2e:
+    name: e2e (ssh, docker)
     runs-on: ubuntu-latest
     needs: test
     timeout-minutes: 25
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
+      # --require-run: here a skip is a broken runner, not an optional backend
       - name: Run end-to-end suites
-        env:
-          _HI_HOME: ${{ github.workspace }}/..
-        run: "${{ github.workspace }}/tests/test_runner.sh ssh ssh_disconnect docker"
+        run: "${{ github.workspace }}/tests/test_runner.sh --require-run --group e2e"
+
+  e2e-backends:
+    name: e2e (podman, nomad, kube)
+    runs-on: ubuntu-latest
+    needs: test
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install podman and nomad
+        run: |
+          set -euo pipefail
+          curl -sSfL https://apt.releases.hashicorp.com/gpg |
+            sudo gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
+          echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" |
+            sudo tee /etc/apt/sources.list.d/hashicorp.list >/dev/null
+          sudo apt-get update && sudo apt-get install -y podman nomad
+          nomad version
+
+      - name: Install kind
+        uses: helm/kind-action@ef37e7f390d99f746eb8b610417061a60e82a6cc # v1.14.0
+        with:
+          install_only: true
+
+      - name: Run backend end-to-end suites
+        run: "${{ github.workspace }}/tests/test_runner.sh --require-run --group backends"

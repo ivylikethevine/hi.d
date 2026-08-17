@@ -2,6 +2,25 @@
 
 # === start required configuration ===
 set -q _HI_HOME; or set -gx _HI_HOME ~
+# GLOSSARY: toggle defaulting - defaulted (never assigned) so bare reads are
+# safe and settings.sh/the gate still override. Mirrors core.sh's _HI_TOGGLES.
+for _hi_toggle in _HI_DISABLE_LOCAL _HI_REMOTE_SESSION _HI_DISABLE_HEADER \
+    _HI_DISABLE_PROMPT _HI_DISABLE_PERSONAL _HI_DISABLE_GIT_STATUS \
+    _HI_DISABLE_EDITORS _HI_DISABLE_ALIASES _HI_DISABLE_OSC52 _HI_DISABLE_TMUX
+  set -q $_hi_toggle; or set -gx $_hi_toggle 0
+end
+set -e _hi_toggle
+# the overlay's home (fish can't expand the XDG default, so each entry point
+# sets it); only when unset, so hi.sh can point a target at its shipped copy
+if not set -q _HI_CONFIG_DIR
+  set -q XDG_CONFIG_HOME; and set -gx _HI_CONFIG_DIR $XDG_CONFIG_HOME/hi.d
+  set -q _HI_CONFIG_DIR; or set -gx _HI_CONFIG_DIR ~/.config/hi.d
+end
+# install.sh's settings ahead of paths.sh, whose gate reads them - plain
+# `export NAME=value` lines, which fish parses natively
+if test -f $_HI_CONFIG_DIR/settings.sh
+  source $_HI_CONFIG_DIR/settings.sh
+end
 source $_HI_HOME/hi.d/common/paths.sh
 source $_HI_ALIASES
 
@@ -16,15 +35,22 @@ function fish_greeting
   set -q fish_greeting; or bash -c "source $_HI_HEADER; hi_header Online"
 end
 
-set -l hi_colors (bash -c "source $_HI_SHARED; _hi_user_color; _hi_host_color")
-set -gx fish_color_user $hi_colors[1]
-set -gx fish_color_host $hi_colors[2]
+# a whole process for two color names: memoized in a universal variable keyed
+# on user@host+colors-mtime, so only the first shell after a change pays it
+set -l hi_key "$USER@"(prompt_hostname)
+test -f $_HI_COLORS; and set hi_key "$hi_key:"(command stat -c %Y $_HI_COLORS 2>/dev/null; or command stat -f %m $_HI_COLORS 2>/dev/null)
+if not set -q __hi_colors_key; or test "$__hi_colors_key" != "$hi_key"
+  set -l hi_colors (bash -c "source $_HI_CORE; _hi_user_color; _hi_host_color")
+  set -U __hi_color_user $hi_colors[1]
+  set -U __hi_color_host $hi_colors[2]
+  set -U __hi_colors_key "$hi_key"
+end
+set -gx fish_color_user $__hi_color_user
+set -gx fish_color_host $__hi_color_host
 set -gx fish_color_host_remote $fish_color_host
 
-# wrapper so aliases (which are functions in fish) still work under sudo.
-# args are passed through fish's own argv mechanism (after --), never spliced
-# into a string that gets re-parsed as fish syntax - anything else invites
-# command injection via quotes/parens/semicolons in an argument.
+# wrapper so aliases (functions, in fish) work under sudo; args ride fish's
+# own argv after --, never a re-parsed string - that invites injection.
 function sudo
   if functions -q -- "$argv[1]"
     set -lx hi_sudo_fn $argv[1]
@@ -35,9 +61,31 @@ function sudo
   end
 end
 
+# the prompt's end character, mirroring core.sh's _hi_prompt_end (fish can't
+# call it): fish setting, then all-three, then default; empty counts as
+# unset, and root still gets '#'.
+set -g _hi_prompt_end '|'
+set -q _HI_PROMPT_END; and test -n "$_HI_PROMPT_END"; and set -g _hi_prompt_end $_HI_PROMPT_END
+set -q _HI_PROMPT_END_FISH; and test -n "$_HI_PROMPT_END_FISH"; and set -g _hi_prompt_end $_HI_PROMPT_END_FISH
+
 # prompt: "<chroot> user@host cwd (git) [status] |", @ turning yellow over ssh
 # skipped entirely when disabled, leaving fish's own default prompt in place
 if test "$_HI_DISABLE_PROMPT" != 1
+
+# deference, chosen in settings.sh - the same rule core.sh's
+# _hi_wants_starship states for bash/zsh (fish can't call it); a missing
+# starship falls back to hi's prompt below, silently
+if test "$_HI_PROMPT" = starship; and command -q starship
+starship init fish | source
+else
+
+# https://no-color.org (fish has no rule of its own): non-empty $NO_COLOR
+# shadows set_color with a no-op - every call below, and fish_vcs_prompt's
+# own, renders the same prompt with no escapes in it.
+if test -n "$NO_COLOR"
+  function set_color
+  end
+end
 
 function prompt_login --description "display user name for the prompt"
   if not set -q __fish_machine
@@ -59,7 +107,7 @@ function fish_prompt --description 'Write out the prompt'
   set -l normal (set_color normal)
 
   set -l color_cwd $fish_color_cwd
-  set -l suffix ' |'
+  set -l suffix " $_hi_prompt_end"
   if functions -q fish_is_root_user; and fish_is_root_user
     set -q fish_color_cwd_root; and set color_cwd $fish_color_cwd_root
     set suffix '#'
@@ -78,6 +126,7 @@ function fish_prompt --description 'Write out the prompt'
     (test "$_HI_DISABLE_GIT_STATUS" != 1; and fish_vcs_prompt) $normal " "$prompt_status $suffix " "
 end
 
+end
 end
 # === end required configuration ===
 
@@ -137,5 +186,22 @@ set -g __fish_git_prompt_color_branch brmagenta
 set -g __fish_git_prompt_color_stagedstate yellow
 set -g __fish_git_prompt_color_invalidstate red
 set -g __fish_git_prompt_color_cleanstate brgreen
+
+# the same ASCII fallback _hi_choose_glyphs gives bash/zsh, _HI_ASCII
+# overriding the locale probe both ways like everywhere else
+if test "$_HI_ASCII" = 1
+    or begin
+        test "$_HI_ASCII" != 0
+        and not string match -qri 'utf-?8' -- "$LC_ALL$LC_CTYPE$LANG"
+    end
+    set -g __fish_git_prompt_char_upstream_ahead '^'
+    set -g __fish_git_prompt_char_upstream_behind 'v'
+    set -g __fish_git_prompt_char_stagedstate '*'
+    set -g __fish_git_prompt_char_dirtystate '+'
+    set -g __fish_git_prompt_char_invalidstate 'x'
+    set -g __fish_git_prompt_char_untrackedfiles '?'
+    set -g __fish_git_prompt_char_stashstate '$'
+    set -g __fish_git_prompt_char_cleanstate 'ok'
+end
 
 end

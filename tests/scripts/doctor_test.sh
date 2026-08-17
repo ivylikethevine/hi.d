@@ -1,0 +1,192 @@
+#!/bin/bash
+# Unit tests for scripts/doctor.sh. Every backend and ssh call runs against
+# shims on a restricted PATH, so the findings are fixed instead of "whatever
+# this machine happens to be running" - the same isolation targets_test.sh
+# uses for completion.
+#
+# Nearly every function below is invoked indirectly - by name, through
+# _hi_case's "$@" - which SC2329 can't see. SC2317 rides along because
+# sourcing doctor.sh reaches hi.sh's trailing dispatch, which shellcheck
+# thinks never returns (see hi_test.sh for the long form of this story).
+# shellcheck disable=SC2329,SC2317
+set -euo pipefail
+
+# shellcheck source=../../common/core.sh
+source "${_HI_HOME:-$HOME}/hi.d/common/core.sh"
+# shellcheck source=../test_lib.sh
+source "$_HI_TEST_LIB"
+# doctor's own hatch stops it before it reports anything; sourcing hands over
+# doctor_backend/doctor_config/doctor_target and, through it, hi.sh's
+# predicates
+# shellcheck source=../../scripts/doctor.sh
+source "$_HI_DOCTOR"
+
+# A toolbox PATH: the coreutils the functions need, plus whichever shims a
+# case installs. Nothing else, so a backend "not installed" case is real
+# even on a machine with every backend.
+function _hi_doctor_path() {
+  _hi_real_path toolbox sh bash awk grep sed printf mktemp rm cat wc tr sleep timeout du date
+}
+
+function _hi_doctor_shims() {
+  local dir="$_HI_WORKDIR/shims"
+  if [ ! -d "$dir" ]; then
+    # the docker half is test_lib.sh's predicate-shape shims, with
+    # "runningbox" as the one running target; nomad/kubectl stay off this
+    # PATH (the report's "not installed" rows are part of what's asserted)
+    # and podman is replaced by a dead CLI for the "not answering" case
+    _hi_probe_shims "$dir" runningbox
+    rm -f "$dir/nomad" "$dir/kubectl"
+    printf '#!/bin/sh\nexit 1\n' >"$dir/podman"
+
+    # connect ok; -O teardown ok; the install probe answers per $HI_FAKE_ROOT;
+    # the tool-inventory loop answers per $HI_FAKE_TOOLS
+    cat >"$dir/ssh" <<'EOF'
+#!/bin/sh
+for a in "$@"; do
+  [ "$a" = -O ] && exit 0
+  [ "$a" = true ] && exit 0
+  case "$a" in
+  *'_r="$HOME/hi.d"'*) printf '%s' "${HI_FAKE_ROOT:-}"; exit 0 ;;
+  *'for c in base64'*) printf '%s' "${HI_FAKE_TOOLS:-}"; exit 0 ;;
+  esac
+done
+exit 0
+EOF
+    chmod +x "$dir/podman" "$dir/ssh"
+  fi
+  printf '%s' "$dir"
+}
+
+# the first doctor_local case: the version row, carrying whatever _hi_version
+# answers (a stamp here, so the row is deterministic)
+function test_local_reports_the_version() {
+  local out
+  out="$(_HI_RELEASE=1.2.3 doctor_local)"
+  [[ "$out" == *version* && "$out" == *"1.2.3"* ]]
+}
+
+function test_backend_missing_reports_not_installed() {
+  local out
+  out="$(PATH="$(_hi_doctor_path)" doctor_backend docker docker ps -q)"
+  [[ "$out" == *"not installed"* ]]
+}
+
+function test_backend_answering_reports_timing() {
+  local out
+  out="$(PATH="$(_hi_doctor_shims):$(_hi_doctor_path)" doctor_backend docker docker ps -q)"
+  [[ "$out" == *"answering"* && "$out" == *s\)* ]]
+}
+
+function test_backend_dead_reports_not_answering() {
+  local out
+  out="$(PATH="$(_hi_doctor_shims):$(_hi_doctor_path)" doctor_backend podman podman ps -q)"
+  [[ "$out" == *"not answering"* ]]
+}
+
+function test_config_flags_a_settings_file_that_does_not_parse() {
+  local dir out
+  dir="$(mktemp -d "$_HI_WORKDIR/badcfg.XXXXXX")"
+  printf 'if [ x\n' >"$dir/settings.sh"
+  out="$(
+    _HI_CONFIG_DIR="$dir"
+    _HI_SETTINGS="$dir/settings.sh"
+    doctor_config
+  )"
+  [[ "$out" == *"does NOT parse as sh"* ]]
+}
+
+function test_config_counts_an_overlay_file() {
+  local dir out
+  dir="$(mktemp -d "$_HI_WORKDIR/overlay.XXXXXX")"
+  printf 'a\nb\n' >"$dir/colors"
+  out="$(
+    _HI_CONFIG_DIR="$dir"
+    _HI_SETTINGS="$dir/settings.sh"
+    doctor_config
+  )"
+  [[ "$out" == *"overridden (2 lines)"* ]] && [[ "$out" == *"packages"*"tree default"* ]]
+}
+
+function test_target_resolves_a_running_container() {
+  local out
+  out="$(PATH="$(_hi_doctor_shims):$(_hi_doctor_path)" _HI_SSH_CONFIG=/nonexistent doctor_target runningbox)"
+  [[ "$out" == *"resolves"*"docker container"* ]]
+}
+
+function test_target_falls_through_to_ssh() {
+  local out
+  out="$(PATH="$(_hi_doctor_shims):$(_hi_doctor_path)" HI_FAKE_TOOLS="base64 bash " \
+  _HI_SSH_CONFIG=/nonexistent doctor_target unknownbox)"
+  [[ "$out" == *"nothing matched"* && "$out" == *"connect"*ok* ]]
+}
+
+function test_ssh_target_reports_a_permanent_install() {
+  local out
+  out="$(PATH="$(_hi_doctor_shims):$(_hi_doctor_path)" HI_FAKE_ROOT=/home/u/hi.d \
+  HI_FAKE_TOOLS="base64 bash " doctor_ssh_target somewhere)"
+  [[ "$out" == *"permanent /home/u/hi.d"* ]]
+}
+
+function test_ssh_target_flags_a_missing_base64() {
+  local out
+  out="$(PATH="$(_hi_doctor_shims):$(_hi_doctor_path)" HI_FAKE_TOOLS="bash " doctor_ssh_target somewhere)"
+  [[ "$out" == *"no base64"* ]]
+}
+
+function test_ssh_target_flags_a_missing_bash() {
+  local out
+  out="$(PATH="$(_hi_doctor_shims):$(_hi_doctor_path)" HI_FAKE_TOOLS="base64 " doctor_ssh_target somewhere)"
+  [[ "$out" == *"no bash"* && "$out" == *"aliases only"* ]]
+}
+
+function test_help_exits_zero() {
+  "$_HI_DOCTOR" --help >/dev/null
+}
+
+# the whole report, end to end, on the restricted PATH: sections present and
+# the exit code is the red-finding count (0 here - nothing is broken, only
+# absent, and absent is not an error)
+function test_full_report_runs_clean() {
+  local out rc=0
+  out="$(PATH="$(_hi_doctor_shims):$(_hi_doctor_path)" _HI_SSH_CONFIG=/nonexistent \
+  _HI_CONFIG_DIR="$_HI_WORKDIR/nocfg" "$_HI_DOCTOR")" || rc=$?
+  [ "$rc" -eq 0 ] &&
+    [[ "$out" == *"The local tree"* && "$out" == *"Backends"* &&
+      "$out" == *"Nothing looks broken"* ]]
+}
+
+function run_doctor_tests() {
+  _hi_workdir doctortest
+
+  _hi_suite_begin
+
+  _hi_h1 "Testing scripts/doctor.sh"
+
+  _hi_h2 "Testing: doctor_local"
+  _hi_check "Reports the version" test_local_reports_the_version
+
+  _hi_h2 "Testing: doctor_backend"
+  _hi_check "Missing CLI -> not installed" test_backend_missing_reports_not_installed
+  _hi_check "Answering CLI -> timed, green" test_backend_answering_reports_timing
+  _hi_check "Dead CLI -> not answering" test_backend_dead_reports_not_answering
+
+  _hi_h2 "Testing: doctor_config"
+  _hi_check "Unparseable settings.sh is flagged" test_config_flags_a_settings_file_that_does_not_parse
+  _hi_check "Overlay files are counted" test_config_counts_an_overlay_file
+
+  _hi_h2 "Testing: doctor_target / doctor_ssh_target"
+  _hi_check "Resolves a running container" test_target_resolves_a_running_container
+  _hi_check "Falls through to ssh" test_target_falls_through_to_ssh
+  _hi_check "Reports a permanent install" test_ssh_target_reports_a_permanent_install
+  _hi_check "Flags a target without base64" test_ssh_target_flags_a_missing_base64
+  _hi_check "Flags a target without bash" test_ssh_target_flags_a_missing_bash
+
+  _hi_h2 "Testing: the report"
+  _hi_check "--help exits zero" test_help_exits_zero
+  _hi_check "Full report runs clean on shims" test_full_report_runs_clean
+
+  _hi_suite_end "doctor.sh"
+}
+
+run_doctor_tests

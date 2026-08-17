@@ -1,0 +1,29 @@
+name: Setup minisign
+# one pinned upstream binary, same pattern as setup-nfpm. Note minisign tags
+# releases without a leading v (0.12, not v0.12) - the tool-versions check
+# strips the prefix from both sides, so the drift report stays accurate.
+description: Install a pinned minisign binary, with caching
+
+inputs:
+  version:
+    description: minisign version to install
+    required: false
+    default: "0.12"
+
+runs:
+  using: composite
+  steps:
+    - name: Cache minisign
+      id: minisign-cache
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: /usr/local/bin/minisign
+        key: minisign-${{ inputs.version }}-linux-x86_64
+
+    - name: Install minisign
+      if: steps.minisign-cache.outputs.cache-hit != 'true'
+      shell: bash
+      env:
+        MINISIGN_VERSION: ${{ inputs.version }}
+      # body in install.sh so the lint suite reads it (see setup-shellcheck)
+      run: '"$GITHUB_ACTION_PATH/install.sh"'

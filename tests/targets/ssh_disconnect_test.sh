@@ -1,25 +1,21 @@
 #!/bin/bash
-# End-to-end test of hi.sh's ephemeral-target cleanup (the `trap 'rm -rf
-# $_HI_CLEANUP' exit` set up in _say_hi's non-installed branch, see hi.sh)
-# surviving an abrupt disconnect, not just a clean `exit`.
+# End-to-end test that hi's ephemeral-target cleanup (_say_hi's `trap 'rm -rf
+# $_HI_CLEANUP' exit`) survives an abrupt disconnect, not just a clean `exit`.
 #
-# Freezing the session takes *two* SIGSTOPs, not one. _say_hi multiplexes the
-# install-probe and the real session over one connection (ControlMaster=auto /
-# ControlPersist=30, see hi.sh), so by the time the session is up there is a
-# backgrounded ControlPersist master holding the TCP socket alongside the `ssh
-# -t ...` the test can see - and the master, not the session client, is what
-# answers sshd's ClientAlive probes. Freeze only the client and sshd quite
-# correctly keeps the session: that's a hung terminal, not a dead link. Both
-# have to stop for this to model a real one, which is why _hi_ssh_mux_pids
-# exists and why a missing master below is a hard failure.
+# Freezing the session takes *two* SIGSTOPs: _say_hi multiplexes over one
+# connection, so a backgrounded ControlPersist master holds the socket beside
+# the visible `ssh -t`, and it is the master that answers sshd's ClientAlive
+# probes. Freeze only the client and sshd correctly keeps the session - that is
+# a hung terminal, not a dead link. Hence _hi_ssh_mux_pids, and hence a missing
+# master being a hard failure below.
 #
 # Nearly every function below is invoked indirectly - by name, through
 # _hi_case's/_hi_poll_bool's "$@", or as a trap hook - which SC2329 can't see.
 # shellcheck disable=SC2329
 set -euo pipefail
 
-# shellcheck source=../../common/bootstrap.sh
-source "${_HI_HOME:-$HOME}/hi.d/common/bootstrap.sh"
+# shellcheck source=../../common/core.sh
+source "${_HI_HOME:-$HOME}/hi.d/common/core.sh"
 # shellcheck source=../test_lib.sh
 source "$_HI_TEST_LIB"
 
@@ -47,6 +43,34 @@ function _hi_ssh_ctl_path() {
 function _hi_ssh_mux_pids() {
   local ctl="${1//./\\.}"
   pgrep -f -- "ssh: $ctl \[mux\]" 2>/dev/null || true
+}
+
+# Every local pid this suite has SIGSTOPped, so the exit trap can undo it.
+# This is the only suite that deliberately freezes processes, and the window
+# between the kill -STOP loop and the kill -9 one is ~30s of polling: an abort
+# in there (^C, a runner timeout, `set -e` upstream) would otherwise leave
+# stopped ssh clients and a mux master holding a socket open indefinitely.
+_HI_FROZEN_PIDS=()
+
+function _hi_freeze() {
+  local pid
+  for pid in "$@"; do
+    _HI_FROZEN_PIDS+=("$pid")
+    kill -STOP "$pid" 2>/dev/null || true
+  done
+}
+
+# CONT before KILL: a SIGSTOPped process can't act on SIGKILL's cleanup path
+# until it is scheduled again, so thawing first is what makes the kill land.
+function _hi_thaw_frozen() {
+  local pid
+  for pid in "${_HI_FROZEN_PIDS[@]:-}"; do
+    [ -n "$pid" ] || continue
+    kill -CONT "$pid" 2>/dev/null || true
+    kill -9 "$pid" 2>/dev/null || true
+  done
+  _HI_FROZEN_PIDS=()
+  return 0
 }
 
 function _hi_ready_dir() {
@@ -98,14 +122,14 @@ function test_sudden_disconnect_removes_cleanup_dir() {
     return 1
   fi
 
-  mapfile -t pids < <(_hi_ssh_client_pids)
+  _hi_read_lines pids < <(_hi_ssh_client_pids)
   if [ "${#pids[@]}" -eq 0 ]; then
     _hi_cecho " | no local ssh process found to freeze" "$RED"
     kill -9 "$launcher_pid" 2>/dev/null || true
     return 1
   fi
   ctl="$(_hi_ssh_ctl_path "${pids[0]}")"
-  [ -n "$ctl" ] && mapfile -t mux < <(_hi_ssh_mux_pids "$ctl")
+  [ -n "$ctl" ] && _hi_read_lines mux < <(_hi_ssh_mux_pids "$ctl")
   # if hi.sh ever stops multiplexing, this is the check that says so - delete
   # it deliberately rather than letting the suite quietly go back to freezing a
   # client whose connection someone else is keeping alive
@@ -114,15 +138,15 @@ function test_sudden_disconnect_removes_cleanup_dir() {
     kill -9 "$launcher_pid" 2>/dev/null || true
     return 1
   fi
-  pids+=("${mux[@]}")
-  for pid in "${pids[@]}"; do kill -STOP "$pid" 2>/dev/null || true; done
+  pids+=(${mux[@]+"${mux[@]}"})
+  _hi_freeze ${pids[@]+"${pids[@]}"}
 
   # sshd's ClientAliveInterval=2/ClientAliveCountMax=1 reaps a frozen client in
   # ~4-6s; the rest is headroom for a loaded runner
   _hi_poll_bool 60 0.5 _hi_cleanup_dir_gone "$cleanup_dir" && ok=1
   [ "$ok" -eq 1 ] || _hi_cecho " | $cleanup_dir survived the disconnect" "$RED"
 
-  for pid in "${pids[@]}"; do kill -9 "$pid" 2>/dev/null || true; done
+  _hi_thaw_frozen
   _hi_wait_pid "$launcher_pid" 5
 
   [ "$ok" -eq 1 ]
@@ -132,12 +156,12 @@ function run_ssh_disconnect_test() {
   _hi_require_backend docker
   _hi_require pgrep
 
-  _hi_workdir sshdisconnecttest
+  _hi_workdir sshdisconnecttest _hi_thaw_frozen
   _hi_h1 "Testing hi's ssh cleanup trap survives an abrupt disconnect"
   _hi_ssh_keypair
 
   _hi_h2 "Building test image"
-  _hi_sshd_image "this suite" || exit 0
+  _hi_sshd_image "this suite" || _hi_stand_down "sshd image build failed"
 
   _HI_CONTAINER="hi-sshdisconnecttest-$$"
   _hi_sshd_container "$_HI_CONTAINER" "$_HI_SSHD_IMAGE" \

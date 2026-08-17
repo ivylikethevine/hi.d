@@ -1,0 +1,54 @@
+name: Link check
+
+# Advisory, exactly as ci.yml's markdownlint job is: a rotted external URL in
+# the docs is worth seeing and has never shipped a bug, so this reports and
+# never blocks - and it is scheduled rather than per-PR, because link rot
+# happens on the internet's clock, not this repo's. Before the repo is public
+# the in-repo github.com/... links all 404; the day it flips, a dispatch of
+# this confirms they went live.
+#
+# Same corollary as markdownlint: never add this to required checks.
+on:
+  schedule:
+    - cron: "23 8 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  lychee:
+    name: lychee (advisory)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - id: lychee
+        continue-on-error: true
+        uses: lycheeverse/lychee-action@e7477775783ea5526144ba13e8db5eec57747ce8 # v2.9.0
+        env:
+          # authenticated github.com requests dodge the anonymous rate limit
+          GITHUB_TOKEN: ${{ github.token }}
+        with:
+          # no --cache: nothing persists .lycheecache between runs, and the
+          # weekly cadence would expire it anyway - a cold sweep is the job
+          args: >-
+            --no-progress
+            --accept 200,204,206,429
+            './**/*.md'
+          fail: true
+
+      - name: Say so, without failing
+        if: steps.lychee.outcome == 'failure'
+        run: |
+          set -euo pipefail
+          echo "::warning title=lychee::Dead or unreachable links above - advisory, not blocking"
+          {
+            echo "### lychee found dead links"
+            echo
+            echo "Advisory only: this job never blocks anything. See the step above for the list,"
+            echo "or run \`lychee './**/*.md'\` locally."
+          } >>"$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,149 @@
+#!/bin/bash
+# Line coverage for the bash suites via kcov - a dev tool to run occasionally,
+# deliberately not wired into CI. The point is finding which arms of
+# scripts/install.sh and packaging/bump.sh the ~670 fast cases never touch,
+# not gating on a number.
+#
+# Usage: tests/coverage.sh [outdir] [runner args...]
+#   outdir       where kcov writes its report (default: $TMPDIR/hi.d-coverage)
+#   runner args  passed straight to test_runner.sh (default: --group fast -
+#                the e2e groups need real backends and add little coverage of
+#                the client-side scripts)
+#
+# ---------------------------------------------------------------------------
+# READ THIS BEFORE BELIEVING A NUMBER THIS PRINTS
+#
+# kcov stops recording the moment tests/test_lib.sh finishes being sourced.
+# Everything a suite does after that - which is every case it runs - is
+# invisible to the report. So these percentages are NOT "the arms the suites
+# never reach". They are much closer to "the lines that ran before the harness
+# finished loading", and they understate real coverage by a wide, uneven margin.
+#
+# How that was established, so the next person doesn't have to redo it. Take one
+# script that sources core.sh, sources git_prompt.sh, makes a git repo and calls
+# _hi_git_prompt once, and trace it under kcov:
+#
+#   no test_lib.sh sourced at all ................ git_prompt.sh  59.15%
+#   test_lib.sh sourced BEFORE the call .......... git_prompt.sh   2.82%
+#   test_lib.sh sourced BEFORE git_prompt.sh ..... git_prompt.sh  ABSENT
+#
+# 2.82% is 2 lines of 71: `set -euo pipefail` on line 5 and `set +euo pipefail`
+# on line 116, the two statements that run at *source* time. The whole function
+# body - called immediately after, successfully, with its output asserted - is
+# recorded as never executed. That 2.82% is also exactly what a full
+# `--group fast` run reports for the file, while its 17 cases pass. The cause is
+# inside kcov's bash instrumentation (it drives a DEBUG trap; something in
+# test_lib.sh's source-time work loses it), not in test_lib.sh or in the suites,
+# and it is not hi.d's to fix. Nothing here is a code smell to go chasing.
+#
+# What that means in practice: a low number here is not evidence that tests are
+# missing, and a high one is not evidence that they are not. Do not write tests
+# to move these figures. Until kcov is fixed or replaced, treat the output as a
+# rough map of what executes at load time and nothing more.
+#
+# The topology below is still the correct one, and is kept for when the tool
+# works again: one kcov per suite with the suite script as the *top-level*
+# process, merged at the end. Wrapping test_runner.sh instead - which is what
+# this used to do - puts every suite in a child process and loses even the
+# load-time lines.
+# ---------------------------------------------------------------------------
+#
+# Lives in tests/ on purpose: tests/ ships in neither the ssh payload
+# ($_HI_PAYLOAD) nor the OS packages ($_HI_PACKAGE_CONTENTS), and a coverage
+# harness has no business on a target.
+set -euo pipefail
+
+if [ -z "${_HI_HOME:-}" ]; then
+  _HI_HOME="$(cd -P "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+fi
+export _HI_HOME
+# shellcheck source=../common/core.sh
+source "$_HI_HOME/hi.d/common/core.sh"
+
+if ! command -v kcov >/dev/null 2>&1; then
+  _hi_cecho " | coverage: kcov not installed - skipping (it is a dev-only tool; see your package manager)" "$YELLOW"
+  exit 0
+fi
+
+_HI_COV_DIR="${1:-${TMPDIR:-/tmp}/hi.d-coverage}"
+shift 2>/dev/null || true
+[ $# -gt 0 ] || set -- --group fast
+_HI_RUNNER="$_HI_HOME/hi.d/tests/test_runner.sh"
+
+rm -rf "$_HI_COV_DIR"
+mkdir -p "$_HI_COV_DIR/parts"
+
+# The runner owns the suite table, so ask it rather than keeping a second copy
+# here - the same reason .github/workflows/ci.yml stopped spelling the suites
+# out. `--list-paths` exists for this caller: kcov has to launch the suite
+# script itself, so the name alone is not enough.
+declare -a _HI_NAMES=()
+declare -a _HI_PATHS=()
+while read -r _hi_group _hi_name _hi_path; do
+  [ -n "${_hi_path:-}" ] || continue
+  _HI_NAMES+=("$_hi_name")
+  _HI_PATHS+=("$_hi_path")
+done < <("$_HI_RUNNER" "$@" --list-paths)
+
+if [ "${#_HI_PATHS[@]}" -eq 0 ]; then
+  _hi_cecho " | coverage: no suites selected by: $*" "$RED" >&2
+  exit 1
+fi
+
+# The suite script is what kcov launches - not test_runner.sh with the suite
+# named, which puts the suite back in a child process and traces nothing (see
+# the header). The two files the runner would otherwise export are made here so
+# _hi_suite_end has somewhere to write its tally; everything else a suite needs
+# it derives from $_HI_HOME through common/paths.sh.
+#
+# tests/ itself is excluded from the report - the product is the subject, not
+# the harness. A suite that fails does not stop the sweep: a red suite still
+# traced everything it reached on the way down, and losing the whole report to
+# one environment-specific failure (no fish, no docker) is the opposite of
+# useful. The tally is printed at the end instead.
+_HI_COUNTS_FILE="$(mktemp -t hi.cov.counts.XXXXXX)"
+_HI_FAILS_FILE="$(mktemp -t hi.cov.fails.XXXXXX)"
+export _HI_COUNTS_FILE _HI_FAILS_FILE
+# shellcheck disable=SC2064 # the paths are fixed by now; expand them here
+trap "rm -f '$_HI_COUNTS_FILE' '$_HI_FAILS_FILE'" EXIT
+
+_HI_FAILED=""
+for _hi_i in $(seq 0 $((${#_HI_PATHS[@]} - 1))); do
+  _hi_suite="${_HI_NAMES[$_hi_i]}"
+  _hi_path="${_HI_PATHS[$_hi_i]}"
+  _hi_cecho " | coverage: tracing $_hi_suite" "$BRCYAN"
+  kcov --include-path="$_HI_HOME/hi.d" \
+    --exclude-path="$_HI_HOME/hi.d/tests" \
+    "$_HI_COV_DIR/parts/$_hi_suite" \
+    "$_hi_path" >/dev/null 2>&1 ||
+    _HI_FAILED="$_HI_FAILED $_hi_suite"
+done
+
+kcov --merge "$_HI_COV_DIR/merged" "$_HI_COV_DIR"/parts/* >/dev/null 2>&1
+
+_hi_cecho " | coverage: report in $_HI_COV_DIR/merged/index.html" "$GREEN"
+[ -z "$_HI_FAILED" ] ||
+  _hi_cecho " | coverage: these suites failed while being traced (their coverage still counts):$_HI_FAILED" "$YELLOW"
+
+# Every file kcov traced, worst first - the ranking is the point, since the
+# question this answers is "which arms does nothing reach", and the answer moves
+# as suites are added. Straight from kcov's merged JSON, where one object is one
+# line and every value is a quoted string:
+#   {"file": "...", "percent_covered": "48.84", "covered_lines": "168", ...}
+# So the percent is found by walking to the `percent_covered` key rather than by
+# field number - which is what the first version of this got wrong, printing the
+# path a second time where the number belonged, because it read `file` and
+# `percent_covered` as two separate lines.
+_HI_COV_JSON="$(find "$_HI_COV_DIR/merged" -name coverage.json 2>/dev/null | head -1)"
+if [ -n "$_HI_COV_JSON" ] && [ -f "$_HI_COV_JSON" ]; then
+  awk -F'"' -v root="$_HI_HOME/hi.d/" '
+    /"file"/ {
+      for (i = 1; i < NF; i++)
+        if ($i == "percent_covered") {
+          path = $4
+          sub(root, "", path)
+          printf " |   %6s%%  %5s/%-5s  %s\n", $(i + 2), $(i + 6), $(i + 10), path
+          break
+        }
+    }' "$_HI_COV_JSON" | sort -n
+fi

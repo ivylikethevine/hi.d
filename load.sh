@@ -1,61 +1,68 @@
 #!/bin/bash
-# forked from sshrc: https://github.com/danrabinowitz/sshrc
-# Runs on the target: prints the header, grafts hi's shell configs onto the
-# host's rc files, hands over to the best shell available, then undoes it all.
+# The target half (forked from sshrc): header, rc grafts, shell handoff, undo.
 
-# `bash --rcfile` (how hi.sh hands off to us) skips the normal startup file
-# chain, so restore it here before anything else runs - deliberately before
-# `set -euo pipefail` below, since arbitrary profile scripts on the target
-# aren't guaranteed to be safe under -e/-u. It runs at source time rather than
-# from load(), since the bootloader's other shape (hi.sh's $CMDARG, for a
-# one-off `hi <target> <command>`) runs that command instead of load() and
-# still wants the target's real PATH.
+# `bash --rcfile` skips the startup chain; restore it before strict mode
+# (profile scripts aren't -e/-u safe), at source time ($CMDARG needs PATH too).
 function _hi_restore_profile() {
   if [ -r /etc/profile ]; then source /etc/profile; fi
   # shellcheck disable=SC1090 # target-specific files, no fixed location
-  if [ -r ~/.bash_profile ]; then source ~/.bash_profile
-  elif [ -r ~/.bash_login ]; then source ~/.bash_login
-  elif [ -r ~/.profile ]; then source ~/.profile
+  if [ -r ~/.bash_profile ]; then
+    source ~/.bash_profile
+  elif [ -r ~/.bash_login ]; then
+    source ~/.bash_login
+  elif [ -r ~/.profile ]; then
+    source ~/.profile
   fi
   export PATH="$PATH:$_HI_ROOT"
 }
 
-# _HI_LOAD_NO_INIT=1 sources this file for its functions alone, without
-# sourcing the target's profile chain - the same "let the tests reach the
-# functions without running the real thing" hatch as the BASH_SOURCE guards at
-# the bottom of scripts/install.sh and scripts/uninstall.sh, spelled as an env
-# var because this file is only ever sourced, never executed.
+# _HI_LOAD_NO_INIT=1: functions only, no profile chain - install.sh's source
+# guard as an env var, since this file is only ever sourced
 [ "${_HI_LOAD_NO_INIT:-0}" = 1 ] || _hi_restore_profile
 
 set -euo pipefail
 
-# every remote/container/alloc path chainloads this file to get here - the
-# local install's own shells never do - so this is what lets common/paths.sh
-# tell "reached via hi" apart from "the machine hi.d lives on", for
-# _HI_DISABLE_LOCAL below.
+# only hi's remote paths chainload this file - it is how common/paths.sh
+# tells "reached via hi" from "the machine hi.d lives on"
 export _HI_REMOTE_SESSION=1
 
-# shellcheck source=./common/bootstrap.sh
-source "${_HI_HOME:-$HOME}/hi.d/common/bootstrap.sh"
+# shellcheck source=./common/core.sh
+source "${_HI_HOME:-$HOME}/hi.d/common/core.sh"
 # shellcheck source=./common/header.sh
 source "$_HI_HEADER"
 
 _HI_CONFIG_START="# hi-config-start"
 _HI_CONFIG_END="# hi-config-end"
 
-# rc file <- hi config, unless a previous session already added it. Fish only
-# gets one if fish is installed (its config dir won't exist otherwise).
-_HI_CONFIGS=("$_HI_BASHRC:$_HI_HOME_BASHRC" "$_HI_ZSHRC:$_HI_HOME_ZSHRC" "$_HI_FISH_CONFIG:$_HI_HOME_FISH_CONFIG")
+# rc file <- hi config; fish/nu only when installed (no config dir otherwise)
+_HI_CONFIGS=("$_HI_BASHRC:$_HI_HOME_BASHRC" "$_HI_ZSHRC:$_HI_HOME_ZSHRC"
+  "$_HI_FISH_CONFIG:$_HI_HOME_FISH_CONFIG" "$_HI_NU_CONFIG:$_HI_HOME_NU_CONFIG")
 
 function configure_files() {
-  local pair target block
+  local pair target src open body
+  # nu makes its config dir on first run, not install - so a fresh nu would
+  # dodge the loop's dir gate; making it here is what nu itself does next
+  command -v nu >/dev/null 2>&1 && mkdir -p "$_HI_HOME_NU_DIR"
   for pair in "${_HI_CONFIGS[@]}"; do
     target="${pair#*:}"
-    [ -d "$(dirname "$target")" ] || continue
+    src="${pair%:*}"
+    [ -d "${target%/*}" ] || continue # targets are absolute; no dirname fork
     touch "$target"
     grep -q "$_HI_CONFIG_START" "$target" && continue
-    block="$_HI_CONFIG_START"$'\n'"$(cat "${pair%:*}")"$'\n'"$_HI_CONFIG_END"
-    printf '%s\n' "$block" >>"$target"
+    # GLOSSARY: graft crash guard - why every graft wraps, and nu's exception
+    # shellcheck disable=SC2016 # single quotes are the point: the guard expands at shell start, not graft time
+    case "$src" in
+    *.fish)
+      open='set -l _hi_tree $HOME'$'\n''test -n "$_HI_HOME"; and set _hi_tree $_HI_HOME'$'\n''if test -f $_hi_tree/hi.d/common/core.sh'
+      body="$open"$'\n'"$(<"$src")"$'\n'"end"
+      ;;
+    *.nu) body="$(<"$src")" ;;
+    *)
+      open='if [ -f "${_HI_HOME:-$HOME}/hi.d/common/core.sh" ]; then'
+      body="$open"$'\n'"$(<"$src")"$'\n'"fi"
+      ;;
+    esac
+    printf '%s\n' "$_HI_CONFIG_START"$'\n'"$body"$'\n'"$_HI_CONFIG_END" >>"$target"
   done
 }
 
@@ -80,6 +87,52 @@ function clean_all() {
   return 0
 }
 
+# The user's login shell, by name: $SHELL when sshd set it (it does), the passwd
+# entry otherwise (container `exec` paths often have neither).
+function _hi_login_shell() {
+  local shell="${SHELL:-}" user
+  if [ -z "$shell" ]; then
+    user="$(_hi_whoami)" # memoized in core.sh; this path forked `id` twice
+    shell="$(getent passwd "$user" 2>/dev/null | awk -F: '{ print $NF }')"
+    [ -n "$shell" ] || shell="$(awk -F: -v u="$user" '$1 == u { print $NF }' /etc/passwd 2>/dev/null)"
+  fi
+  printf '%s' "${shell##*/}"
+}
+
+# Which shell this session runs in.
+# GLOSSARY: session-shell ranking - login-first, and nu's allow-list-only seat
+function _hi_session_shell() {
+  local want
+  # the ranking is appended rather than kept as a second loop: a preference
+  # that names nothing installed falls through to it either way
+  for want in ${_HI_SHELL_PREFERENCE:-login fish zsh bash} fish zsh bash; do
+    [ "$want" = login ] && want="$(_hi_login_shell)"
+    case "$want" in
+    bash | zsh | fish | nu) command -v "$want" >/dev/null 2>&1 && {
+      printf '%s' "$want"
+      return 0
+    } ;;
+    esac
+  done
+  printf 'bash'
+}
+
+# True when this session should run inside a named tmux (`hi --tmux` /
+# _HI_TMUX_ATTACH=1). Both refusals print and carry on: a disposable tree
+# would outlive a detached tmux, and the client can't know if tmux exists.
+function _hi_tmux_wanted() {
+  [ "${_HI_TMUX_ATTACH:-0}" = 1 ] || return 1
+  if [ -n "${_HI_CLEANUP:-}" ]; then
+    _hi_cecho " --tmux needs a permanent hi.d here (scripts/install.sh) - this tree is disposable, so a detached session would outlive it. Continuing without tmux." "$YELLOW"
+    return 1
+  fi
+  if ! command -v tmux >/dev/null 2>&1; then
+    _hi_cecho " --tmux asked for, but there is no tmux on this host. Continuing without it." "$YELLOW"
+    return 1
+  fi
+  return 0
+}
+
 function load() {
   local start
   start="$(_hi_now)"
@@ -95,29 +148,41 @@ function load() {
   _hi_cecho " | " "$NC" 1
   _hi_cecho "hi loaded with... " "$BRCYAN" 1
 
-  local shell=bash greeting="only bash today :(" color="$RED"
-  if command -v fish &>/dev/null; then
-    shell=fish greeting="fish shell! :^)" color="$GREEN"
-  elif command -v zsh &>/dev/null; then
-    shell=zsh greeting="zsh shell! :)" color="$PURPLE"
-  fi
+  local shell greeting color
+  shell="$(_hi_session_shell)"
+  case "$shell" in
+  fish) greeting="fish shell! :^)" color="$GREEN" ;;
+  zsh) greeting="zsh shell! :)" color="$PURPLE" ;;
+  nu) greeting="nushell! :o)" color="$BRCYAN" ;;
+  *) greeting="only bash today :(" color="$RED" ;;
+  esac
   _hi_cecho "$greeting" "$color" 1
   _hi_cecho " | load: $(_hi_elapsed "$start" "$(_hi_now)")s | copy: ${_HI_COPY_TIME:--1}s"
 
-  if [ "$shell" = fish ]; then
-    fish -C "set fish_greeting ''" -i # the header above is our greeting
+  # keep the session's own status: `hi <target>` should report a shell that
+  # exited non-zero rather than always claiming success
+  local shell_ec=0
+  local -a shell_cmd=("$shell" -i)
+  # the header above is our greeting
+  [ "$shell" = fish ] && shell_cmd=(fish -C "set fish_greeting ''" -i)
+  if _hi_tmux_wanted; then
+    # -A: attach-or-create, the answer that never loses work; separate args so
+    # fish's -C survives unquoted. GLOSSARY: tmux server-start rules
+    tmux -f "$_HI_TMUXCONF" new-session -A -s "${_HI_TMUX_SESSION:-hi}" \
+      "${shell_cmd[@]}" || shell_ec=$?
   else
-    "$shell" -i
+    "${shell_cmd[@]}" || shell_ec=$?
   fi
 
   local size
-  size="$(_hi_du_size)"
+  # the whole unpacked tree, unlike hi.sh's _hi_size (client tree has extras)
+  size="$(_hi_du_size "$_HI_ROOT")"
   _hi_cecho " $size" "$NC" 1
   if [[ "${_HI_DISABLE_HEADER:-0}" != 1 ]]; then
     banner Disconnected "$BRRED" " $size"
-    timestamp
+    [[ "${_HI_HEADER_TIMESTAMP:-1}" == 0 ]] || timestamp
   fi
   _hi_cecho " | " "$NC" 1
   _hi_cecho "hi closing! " "$BRPURPLE"
-  exit 0
+  exit "$shell_ec"
 }

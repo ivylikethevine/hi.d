@@ -3,41 +3,133 @@
 # The bash, zsh and fish completions (and `hi_colors`) all read this for
 # connection, autocomplete, and autosuggest.
 # Usage: sh targets.sh [ssh|docker|podman|nomad|kube] (no argument = all of them)
+# GLOSSARY: completion probe knobs - _HI_PROBE_TIMEOUT and _HI_TARGETS_TTL
 kind="${1:-all}"
+ttl="${_HI_TARGETS_TTL:-5}"
 
-if [ "$kind" = ssh ] || [ "$kind" = all ]; then
-  [ -f "${_HI_SSH_CONFIG:-$HOME/.ssh/config}" ] &&
-    awk 'tolower($1) == "host" {
-      for (i = 2; i <= NF; i++) {
-        if ($i ~ /^#/) break
-        if ($i !~ /[*?]/) printf "%s\tssh\n", $i
-      }
-    }' "${_HI_SSH_CONFIG:-$HOME/.ssh/config}"
+# `timeout` is GNU, absent on stock macOS - optional. Called via list_*.
+# shellcheck disable=SC2329
+if command -v timeout >/dev/null 2>&1; then
+  run_backend() { timeout "${_HI_PROBE_TIMEOUT:-2}" "$@"; }
+else
+  run_backend() { "$@"; }
 fi
 
-if [ "$kind" = docker ] || [ "$kind" = all ]; then
-  command -v docker >/dev/null 2>&1 &&
-    docker ps --format '{{.Names}}' 2>/dev/null | sed 's/$/\tdocker/'
+# Everything below the first line of $1, fork-free - faster than a `tail` exec
+# at this size, and it keeps the cache working on a PATH with no coreutils.
+cache_body() {
+  _hi_first=1
+  while IFS= read -r _hi_line || [ -n "$_hi_line" ]; do
+    if [ "$_hi_first" = 1 ]; then
+      _hi_first=0
+      continue
+    fi
+    printf '%s\n' "$_hi_line"
+  done <"$1"
+}
+
+# emit_backend <label> <bin> <lister...> - kind gate + presence check +
+# timeout wrap. Listers go through "$@" (hence SC2329).
+# shellcheck disable=SC2329
+emit_backend() {
+  label="$1" bin="$2"
+  shift 2
+  { [ "$kind" = "$label" ] || [ "$kind" = all ]; } || return 0
+  command -v "$bin" >/dev/null 2>&1 || return 0
+  "$@"
+}
+
+emit_targets() {
+  if [ "$kind" = ssh ] || [ "$kind" = all ]; then
+    [ -f "${_HI_SSH_CONFIG:-$HOME/.ssh/config}" ] &&
+      awk 'tolower($1) == "host" {
+        for (i = 2; i <= NF; i++) {
+          if ($i ~ /^#/) break
+          if ($i !~ /[*?]/) printf "%s\tssh\n", $i
+        }
+      }' "${_HI_SSH_CONFIG:-$HOME/.ssh/config}"
+  fi
+
+  emit_backend docker docker list_ps docker
+  emit_backend podman podman list_ps podman
+  emit_backend nomad nomad list_nomad
+  emit_backend kube kubectl list_kube
+  return 0
+}
+
+# The listers, each reached indirectly through emit_backend's "$@".
+# shellcheck disable=SC2329
+
+# docker and podman are one call (drop-in CLIs); the tag rides a `sed` over
+# the result, so it holds whatever the backend does with --format
+list_ps() {
+  run_backend "$1" ps --format '{{.Names}}' 2>/dev/null | sed "s/\$/	$1/"
+}
+
+# shellcheck disable=SC2329
+list_nomad() {
+  run_backend nomad job status 2>/dev/null | awk 'NR > 1 { print $1 }' | while read -r job; do
+    run_backend nomad job allocs -t \
+      '{{range .}}{{if eq .ClientStatus "running"}}{{printf "%.8s" .ID}}{{"\n"}}{{end}}{{end}}' \
+      "$job" 2>/dev/null
+  done | sed 's/$/	nomad/'
+}
+
+# shellcheck disable=SC2329
+list_kube() {
+  run_backend kubectl get pods --field-selector=status.phase=Running \
+    -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' 2>/dev/null | sed 's/$/	kube/'
+}
+
+# No cache wanted (or no writable place to put one): just answer.
+if [ "$ttl" -le 0 ]; then
+  emit_targets
+  exit 0
 fi
 
-if [ "$kind" = podman ] || [ "$kind" = all ]; then
-  command -v podman >/dev/null 2>&1 &&
-    podman ps --format '{{.Names}}' 2>/dev/null | sed 's/$/\tpodman/'
+# $XDG_RUNTIME_DIR is per-user and 0700 where it exists; the fallback makes its
+# own private directory rather than a predictable name in a shared /tmp.
+cache_dir="${XDG_RUNTIME_DIR:-}"
+if [ -z "$cache_dir" ] || [ ! -d "$cache_dir" ]; then
+  cache_dir="${TMPDIR:-/tmp}/hi-$(id -u 2>/dev/null || echo unknown)"
+  # only on the first TAB - mkdir+chmod otherwise cost two execs per completion
+  # on any host without $XDG_RUNTIME_DIR (macOS, most containers)
+  [ -d "$cache_dir" ] || {
+    mkdir -p "$cache_dir" 2>/dev/null && chmod 700 "$cache_dir" 2>/dev/null
+  }
+fi
+cache="$cache_dir/hi.targets.$kind"
+now="$(date +%s 2>/dev/null || echo 0)"
+
+# The timestamp is the cache's first line, not the file's mtime: every portable
+# way to read an mtime in seconds is a GNU `find`/`stat` extension.
+if [ -f "$cache" ] && [ -r "$cache" ]; then
+  # `read < file`, not $(head -n1): this is the cache-*hit* path, where the
+  # subshell+exec was most of the cost.
+  IFS= read -r stamp <"$cache" 2>/dev/null || stamp=""
+  case "$stamp" in
+  '' | *[!0-9]*) ;; # not a timestamp - treat as a miss and rewrite it
+  *)
+    if [ "$now" -ge "$stamp" ] && [ "$((now - stamp))" -lt "$ttl" ]; then
+      cache_body "$cache"
+      exit 0
+    fi
+    ;;
+  esac
 fi
 
-if [ "$kind" = nomad ] || [ "$kind" = all ]; then
-  command -v nomad >/dev/null 2>&1 &&
-    nomad job status 2>/dev/null | awk 'NR > 1 { print $1 }' | while read -r job; do
-      nomad job allocs -t \
-        '{{range .}}{{if eq .ClientStatus "running"}}{{printf "%.8s" .ID}}{{"\n"}}{{end}}{{end}}' \
-        "$job" 2>/dev/null | sed 's/$/\tnomad/'
-    done
+# Swept once, then temp-file-and-mv so a mid-refresh reader sees old or new,
+# never half; a cache that can't be written is not an error - answer anyway.
+out="$(emit_targets)"
+tmp="$cache.$$"
+if {
+  printf '%s\n' "$now"
+  [ -n "$out" ] && printf '%s\n' "$out"
+  true
+} >"$tmp" 2>/dev/null; then
+  mv "$tmp" "$cache" 2>/dev/null || rm -f "$tmp" 2>/dev/null
+else
+  rm -f "$tmp" 2>/dev/null
 fi
-
-if [ "$kind" = kube ] || [ "$kind" = all ]; then
-  command -v kubectl >/dev/null 2>&1 &&
-    kubectl get pods --field-selector=status.phase=Running \
-      -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' 2>/dev/null | sed 's/$/\tkube/'
-fi
-
+[ -n "$out" ] && printf '%s\n' "$out"
 exit 0

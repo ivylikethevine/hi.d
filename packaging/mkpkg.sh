@@ -1,0 +1,221 @@
+#!/bin/bash
+# Builds the distributable packages: stage the tree with scripts/install.sh's
+# packaging mode, then hand that staging root to nfpm for .deb/.rpm/.apk.
+#
+# Named mkpkg.sh because both obvious names are taken: .gitignore's `**build**`
+# rule would silently swallow a build.sh (see the note at the top of
+# .gitignore), and package.sh at the repo root is basher's manifest. Not to be
+# confused with Arch's makepkg - Arch is deliberately not built here (below).
+#
+# Arch is deliberately not built here even though nfpm can: packaging/aur/ makes
+# a better Arch package (real optdepends, a -git variant, AUR updates), and two
+# Arch packages for one project would only conflict.
+set -euo pipefail
+
+# the locator, core.sh, and the shared primitives (rewrite/sha256_lines/
+# pkgbuild_version) all come from lib.sh, found beside this script
+# shellcheck source=./lib.sh
+source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
+
+_HI_PACKAGERS=(deb rpm apk)
+_HI_NFPM_CONFIG="$_HI_ROOT/packaging/nfpm/nfpm.yaml"
+_HI_PKGBUILD="$_HI_ROOT/packaging/aur/hi.d/PKGBUILD"
+_HI_DIST="$_HI_ROOT/dist"
+_HI_STAGE_ONLY=""
+_HI_VERSION=""
+_HI_USAGE="Usage: mkpkg.sh [--version <x.y.z>] [--stage-only] [--outdir <dir>]"
+
+# install.sh insists on a checkout named exactly hi.d ($_HI_HOME/hi.d is how it
+# finds everything). A clone directory called anything else - hi.d-main, a
+# worktree, a CI checkout path - would otherwise fail here rather than in the
+# packager's build, so give it the name it wants under a scratch parent.
+function staged_launcher() {
+  local shim
+  if [ "$(basename "$_HI_ROOT")" = hi.d ]; then
+    printf '%s' "$_HI_ROOT/scripts/install.sh"
+    return 0
+  fi
+  shim="$_HI_DIST/shim"
+  rm -rf "$shim"
+  mkdir -p "$shim"
+  ln -sfn "$_HI_ROOT" "$shim/hi.d"
+  printf '%s' "$shim/hi.d/scripts/install.sh"
+}
+
+function stage_tree() {
+  local installer
+  installer="$(staged_launcher)"
+  _hi_h2 "Staging the tree"
+  rm -rf "$_HI_DIST/staging"
+  mkdir -p "$_HI_DIST/staging"
+  DESTDIR="$_HI_DIST/staging" "$installer" --prefix /usr/share
+  stamp_launcher
+  stamp_manpage
+  touch_epoch
+}
+
+# The staged copy answers `hi --version` with the packaged version. Stamped
+# here at build time, never in git: bump.sh only runs after the tag exists, so
+# a committed stamp would always be one release stale in the tag tarball (the
+# PKGBUILD and the Homebrew formula stamp their own copies the same way).
+# lib.sh's rewrite keeps the staged file's exec bit.
+function stamp_launcher() {
+  rewrite "$_HI_DIST/staging/usr/share/hi.d/hi.sh" \
+    "s/^_HI_RELEASE=.*/_HI_RELEASE=\"$_HI_VERSION\"/"
+}
+
+# `man hi`'s footer answers with the packaged version too: the same build-time
+# stamp, sedded into the .TH line through the gzip install_tree produced. The
+# date is $SOURCE_DATE_EPOCH's day (GNU -d first, BSD -r second - same dual
+# shape as touch_epoch), and -9n plus the epoch clamp that follows keep the
+# reproducible-build diff empty. The PKGBUILDs and the formula stamp their own
+# copies, and tests/scripts/packaging_test.sh holds all three together.
+function stamp_manpage() {
+  local gz="$_HI_DIST/staging/usr/share/man/man1/hi.1.gz" page day
+  [ -f "$gz" ] || return 0
+  page="${gz%.gz}"
+  day="$(date -u -d "@$SOURCE_DATE_EPOCH" +%Y-%m-%d 2>/dev/null ||
+    date -u -r "$SOURCE_DATE_EPOCH" +%Y-%m-%d)"
+  gzip -d "$gz"
+  rewrite "$page" "s/^\.TH .*/.TH HI 1 \"$day\" \"hi.d $_HI_VERSION\" \"User Commands\"/"
+  gzip -9n "$page"
+}
+
+# Clamp every staged mtime to $SOURCE_DATE_EPOCH: install_tree's cp stamps
+# each file "now", which nfpm faithfully preserves into the package as the one
+# run-to-run difference. Files and directories only - the staged /usr/bin/hi
+# symlink points at its installed (not-yet-existing) target, and nfpm builds
+# its own symlink entry from nfpm.yaml anyway. GNU touch takes -d @epoch;
+# BSD/macOS needs -t with a stamp its own date -r builds (TZ pinned, -t reads
+# local time) - the same dual-implementation shape as bump.sh's checksums.
+function touch_epoch() {
+  local stamp
+  if touch -d "@$SOURCE_DATE_EPOCH" "$_HI_DIST/staging" 2>/dev/null; then
+    find "$_HI_DIST/staging" \( -type f -o -type d \) \
+      -exec touch -d "@$SOURCE_DATE_EPOCH" {} +
+  else
+    stamp="$(TZ=UTC date -u -r "$SOURCE_DATE_EPOCH" +%Y%m%d%H%M.%S)"
+    find "$_HI_DIST/staging" \( -type f -o -type d \) \
+      -exec env TZ=UTC touch -t "$stamp" {} +
+  fi
+}
+
+function run_nfpm() {
+  local packager
+  if ! command -v nfpm >/dev/null 2>&1; then
+    _hi_cecho " nfpm is not installed - it is a single Go binary:" "$RED" >&2
+    _hi_cecho "   go install github.com/goreleaser/nfpm/v2/cmd/nfpm@latest" "$YELLOW" >&2
+    _hi_cecho "   or grab a release from https://github.com/goreleaser/nfpm/releases" "$YELLOW" >&2
+    return 1
+  fi
+  for packager in "${_HI_PACKAGERS[@]}"; do
+    _hi_h2 "Building $packager"
+    # cd to the tree root: nfpm.yaml's contents are relative to the config's
+    # working directory, and they are written relative to the repo root
+    (cd "$_HI_ROOT" && HI_VERSION="$_HI_VERSION" nfpm package \
+      -f "$_HI_NFPM_CONFIG" -p "$packager" -t "$_HI_DIST")
+  done
+  write_checksums
+}
+
+# One artifact per packager, plus a SHA256SUMS over them for release users to
+# verify downloads against. _HI_PACKAGERS is the single home of "what a
+# release consists of" - the workflows call this rather than repeating the
+# format list in YAML. The sums come from lib.sh's sha256_lines (mac fallback
+# included).
+function write_checksums() {
+  local packager f
+  local -a built=()
+  for packager in "${_HI_PACKAGERS[@]}"; do
+    for f in "$_HI_DIST"/*."$packager"; do
+      [ -f "$f" ] || {
+        _hi_cecho " nfpm exited 0 but built no .$packager" "$RED" >&2
+        return 1
+      }
+      built+=("${f##*/}")
+    done
+  done
+  (cd "$_HI_DIST" && sha256_lines "${built[@]}" >SHA256SUMS)
+  _hi_cecho " $_HI_DIST/SHA256SUMS :)" "$GREEN"
+}
+
+# sourcing stops here (tests reach the functions above) - install.sh's pattern
+[[ "${BASH_SOURCE[0]}" == "$0" ]] || return 0
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+  --stage-only) _HI_STAGE_ONLY=1 ;;
+  --version)
+    [ $# -ge 2 ] || {
+      echo "mkpkg.sh: --version requires a value" >&2
+      exit 1
+    }
+    _HI_VERSION="$2"
+    shift
+    ;;
+  --version=*) _HI_VERSION="${1#--version=}" ;;
+  --outdir)
+    [ $# -ge 2 ] || {
+      echo "mkpkg.sh: --outdir requires a path" >&2
+      exit 1
+    }
+    _HI_DIST="$2"
+    shift
+    ;;
+  --outdir=*) _HI_DIST="${1#--outdir=}" ;;
+  -h | --help)
+    cat <<EOF
+$_HI_USAGE
+
+Stages hi.d the way a package manager would (scripts/install.sh --prefix
+/usr/share, into dist/staging) and then builds ${_HI_PACKAGERS[*]} packages
+from that staging root with nfpm.
+
+  --version <x.y.z>  Version to stamp. Defaults to the pkgver in
+                     packaging/aur/hi.d/PKGBUILD, which packaging/bump.sh
+                     owns - that file is the one version of record.
+  --stage-only       Stop after staging. Needs no nfpm, and is the quickest
+                     way to see exactly what a package would contain.
+  --outdir <dir>     Where to stage and write packages. Default: dist/
+EOF
+    exit 0
+    ;;
+  *)
+    echo "mkpkg.sh: unrecognized argument: $1" >&2
+    echo "$_HI_USAGE" >&2
+    exit 1
+    ;;
+  esac
+  shift
+done
+
+: "${_HI_VERSION:=$(pkgbuild_version)}"
+
+# Reproducible builds: nfpm stamps the timestamps it controls from
+# $SOURCE_DATE_EPOCH, and touch_epoch clamps the staged tree's mtimes to it,
+# so two runs over the same commit produce byte-identical packages. HEAD's
+# commit time (on a release checkout, the tag's), respecting a caller's value
+# per the reproducible-builds.org convention; with no git history the build
+# still works but stamps "now", and says so.
+: "${SOURCE_DATE_EPOCH:=$(git -C "$_HI_ROOT" log -1 --format=%ct 2>/dev/null || true)}"
+if [ -z "$SOURCE_DATE_EPOCH" ]; then
+  SOURCE_DATE_EPOCH="$(date +%s)"
+  _hi_cecho " no git history - SOURCE_DATE_EPOCH stamps 'now'; this build is not reproducible" "$YELLOW" >&2
+fi
+export SOURCE_DATE_EPOCH
+
+_hi_h1 "Packaging hi.d $_HI_VERSION"
+_hi_cecho " | root: $_HI_ROOT | outdir: $_HI_DIST" "$BLUE"
+
+stage_tree
+
+if [ -n "$_HI_STAGE_ONLY" ]; then
+  _hi_h1 "Staged!"
+  _hi_cecho " | $_HI_DIST/staging - nothing built, pass no --stage-only to build" "$BLUE"
+  exit 0
+fi
+
+run_nfpm
+
+_hi_h1 "Packaged!"
+_hi_cecho " | $_HI_DIST" "$BLUE"

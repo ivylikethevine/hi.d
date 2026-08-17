@@ -1,0 +1,379 @@
+name: Release
+
+# Fires on a pushed v* tag (the real thing), or by hand as a *rehearsal*: the
+# dispatch runs the whole build job against a HEAD archive and a fake version,
+# and the publish job is hard-gated to tag pushes - so the release machinery
+# can be exercised any day, not only discovered broken on release day.
+# Nothing here runs on a branch push or a PR - ci.yml owns those.
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: rehearsal version (build only - nothing publishes)
+        required: false
+        default: "0.0.0"
+
+# read-only by default; only the gated publish job gets `contents: write`
+permissions:
+  contents: read
+
+# Serialized, never cancelled: two tags pushed close together would otherwise
+# race the publish job's manifest push to main. Waiting on the environment
+# approval costs nothing here - that wait doesn't count against job timeouts.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  # Everything that can fail, and nothing that can publish. Runs unattended so
+  # that a bad tag is caught before anyone is asked to approve anything.
+  build:
+    name: build packages
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # the provenance attestation below needs these two; contents stays read
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install zsh and fish
+        run: sudo apt-get update && sudo apt-get install -y zsh fish
+
+      # same pinned upstream binary ci.yml uses - the distro package lags badly
+      - uses: ./.github/actions/setup-shellcheck
+
+      # The tarball both channels checksum only exists once the tag does, so
+      # the bump runs here, not before tagging (which needed a force-retag).
+      # Review happens at the environment gate, over the files this produced.
+      # A rehearsal has no tag tarball, so it checksums a HEAD archive built
+      # to the same shape instead - same code path, fake sums, never committed.
+      - name: Pick the version (tag or rehearsal input)
+        # the input reaches the script through env, never inline ${{ }} in a
+        # run block - a crafted dispatch input must stay data (zizmor:
+        # template-injection)
+        env:
+          REHEARSAL_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            echo "HI_VERSION=$REHEARSAL_VERSION" >>"$GITHUB_ENV"
+            git archive --prefix "hi.d-$REHEARSAL_VERSION/" -o /tmp/rehearsal.tar.gz HEAD
+            echo "HI_TARBALL=/tmp/rehearsal.tar.gz" >>"$GITHUB_ENV"
+          else
+            echo "HI_VERSION=${GITHUB_REF_NAME#v}" >>"$GITHUB_ENV"
+            echo "HI_TARBALL=" >>"$GITHUB_ENV"
+          fi
+
+      - name: Regenerate the manifests
+        run: |
+          set -euo pipefail
+          if [ -n "$HI_TARBALL" ]; then
+            packaging/bump.sh --tarball "$HI_TARBALL" "$HI_VERSION"
+          else
+            packaging/bump.sh "$HI_VERSION"
+          fi
+
+      - name: Verify the result
+        run: packaging/bump.sh --check "$HI_VERSION"
+
+      # after the bump, so the packaging drift guards in the fast group run
+      # against the manifests this release will actually ship
+      - name: Run fast test suites
+        run: "${{ github.workspace }}/tests/test_runner.sh --group fast"
+
+      - uses: ./.github/actions/setup-nfpm
+
+      # The apk signing key, when the APK_SIGNING_KEY repo secret exists.
+      # Absent (forks, before-first-release), the apk builds unsigned exactly
+      # as a keyless local build does - nfpm skips the signature on an empty
+      # key_file. A plain repo secret rather than the release environment:
+      # this job is deliberately ungated (rehearsals run it), and the key only
+      # signs an artifact the gated publish job still has to approve.
+      - name: Write the apk signing key
+        env:
+          APK_SIGNING_KEY: ${{ secrets.APK_SIGNING_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -n "$APK_SIGNING_KEY" ]; then
+            printf '%s\n' "$APK_SIGNING_KEY" >"$RUNNER_TEMP/hi.d-apk.rsa"
+            chmod 600 "$RUNNER_TEMP/hi.d-apk.rsa"
+            echo "HI_APK_KEY=$RUNNER_TEMP/hi.d-apk.rsa" >>"$GITHUB_ENV"
+          else
+            echo "no APK_SIGNING_KEY secret - the apk will be unsigned"
+          fi
+
+      # asserts one artifact per format and writes dist/SHA256SUMS itself
+      - name: Build the packages
+        run: packaging/mkpkg.sh
+
+      - name: Collect the manifests alongside them
+        run: |
+          set -euo pipefail
+          mkdir -p dist/manifests
+          cp packaging/aur/hi.d/PKGBUILD dist/manifests/PKGBUILD
+          cp packaging/aur/hi.d/.SRCINFO dist/manifests/.SRCINFO
+          cp packaging/aur/hi.d-git/PKGBUILD dist/manifests/PKGBUILD.git
+          cp packaging/aur/hi.d-git/.SRCINFO dist/manifests/.SRCINFO.git
+          cp packaging/homebrew/hi.d.rb dist/manifests/hi.d.rb
+
+      # Signed build provenance for everything the release will carry - pairs
+      # with SHA256SUMS: the sums say what the bytes are, the attestation says
+      # which workflow run built them. Anyone can check with:
+      #   gh attestation verify <file> --repo <owner>/<repo>
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: |
+            dist/*.deb
+            dist/*.rpm
+            dist/*.apk
+            dist/SHA256SUMS
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: packages
+          path: |
+            dist/*.deb
+            dist/*.rpm
+            dist/*.apk
+            dist/SHA256SUMS
+            dist/manifests/*
+          if-no-files-found: error
+
+  # The only job that publishes, and it waits for you.
+  #
+  # `environment: release` is what makes GitHub hold this job in a pending state
+  # until a required reviewer approves it in the web UI. THAT REVIEWER IS NOT
+  # CONFIGURED BY THIS FILE - it is a repo setting, and until it exists the
+  # environment imposes no gate at all and this job runs unattended. One-time
+  # setup: Settings -> Environments -> New environment -> "release" -> tick
+  # "Required reviewers" and add yourself. See packaging/README.md.
+  publish:
+    name: publish to the release (manual approval)
+    needs: build
+    # hard gate, not just the environment: a rehearsal dispatch must never be
+    # able to publish, however the environment happens to be configured
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: release
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: packages
+          path: dist
+
+      - uses: ./.github/actions/setup-minisign
+
+      # The offline half of release verification: the attestation proves which
+      # workflow run built the artifacts but needs gh and GitHub to check; a
+      # detached minisign signature over SHA256SUMS verifies with one static
+      # public key (printed in the README) and no network. The secret is
+      # sealed to this environment - it exists only behind the approval gate,
+      # unlike the apk key, which the ungated build job needs. Generated with
+      # `minisign -G -W` (no password: nobody is at this terminal to type
+      # one). Absent the secret, the release ships unsigned sums, loudly.
+      - name: Sign SHA256SUMS
+        env:
+          MINISIGN_SECRET_KEY: ${{ secrets.MINISIGN_SECRET_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -n "$MINISIGN_SECRET_KEY" ]; then
+            printf '%s\n' "$MINISIGN_SECRET_KEY" >"$RUNNER_TEMP/minisign.key"
+            minisign -S -s "$RUNNER_TEMP/minisign.key" -m dist/SHA256SUMS \
+              -t "hi.d $GITHUB_REF_NAME"
+          else
+            echo "no MINISIGN_SECRET_KEY secret - SHA256SUMS ships unsigned"
+          fi
+
+      - name: Attach everything to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 ||
+            gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --generate-notes
+          # The manifests ride along with the packages so that updating the AUR
+          # and the tap is a copy rather than a re-derivation of the same sums.
+          files=(dist/*.deb dist/*.rpm dist/*.apk dist/SHA256SUMS dist/manifests/*)
+          [ -f dist/SHA256SUMS.minisig ] && files+=(dist/SHA256SUMS.minisig)
+          gh release upload "$GITHUB_REF_NAME" --clobber "${files[@]}"
+
+      # Committing the regenerated manifests here - after the human gate - is
+      # what lets the tag stay put: they are consumed from the AUR/tap repos,
+      # not from inside the tarball, so they needn't be in the tagged tree.
+      # the one checkout that keeps its credentials: the step below pushes to
+      # main with them (every other checkout sets persist-credentials: false)
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1 # zizmor: ignore[artipacked]
+        with:
+          ref: main
+          path: main
+
+      - name: Commit the manifests to main
+        run: |
+          set -euo pipefail
+          cp dist/manifests/PKGBUILD main/packaging/aur/hi.d/PKGBUILD
+          cp dist/manifests/.SRCINFO main/packaging/aur/hi.d/.SRCINFO
+          cp dist/manifests/hi.d.rb main/packaging/homebrew/hi.d.rb
+          cd main
+          if git diff --quiet; then
+            echo "manifests already current on main - nothing to commit"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add packaging/aur/hi.d/PKGBUILD packaging/aur/hi.d/.SRCINFO packaging/homebrew/hi.d.rb
+          git commit -m "packaging: manifests for $GITHUB_REF_NAME"
+          git push origin main
+
+  # The tap half of "publishing each channel", automated: copying one formula
+  # into a GitHub repo is a push, and a push is a job. It stays behind the same
+  # human gate (`environment: release`, `needs: publish`) rather than getting
+  # its own - what was approved above is exactly what lands here.
+  #
+  # A PR, not a direct push: a tap has no review of any kind, and
+  # `brew audit --strict --new` can only be run from a mac, so the PR is where
+  # that check gets recorded before the formula goes live.
+  #
+  # Every step no-ops loudly without HOMEBREW_TAP_TOKEN, which is what lets this
+  # land before the tap repo exists. See packaging/README.md.
+  tap:
+    name: open a PR against the Homebrew tap
+    needs: publish
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: release
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: packages
+          path: dist
+
+      - name: Open the formula PR
+        env:
+          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          TAP_REPO: ${{ github.repository_owner }}/homebrew-tap
+        run: |
+          set -euo pipefail
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "no HOMEBREW_TAP_TOKEN secret - the tap formula was NOT updated;"
+            echo "copy dist/manifests/hi.d.rb to Formula/hi.d.rb by hand (packaging/README.md)"
+            exit 0
+          fi
+          branch="hi.d-$GITHUB_REF_NAME"
+          gh repo clone "$TAP_REPO" tap -- --depth 1
+          cd tap
+          git checkout -b "$branch"
+          mkdir -p Formula
+          cp ../dist/manifests/hi.d.rb Formula/hi.d.rb
+          if git diff --quiet; then
+            echo "tap formula already current - nothing to open"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git commit -am "hi.d $GITHUB_REF_NAME"
+          git push origin "$branch"
+          # The checklist rides in the body: this is the one channel with no
+          # review of its own, and the audit cannot run in this CI. Built with
+          # printf rather than a heredoc - a heredoc's body would have to be
+          # unindented, which ends the YAML block scalar this whole step is.
+          # shellcheck disable=SC2016 # the backticks are markdown, not substitution
+          body="$(printf '%s\n' \
+            "Formula for hi.d $GITHUB_REF_NAME, generated by the release workflow." \
+            "" \
+            "Before merging, from a mac (or Homebrew on Linux):" \
+            "" \
+            '- [ ] `brew install --build-from-source Formula/hi.d.rb`' \
+            '- [ ] `brew test hi.d`' \
+            '- [ ] `brew audit --strict --new hi.d`')"
+          gh pr create --repo "$TAP_REPO" --head "$branch" \
+            --title "hi.d $GITHUB_REF_NAME" --body "$body"
+
+  # The AUR half of the same job. It is a plain git push over ssh - the AUR has
+  # no PR mechanism to hold anything for review - so the safety here is the gate
+  # above (`needs: publish`, the same `release` environment) plus the fact that
+  # what it pushes is exactly the two files the build job regenerated and the
+  # packaging suite already checked.
+  #
+  # Two things this job deliberately does NOT do:
+  #   - run namcap. It is the hard gate before an AUR submission and it needs an
+  #     Arch box, which this runner is not. The first push of each package is
+  #     therefore still a manual, namcap'd one (packaging/README.md); this job
+  #     is for the releases after that.
+  #   - touch hi.d-git. That package builds from `main` and has no version to
+  #     bump, so a release has nothing to say to it.
+  #
+  # No secret, no push: it prints what to copy and exits 0, exactly as the tap
+  # job does, which is what lets it live here before the AUR account exists.
+  aur:
+    name: push the AUR package
+    needs: publish
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: release
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: packages
+          path: dist
+
+      - name: Push PKGBUILD and .SRCINFO to the AUR
+        env:
+          AUR_SSH_KEY: ${{ secrets.AUR_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${AUR_SSH_KEY:-}" ]; then
+            echo "no AUR_SSH_KEY secret - the AUR package was NOT updated;"
+            echo "copy dist/manifests/PKGBUILD and .SRCINFO to the aur/hi.d repo by hand,"
+            echo "after running the namcap gate in packaging/README.md"
+            exit 0
+          fi
+          # the key never touches the workspace: $RUNNER_TEMP is outside it, and
+          # the host key is pinned by keyscan rather than accepted on first use
+          install -m 700 -d "$RUNNER_TEMP/ssh"
+          printf '%s\n' "$AUR_SSH_KEY" >"$RUNNER_TEMP/ssh/aur"
+          chmod 600 "$RUNNER_TEMP/ssh/aur"
+          ssh-keyscan -t ed25519 aur.archlinux.org >"$RUNNER_TEMP/ssh/known_hosts" 2>/dev/null
+          export GIT_SSH_COMMAND="ssh -i $RUNNER_TEMP/ssh/aur -o IdentitiesOnly=yes -o UserKnownHostsFile=$RUNNER_TEMP/ssh/known_hosts"
+
+          git clone --depth 1 ssh://aur@aur.archlinux.org/hi.d.git aur
+          cp dist/manifests/PKGBUILD aur/PKGBUILD
+          cp dist/manifests/.SRCINFO aur/.SRCINFO
+          cd aur
+          # only those two files are ever tracked in an AUR repo, and the guard
+          # is worth keeping: a stray file pushed there is a package that fails
+          # to build for everyone
+          if [ -n "$(git ls-files --others --exclude-standard)" ]; then
+            echo "refusing to push: the AUR checkout has untracked files" >&2
+            git status --short >&2
+            exit 1
+          fi
+          if git diff --quiet; then
+            echo "AUR package already current - nothing to push"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git commit -am "hi.d $GITHUB_REF_NAME"
+          git push origin master

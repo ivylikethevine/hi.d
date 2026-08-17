@@ -515,7 +515,7 @@ function config_prompt_ends() {
 # $_HI_CONFIG_DIR versions exactly the files that are the user's, and dodges
 # the checkout's own .git (hi_update reads $_HI_ROOT/.git as "this is a
 # checkout"). Owns init-and-commit and no more: sync, merge and secrets are a
-# dotfile manager's job, and comparison.md says so. The initial commit is
+# dotfile manager's job, and the README's alternatives section says so. The initial commit is
 # --allow-empty on purpose - an unconfigured overlay still starts tracking.
 function overlay_init() {
   command -v git >/dev/null 2>&1 || {

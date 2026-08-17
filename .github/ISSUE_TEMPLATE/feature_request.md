@@ -8,5 +8,6 @@ labels: enhancement
 
 **What do you do today instead?**
 
-<!-- Worth a skim first: docs/ROADMAP.md - it may already be planned, and
-     docs/comparison.md records a few things hi deliberately does not do. -->
+<!-- Worth a skim first: docs/ROADMAP.md - it may already be planned, and the
+     README's "Where hi.d is the wrong choice" records a few things hi
+     deliberately does not do. -->

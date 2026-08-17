@@ -13,17 +13,10 @@
 # nobody reviewed.
 set -euo pipefail
 
-_HI_SELF="${BASH_SOURCE[0]}"
-while [ -L "$_HI_SELF" ]; do
-  _HI_SELF_DIR="$(cd -P "$(dirname "$_HI_SELF")" && pwd)"
-  _HI_SELF="$(readlink "$_HI_SELF")"
-  [[ $_HI_SELF == /* ]] || _HI_SELF="$_HI_SELF_DIR/$_HI_SELF"
-done
-_HI_HOME="$(cd -P "$(dirname "$_HI_SELF")/../.." && pwd)"
-export _HI_HOME
-
-# shellcheck source=../common/core.sh
-source "$_HI_HOME/hi.d/common/core.sh"
+# the locator, core.sh, and the shared primitives (sha256_of/b2_of/rewrite/
+# pkgbuild_version) all come from lib.sh, found beside this script
+# shellcheck source=./lib.sh
+source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
 # One overridable seam - the test suite points it at a fixture directory with
 # the same layout; the three paths always derive from it.
@@ -36,97 +29,65 @@ _HI_URL_BASE="https://github.com/ivylikethevine/hi.d/archive"
 _HI_PLACEHOLDER_SHA="0000000000000000000000000000000000000000000000000000000000000000"
 _HI_USAGE="Usage: bump.sh [--check] [--tarball <file>] <version>"
 
-# sha256 and blake2b of $1, each with a non-coreutils fallback so this also runs
-# on a mac (no sha256sum, no b2sum) rather than only on the Linux CI box.
-function sha256_of() {
-  if command -v sha256sum >/dev/null 2>&1; then
-    sha256sum "$1" | awk '{ print $1 }'
+# One verify-and-report row of --check: <ok-msg> <fail-msg> <predicate...>.
+# Green ":)" or red plus bad=1 - `bad` is check_manifests' local, reached
+# through bash's dynamic scoping, which is what replaces seven copies of the
+# same if/else plumbing.
+function _hi_manifest_check() {
+  local ok_msg="$1" bad_msg="$2"
+  shift 2
+  if "$@"; then
+    _hi_cecho " $ok_msg :)" "$GREEN"
   else
-    shasum -a 256 "$1" | awk '{ print $1 }'
+    _hi_cecho " $bad_msg" "$RED"
+    bad=1
   fi
 }
 
-function b2_of() {
-  if command -v b2sum >/dev/null 2>&1; then
-    b2sum "$1" | awk '{ print $1 }'
-  else
-    # BLAKE2b-512 is exactly what makepkg's b2sums holds
-    openssl dgst -blake2b512 "$1" | awk '{ print $NF }'
-  fi
+# a checksum field carrying an actual sum, not its pre-release sentinel
+# ($2: SKIP for the PKGBUILD, the zero-sha placeholder for the formula)
+function _hi_real_sum() {
+  [ -n "$1" ] && [ "$1" != "$2" ]
 }
 
-# rewrite <file> <sed-expr>... - all expressions in one pass. A temp file
-# rather than `sed -i` (whose in-place flag differs BSD/GNU), written back with
-# cat, not mv - mv would put mktemp's 0600 on a tracked manifest.
-function rewrite() {
-  local file="$1" e tmp
-  shift
-  local -a exprs=()
-  for e in "$@"; do exprs+=(-e "$e"); done
-  tmp="$(mktemp -t hi.bump.XXXXXX)"
-  sed "${exprs[@]}" "$file" >"$tmp"
-  cat "$tmp" >"$file"
-  rm -f "$tmp"
+function _hi_nonempty_match() {
+  [ -n "$1" ] && [ "$1" = "$2" ]
 }
 
 function check_manifests() {
   local bad=0 pkgver sha b2 srcinfo_b2
   _hi_h2 "Checking the manifests say $_HI_VERSION"
 
-  pkgver="$(sed -n 's/^pkgver=//p' "$_HI_PKGBUILD" | head -1)"
-  if [ "$pkgver" = "$_HI_VERSION" ]; then
-    _hi_cecho " PKGBUILD pkgver=$pkgver :)" "$GREEN"
-  else
-    _hi_cecho " PKGBUILD pkgver=$pkgver, expected $_HI_VERSION" "$RED"
-    bad=1
-  fi
-
+  # errors (a PKGBUILD with no pkgver line) become an empty string here, so
+  # they read as a red mismatch row rather than a set -e abort
+  pkgver="$(pkgbuild_version 2>/dev/null || true)"
   b2="$(sed -n "s/^b2sums=('\\(.*\\)')/\\1/p" "$_HI_PKGBUILD" | head -1)"
-  if [ "$b2" = SKIP ] || [ -z "$b2" ]; then
-    _hi_cecho " PKGBUILD b2sums is still SKIP - run bump.sh $_HI_VERSION" "$RED"
-    bad=1
-  else
-    _hi_cecho " PKGBUILD b2sums is a real sum :)" "$GREEN"
-  fi
-
-  if grep -qF "v$_HI_VERSION.tar.gz" "$_HI_FORMULA"; then
-    _hi_cecho " formula url points at v$_HI_VERSION :)" "$GREEN"
-  else
-    _hi_cecho " formula url does not point at v$_HI_VERSION" "$RED"
-    bad=1
-  fi
-
   sha="$(sed -n 's/^  sha256 "\(.*\)"/\1/p' "$_HI_FORMULA" | head -1)"
-  if [ "$sha" = "$_HI_PLACEHOLDER_SHA" ] || [ -z "$sha" ]; then
-    _hi_cecho " formula sha256 is still the placeholder - run bump.sh $_HI_VERSION" "$RED"
-    bad=1
-  else
-    _hi_cecho " formula sha256 is a real sum :)" "$GREEN"
-  fi
-
-  if grep -qF "pkgver = $_HI_VERSION" "$_HI_SRCINFO"; then
-    _hi_cecho " .SRCINFO pkgver=$_HI_VERSION :)" "$GREEN"
-  else
-    _hi_cecho " .SRCINFO is stale - regenerate with makepkg --printsrcinfo" "$RED"
-    bad=1
-  fi
-
   # the AUR consumes .SRCINFO, not the PKGBUILD, so its b2sums/source lines
-  # have to be checked too - pkgver alone lets a stale checksum through
+  # are checked too - pkgver alone lets a stale checksum through
   srcinfo_b2="$(sed -n 's/^[[:space:]]*b2sums = //p' "$_HI_SRCINFO" | head -1)"
-  if [ -n "$b2" ] && [ "$srcinfo_b2" = "$b2" ]; then
-    _hi_cecho " .SRCINFO b2sums matches the PKGBUILD's :)" "$GREEN"
-  else
-    _hi_cecho " .SRCINFO b2sums does not match the PKGBUILD's - regenerate it" "$RED"
-    bad=1
-  fi
 
-  if grep -qF "v$_HI_VERSION.tar.gz" "$_HI_SRCINFO"; then
-    _hi_cecho " .SRCINFO source points at v$_HI_VERSION :)" "$GREEN"
-  else
-    _hi_cecho " .SRCINFO source does not point at v$_HI_VERSION" "$RED"
-    bad=1
-  fi
+  _hi_manifest_check "PKGBUILD pkgver=$pkgver" \
+    "PKGBUILD pkgver=$pkgver, expected $_HI_VERSION" \
+    [ "$pkgver" = "$_HI_VERSION" ]
+  _hi_manifest_check "PKGBUILD b2sums is a real sum" \
+    "PKGBUILD b2sums is still SKIP - run bump.sh $_HI_VERSION" \
+    _hi_real_sum "$b2" SKIP
+  _hi_manifest_check "formula url points at v$_HI_VERSION" \
+    "formula url does not point at v$_HI_VERSION" \
+    grep -qF "v$_HI_VERSION.tar.gz" "$_HI_FORMULA"
+  _hi_manifest_check "formula sha256 is a real sum" \
+    "formula sha256 is still the placeholder - run bump.sh $_HI_VERSION" \
+    _hi_real_sum "$sha" "$_HI_PLACEHOLDER_SHA"
+  _hi_manifest_check ".SRCINFO pkgver=$_HI_VERSION" \
+    ".SRCINFO is stale - regenerate with makepkg --printsrcinfo" \
+    grep -qF "pkgver = $_HI_VERSION" "$_HI_SRCINFO"
+  _hi_manifest_check ".SRCINFO b2sums matches the PKGBUILD's" \
+    ".SRCINFO b2sums does not match the PKGBUILD's - regenerate it" \
+    _hi_nonempty_match "$b2" "$srcinfo_b2"
+  _hi_manifest_check ".SRCINFO source points at v$_HI_VERSION" \
+    ".SRCINFO source does not point at v$_HI_VERSION" \
+    grep -qF "v$_HI_VERSION.tar.gz" "$_HI_SRCINFO"
 
   return "$bad"
 }

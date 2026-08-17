@@ -50,10 +50,21 @@ source "$_HI_LAUNCHER"
 
 _HI_DOC_BAD=0
 
-# doctor_row <label> <text> [color] - one aligned finding
+# doctor_row <label> <text> [severity] - one aligned row. Severity picks the
+# color AND decides whether the row counts as a finding: "" plain, ok green,
+# warn yellow, bad red-and-counted. Its own argument rather than inferred
+# from a color, so the palette and the finding counter are separate knobs.
 function doctor_row() {
-  _hi_cecho " | $(printf '%-12s' "$1") $2" "${3:-}"
-  [ "${3:-}" = "$RED" ] && _HI_DOC_BAD=$((_HI_DOC_BAD + 1))
+  local color=""
+  case "${3:-}" in
+  ok) color="$GREEN" ;;
+  warn) color="$YELLOW" ;;
+  bad)
+    color="$RED"
+    _HI_DOC_BAD=$((_HI_DOC_BAD + 1))
+    ;;
+  esac
+  _hi_cecho " | $(printf '%-12s' "$1") $2" "$color"
   return 0
 }
 
@@ -85,11 +96,11 @@ function doctor_config() {
   _hi_h2 "The config overlay ($_HI_CONFIG_DIR)"
   if [ -f "$_HI_SETTINGS" ]; then
     if ! sh -n "$_HI_SETTINGS" 2>/dev/null; then
-      doctor_row settings.sh "does NOT parse as sh - every shell sources this file" "$RED"
+      doctor_row settings.sh "does NOT parse as sh - every shell sources this file" bad
     elif command -v fish >/dev/null 2>&1 && ! fish --no-execute "$_HI_SETTINGS" 2>/dev/null; then
-      doctor_row settings.sh "parses as sh but NOT as fish - fish sessions lose it" "$RED"
+      doctor_row settings.sh "parses as sh but NOT as fish - fish sessions lose it" bad
     else
-      doctor_row settings.sh "present, parses" "$GREEN"
+      doctor_row settings.sh "present, parses" ok
     fi
   else
     doctor_row settings.sh "none - defaults apply (hi_configure writes one)"
@@ -104,7 +115,7 @@ function doctor_config() {
   # whether the overlay has history - hi_overlay_init's optional-and-quiet
   # contract means untracked is a state, not a problem
   if [ -d "$_HI_CONFIG_DIR/.git" ]; then
-    doctor_row versioning "tracked ($(git -C "$_HI_CONFIG_DIR" rev-list --count HEAD 2>/dev/null || echo 0) commits)" "$GREEN"
+    doctor_row versioning "tracked ($(git -C "$_HI_CONFIG_DIR" rev-list --count HEAD 2>/dev/null || echo 0) commits)" ok
   else
     doctor_row versioning "untracked (hi_overlay_init gives it history)"
   fi
@@ -112,11 +123,22 @@ function doctor_config() {
   for t in "${_HI_TOGGLES[@]}"; do
     eval "v=\${$t:-0}"
     [ "$v" = 0 ] && continue
-    doctor_row toggle "$t=$v" "$YELLOW"
+    doctor_row toggle "$t=$v" warn
     any=1
   done
   [ "$any" = 1 ] || doctor_row toggles "all defaults (every feature on)"
 }
+
+# The one backend roster both halves of this report walk:
+# <name>|<what a target resolves as>|<liveness probe>|<hi.sh predicate>.
+# doctor_backends probes column 3, doctor_target times column 4 - the same
+# chain _hi dispatches on, stated once instead of once per section.
+_HI_DOC_BACKENDS=(
+  "docker|docker container|docker ps -q|_hi_is_docker_container"
+  "podman|podman container|podman ps -q|_hi_is_podman_container"
+  "nomad|nomad allocation|nomad job status|_hi_is_nomad_alloc"
+  "kube|kubernetes pod|kubectl get pods -o name|_hi_is_k8s_pod"
+)
 
 # doctor_backend <name> <cli> <probe...> - installed, answering, and how long
 # the answer took; the same _hi_probe ceiling the header and completion use
@@ -131,9 +153,9 @@ function doctor_backend() {
   _hi_probe "$@" >/dev/null 2>&1 || rc=$?
   t1="$(_hi_now)"
   if [ "$rc" -eq 0 ]; then
-    doctor_row "$name" "answering ($(_hi_elapsed "$t0" "$t1")s)" "$GREEN"
+    doctor_row "$name" "answering ($(_hi_elapsed "$t0" "$t1")s)" ok
   else
-    doctor_row "$name" "installed but not answering after $(_hi_elapsed "$t0" "$t1")s (exit $rc) - completion and the header wait on this every time" "$YELLOW"
+    doctor_row "$name" "installed but not answering after $(_hi_elapsed "$t0" "$t1")s (exit $rc) - completion and the header wait on this every time" warn
   fi
 }
 
@@ -146,31 +168,36 @@ function doctor_backends() {
   else
     doctor_row ssh "no $_HI_SSH_CONFIG - names still reach ssh, just without completion or tags"
   fi
-  doctor_backend docker docker ps -q
-  doctor_backend podman podman ps -q
-  doctor_backend nomad nomad job status
-  doctor_backend kube kubectl get pods -o name
+  local row name what probe predicate
+  for row in "${_HI_DOC_BACKENDS[@]}"; do
+    IFS='|' read -r name what probe predicate <<<"$row"
+    # the probe column's word split is the point - it is a command line
+    # shellcheck disable=SC2086
+    doctor_backend "$name" $probe
+  done
   t0="$(_hi_now)"
   _HI_TARGETS_TTL=0 sh "$_HI_TARGETS" >/dev/null 2>&1 || true
   t1="$(_hi_now)"
   doctor_row completion "full target list built in $(_hi_elapsed "$t0" "$t1")s cold (TAB reuses it for ${_HI_TARGETS_TTL:-5}s)"
 }
 
-# the same chain _hi dispatches on, each predicate timed, first match wins
+# the same chain _hi dispatches on, each predicate timed, first match wins -
+# ssh leads (its predicate isn't a backend row), then the roster in order
 function doctor_target() {
-  local target="$1" kind="" pair name t0 t1
+  local target="$1" kind="" pair row name what probe predicate t0 t1
+  local -a chain=("ssh host:_hi_is_ssh_host")
+  for row in "${_HI_DOC_BACKENDS[@]}"; do
+    IFS='|' read -r name what probe predicate <<<"$row"
+    chain+=("$what:$predicate")
+  done
   _hi_h2 "Target: $target"
-  for pair in "ssh host:_hi_is_ssh_host" \
-    "docker container:_hi_is_docker_container" \
-    "podman container:_hi_is_podman_container" \
-    "nomad allocation:_hi_is_nomad_alloc" \
-    "kubernetes pod:_hi_is_k8s_pod"; do
+  for pair in "${chain[@]}"; do
     name="${pair%%:*}"
     t0="$(_hi_now)"
     if "${pair#*:}" "$target" >/dev/null 2>&1; then
       t1="$(_hi_now)"
       kind="$name"
-      doctor_row resolves "$name ($(_hi_elapsed "$t0" "$t1")s)" "$GREEN"
+      doctor_row resolves "$name ($(_hi_elapsed "$t0" "$t1")s)" ok
       break
     fi
     t1="$(_hi_now)"
@@ -197,14 +224,14 @@ function doctor_ssh_target() {
   t0="$(_hi_now)"
   if ! ssh "${ctl_opts[@]}" -o ConnectTimeout=5 "$DOMAIN" true 2>"$err"; then
     t1="$(_hi_now)"
-    doctor_row connect "FAILED after $(_hi_elapsed "$t0" "$t1")s (BatchMode - a password/2FA prompt fails here but may work interactively)" "$RED"
+    doctor_row connect "FAILED after $(_hi_elapsed "$t0" "$t1")s (BatchMode - a password/2FA prompt fails here but may work interactively)" bad
     sed 's/^/      /' "$err"
     rm -f "$err"
     return 0
   fi
   t1="$(_hi_now)"
   rm -f "$err"
-  doctor_row connect "ok ($(_hi_elapsed "$t0" "$t1")s to authenticate - later probes reuse the socket)" "$GREEN"
+  doctor_row connect "ok ($(_hi_elapsed "$t0" "$t1")s to authenticate - later probes reuse the socket)" ok
   root="$(_hi_remote_root "${ctl_opts[@]}")"
   if [ -n "$root" ]; then
     doctor_row install "permanent $root - hi loads it in place, ships nothing"
@@ -219,11 +246,11 @@ function doctor_ssh_target() {
   doctor_row remote "has: ${tools:-nothing this probes for}"
   case " $tools" in
   *" base64 "*) ;;
-  *) doctor_row remote "no base64 - the ssh bootstrap cannot decode there" "$RED" ;;
+  *) doctor_row remote "no base64 - the ssh bootstrap cannot decode there" bad ;;
   esac
   case " $tools" in
   *" bash "*) ;;
-  *) doctor_row remote "no bash - sessions fall back to ${_HI_SHELL_LADDER// / > } with aliases only" "$YELLOW" ;;
+  *) doctor_row remote "no bash - sessions fall back to ${_HI_SHELL_LADDER// / > } with aliases only" warn ;;
   esac
   ssh -O exit "${ctl_opts[@]}" "$DOMAIN" >/dev/null 2>&1 || true
   rm -f "$ctl_path" 2>/dev/null || true

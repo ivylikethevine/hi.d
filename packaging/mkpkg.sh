@@ -12,19 +12,10 @@
 # Arch packages for one project would only conflict.
 set -euo pipefail
 
-# Locate hi.d relative to this script (resolving symlinks), the same way
-# scripts/install.sh does - packaging/ is one level down from the tree root.
-_HI_SELF="${BASH_SOURCE[0]}"
-while [ -L "$_HI_SELF" ]; do
-  _HI_SELF_DIR="$(cd -P "$(dirname "$_HI_SELF")" && pwd)"
-  _HI_SELF="$(readlink "$_HI_SELF")"
-  [[ $_HI_SELF == /* ]] || _HI_SELF="$_HI_SELF_DIR/$_HI_SELF"
-done
-_HI_HOME="$(cd -P "$(dirname "$_HI_SELF")/../.." && pwd)"
-export _HI_HOME
-
-# shellcheck source=../common/core.sh
-source "$_HI_HOME/hi.d/common/core.sh"
+# the locator, core.sh, and the shared primitives (rewrite/sha256_lines/
+# pkgbuild_version) all come from lib.sh, found beside this script
+# shellcheck source=./lib.sh
+source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
 _HI_PACKAGERS=(deb rpm apk)
 _HI_NFPM_CONFIG="$_HI_ROOT/packaging/nfpm/nfpm.yaml"
@@ -33,18 +24,6 @@ _HI_DIST="$_HI_ROOT/dist"
 _HI_STAGE_ONLY=""
 _HI_VERSION=""
 _HI_USAGE="Usage: mkpkg.sh [--version <x.y.z>] [--stage-only] [--outdir <dir>]"
-
-# The version of record lives in the PKGBUILD (bump.sh writes it there); reading
-# it back rather than keeping a second copy is what stops the two disagreeing.
-function pkgbuild_version() {
-  local v
-  v="$(sed -n 's/^pkgver=//p' "$_HI_PKGBUILD" | head -1)"
-  [ -n "$v" ] || {
-    _hi_cecho " no pkgver= in $_HI_PKGBUILD" "$RED" >&2
-    return 1
-  }
-  printf '%s' "$v"
-}
 
 # install.sh insists on a checkout named exactly hi.d ($_HI_HOME/hi.d is how it
 # finds everything). A clone directory called anything else - hi.d-main, a
@@ -79,14 +58,10 @@ function stage_tree() {
 # here at build time, never in git: bump.sh only runs after the tag exists, so
 # a committed stamp would always be one release stale in the tag tarball (the
 # PKGBUILD and the Homebrew formula stamp their own copies the same way).
-# bump.sh's rewrite shape: a temp file rather than `sed -i` (BSD/GNU differ),
-# written back with cat so the staged file keeps its exec bit.
+# lib.sh's rewrite keeps the staged file's exec bit.
 function stamp_launcher() {
-  local file="$_HI_DIST/staging/usr/share/hi.d/hi.sh" tmp
-  tmp="$(mktemp -t hi.package.XXXXXX)"
-  sed "s/^_HI_RELEASE=.*/_HI_RELEASE=\"$_HI_VERSION\"/" "$file" >"$tmp"
-  cat "$tmp" >"$file"
-  rm -f "$tmp"
+  rewrite "$_HI_DIST/staging/usr/share/hi.d/hi.sh" \
+    "s/^_HI_RELEASE=.*/_HI_RELEASE=\"$_HI_VERSION\"/"
 }
 
 # `man hi`'s footer answers with the packaged version too: the same build-time
@@ -96,16 +71,13 @@ function stamp_launcher() {
 # reproducible-build diff empty. The PKGBUILDs and the formula stamp their own
 # copies, and tests/scripts/packaging_test.sh holds all three together.
 function stamp_manpage() {
-  local gz="$_HI_DIST/staging/usr/share/man/man1/hi.1.gz" page day tmp
+  local gz="$_HI_DIST/staging/usr/share/man/man1/hi.1.gz" page day
   [ -f "$gz" ] || return 0
   page="${gz%.gz}"
   day="$(date -u -d "@$SOURCE_DATE_EPOCH" +%Y-%m-%d 2>/dev/null ||
     date -u -r "$SOURCE_DATE_EPOCH" +%Y-%m-%d)"
-  tmp="$(mktemp -t hi.package.XXXXXX)"
   gzip -d "$gz"
-  sed "s/^\.TH .*/.TH HI 1 \"$day\" \"hi.d $_HI_VERSION\" \"User Commands\"/" "$page" >"$tmp"
-  cat "$tmp" >"$page"
-  rm -f "$tmp"
+  rewrite "$page" "s/^\.TH .*/.TH HI 1 \"$day\" \"hi.d $_HI_VERSION\" \"User Commands\"/"
   gzip -9n "$page"
 }
 
@@ -149,7 +121,8 @@ function run_nfpm() {
 # One artifact per packager, plus a SHA256SUMS over them for release users to
 # verify downloads against. _HI_PACKAGERS is the single home of "what a
 # release consists of" - the workflows call this rather than repeating the
-# format list in YAML. shasum: mac fallback, same reasoning as bump.sh.
+# format list in YAML. The sums come from lib.sh's sha256_lines (mac fallback
+# included).
 function write_checksums() {
   local packager f
   local -a built=()
@@ -162,14 +135,7 @@ function write_checksums() {
       built+=("${f##*/}")
     done
   done
-  (
-    cd "$_HI_DIST" || exit 1
-    if command -v sha256sum >/dev/null 2>&1; then
-      sha256sum -- "${built[@]}" >SHA256SUMS
-    else
-      shasum -a 256 -- "${built[@]}" >SHA256SUMS
-    fi
-  )
+  (cd "$_HI_DIST" && sha256_lines "${built[@]}" >SHA256SUMS)
   _hi_cecho " $_HI_DIST/SHA256SUMS :)" "$GREEN"
 }
 

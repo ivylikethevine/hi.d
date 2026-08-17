@@ -127,10 +127,20 @@ export _HI_HOME
 
 # shellcheck source=../common/core.sh
 source "$_HI_HOME/hi.d/common/core.sh"
-# shellcheck source=../common/header.sh
-source "$_HI_HEADER"
-# shellcheck source=../common/git_prompt.sh
-source "$_HI_GIT_PROMPT"
+
+# The live previews borrow header.sh's banner/timestamp/system_info/identity/
+# full_check and git_prompt.sh's segment. Sourced on first use (the two
+# prompt groups) rather than up top: --uninstall, --check-configs,
+# --overlay-init and packaging mode - the one a PKGBUILD runs on every
+# build - never render a preview.
+function _hi_load_preview_sources() {
+  [ -n "${_hi_previews_loaded:-}" ] && return 0
+  _hi_previews_loaded=1
+  # shellcheck source=../common/header.sh
+  source "$_HI_HEADER"
+  # shellcheck source=../common/git_prompt.sh
+  source "$_HI_GIT_PROMPT"
+}
 
 # Ownership of the lines hi adds to a user's shell rc files: writing them
 # (config_shell) and taking them back out (strip_marker). $_HI_MARKER comes from
@@ -181,6 +191,21 @@ function config_shell() {
 function _hi_write_back() {
   cat "$1" >"$2"
   rm -f "$1"
+  # a write through here invalidates setting_off's read-once cache
+  if [ "$_HI_SETTINGS_CACHE_FOR" = "$2" ]; then _HI_SETTINGS_CACHE_FOR=""; fi
+}
+
+# The settings file, read once rather than grep-forked per question:
+# setting_off is asked for every row of both prompt tables against a file
+# that doesn't change until config_shell writes it at the very end (and that
+# write, via _hi_write_back, clears this cache).
+_HI_SETTINGS_CACHE=""
+_HI_SETTINGS_CACHE_FOR=""
+
+function _hi_settings_load() {
+  [ "$_HI_SETTINGS_CACHE_FOR" = "$1" ] && return 0
+  _HI_SETTINGS_CACHE_FOR="$1"
+  _HI_SETTINGS_CACHE="$(cat "$1" 2>/dev/null || true)"
 }
 
 # config_shell with an empty block, plus a quieter report for the common
@@ -229,17 +254,22 @@ function pending_answer() {
   return 1
 }
 
-# true if $1 is turned off - this run's answer if it has one, otherwise
-# "export $1=$3" being present in $2. hi's own _HI_DISABLE_* vars use 1 for
-# "off"; common/header.sh's older per-line toggles use 0, hence the third
-# argument.
+# true if $1 is turned off - this run's answer if it has one, otherwise a
+# line starting "export $1=$3" being present in $2 (read through the cache
+# above, so twenty questions cost one file read). hi's own _HI_DISABLE_* vars
+# use 1 for "off"; common/header.sh's older per-line toggles use 0, hence the
+# third argument.
 function setting_off() {
   local var="$1" target="$2" off="${3:-1}" answer
   if answer="$(pending_answer "$var")"; then
     [ "$answer" = "$off" ]
     return
   fi
-  grep -qE "^export $var=$off" "$target" 2>/dev/null
+  _hi_settings_load "$target"
+  case $'\n'"$_HI_SETTINGS_CACHE" in
+  *$'\n'"export $var=$off"*) return 0 ;;
+  esac
+  return 1
 }
 
 function setting_enabled() {
@@ -406,6 +436,7 @@ function ask_prompt_group() {
 # applies locally and on every host hi.d gets copied to.
 function config_features() {
   _hi_h2 "Choosing features"
+  _hi_load_preview_sources
   ask_prompt_group _HI_FEATURE_PROMPTS
 }
 
@@ -416,27 +447,49 @@ function config_features() {
 function config_header_details() {
   setting_off _HI_DISABLE_HEADER "$_HI_SETTINGS" 1 && return 0
   _hi_h2 "Choosing header details"
+  _hi_load_preview_sources
   ask_prompt_group _HI_HEADER_PROMPTS
 }
 
-# Ask for the header/banner's terminal width. Entering nothing keeps whatever's
-# already configured; entering 80 (common/core.sh's own built-in default,
-# via ${_HI_MAX_WIDTH:-80}) clears the override instead of writing it out.
-function config_max_width() {
-  local target="$_HI_SETTINGS" current value reply=""
-  current="$(grep -oE '^export _HI_MAX_WIDTH=[0-9]+' "$target" 2>/dev/null | cut -d= -f2)"
-  value="${current:-80}"
+# ask_value <question> <current> <default> <validator-fn> <invalid-msg> -
+# one free-text prompt, printed value on stdout: entering nothing keeps
+# <current> (or the default when there is no override yet), a rejected answer
+# says why and keeps it too, and an answer equal to <default> comes back
+# empty - the caller writes nothing rather than restating a shipped default.
+# Non-interactive runs keep what is configured, like ask_setting. The
+# messages go to stderr: stdout is the captured answer.
+function ask_value() {
+  local question="$1" current="$2" default="$3" validate="$4" invalid_msg="$5"
+  local value reply=""
+  value="${current:-$default}"
   if [ -t 0 ]; then
-    read -r -p " Terminal width for the header/banner? [$value] " reply || reply=""
+    read -r -p " $question [$value] " reply || reply=""
     if [ -n "$reply" ]; then
-      if [[ "$reply" =~ ^[0-9]+$ ]]; then
+      if "$validate" "$reply"; then
         value="$reply"
       else
-        _hi_cecho " not a number, leaving width at $value" "$YELLOW"
+        _hi_cecho " $invalid_msg, leaving it at $value" "$YELLOW" >&2
       fi
     fi
   fi
-  [ "$value" = 80 ] && value=""
+  [ "$value" = "$default" ] && value=""
+  printf '%s' "$value"
+}
+
+function _hi_is_number() { [[ "$1" =~ ^[0-9]+$ ]]; }
+
+function _hi_has_no_single_quote() {
+  case "$1" in *\'*) return 1 ;; esac
+}
+
+# Ask for the header/banner's terminal width. Entering 80 (common/core.sh's
+# own built-in default, via ${_HI_MAX_WIDTH:-80}) clears the override instead
+# of writing it out.
+function config_max_width() {
+  local current value
+  current="$(grep -oE '^export _HI_MAX_WIDTH=[0-9]+' "$_HI_SETTINGS" 2>/dev/null | cut -d= -f2)"
+  value="$(ask_value "Terminal width for the header/banner?" "$current" 80 \
+    _hi_is_number "not a number")"
   _HI_SETTING_LINES+=("${value:+export _HI_MAX_WIDTH=$value}")
 }
 
@@ -450,26 +503,16 @@ _HI_PROMPT_END_ROWS=("bash:BASH:\\\$" "zsh:ZSH:>" "fish:FISH:|")
 
 function config_prompt_ends() {
   setting_off _HI_DISABLE_PROMPT "$_HI_SETTINGS" 1 && return 0
-  local row name shell default var current value reply
+  local row name shell default var current value
   for row in "${_HI_PROMPT_END_ROWS[@]}"; do
     name="${row%%:*}"
     shell="${row#*:}"
     shell="${shell%%:*}"
     default="${row##*:}"
     var="_HI_PROMPT_END_$shell"
-    reply=""
     current="$(grep -oE "^export $var='.*'\$" "$_HI_SETTINGS" 2>/dev/null | sed -E "s/^export $var='//; s/'\$//")"
-    value="${current:-$default}"
-    if [ -t 0 ]; then
-      read -r -p " Character to end the $name prompt with? [$value] " reply || reply=""
-      if [ -n "$reply" ]; then
-        case "$reply" in
-        *\'*) _hi_cecho " a single quote can't be written to settings.sh, leaving it at $value" "$YELLOW" ;;
-        *) value="$reply" ;;
-        esac
-      fi
-    fi
-    [ "$value" = "$default" ] && value=""
+    value="$(ask_value "Character to end the $name prompt with?" "$current" "$default" \
+      _hi_has_no_single_quote "a single quote can't be written to settings.sh")"
     # shellcheck disable=SC2016 # the quotes are written to the file, not read here
     _HI_SETTING_LINES+=("${value:+export $var='$value'}")
   done
@@ -560,15 +603,34 @@ function check_one_config() {
   return 1
 }
 
-# Validates whatever of ~/.bashrc, ~/.zshrc and ~/.config/fish/config.fish
-# already exist, before install.sh's own lines get appended to them. Returns
-# non-zero if anything failed so callers can decide what to do about it.
+# One row per shell hi wires up locally: <shell>|<rc label>|<rc file>|<syntax
+# check cmd>. Validation, install and uninstall all loop this roster (the
+# install-time line bodies stay in a case beside the loop - the one per-shell
+# irregular part), so adding a shell is one row plus its lines rather than
+# three disjoint edits. load.sh's _HI_CONFIGS is the same roster for a
+# *session* graft; the two mechanisms stay separate on purpose (see the note
+# above config_shell). nu is deliberately absent even though load.sh grafts
+# it on targets: shells/config.nu is gated on the env a hi session exports
+# (_HI_CORE and friends), which a plain local nu never has - wiring it up
+# locally needs an env bridge first, not an rc line.
+_HI_RC_TABLE=(
+  "bash|bashrc|$_HI_HOME_BASHRC|bash -n"
+  "zsh|zshrc|$_HI_HOME_ZSHRC|zsh -n"
+  "config.fish|config.fish|$_HI_HOME_FISH_CONFIG|fish --no-execute"
+)
+
+# Validates whatever of the roster's rc files already exist, before
+# install.sh's own lines get appended to them. Returns non-zero if anything
+# failed so callers can decide what to do about it.
 function check_shell_configs() {
   _hi_h2 "Checking existing shell configs"
-  local bad=0
-  check_one_config bash "$_HI_HOME_BASHRC" bash -n || bad=1
-  check_one_config zsh "$_HI_HOME_ZSHRC" zsh -n || bad=1
-  check_one_config "config.fish" "$_HI_HOME_FISH_CONFIG" fish --no-execute || bad=1
+  local bad=0 row shell label target check
+  for row in "${_HI_RC_TABLE[@]}"; do
+    IFS='|' read -r shell label target check <<<"$row"
+    # the check-column word split is the point: it is a command plus its flag
+    # shellcheck disable=SC2086
+    check_one_config "$shell" "$target" $check || bad=1
+  done
   return $bad
 }
 
@@ -678,9 +740,11 @@ function unlink_hi() {
 # settings file, and unlinks /usr/bin/hi if it points at this hi.d. Leaves the
 # checkout itself in place - delete that yourself once you're done with it.
 function run_uninstall() {
-  strip_marker bashrc "$_HI_HOME_BASHRC"
-  strip_marker zshrc "$_HI_HOME_ZSHRC"
-  strip_marker config.fish "$_HI_HOME_FISH_CONFIG"
+  local row shell label target check
+  for row in "${_HI_RC_TABLE[@]}"; do
+    IFS='|' read -r shell label target check <<<"$row"
+    strip_marker "$label" "$target"
+  done
   strip_settings
   unlink_hi
 }
@@ -820,20 +884,32 @@ if [ -n "$_HI_FEATURES_ONLY" ]; then
   exit 0
 fi
 
-config_shell bashrc "$_HI_HOME_BASHRC" \
-  "$(tmpdir_line sh)" \
-  '[[ $- != *i* ]] && return' \
-  "source \"$_HI_BASHRC\""
-
-config_shell zshrc "$_HI_HOME_ZSHRC" \
-  "$(tmpdir_line sh)" \
-  "source \"$_HI_ZSHRC\""
-
-config_shell config.fish "$_HI_HOME_FISH_CONFIG" \
-  "$(tmpdir_line fish)" \
-  'if status is-interactive' \
-  "  source \"$_HI_FISH_CONFIG\"" \
-  'end'
+# the rc lines each shell gets, keyed by the roster's rc label - the one
+# per-shell irregular part of the _HI_RC_TABLE loop
+for _hi_row in "${_HI_RC_TABLE[@]}"; do
+  IFS='|' read -r _hi_shell _hi_label _hi_target _hi_check <<<"$_hi_row"
+  case "$_hi_label" in
+  bashrc)
+    config_shell "$_hi_label" "$_hi_target" \
+      "$(tmpdir_line sh)" \
+      '[[ $- != *i* ]] && return' \
+      "source \"$_HI_BASHRC\""
+    ;;
+  zshrc)
+    config_shell "$_hi_label" "$_hi_target" \
+      "$(tmpdir_line sh)" \
+      "source \"$_HI_ZSHRC\""
+    ;;
+  config.fish)
+    config_shell "$_hi_label" "$_hi_target" \
+      "$(tmpdir_line fish)" \
+      'if status is-interactive' \
+      "  source \"$_HI_FISH_CONFIG\"" \
+      'end'
+    ;;
+  *) _hi_cecho " no rc lines defined for $_hi_label - add its arm above" "$RED" ;;
+  esac
+done
 
 config_hi
 

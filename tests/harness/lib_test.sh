@@ -381,6 +381,102 @@ function test_probe_cmd_fish_shapes_run_under_fish() {
     ! _hi_probe_says_ok ssh_fallback_fish "function hi_info; end; " /nonexistent/hi.d fish
 }
 
+# --- _hi_host_report ---------------------------------------------------------
+#
+# $_HI_ROOT is read at call time, so a case can point the tree check anywhere
+# from inside a subshell without disturbing this suite's own environment.
+
+function _hi_host_report_out() {
+  _hi_host_report "${1:-$_HI_ROOT}" 2>&1
+}
+
+function test_host_report_names_this_bash_and_kernel() {
+  local out
+  out="$(_hi_host_report_out)"
+  [[ "$out" == *"$BASH_VERSION"* ]] && [[ "$out" == *"$(uname -s)"* ]]
+}
+
+function test_host_report_carries_the_tree_variables() {
+  local out
+  out="$(_hi_host_report_out)"
+  [[ "$out" == *"$_HI_HOME"* ]] && [[ "$out" == *"$_HI_ROOT"* ]]
+}
+
+function test_host_report_agrees_when_the_tree_matches() {
+  local out
+  out="$(_hi_host_report_out)"
+  [[ "$out" == *"the tree this run came from"* ]] &&
+    [[ "$out" != *"another checkout"* ]]
+}
+
+# The reference is captured before the subshell moves $_HI_ROOT: written as an
+# `_HI_ROOT=x _hi_host_tree_check "$_HI_ROOT"` prefix instead, the argument
+# would expand to the *new* value and the two would agree again.
+function test_host_report_warns_when_the_tree_differs() {
+  local out ref="$_HI_ROOT"
+  out="$(
+    _HI_ROOT="$_HI_WORKDIR"
+    _hi_host_report "$ref" 2>&1
+  )"
+  # both paths named: which tree ran, and which one it should have been
+  [[ "$out" == *"another checkout"* ]] &&
+    [[ "$out" == *"$_HI_WORKDIR"* ]] && [[ "$out" == *"$ref"* ]]
+}
+
+function test_host_tree_check_is_silent_and_zero_when_it_agrees() {
+  local out rc=0
+  out="$(_hi_host_tree_check "$_HI_ROOT" 2>&1)" || rc=$?
+  [ "$rc" -eq 0 ] && [ -z "$out" ]
+}
+
+function test_host_tree_check_returns_one_when_it_differs() {
+  local rc=0 ref="$_HI_ROOT"
+  (
+    _HI_ROOT="$_HI_WORKDIR"
+    _hi_host_tree_check "$ref"
+  ) >/dev/null 2>&1 || rc=$?
+  [ "$rc" -eq 1 ]
+}
+
+function test_host_report_lists_the_lint_tools() {
+  local out
+  out="$(_hi_host_report_out)"
+  [[ "$out" == *shellcheck* ]] && [[ "$out" == *shfmt* ]] && [[ "$out" == *checkbashisms* ]]
+}
+
+# The report is a debug aid: a host so stripped that not one probe resolves
+# still has to get a block, and the run must survive it. An empty PATH is the
+# cheapest way to be that host.
+function test_host_report_survives_an_empty_path() {
+  local rc=0
+  (
+    # shellcheck disable=SC2123 # emptying the search path is the case
+    PATH=""
+    _hi_host_report "$_HI_ROOT"
+  ) >/dev/null 2>&1 || rc=$?
+  [ "$rc" -eq 0 ]
+}
+
+function test_host_report_marks_absent_tools_absent() {
+  local out
+  out="$(
+    # shellcheck disable=SC2123 # emptying the search path is the case
+    PATH=""
+    _hi_host_report "$_HI_ROOT" 2>&1
+  )"
+  [[ "$out" == *"shellcheck (absent)"* ]] && [[ "$out" == *"docker: absent"* ]]
+}
+
+function test_tool_version_reports_a_number_for_a_real_tool() {
+  [[ "$(_hi_tool_version bash)" =~ ^bash\ [0-9]+\.[0-9]+ ]]
+}
+
+function test_tool_version_says_absent_rather_than_failing() {
+  local rc=0 out
+  out="$(_hi_tool_version definitely-not-a-real-binary)" || rc=$?
+  [ "$rc" -eq 0 ] && [ "$out" = "definitely-not-a-real-binary (absent)" ]
+}
+
 function test_probe_cmd_rejects_an_unknown_shape() {
   local rc=0
   _hi_probe_cmd MARK not-a-shape >/dev/null 2>&1 || rc=$?
@@ -630,6 +726,19 @@ function run_test_lib_tests() {
   _hi_check "Uses a custom reason" test_require_uses_a_custom_reason
   _hi_check "Backend skips when the CLI is missing" test_require_backend_skips_when_the_cli_is_missing
   _hi_check "Backend skips when it's installed but unreachable" test_require_backend_skips_when_the_backend_is_unreachable
+
+  _hi_h2 "Testing: _hi_host_report / _hi_host_tree_check"
+  _hi_check "Names this bash and kernel" test_host_report_names_this_bash_and_kernel
+  _hi_check "Carries \$_HI_HOME and \$_HI_ROOT" test_host_report_carries_the_tree_variables
+  _hi_check "Agrees when the tree matches" test_host_report_agrees_when_the_tree_matches
+  _hi_check "Warns, naming both, when it differs" test_host_report_warns_when_the_tree_differs
+  _hi_check "Tree check stays silent on agreement" test_host_tree_check_is_silent_and_zero_when_it_agrees
+  _hi_check "Tree check returns 1 on a mismatch" test_host_tree_check_returns_one_when_it_differs
+  _hi_check "Lists the lint tools" test_host_report_lists_the_lint_tools
+  _hi_check "Survives an empty PATH" test_host_report_survives_an_empty_path
+  _hi_check "Marks absent tools absent" test_host_report_marks_absent_tools_absent
+  _hi_check "Tool version reads a real number" test_tool_version_reports_a_number_for_a_real_tool
+  _hi_check "Tool version says absent, not fails" test_tool_version_says_absent_rather_than_failing
 
   _hi_h2 "Testing: _hi_probe_cmd"
   _hi_check "Bash shape fires only with a real root" test_probe_cmd_bash_shape_fires_only_with_a_real_root

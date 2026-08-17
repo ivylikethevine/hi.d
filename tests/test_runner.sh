@@ -7,15 +7,27 @@
 #   name ...    - run only the named suite(s), e.g. `tests/test_runner.sh docker kube`
 set -euo pipefail
 
-# Default _HI_HOME to this checkout's parent (an explicit env var still wins),
-# so a fresh clone and CI can run this with no setup - and no run ever falls
-# back to ~/hi.d by accident. Exported, so every child suite inherits it.
+# The tree this file was invoked from, resolved before anything derived from
+# $_HI_HOME exists. It is the default for _HI_HOME below (so a fresh clone and
+# CI run with no setup, and no run falls back to ~/hi.d by accident), and it is
+# also the only honest reference for the tree check further down: $_HI_ROOT,
+# $_HI_TESTS_DIR and this suite table all move together when _HI_HOME is wrong,
+# so none of them can notice that it is.
+_HI_RUNNER_TREE="$(cd -P "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 if [ -z "${_HI_HOME:-}" ]; then
-  _HI_HOME="$(cd -P "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+  _HI_HOME="$(cd -P "$_HI_RUNNER_TREE/.." && pwd)"
 fi
 export _HI_HOME
 # shellcheck source=../common/core.sh
 source "$_HI_HOME/hi.d/common/core.sh"
+# The scaffolding every suite sources; the runner wants the host report out of
+# it (and the tree check it prints on every run). Sourcing it here also puts
+# the runner behind test_lib.sh's config isolation - $XDG_CONFIG_HOME moves to
+# a path that does not exist, so nothing here can read the developer's real
+# ~/.config/hi.d. Each suite re-sources the file and re-derives that path from
+# its own $$, so what the suites see is unchanged.
+# shellcheck source=./test_lib.sh
+source "$_HI_HOME/hi.d/tests/test_lib.sh"
 
 # group:name:path (relative to this directory), in the order they run - fast
 # local checks first, the docker/kind/nomad-backed end-to-end tests after.
@@ -100,6 +112,7 @@ _HI_GROUP=""
 _HI_LIST=0
 _HI_LIST_PATHS=0
 _HI_REQUIRE_RUN=0
+_HI_HOST_REPORT="${_HI_HOST_REPORT:-0}"
 declare -a _HI_ARGS=()
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -119,6 +132,10 @@ rather than PASS, so a green run can't overstate what actually ran.
   --list-paths     the same, plus each suite's absolute path as a third column
   --require-run    treat SKIPPED suites as failures - for CI runners where a
                    skip means the runner is broken, not the backend optional
+  --host-report    print what this machine is before running anything: bash,
+                   OS, GNU/BSD/busybox userland, which tree \$_HI_HOME resolves
+                   to, which backends answer, and the lint tools' versions.
+                   _HI_HOST_REPORT=1 does the same. CI passes it always
   -h, --help       this text
 
 A passing suite's transcript is collapsed to one status line; failures and
@@ -136,6 +153,7 @@ EOF
     ;;
   # handled after selection below, so `--group X --list` lists that group
   --list) _HI_LIST=1 ;;
+  --host-report) _HI_HOST_REPORT=1 ;;
   # a third column would land in $name for every `read -r group name` consumer
   # (runner_test.sh has two), so the path gets its own flag rather than widening
   # --list. tests/coverage.sh is the caller: it traces each suite script as the
@@ -194,6 +212,17 @@ if [ "$_HI_LIST" = 1 ]; then
     fi
   done
   exit 0
+fi
+
+# What machine is this, before a single suite runs - see _hi_host_report. The
+# tree check is the half worth having either way, so an unflagged run still
+# gets it; it prints nothing at all when $_HI_ROOT is the tree this file came
+# from, which is the normal case. Never fatal: testing another tree on purpose
+# is a documented use of _HI_HOME.
+if [ "$_HI_HOST_REPORT" = 1 ]; then
+  _hi_host_report "$_HI_RUNNER_TREE"
+else
+  _hi_host_tree_check "$_HI_RUNNER_TREE" || true
 fi
 
 _hi_h1 "Running ${#_HI_SELECTED[@]} test suite(s)"

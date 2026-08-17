@@ -15,6 +15,7 @@ tests/test_runner.sh header shellcheck  # just the named suites
 tests/test_runner.sh --group fast       # what CI runs on every push
 tests/test_runner.sh --group bench      # hot-path timings vs ceilings
 tests/test_runner.sh --group e2e        # real containers; needs docker
+tests/test_runner.sh --host-report      # ...plus what this machine is
 ```
 
 A passing suite's transcript is collapsed to one status line; failures
@@ -22,6 +23,15 @@ replay in full and are recapped under the summary table. `_HI_VERBOSE=1`
 streams everything live. A suite whose backend is missing reports
 **SKIPPED**, never a green pass, and `--require-run` (what CI's e2e jobs
 pass) turns those skips into failures.
+
+`--host-report` (or `_HI_HOST_REPORT=1`) prints one block before the first
+suite: bash, OS, whether the userland is GNU/BSD/busybox, the locale's
+glyph verdict, which tree `$_HI_HOME` actually resolves to, which backends
+answer, and the lint tools' versions. CI passes it on every job, so a run
+that behaved differently there says why in its own log. The `_HI_HOME` half
+of it prints on **every** run, flag or not — but only when the tree the
+suites are testing isn't the one you invoked the runner from, which is the
+quietest way to get a wrong result here.
 
 `tests/coverage.sh` runs the fast suites under kcov when you want to know
 which arms of `install.sh`/`bump.sh` the cases never touch.

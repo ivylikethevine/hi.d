@@ -691,7 +691,12 @@ colored pass/fail summary at the end:
 ```sh
 tests/test_runner.sh                    # every suite
 tests/test_runner.sh aliases shellcheck # just the named suite(s)
+tests/test_runner.sh --host-report      # ...prefixed with what this machine is
 ```
+
+`--host-report` (`_HI_HOST_REPORT=1`) prints bash, the OS, whether the userland is GNU/BSD/busybox, which tree
+`$_HI_HOME` resolves to, which backends answer and the lint tools' versions before the first suite runs - the
+questions asked every time a suite passes on one machine and fails on another. CI passes it on every job.
 
 Suite names: `aliases`, `alias_fallthrough`, `osc52`, `tmux`, `shellcheck`, `install`, `hi`, `header`, `core`,
 `git_prompt`, `targets`, `paths`, `color_preview`, `load`, `test_lib`, `test_runner` are fast and dependency-free - they're the first thing CI

@@ -63,7 +63,7 @@ function _hi_run_runner() {
   # unterminated string. GLOSSARY-worthy, learned from the macOS CI job.)
   # shellcheck disable=SC2163 # the var=value pair is chosen by each caller
   _HI_RUN_OUT="$(
-    unset GITHUB_ACTIONS _HI_VERBOSE
+    unset GITHUB_ACTIONS _HI_VERBOSE _HI_HOST_REPORT
     [ -n "${_HI_RUN_WITH:-}" ] && export "${_HI_RUN_WITH?}"
     _HI_TESTS=("${entries[@]}")
     _HI_TESTS_DIR="$_HI_FIXTURES"
@@ -290,6 +290,50 @@ function test_require_run_adds_skips_to_the_failure_exit_code() {
 
 function test_require_run_is_listed_in_help() {
   "$_HI_TEST_RUN" --help | grep -q -- '--require-run'
+}
+
+# --- the host report ---------------------------------------------------------
+#
+# The block itself is test_lib.sh's, and lib_test.sh pins its contents; these
+# cases are only about the wiring - that it is off by default, that both the
+# flag and the env var reach it, and that a run prints it once rather than
+# per suite.
+
+function test_host_report_is_off_by_default() {
+  _hi_run_runner $'a:green.sh'
+  [[ "$_HI_RUN_OUT" != *"The host"* ]]
+}
+
+function test_host_report_flag_prints_the_block() {
+  _hi_run_runner $'a:green.sh' --host-report
+  [[ "$_HI_RUN_OUT" == *"The host"* ]] && [[ "$_HI_RUN_OUT" == *"userland"* ]]
+}
+
+function test_host_report_env_var_prints_the_block() {
+  _HI_RUN_WITH="_HI_HOST_REPORT=1" _hi_run_runner $'a:green.sh'
+  [[ "$_HI_RUN_OUT" == *"The host"* ]]
+}
+
+# before any suite runs: the point of the block is to explain what follows
+function test_host_report_precedes_the_first_suite() {
+  _hi_run_runner $'a:green.sh' --host-report
+  _hi_before "$_HI_RUN_OUT" "The host" "Running 1 test suite"
+}
+
+function test_host_report_prints_once_per_run() {
+  _hi_run_runner $'a:green.sh\nb:green.sh' --host-report
+  [ "$(printf '%s\n' "$_HI_RUN_OUT" | grep -c 'The host')" -eq 1 ]
+}
+
+function test_host_report_is_listed_in_help() {
+  "$_HI_TEST_RUN" --help | grep -q -- '--host-report'
+}
+
+# The tree check rides every run, flagged or not - but it says nothing when
+# $_HI_ROOT is the tree the runner came from, which is the case here.
+function test_unflagged_run_stays_quiet_about_the_tree() {
+  _hi_run_runner $'a:green.sh'
+  [[ "$_HI_RUN_OUT" != *"another checkout"* ]]
 }
 
 # a skip contributes no cases, so it must not add a 0 to the totals either
@@ -533,6 +577,15 @@ function run_runner_tests() {
   _hi_check "--require-run passes when nothing skips" test_require_run_passes_when_nothing_skips
   _hi_check "--require-run adds skips to the exit code" test_require_run_adds_skips_to_the_failure_exit_code
   _hi_check "--require-run appears in --help" test_require_run_is_listed_in_help
+
+  _hi_h2 "Testing: the host report"
+  _hi_check "Off by default" test_host_report_is_off_by_default
+  _hi_check "--host-report prints the block" test_host_report_flag_prints_the_block
+  _hi_check "_HI_HOST_REPORT=1 prints the block" test_host_report_env_var_prints_the_block
+  _hi_check "Printed before the first suite" test_host_report_precedes_the_first_suite
+  _hi_check "Printed once per run" test_host_report_prints_once_per_run
+  _hi_check "--host-report appears in --help" test_host_report_is_listed_in_help
+  _hi_check "An unflagged run stays quiet about the tree" test_unflagged_run_stays_quiet_about_the_tree
 
   _hi_h2 "Testing: the shipped table"
   _hi_check "Lists a group and name per suite" test_shipped_table_lists_a_group_and_name_per_suite

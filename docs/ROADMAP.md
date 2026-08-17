@@ -97,9 +97,11 @@ meantime.
 
 - [ ] **Jekyll GitHub Pages action** — _Unblocked to write; publishing waits
       on the repo being public._ A `pages.yml` workflow that renders the
-      repo's markdown (`README.md` as the index, plus `docs/` — comparison,
-      packaging, architecture, windows already interlink with relative
-      links `link-check.yml` keeps honest) into a GitHub Pages site via the
+      repo's markdown (`README.md` as the index — it now carries the demos,
+      comparison, architecture, packaging and Windows material inline — plus
+      what is left in `docs/`: GLOSSARY, CONTRIBUTING, SECURITY, this file and
+      tldr, which interlink with relative links `link-check.yml` keeps
+      honest) into a GitHub Pages site via the
       stock `actions/jekyll-build-pages` → `actions/deploy-pages` pair,
       SHA-pinned and minimal-permission like every other workflow here,
       plus a small `_config.yml` choosing a theme and excluding the
@@ -107,6 +109,24 @@ meantime.
       Source: GitHub Actions — which only exists once the repo is public.
 
 ### Tests
+
+- [ ] **a host report from the harness** — when a suite fails on someone's
+      machine and passes in CI (or the reverse), the first three questions are
+      always the same and none of them are in the output: what bash is this,
+      what userland, and is `_HI_HOME` even pointing at this checkout. A single
+      debug block, printed once at the top of a run, would answer them: bash
+      version and path, OS/kernel, whether the userland is GNU or BSD/busybox,
+      `$_HI_HOME`/`$_HI_ROOT` and whether they resolve to the tree the runner
+      was invoked from, which backends (`docker`/`podman`/`nomad`/`kubectl`/
+      `ssh`) probe available, and the lint tools' versions (`shellcheck`,
+      `shfmt`, `checkbashisms`). Natural home is `tests/test_lib.sh` — it
+      already owns the skip preamble and the probe commands — behind a flag or
+      env on `tests/test_runner.sh` so CI logs can always carry it without
+      noising up a local run. The `_HI_HOME` line alone pays for it: pointing
+      at the wrong tree is this repo's most common false result, and it
+      currently shows only as a suite quietly running fewer cases.
+
+  - **Ticks when:** a run with the flag prints the block, and CI's fast job passes it by default.
 
 - [ ] **the relay e2e** — prove `hi` can be chained: from machine A (has
       hi.d) to machine B (doesn't), then *from inside that session* on to
@@ -132,7 +152,8 @@ meantime.
 ### GitHub repo settings
 
 Both are one-time, both are pre-first-release, and neither can be done from a
-workflow file — see `packaging/README.md`'s "Before the first release".
+workflow file. The exact commands live here, in the entries below — this file
+is the single copy, and the README's "Packaging & releases" points at it.
 
 - [ ] **The `release` approval gate** — `.github/workflows/release.yml`'s
       `publish` job declares `environment: release`, but an environment with no
@@ -150,12 +171,40 @@ workflow file — see `packaging/README.md`'s "Before the first release".
       does, classic branch protection does not.
 
   - **Where:** the `gh` CLI (a repo setting under the hood)
-  - **Do:** run the ready-made `gh api repos/{owner}/{repo}/rulesets` command in `packaging/README.md` — one command, bypass actor already filled in. Do it alongside the `release` environment above.
+  - **Do:** run the command below — one shot, bypass actor 15368 (the GitHub Actions App) already filled in. Do it alongside the `release` environment above.
   - **Ticks when:** the ruleset is active on the repo.
+
+    ```sh
+    gh api repos/{owner}/{repo}/rulesets --method POST --input - <<'JSON'
+    {
+      "name": "protect-main",
+      "target": "branch",
+      "enforcement": "active",
+      "conditions": { "ref_name": { "include": ["~DEFAULT_BRANCH"], "exclude": [] } },
+      "bypass_actors": [
+        { "actor_id": 15368, "actor_type": "Integration", "bypass_mode": "always" }
+      ],
+      "rules": [
+        { "type": "deletion" },
+        { "type": "non_fast_forward" },
+        {
+          "type": "required_status_checks",
+          "parameters": {
+            "strict_required_status_checks_policy": false,
+            "required_status_checks": [
+              { "context": "fast suites (ubuntu-latest)" },
+              { "context": "fast suites (macos-latest)" }
+            ]
+          }
+        }
+      ]
+    }
+    JSON
+    ```
 
 ### Secrets & keys
 
-Two keypairs. **The in-repo half of both is already written and tested** — CI consumes each secret the moment it exists and says so loudly in the log when it doesn't. What's left is generating the key and pasting it in. Exact commands live in `packaging/README.md`'s checklist rather than here, so there's one copy.
+Two keypairs. **The in-repo half of both is already written and tested** — CI consumes each secret the moment it exists and says so loudly in the log when it doesn't. What's left is generating the key and pasting it in; the exact commands are in each entry below.
 
 - [ ] **apk signing key** — signing is wired end to end: `nfpm.yaml` declares
       the signature (key from `$HI_APK_KEY`, name `hi.d.rsa.pub`), `release.yml`
@@ -164,8 +213,13 @@ Two keypairs. **The in-repo half of both is already written and tested** — CI 
       builds unsigned and installing it needs `--allow-untrusted`.
 
   - **Where:** a terminal, then Settings → Secrets and variables → Actions
-  - **Do:** generate the RSA keypair, add the private half as the `APK_SIGNING_KEY` **repo** secret (not an environment secret — the ungated build job needs it), commit `packaging/apk/hi.d.rsa.pub` under exactly that filename, delete the local private half.
+  - **Do:** generate the RSA keypair (abuild-style), add the private half as the `APK_SIGNING_KEY` **repo** secret (not an environment secret — the ungated build job needs it), commit `packaging/apk/hi.d.rsa.pub` under exactly that filename (apk matches signatures to `/etc/apk/keys/` by name, and it must stay what `nfpm.yaml`'s `key_name` says), delete the local private half.
   - **Ticks when:** the secret exists and the public key is committed.
+
+    ```sh
+    openssl genrsa -out hi.d-apk.rsa 4096
+    openssl rsa -in hi.d-apk.rsa -pubout -out packaging/apk/hi.d.rsa.pub
+    ```
 
 - [ ] **minisign keypair** — the publish job installs a pinned minisign
       (drift-checked weekly) and signs `SHA256SUMS` with
@@ -174,8 +228,12 @@ Two keypairs. **The in-repo half of both is already written and tested** — CI 
       shows the check.
 
   - **Where:** a terminal, then Settings → Environments → `release` → Environment secrets
-  - **Do:** `minisign -G -W`, paste the secret key as the `MINISIGN_SECRET_KEY` **environment** secret (sealed to the gated publish job), replace the placeholder public key in the README, delete both local files.
+  - **Do:** generate it passwordless (CI has nobody to type one), paste `minisign.key`'s contents as the `MINISIGN_SECRET_KEY` **environment** secret (sealed to the gated publish job), put `minisign.pub`'s public key line into the README's "Verifying a release download" over the `RWT-PLACEHOLDER-…` value, delete both local files.
   - **Ticks when:** the secret exists and the README carries the real key.
+
+    ```sh
+    minisign -G -W -p minisign.pub -s minisign.key
+    ```
 
 - [ ] **Homebrew tap token** — only once the tap-PR job (see [Code
       work](#code-work)) has something to push to. The job no-ops cleanly
@@ -209,9 +267,10 @@ All three workflows are written, committed, and dispatch-only. They need nothing
   - **Ticks when:** its first green dispatch. Promote to every-PR only once it proves stable.
 
 - [ ] **Windows target e2e** (`.github/workflows/windows-e2e.yml`) — the README
-      documents the Git Bash/WSL/PowerShell fallback ladder and
-      `packaging/windows.md` gates every native Windows channel on "the Windows
-      CI job is green", but no such job has ever run. The job configures the
+      documents the Git Bash/WSL/PowerShell fallback ladder but no Windows job
+      has ever run. (This is the *target*-side job; the README's "Windows
+      channels" gates the native channels on a separate client-side job — the
+      fast suites under Git Bash — which is not written yet.) The job configures the
       stock sshd, sets the admin `authorized_keys` ACL, drives `hi localhost`
       from Git Bash, and asserts the PowerShell greeting — the cmd `||` fallback
       the README promises is the case to watch. Explicitly experimental.

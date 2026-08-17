@@ -142,6 +142,10 @@ Host untaggedhost
 # Tags= dev
 Host devhost otheralias
     HostName 9.9.9.9
+
+# Tags: lower
+host lowerhost
+    HostName 10.10.10.10
 EOF
   printf '%s' "$f"
 }
@@ -169,6 +173,28 @@ function test_ssh_host_tag_unknown_host_fails() {
   local f
   f="$(_hi_ssh_tag_fixture)"
   ! _HI_SSH_CONFIG="$f" _hi_ssh_host_tag no-such-host
+}
+
+# ssh reads its keywords case-insensitively, and targets.sh's awk agrees - a
+# lowercase `host` entry once completed and dispatched as ssh while its tag
+# was silently never found
+function test_ssh_host_tag_matches_lowercase_host_keyword() {
+  local f
+  f="$(_hi_ssh_tag_fixture)"
+  [ "$(_HI_SSH_CONFIG="$f" _hi_ssh_host_tag lowerhost)" = "lower" ]
+}
+
+# the walker's rc is a three-way contract: 0 tagged, 2 known-but-untagged,
+# 1 unknown - rc 2 is what hi.sh's _hi_is_ssh_host dispatches on
+function test_ssh_host_tag_return_codes() {
+  local f rc
+  f="$(_hi_ssh_tag_fixture)"
+  _HI_SSH_CONFIG="$f" _hi_ssh_host_tag untaggedhost >/dev/null
+  rc=$?
+  [ "$rc" -eq 2 ] || return 1
+  _HI_SSH_CONFIG="$f" _hi_ssh_host_tag no-such-host >/dev/null
+  rc=$?
+  [ "$rc" -eq 1 ]
 }
 
 function test_resolve_color_override_wins() {
@@ -309,6 +335,8 @@ function run_core_tests() {
   _hi_check "Untagged host fails" test_ssh_host_tag_untagged_host_fails
   _hi_check "'Tags=' syntax and multi-alias Host lines" test_ssh_host_tag_equals_syntax_and_multialias
   _hi_check "Unknown host fails" test_ssh_host_tag_unknown_host_fails
+  _hi_check "Lowercase 'host' keyword matches" test_ssh_host_tag_matches_lowercase_host_keyword
+  _hi_check "rc contract: 0 tagged / 2 untagged / 1 unknown" test_ssh_host_tag_return_codes
 
   _hi_h2 "Testing: _hi_resolve_color precedence"
   _hi_check "Exact override wins" test_resolve_color_override_wins

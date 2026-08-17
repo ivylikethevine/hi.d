@@ -12,12 +12,13 @@ _hi_git_prompt() {
 
   # --no-optional-locks or `git status` rewrites .git/index per prompt -
   # real I/O per keystroke on a large checkout, for identical output
-  local git_dir ref="" detached=0
+  local git_dir ref="" oid="" detached=0
   git_dir=$(LC_ALL=C git --no-optional-locks rev-parse --git-dir 2>/dev/null) || return
 
   local ahead=0 behind=0 staged=0 dirty=0 invalid=0 untracked=0 line
   while IFS= read -r line; do
     case "$line" in
+    "# branch.oid "*) oid="${line#"# branch.oid "}" ;;
     "# branch.head "*)
       ref="${line#"# branch.head "}"
       [[ "$ref" == "(detached)" || "$ref" == "(unknown)" ]] && ref=""
@@ -40,6 +41,9 @@ _hi_git_prompt() {
     detached=1
     ref=$(LC_ALL=C git describe --tags --contains HEAD 2>/dev/null)
     [[ -z "$ref" ]] && ref=$(LC_ALL=C git describe --tags HEAD 2>/dev/null)
+    # branch.oid already rode the porcelain stream - not a third git fork; the
+    # rev-parse answers only for a stream too old to carry the header
+    [[ -z "$ref" && -n "$oid" && "$oid" != "(initial)" ]] && ref="(${oid:0:8})"
     [[ -z "$ref" ]] && ref="($(LC_ALL=C git rev-parse --short=8 HEAD 2>/dev/null))"
   fi
   [[ -n "$ref" ]] || return
@@ -72,8 +76,9 @@ _hi_git_prompt() {
   fi
   if [[ -n "$dir" ]]; then
     state+=" ${step:-?}/${total:-?}"
-    # a rebase knows the branch it started from, so show that instead of HEAD
-    [[ -f "$dir/head-name" ]] && ref=$(sed 's#^refs/heads/##' "$dir/head-name") && detached=0
+    # a rebase knows the branch it started from, so show that instead of HEAD;
+    # `read < file` + expansion, not a `sed` fork per prompt for the whole rebase
+    [[ -f "$dir/head-name" ]] && read -r ref <"$dir/head-name" && ref="${ref#refs/heads/}" && detached=0
   fi
 
   # shorten_branch_len 32, matching config.fish

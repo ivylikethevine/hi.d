@@ -101,10 +101,12 @@ function identity() {
     jobs="Jobs: ${#lines[@]}"
   fi
   # kube is a target hi can connect to (hi.sh's _hi_is_k8s_pod), so it belongs
-  # on the same count line as the other three
+  # on the same count line as the other three - counted through targets.sh,
+  # whose list_kube owns the "which pods count as reachable" rule (and brings
+  # its probe timeout along). docker/nomad above stay direct on purpose:
+  # their counts answer different questions than the completion listers do.
   if command -v kubectl &>/dev/null; then
-    _hi_read_lines lines < <(_hi_probe kubectl get pods --field-selector=status.phase=Running \
-      -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' 2>/dev/null)
+    _hi_read_lines lines < <(sh "$_HI_TARGETS" kube 2>/dev/null)
     pods="Pods: ${#lines[@]}"
   fi
   [ -f "$_HI_SSH_AUTHORIZED_KEYS" ] && _hi_read_lines lines <"$_HI_SSH_AUTHORIZED_KEYS" && authorized=${#lines[@]}

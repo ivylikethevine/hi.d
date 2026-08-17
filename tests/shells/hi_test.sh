@@ -590,7 +590,7 @@ function test_wire_size_is_not_the_disk_size() {
 function test_payload_stays_clear_of_the_arg_limit() {
   local bytes
   bytes="$(_hi_armored_len "$(($(_hi_armored_len "$(wc -c <"$_HI_LAUNCHER")") + \
-  $(_hi_armored_len "$(tar czf - -h -C "$_HI_HOME" "${_HI_PAYLOAD[@]/#/hi.d/}" | wc -c)")))")"
+  $(_hi_armored_len "$(_hi_payload_tar | wc -c)")))")"
   # 128KB (MAX_ARG_STRLEN) is where it used to break outright; 256KB is the
   # "this has doubled, come and look" line
   [ "$bytes" -lt 262144 ]

@@ -25,8 +25,13 @@ if [[ "${_HI_DISABLE_PROMPT:-0}" != 1 ]] && ! _hi_wants_starship; then
 fi
 
 if ! shopt -oq posix; then
+  # $BASH_COMPLETION_VERSINFO is the loader's own sentinel: the host's stock
+  # rc (Debian's skeleton, notably) often sourced it before hi's grafted
+  # block runs, and re-parsing the ~2000-line script costs every shell start
+  # 20-50ms for nothing
   # shellcheck disable=SC1091
-  source /usr/share/bash-completion/bash_completion 2>/dev/null ||
+  [ -n "${BASH_COMPLETION_VERSINFO-}" ] ||
+    source /usr/share/bash-completion/bash_completion 2>/dev/null ||
     source /etc/bash_completion 2>/dev/null
 fi
 

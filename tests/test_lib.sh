@@ -48,9 +48,7 @@ function _hi_test_cleanup() {
     "$_HI_EXTRA_CLEANUP" || true
   fi
   for c in "${_HI_STARTED[@]:-}"; do
-    if [ -n "$c" ]; then
-      "${_HI_BACKEND:-docker}" rm -f "$c" >/dev/null 2>&1 || true
-    fi
+    [ -n "$c" ] && _hi_rm_container "$c"
   done
   if [ -n "$_HI_WORKDIR" ]; then
     rm -rf "$_HI_WORKDIR" || true
@@ -129,24 +127,19 @@ function _hi_check_requires() {
   fi
 }
 
-# _hi_fake_bin <dir> <name> - a no-op executable, for suites that prove a
-# resolution ladder ("candidate X is missing, does it fall through to Y")
-# against a PATH they control rather than against whatever this machine has.
-function _hi_fake_bin() {
-  printf '%s\n' '#!/bin/sh' 'exit 0' >"$1/$2"
-  chmod +x "$1/$2"
-}
-
-# _hi_fake_path <name> <bin...> - a $_HI_WORKDIR/<name> directory holding those
-# fakes, printed. Built once per name: the callers ask for the same set many
-# times over.
+# _hi_fake_path <name> <bin...> - a $_HI_WORKDIR/<name> directory of no-op
+# executables, printed - for suites that prove a resolution ladder
+# ("candidate X is missing, does it fall through to Y") against a PATH they
+# control rather than against whatever this machine has. Built once per name:
+# the callers ask for the same set many times over.
 function _hi_fake_path() {
   local dir="$_HI_WORKDIR/$1" bin
   shift
   if [ ! -d "$dir" ]; then
     mkdir -p "$dir"
     for bin in "$@"; do
-      _hi_fake_bin "$dir" "$bin"
+      printf '%s\n' '#!/bin/sh' 'exit 0' >"$dir/$bin"
+      chmod +x "$dir/$bin"
     done
   fi
   printf '%s' "$dir"
@@ -540,16 +533,20 @@ function _hi_free_port_base() {
   return 1
 }
 
+# Both pollers take (tries, interval) - the shape every call site speaks -
+# but tries*interval only sizes the wall-clock budget: the deadline is the
+# one bound, for _hi_wait_pid's reason (an iteration counter stretches
+# without bound exactly when the machine is busiest).
 function _hi_poll_bool() {
   local abort=""
   if [ "$1" = -a ]; then
     abort="$2"
     shift 2
   fi
-  local tries="$1" interval="$2" i deadline
+  local tries="$1" interval="$2" deadline
   shift 2
   deadline=$((SECONDS + $(_hi_poll_budget "$tries" "$interval")))
-  for ((i = 0; i < tries; i++)); do
+  while :; do
     "$@" >/dev/null 2>&1 && return 0
     if [ -n "$abort" ] && ! "$abort"; then
       return 1
@@ -557,14 +554,13 @@ function _hi_poll_bool() {
     [ "$SECONDS" -lt "$deadline" ] || return 1
     sleep "$interval"
   done
-  return 1
 }
 
 function _hi_poll_value() {
-  local tries="$1" interval="$2" out i deadline
+  local tries="$1" interval="$2" out deadline
   shift 2
   deadline=$((SECONDS + $(_hi_poll_budget "$tries" "$interval")))
-  for ((i = 0; i < tries; i++)); do
+  while :; do
     out="$("$@" 2>/dev/null)"
     if [ -n "$out" ]; then
       printf '%s' "$out"
@@ -573,7 +569,6 @@ function _hi_poll_value() {
     [ "$SECONDS" -lt "$deadline" ] || return 1
     sleep "$interval"
   done
-  return 1
 }
 
 # Wall-clock, not iteration count: `for ((i = 0; i < timeout_s * 4))` at

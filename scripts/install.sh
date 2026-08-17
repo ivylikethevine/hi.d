@@ -191,21 +191,6 @@ function config_shell() {
 function _hi_write_back() {
   cat "$1" >"$2"
   rm -f "$1"
-  # a write through here invalidates setting_off's read-once cache
-  if [ "$_HI_SETTINGS_CACHE_FOR" = "$2" ]; then _HI_SETTINGS_CACHE_FOR=""; fi
-}
-
-# The settings file, read once rather than grep-forked per question:
-# setting_off is asked for every row of both prompt tables against a file
-# that doesn't change until config_shell writes it at the very end (and that
-# write, via _hi_write_back, clears this cache).
-_HI_SETTINGS_CACHE=""
-_HI_SETTINGS_CACHE_FOR=""
-
-function _hi_settings_load() {
-  [ "$_HI_SETTINGS_CACHE_FOR" = "$1" ] && return 0
-  _HI_SETTINGS_CACHE_FOR="$1"
-  _HI_SETTINGS_CACHE="$(cat "$1" 2>/dev/null || true)"
 }
 
 # config_shell with an empty block, plus a quieter report for the common
@@ -255,9 +240,10 @@ function pending_answer() {
 }
 
 # true if $1 is turned off - this run's answer if it has one, otherwise a
-# line starting "export $1=$3" being present in $2 (read through the cache
-# above, so twenty questions cost one file read). hi's own _HI_DISABLE_* vars
-# use 1 for "off"; common/header.sh's older per-line toggles use 0, hence the
+# line starting "export $1=$3" being present in $2 (a tiny file, re-read per
+# question behind an interactive prompt - not worth a cache that every write
+# path would have to remember to clear). hi's own _HI_DISABLE_* vars use 1
+# for "off"; common/header.sh's older per-line toggles use 0, hence the
 # third argument.
 function setting_off() {
   local var="$1" target="$2" off="${3:-1}" answer
@@ -265,8 +251,7 @@ function setting_off() {
     [ "$answer" = "$off" ]
     return
   fi
-  _hi_settings_load "$target"
-  case $'\n'"$_HI_SETTINGS_CACHE" in
+  case $'\n'"$(cat "$target" 2>/dev/null || true)" in
   *$'\n'"export $var=$off"*) return 0 ;;
   esac
   return 1
@@ -346,10 +331,11 @@ function show_preview() {
 function _hi_banner_preview() { (unset _HI_HEADER_BANNER && banner Connected); }
 
 # sample "user@host cwd" line, colored like shells/bash.sh's real HI_PS1, with
-# the literal current user/host/cwd instead of \u/\h/\w
+# the literal current user/host/cwd instead of \u/\h/\w - the fragment itself
+# is core.sh's _hi_userhost, the same one nu's prompt renders
 function _hi_prompt_preview() {
   local cwd="${PWD/#$HOME/\~}"
-  printf '%b\n' " $(_hi_user_escape)$(whoami)$(_hi_at_color)@$(_hi_host_escape)$(_hi_hostname)$NC $BRBLUE$cwd$NC"
+  printf '%b\n' "$(_hi_userhost) $BRBLUE$cwd$NC"
 }
 
 # the real git prompt segment against hi.d's own checkout (always a git repo),

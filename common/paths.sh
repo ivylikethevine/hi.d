@@ -55,7 +55,6 @@ export _HI_SSH_CONFIG="$HOME/.ssh/config"
 export _HI_SSH_AUTHORIZED_KEYS="$HOME/.ssh/authorized_keys"
 export _HI_HOME_BASHRC="$HOME/.bashrc"
 export _HI_HOME_ZSHRC="$HOME/.zshrc"
-export _HI_HOME_FISH_DIR="$HOME/.config/fish" # absent unless fish is installed
 export _HI_HOME_FISH_CONFIG="$HOME/.config/fish/config.fish"
 export _HI_HOME_NU_DIR="$HOME/.config/nushell" # likewise, absent unless nu is
 export _HI_HOME_NU_CONFIG="$HOME/.config/nushell/config.nu"
@@ -92,6 +91,9 @@ alias hi_test="[ ! -f $_HI_TEST_RUN ] && echo 'hi_test $_HI_NO_CHECKOUT' || $_HI
 export _HI_DISABLE_LOCAL
 export _HI_REMOTE_SESSION
 
+# The list below is core.sh's _HI_TOGGLES minus the gate's own two inputs,
+# spelled out because this dialect can't loop; paths_test.sh pins the two
+# lists together (OSC52 and TMUX had already gone missing here once).
 [ "$_HI_DISABLE_LOCAL" = 1 ] && [ "$_HI_REMOTE_SESSION" != 1 ] && {
   export _HI_DISABLE_HEADER=1
   export _HI_DISABLE_PROMPT=1
@@ -99,4 +101,6 @@ export _HI_REMOTE_SESSION
   export _HI_DISABLE_GIT_STATUS=1
   export _HI_DISABLE_EDITORS=1
   export _HI_DISABLE_ALIASES=1
+  export _HI_DISABLE_OSC52=1
+  export _HI_DISABLE_TMUX=1
 } || true

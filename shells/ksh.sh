@@ -40,7 +40,7 @@ _hi_ksh_git() {
 
   _hi_kg_dir=$(LC_ALL=C git --no-optional-locks rev-parse --git-dir 2>/dev/null) || return 0
 
-  _hi_kg_ref=""
+  _hi_kg_ref="" _hi_kg_oid=""
   _hi_kg_ahead=0 _hi_kg_behind=0 _hi_kg_staged=0 _hi_kg_dirty=0
   _hi_kg_invalid=0 _hi_kg_untracked=0 _hi_kg_detached=0
 
@@ -48,6 +48,7 @@ _hi_ksh_git() {
   # same ones git_prompt.sh reads, in the same order
   while IFS= read -r _hi_kg_line; do
     case "$_hi_kg_line" in
+    "# branch.oid "*) _hi_kg_oid="${_hi_kg_line#\# branch.oid }" ;;
     "# branch.head "*)
       _hi_kg_ref="${_hi_kg_line#\# branch.head }"
       case "$_hi_kg_ref" in
@@ -86,7 +87,12 @@ EOF
   if [ -z "$_hi_kg_ref" ]; then
     _hi_kg_detached=1
     _hi_kg_ref=$(LC_ALL=C git describe --tags --contains HEAD 2>/dev/null) ||
-      _hi_kg_ref=$(LC_ALL=C git describe --tags HEAD 2>/dev/null) ||
+      _hi_kg_ref=$(LC_ALL=C git describe --tags HEAD 2>/dev/null) || _hi_kg_ref=""
+    # branch.oid already rode the porcelain stream - not a third git fork; the
+    # rev-parse answers only for a stream too old to carry the header
+    [ -z "$_hi_kg_ref" ] && [ -n "$_hi_kg_oid" ] && [ "$_hi_kg_oid" != "(initial)" ] &&
+      _hi_kg_ref="($(printf '%.8s' "$_hi_kg_oid"))"
+    [ -z "$_hi_kg_ref" ] &&
       _hi_kg_ref="($(LC_ALL=C git rev-parse --short=8 HEAD 2>/dev/null))"
   fi
   [ -n "$_hi_kg_ref" ] || return 0
@@ -116,10 +122,15 @@ EOF
   [ "$_hi_kg_ahead" -gt 0 ] 2>/dev/null && _hi_kg_up="$_hi_kg_up$_HI_KSH_AHEAD$_hi_kg_ahead"
   [ "$_hi_kg_behind" -gt 0 ] 2>/dev/null && _hi_kg_up="$_hi_kg_up$_HI_KSH_BEHIND$_hi_kg_behind"
 
-  # one line per stash push/apply, the count `rev-list --walk-reflogs` gives
+  # one line per stash push/apply, the count `rev-list --walk-reflogs` gives -
+  # counted with the read builtin (the shape git_prompt.sh's _hi_read_lines
+  # gives the bash tier), not a wc|tr pipeline of two execs per prompt
   _hi_kg_stash=0
-  [ -f "$_hi_kg_dir/logs/refs/stash" ] &&
-    _hi_kg_stash=$(wc -l <"$_hi_kg_dir/logs/refs/stash" 2>/dev/null | tr -d ' ')
+  if [ -f "$_hi_kg_dir/logs/refs/stash" ]; then
+    while IFS= read -r _hi_kg_line || [ -n "$_hi_kg_line" ]; do
+      _hi_kg_stash=$((_hi_kg_stash + 1))
+    done <"$_hi_kg_dir/logs/refs/stash"
+  fi
 
   _hi_kg_flags=""
   [ "$_hi_kg_staged" -gt 0 ] &&

@@ -22,10 +22,14 @@ if [ -n "${TMUX:-}" ]; then
   _hi_esc="\033Ptmux;\033$_hi_esc\033\\" # tmux wants the inner ESC doubled
 elif [ -n "${ZELLIJ:-}" ]; then
   : # raw
-elif [ "${TERM#screen}" != "${TERM:-}" ]; then
+else
+  # `case` over `${TERM#screen}`: dash enforces `set -u` inside ${var#word}
+  # (bash does not), and TERM is genuinely unset on CI runners
+  case "${TERM:-}" in
   # unchunked: real screen truncates a long DCS, so a big yank under bare screen
   # can arrive clipped - visibly, and rarely enough not to earn a rejoin loop
-  _hi_esc="\033P$_hi_esc\033\\"
+  screen*) _hi_esc="\033P$_hi_esc\033\\" ;;
+  esac
 fi
 
 # the open is the test - `[ -w /dev/tty ]` passes with no controlling

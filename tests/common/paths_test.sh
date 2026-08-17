@@ -1,5 +1,5 @@
 #!/bin/bash
-# Unit tests for common/paths.sh's local-only gate: the six-var flip at the
+# Unit tests for common/paths.sh's local-only gate: the toggle flip at the
 # bottom of the file, which is what _HI_DISABLE_LOCAL means. It turns every
 # toggle off on the machine hi.d is *installed* on while leaving them on when
 # that machine says `hi` elsewhere, told apart by _HI_REMOTE_SESSION (load.sh
@@ -21,7 +21,8 @@ source "${_HI_HOME:-$HOME}/hi.d/common/core.sh"
 source "$_HI_TEST_LIB"
 
 _HI_GATED_VARS=(_HI_DISABLE_HEADER _HI_DISABLE_PROMPT _HI_DISABLE_PERSONAL
-  _HI_DISABLE_GIT_STATUS _HI_DISABLE_EDITORS _HI_DISABLE_ALIASES)
+  _HI_DISABLE_GIT_STATUS _HI_DISABLE_EDITORS _HI_DISABLE_ALIASES
+  _HI_DISABLE_OSC52 _HI_DISABLE_TMUX)
 
 # Source paths.sh in a child shell with $1/$2 as the two gate inputs, then
 # print "<var>=<value>" for every toggle the gate governs. core.sh does the
@@ -65,6 +66,41 @@ function test_toggles_stay_on_without_local_only() {
 
 function test_toggles_stay_on_remotely_without_local_only() {
   _hi_all_gated "$(_hi_gate 0 1)" 0
+}
+
+# The gate's list has to be core.sh's _HI_TOGGLES minus the gate's own two
+# inputs - paths.sh can't loop the roster (its four-shell dialect has no
+# loops), so it spells the list out, and a toggle added to core.sh that never
+# reaches it is exactly how _HI_DISABLE_OSC52/_HI_DISABLE_TMUX once went
+# missing from "all of the above". The behavioral cases above walk
+# _HI_GATED_VARS, so pinning that list to the roster pins the gate.
+function test_gate_list_matches_the_toggle_roster() {
+  local t
+  local -a want=()
+  for t in "${_HI_TOGGLES[@]}"; do
+    case "$t" in _HI_DISABLE_LOCAL | _HI_REMOTE_SESSION) continue ;; esac
+    want+=("$t")
+  done
+  [ "${want[*]}" = "${_HI_GATED_VARS[*]}" ] || {
+    _hi_cecho " | roster (minus gate inputs): ${want[*]}" "$RED"
+    _hi_cecho " | gated:                      ${_HI_GATED_VARS[*]}" "$RED"
+    return 1
+  }
+}
+
+# config.fish can't read the roster either (fish parses no bash), so it
+# carries a hand-written mirror in its toggle-defaulting loop - this is the
+# whole-list drift guard that mirror never had
+function test_fish_toggle_list_matches_core() {
+  local fish_list core_list
+  fish_list="$(awk '/^for _hi_toggle in /{p=1} p{print; if ($0 !~ /\\$/) exit}' \
+    "$_HI_ROOT/shells/config.fish" | grep -oE '_HI_[A-Z0-9_]+')"
+  core_list="$(printf '%s\n' "${_HI_TOGGLES[@]}")"
+  [ "$fish_list" = "$core_list" ] || {
+    _hi_cecho " | config.fish: $(printf '%s' "$fish_list" | tr '\n' ' ')" "$RED"
+    _hi_cecho " | core.sh:     ${_HI_TOGGLES[*]}" "$RED"
+    return 1
+  }
 }
 
 # the gate is the last thing paths.sh does and it ends in `|| true`, so a
@@ -194,6 +230,25 @@ function test_settings_point_at_the_overlay_before_it_exists() {
   [ "$(_hi_resolved _HI_SETTINGS "$dir")" = "$dir/settings.sh" ]
 }
 
+# Every overlay file hi ships (hi.sh's _HI_OVERLAY_FILES) needs a local
+# override guard in paths.sh - except settings.sh (unguarded by design: the
+# overlay is its only home) and aliases.sh (consumed additively by
+# shells/aliases.sh's last line, not through a path var). A missed guard
+# fails asymmetrically: the file works on targets but local sessions ignore
+# the override - the same silent drift the toggle-gate pin above catches.
+function test_overlay_guards_match_the_roster() {
+  local f roster
+  roster="$(bash -c 'set -- && source "$_HI_LAUNCHER" && printf "%s\n" "${_HI_OVERLAY_FILES[@]}"')"
+  [ -n "$roster" ] || return 1
+  while IFS= read -r f; do
+    case "$f" in settings.sh | aliases.sh) continue ;; esac
+    grep -qF "[ -f \"\$_HI_CONFIG_DIR/$f\" ] && export" "$_HI_ROOT/common/paths.sh" || {
+      _hi_cecho " | overlay file $f has no local-override guard in paths.sh" "$RED"
+      return 1
+    }
+  done <<<"$roster"
+}
+
 # the gate reads what install.sh wrote, and after this change that file is the
 # overlay's - so the ordering test above has to hold from there too
 function test_overlay_settings_are_visible_to_the_gate() {
@@ -216,6 +271,8 @@ function run_paths_tests() {
   _hi_check "Local-only leaves a remote session alone" test_local_only_leaves_a_remote_session_alone
   _hi_check "Toggles stay on without local-only" test_toggles_stay_on_without_local_only
   _hi_check "Toggles stay on remotely without local-only" test_toggles_stay_on_remotely_without_local_only
+  _hi_check "The gate covers the whole toggle roster" test_gate_list_matches_the_toggle_roster
+  _hi_check "config.fish's toggle mirror matches core.sh" test_fish_toggle_list_matches_core
   _hi_check "Sources cleanly under strict mode" test_paths_sources_cleanly_under_strict_mode
 
   _hi_h2 "Testing: the toggles are always defined"
@@ -231,6 +288,7 @@ function run_paths_tests() {
   _hi_check "No overlay uses the tree" test_no_overlay_uses_the_tree
   _hi_check "Settings point at the overlay before it exists" test_settings_point_at_the_overlay_before_it_exists
   _hi_check "Overlay settings reach the gate" test_overlay_settings_are_visible_to_the_gate
+  _hi_check "Every overlay file has its paths.sh guard" test_overlay_guards_match_the_roster
 
   _hi_suite_end "paths.sh"
 }

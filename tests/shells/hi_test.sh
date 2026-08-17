@@ -537,10 +537,50 @@ function test_fallback_rc_stays_shell_agnostic() {
 function test_remote_suffix_appends_the_prompt_for_posix_shells() {
   local out
   out="$(DOMAIN=hitest@myhost _hi_remote_suffix)"
-  # the append lands after the fish arm, i.e. on the `*)` one that runs
-  # sh/ksh/mksh, and that arm is still the one exporting ENV
+  # the append lands after the fish arm - on the ksh/mksh arm, which is the
+  # first one past fish - and every arm that appends also exports ENV
   _hi_before "$out" 'fish -C' '>> "\$_hi_rc_dir/.hi_fallback_rc"' &&
     _hi_before "$out" '>> "\$_hi_rc_dir/.hi_fallback_rc"' 'ENV='
+}
+
+# The container fallback ships aliases.sh alone, so the ssh path's
+# `. $_HI_ROOT/shells/ksh.sh` has nothing to resolve against here: the segment
+# is copied in beside it and sourced by absolute path. Pinned because a mksh
+# container silently got the plain-sh prompt until Aug 2026 - no error, just a
+# missing git segment nobody was looking for.
+function test_container_fallback_gives_ksh_the_git_segment() {
+  local dir rc out
+  dir="$_HI_WORKDIR/ksh-container"
+  rc="$dir/rc.captured"
+  mkdir -p "$dir"
+  # answers only the three shapes _say_hi_container makes on this path: the
+  # bash probe (fails, forcing the fallback), the ladder probe (mksh), and the
+  # rc write (captured). `exec -it` never runs - the attach is the last thing
+  # the function does and its exit code is all the case needs.
+  cat >"$dir/docker" <<EOF
+#!/bin/sh
+for a in "\$@"; do
+  case "\$a" in
+  *'command -v bash'*) exit 1 ;;
+  *_hi_s*) printf 'mksh\n'; exit 0 ;;
+  # the write, not the attach - both name the rc, and matching loosely here
+  # lets the attach truncate what the write just captured
+  'cat > '*.hi_fallback_rc*) cat > '$rc'; exit 0 ;;
+  esac
+done
+exit 0
+EOF
+  chmod +x "$dir/docker"
+
+  PATH="$dir:$PATH" DOMAIN=hitest _HI_SHELL_START=0 \
+    _say_hi_container docker "$dir/err.log" 0 >/dev/null 2>&1
+  [ -s "$rc" ] || return 1
+  out="$(cat "$rc")"
+  # the source line must land after the rc's verdict exports (ksh.sh reads
+  # them) and before the prompt that calls into it
+  _hi_before "$out" 'export _HI_ASCII=' '/ksh.sh' &&
+    _hi_before "$out" '/ksh.sh' 'PS1=' &&
+    [[ "$out" == *'$(_hi_ksh_git)'* ]]
 }
 
 # --- the size hi reports, and the transport that carries it -------------------
@@ -758,6 +798,7 @@ function run_hi_tests() {
   _hi_check_requires dash "Renders in a real dash" test_fallback_prompt_renders_in_dash
   _hi_check "The shared rc stays shell-agnostic" test_fallback_rc_stays_shell_agnostic
   _hi_check "The POSIX arm appends it" test_remote_suffix_appends_the_prompt_for_posix_shells
+  _hi_check "The container fallback gives ksh the git segment" test_container_fallback_gives_ksh_the_git_segment
 
   _hi_h2 "Testing: the size hi reports"
   _hi_check "_hi_human_bytes matches du's shapes" test_human_bytes_matches_du_shapes

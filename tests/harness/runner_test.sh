@@ -6,26 +6,65 @@
 # shellcheck disable=SC2329
 set -euo pipefail
 
-# shellcheck source=../../common/bootstrap.sh
-source "${_HI_HOME:-$HOME}/hi.d/common/bootstrap.sh"
+# shellcheck source=../../common/core.sh
+source "${_HI_HOME:-$HOME}/hi.d/common/core.sh"
 # shellcheck source=../test_lib.sh
 source "$_HI_TEST_LIB"
 
+# _hi_fixture <name> <exit> [counts-line] - a stand-in suite: announces itself
+# as "ran:<name>", optionally writes <counts-line> to $_HI_COUNTS_FILE the way
+# _hi_report_counts/_hi_report_skip do, and exits <exit>. One writer rather
+# than three near-copies of the same hand-escaped printf format.
 function _hi_fixture() {
-  printf '#!/bin/bash\nprintf "ran:%s\\n"\nexit %s\n' "$1" "$2" >"$_HI_FIXTURES/$1.sh"
+  {
+    printf '#!/bin/bash\nprintf "ran:%s\\n"\n' "$1"
+    # shellcheck disable=SC2016 # $_HI_COUNTS_FILE is resolved when the fixture runs
+    [ -n "${3:-}" ] && printf 'printf "%%s\\n" "%s" >"$_HI_COUNTS_FILE"\n' "$3"
+    printf 'exit %s\n' "$2"
+  } >"$_HI_FIXTURES/$1.sh"
   chmod +x "$_HI_FIXTURES/$1.sh"
+}
+
+# A suite reporting a case tally: "<total> <failed> [skipped]", exiting with
+# the fail count. The third field is what _hi_report_counts writes now; leaving
+# it off (as an older suite would) must still parse, so one fixture below does.
+function _hi_counting_fixture() {
+  _hi_fixture "$1" "$3" "$2 $3${4:+ $4}"
+}
+
+# a suite that stood down without running anything - what _hi_require does
+# when its backend is missing. Exits 0 like a passing suite, so only the SKIP
+# line in $_HI_COUNTS_FILE tells the runner the two apart.
+function _hi_skipping_fixture() {
+  _hi_fixture "$1" 0 "SKIP ${2:-no backend}"
 }
 
 function _hi_run_runner() {
   local table="$1" line
   shift
   local -a entries=()
+  # Fixtures are written "<name>:<path>" - the group is what the real table
+  # carries for CI's sake and no case here is about, so a two-field row gets
+  # the default one rather than every call site restating it.
   while IFS= read -r line; do
-    [ -n "$line" ] && entries+=("$line")
+    [ -n "$line" ] || continue
+    case "$line" in
+    *:*:*) entries+=("$line") ;;
+    *) entries+=("fast:$line") ;;
+    esac
   done <<<"$table"
 
   _HI_RUN_EXIT=0
+  # The environment is scrubbed so a fixture run behaves the same under the
+  # real CI (which exports GITHUB_ACTIONS) as locally; a case that *wants* one
+  # of those modes sets it back via _HI_RUN_WITH="VAR=VALUE" on the call.
+  # (No comments with apostrophes inside the $( ) below: bash 3.2 scans a
+  # command substitution with a dumb quote matcher and reads one as an
+  # unterminated string. GLOSSARY-worthy, learned from the macOS CI job.)
+  # shellcheck disable=SC2163 # the var=value pair is chosen by each caller
   _HI_RUN_OUT="$(
+    unset GITHUB_ACTIONS _HI_VERBOSE
+    [ -n "${_HI_RUN_WITH:-}" ] && export "${_HI_RUN_WITH?}"
     _HI_TESTS=("${entries[@]}")
     _HI_TESTS_DIR="$_HI_FIXTURES"
     export _HI_TESTS_DIR
@@ -46,11 +85,8 @@ function test_runs_only_the_named_suites() {
 }
 
 function test_selecting_several_suites_keeps_table_order() {
-  local first second
   _hi_run_runner $'one:green.sh\ntwo:green.sh\nthree:green.sh' three one
-  first="$(printf '%s\n' "$_HI_RUN_OUT" | grep -n "Running one" | head -1 | cut -d: -f1)"
-  second="$(printf '%s\n' "$_HI_RUN_OUT" | grep -n "Running three" | head -1 | cut -d: -f1)"
-  [ -n "$first" ] && [ -n "$second" ] && [ "$first" -lt "$second" ]
+  _hi_before "$_HI_RUN_OUT" "Running one" "Running three"
 }
 
 function test_unknown_suite_name_is_an_error() {
@@ -65,7 +101,7 @@ function test_unknown_suite_name_lists_the_known_ones() {
 
 function test_all_passing_exits_zero_with_a_green_summary() {
   _hi_run_runner $'a:green.sh\nb:green.sh'
-  [ "$_HI_RUN_EXIT" -eq 0 ] && [[ "$_HI_RUN_OUT" == *"All 2 test suites passed"* ]]
+  [ "$_HI_RUN_EXIT" -eq 0 ] && [[ "$_HI_RUN_OUT" == *"2/2 test suites passed"* ]]
 }
 
 function test_a_failing_suite_is_reported_with_its_exit_code() {
@@ -80,7 +116,9 @@ function test_runner_exits_with_the_failed_suite_count() {
 
 function test_a_failure_does_not_stop_later_suites() {
   _hi_run_runner $'a:red.sh\nb:green.sh'
-  [[ "$_HI_RUN_OUT" == *"ran:red"* && "$_HI_RUN_OUT" == *"ran:green"* ]]
+  # the passing suite's body is collapsed, so its status line is the evidence
+  [[ "$_HI_RUN_OUT" == *"ran:red"* ]] &&
+    printf '%s\n' "$_HI_RUN_OUT" | grep -qE 'b: PASS \('
 }
 
 function test_failure_summary_counts_failed_over_total() {
@@ -100,7 +138,7 @@ function test_a_missing_script_counts_as_a_failed_suite() {
 
 function test_a_missing_script_does_not_stop_the_run() {
   _hi_run_runner $'gone:not-a-real-fixture.sh\nok:green.sh'
-  [[ "$_HI_RUN_OUT" == *"ran:green"* ]]
+  printf '%s\n' "$_HI_RUN_OUT" | grep -qE 'ok: PASS \('
 }
 
 function test_summary_lists_every_suite_with_a_duration() {
@@ -110,46 +148,317 @@ function test_summary_lists_every_suite_with_a_duration() {
     printf '%s\n' "$_HI_RUN_OUT" | grep -qE 'beta .*FAILED \(3\)'
 }
 
+# The summary rows carry color, so every measurement below strips the escapes
+# first and then reads the row whose name cell is $1 - "SUITE" for the header
+# and "TOTAL" for the totals row, both of which sit in the same column.
+function _hi_summary_field() {
+  printf '%s\n' "$_HI_RUN_OUT" | sed 's/\x1b\[[0-9;]*m//g' |
+    awk -v n="$1" -v what="$2" '$1 == "|" && $2 == n {
+      print (what == "len" ? length($0) : index($0, "PASS")); exit
+    }'
+}
+
 function test_summary_pads_names_to_the_widest() {
-  local short_line
+  local short long
   _hi_run_runner $'a:green.sh\nlongername:green.sh'
-  short_line="$(printf '%s\n' "$_HI_RUN_OUT" | grep -E '^\s*\S*\s*\| a ' | head -1)"
-  # "a" is padded out to "longername"'s width, so PASS starts at the same
-  # column on both rows
-  [[ "$short_line" == *"a           PASS"* ]]
+  # a short name is padded out to the column width, so the STATUS cell starts
+  # at the same offset on every row
+  short="$(_hi_summary_field a col)"
+  long="$(_hi_summary_field longername col)"
+  [ -n "$short" ] && [ "$short" != 0 ] && [ "$short" = "$long" ]
 }
 
-function test_each_suites_own_output_still_streams() {
-  _hi_run_runner $'a:green.sh'
-  [[ "$_HI_RUN_OUT" == *"ran:green"* ]]
-}
-
-function test_shipped_table_still_has_every_suite_name() {
-  local name out
-  out="$("$_HI_TEST_RUN" definitely-not-a-suite 2>&1)" || true
-  for name in aliases alias_fallthrough shellcheck install uninstall check header shared git_prompt \
-    targets load test_lib test_runner ssh ssh_disconnect docker podman nomad kube; do
-    [[ "$out" == *"$name"* ]] || {
-      _hi_cecho " | missing from the table: $name" "$RED"
+# the table is sized like every other banner hi prints - see common/core.sh's
+# _HI_MAX_WIDTH, which the _hi_h1 rules above and below the table already use
+function test_summary_rows_span_hi_max_width() {
+  local row
+  export _HI_MAX_WIDTH=72
+  _hi_run_runner $'a:green.sh\nlongername:green.sh'
+  unset _HI_MAX_WIDTH
+  for row in SUITE a longername TOTAL; do
+    [ "$(_hi_summary_field "$row" len)" = 72 ] || {
+      _hi_cecho " | row '$row' is $(_hi_summary_field "$row" len) wide, expected 72" "$RED"
       return 1
     }
   done
 }
 
-function test_every_shipped_suite_script_exists_and_is_executable() {
-  local entry path known
-  local -a entries=() names=()
-  mapfile -t entries < <(grep -oE '^[[:space:]]*"[^":]+:[^"]+\.sh"$' "$_HI_TEST_RUN" | tr -d '" ')
-  known="$("$_HI_TEST_RUN" definitely-not-a-suite 2>&1)" || true
-  read -r -a names <<<"$(sed 's/.*(known: //; s/).*//' <<<"$known")"
+function test_summary_tracks_a_wider_hi_max_width() {
+  export _HI_MAX_WIDTH=110
+  _hi_run_runner $'a:green.sh'
+  unset _HI_MAX_WIDTH
+  [ "$(_hi_summary_field TOTAL len)" = 110 ]
+}
 
-  if [ "${#entries[@]}" -eq 0 ] || [ "${#entries[@]}" -ne "${#names[@]}" ]; then
-    _hi_cecho " | parsed ${#entries[@]} table entries out of $_HI_TEST_RUN, runner reports ${#names[@]} suites" "$RED"
+# too narrow to fit the names, the column keeps its natural size and the row
+# overflows - a truncated suite name would be worse than a long line
+function test_summary_narrow_width_does_not_truncate_names() {
+  export _HI_MAX_WIDTH=20
+  _hi_run_runner $'averylongsuitename:green.sh'
+  unset _HI_MAX_WIDTH
+  [ -n "$(_hi_summary_field averylongsuitename len)" ]
+}
+
+function test_summary_has_a_column_header() {
+  _hi_run_runner $'a:green.sh'
+  printf '%s\n' "$_HI_RUN_OUT" | grep -qE 'SUITE .*STATUS .*PASS .*FAIL .*SKIP .*TIME'
+}
+
+# a suite's yellow in-suite skips land in their own column, so a non-run can
+# never read as a pass even at the summary level
+function test_summary_shows_suite_skip_counts() {
+  _hi_counting_fixture skippy 6 1 2
+  _hi_run_runner $'skippy:skippy.sh'
+  printf '%s\n' "$_HI_RUN_OUT" | grep -qE 'skippy +FAILED \(1\) +5 +1 +2 '
+}
+
+function test_summary_totals_sum_skip_counts() {
+  _hi_counting_fixture skippy2 6 0 2
+  _hi_counting_fixture skippy3 4 0 1
+  _hi_run_runner $'skippy2:skippy2.sh\nskippy3:skippy3.sh'
+  printf '%s\n' "$_HI_RUN_OUT" | grep -qE 'TOTAL +2 suite\(s\) +10 +0 +3 '
+}
+
+# 7 cases, 2 of them failing, must render as 5 passed / 2 failed
+function test_summary_shows_each_suites_case_counts() {
+  _hi_counting_fixture counted 7 2
+  _hi_run_runner $'counted:counted.sh'
+  printf '%s\n' "$_HI_RUN_OUT" | grep -qE 'counted .*FAILED \(2\) +5 +2 '
+}
+
+# a suite that never reported (no _hi_suite_end - a backend skip, or a bare
+# script) must read as "-", not as a silent 0
+function test_summary_shows_dashes_when_no_counts_were_reported() {
+  _hi_run_runner $'a:green.sh'
+  printf '%s\n' "$_HI_RUN_OUT" | grep -qE 'a +PASS +- +- '
+}
+
+# the totals row sums subtests across suites: (6-1) + (4-0) passed, 1 + 0 failed
+function test_summary_totals_sum_every_suites_cases() {
+  _hi_counting_fixture six 6 1
+  _hi_counting_fixture four 4 0
+  _hi_run_runner $'six:six.sh\nfour:four.sh'
+  printf '%s\n' "$_HI_RUN_OUT" | grep -qE 'TOTAL +2 suite\(s\) +9 +1 '
+}
+
+# suites that reported nothing must not drag the totals to "-" or crash the sum
+function test_summary_totals_ignore_suites_without_counts() {
+  _hi_counting_fixture three 3 0
+  _hi_run_runner $'three:three.sh\nplain:green.sh'
+  printf '%s\n' "$_HI_RUN_OUT" | grep -qE 'TOTAL +2 suite\(s\) +3 +0 '
+}
+
+# The honest half of the summary: a suite that ran nothing exits 0, so
+# without a status of its own it would render as a green PASS and a run could
+# report every suite passing while several never executed a case.
+function test_a_skipping_suite_is_reported_as_skipped() {
+  _hi_skipping_fixture stood_down "no docker"
+  _hi_run_runner $'stood_down:stood_down.sh'
+  printf '%s\n' "$_HI_RUN_OUT" | grep -qE 'stood_down +SKIPPED'
+}
+
+function test_a_skipping_suite_is_not_a_failure() {
+  _hi_skipping_fixture stood_down2
+  _hi_run_runner $'stood_down2:stood_down2.sh'
+  [ "$_HI_RUN_EXIT" -eq 0 ]
+}
+
+function test_a_skipping_suite_is_not_counted_as_passed() {
+  _hi_skipping_fixture stood_down3
+  _hi_run_runner $'stood_down3:stood_down3.sh\nok:green.sh'
+  [[ "$_HI_RUN_OUT" == *"1/2 test suites passed"* ]] && [[ "$_HI_RUN_OUT" == *"1 skipped"* ]]
+}
+
+# --require-run is what CI's e2e jobs pass: the fixture that passes above
+# has to fail under it
+function test_require_run_fails_when_a_suite_skips() {
+  _hi_skipping_fixture stood_down5
+  _hi_run_runner $'stood_down5:stood_down5.sh\nok:green.sh' --require-run
+  [ "$_HI_RUN_EXIT" -eq 1 ] && [[ "$_HI_RUN_OUT" == *"--require-run"* ]]
+}
+
+function test_require_run_passes_when_nothing_skips() {
+  _hi_run_runner $'a:green.sh\nb:green.sh' --require-run
+  [ "$_HI_RUN_EXIT" -eq 0 ]
+}
+
+function test_require_run_adds_skips_to_the_failure_exit_code() {
+  _hi_skipping_fixture stood_down6
+  _hi_run_runner $'stood_down6:stood_down6.sh\nbad:red.sh' --require-run
+  [ "$_HI_RUN_EXIT" -eq 2 ]
+}
+
+function test_require_run_is_listed_in_help() {
+  "$_HI_TEST_RUN" --help | grep -q -- '--require-run'
+}
+
+# a skip contributes no cases, so it must not add a 0 to the totals either
+function test_a_skipping_suite_contributes_no_cases() {
+  _hi_counting_fixture five 5 0
+  _hi_skipping_fixture stood_down4
+  _hi_run_runner $'five:five.sh\nstood_down4:stood_down4.sh'
+  printf '%s\n' "$_HI_RUN_OUT" | grep -qE 'TOTAL +2 suite\(s\) +5 +0 ' &&
+    printf '%s\n' "$_HI_RUN_OUT" | grep -qE 'stood_down4 +SKIPPED +- +- '
+}
+
+# a passing suite's transcript collapses to one status line...
+function test_passing_suite_output_is_collapsed() {
+  _hi_run_runner $'a:green.sh'
+  [[ "$_HI_RUN_OUT" != *"ran:green"* ]] &&
+    printf '%s\n' "$_HI_RUN_OUT" | grep -qE 'a: PASS \('
+}
+
+# ...a failing suite's replays in full, so its context is never the thing lost
+function test_failing_suite_output_replays() {
+  _hi_run_runner $'a:red.sh'
+  [[ "$_HI_RUN_OUT" == *"ran:red"* ]]
+}
+
+# ...and _HI_VERBOSE=1 streams everything, the pre-collapse behavior
+function test_verbose_streams_passing_output() {
+  _HI_RUN_WITH="_HI_VERBOSE=1" _hi_run_runner $'a:green.sh'
+  [[ "$_HI_RUN_OUT" == *"ran:green"* ]]
+}
+
+# under GitHub Actions a passing transcript is kept, folded into a group...
+function test_ci_folds_passing_output_into_a_group() {
+  _HI_RUN_WITH="GITHUB_ACTIONS=1" _hi_run_runner $'a:green.sh'
+  [[ "$_HI_RUN_OUT" == *"::group::a"* && "$_HI_RUN_OUT" == *"ran:green"* &&
+    "$_HI_RUN_OUT" == *"::endgroup::"* ]]
+}
+
+# ...while a failing suite prints unfolded and annotates every failing case
+function test_ci_annotates_failures_unfolded() {
+  _HI_RUN_WITH="GITHUB_ACTIONS=1" _hi_run_runner $'a:red.sh'
+  [[ "$_HI_RUN_OUT" == *"ran:red"* && "$_HI_RUN_OUT" != *"::group::a"* &&
+    "$_HI_RUN_OUT" == *"::error title=test failure::"* ]]
+}
+
+# the recap under the summary: a suite that noted its failing cases gets them
+# listed by name, one that failed silently still gets one line
+function test_failing_cases_are_recapped_under_the_summary() {
+  {
+    printf '#!/bin/bash\nprintf "ran:noted\\n"\n'
+    # shellcheck disable=SC2016 # $_HI_FAILS_FILE resolves when the fixture runs
+    printf 'printf "%%s\\n" "case-x" >>"$_HI_FAILS_FILE"\n'
+    printf 'exit 1\n'
+  } >"$_HI_FIXTURES/noted.sh"
+  chmod +x "$_HI_FIXTURES/noted.sh"
+  _hi_run_runner $'noted:noted.sh\nquiet:red.sh'
+  [[ "$_HI_RUN_OUT" == *"Failing cases"* &&
+    "$_HI_RUN_OUT" == *"noted: case-x"* &&
+    "$_HI_RUN_OUT" == *"quiet: suite exited 3"* ]]
+}
+
+function test_a_green_run_has_no_recap() {
+  _hi_run_runner $'a:green.sh'
+  [[ "$_HI_RUN_OUT" != *"Failing cases"* ]]
+}
+
+# The shipped table, straight from --list: "<group> <name>" per suite. This
+# used to be a hardcoded name list here plus a `sed` over the runner's own
+# error message - parsing a UI string as an API. The hardcoded copy had already
+# drifted: paths, color_preview and kube were in the table and not in the list,
+# so the test meant to catch drift was silently ignoring three suites.
+function _hi_runner_list() {
+  "$_HI_TEST_RUN" --list 2>/dev/null
+}
+
+function test_shipped_table_lists_a_group_and_name_per_suite() {
+  local group name count=0
+  while read -r group name; do
+    [ -n "$group" ] && [ -n "$name" ] || {
+      _hi_cecho " | malformed --list row: $group $name" "$RED"
+      return 1
+    }
+    count=$((count + 1))
+  done < <(_hi_runner_list)
+  [ "$count" -gt 0 ] || {
+    _hi_cecho " | --list returned nothing" "$RED"
+    return 1
+  }
+}
+
+# --list-paths is --list plus the suite's absolute path, for tests/coverage.sh,
+# which has to launch each suite script itself. It is a separate flag rather
+# than a third column on --list because every --list consumer reads rows with
+# `read -r group name` - two of them in this file - where a third field would
+# land silently inside $name.
+function test_list_paths_adds_a_readable_path_per_suite() {
+  local group name path count=0
+  while read -r group name path; do
+    [ -n "$path" ] && [ -f "$path" ] || {
+      _hi_cecho " | --list-paths row has no readable path: $group $name $path" "$RED"
+      return 1
+    }
+    count=$((count + 1))
+  done < <("$_HI_TEST_RUN" --list-paths 2>/dev/null)
+  [ "$count" -gt 0 ]
+}
+
+# the two listings have to describe the same table, or coverage.sh and CI are
+# reading different things
+function test_list_paths_matches_list() {
+  [ "$("$_HI_TEST_RUN" --list-paths 2>/dev/null | awk '{print $1, $2}')" = \
+    "$("$_HI_TEST_RUN" --list 2>/dev/null)" ]
+}
+
+# Every suite has to be in a group CI actually runs, or it never runs on a push
+# and nothing says so - which is what happened to the `hi` suite. CI invokes
+# groups by name now (see ci.yml's `--group fast`/`e2e`/`backends`), so this
+# checks the workflow runs every group the table uses rather than every suite.
+function test_ci_runs_every_group_in_the_table() {
+  local workflow="$_HI_ROOT/.github/workflows/ci.yml" group name missing=""
+  local -a groups=()
+  [ -f "$workflow" ] || return 0 # a shipped tree has no .github
+  while read -r group name; do
+    [[ " ${groups[*]} " == *" $group "* ]] || groups+=("$group")
+  done < <(_hi_runner_list)
+  [ "${#groups[@]}" -gt 0 ] || {
+    _hi_cecho " | couldn't read the suite table back out of the runner" "$RED"
+    return 1
+  }
+  for group in "${groups[@]}"; do
+    grep -qF -- "--group $group" "$workflow" || missing+=" $group"
+  done
+  [ -z "$missing" ] || {
+    _hi_cecho " | groups in the runner but not run by CI:$missing" "$RED"
+    return 1
+  }
+}
+
+# Each suite selectable on its own, and every group non-empty: together these
+# are what makes `--group` a safe thing for CI to depend on.
+# --group is what ci.yml invokes, so every group the table uses has to select
+# at least one suite - and only suites of that group
+function test_every_group_selects_only_its_own_suites() {
+  local group rows
+  while read -r group; do
+    rows="$("$_HI_TEST_RUN" --group "$group" --list 2>/dev/null)"
+    [ -n "$rows" ] || {
+      _hi_cecho " | group selects nothing: $group" "$RED"
+      return 1
+    }
+    [ -z "$(printf '%s\n' "$rows" | awk -v g="$group" '$1 != g')" ] || {
+      _hi_cecho " | --group $group returned another group's suites" "$RED"
+      return 1
+    }
+  done < <(_hi_runner_list | awk '!seen[$1]++ {print $1}')
+}
+
+function test_every_shipped_suite_script_exists_and_is_executable() {
+  local entry path count=0
+  local -a entries=()
+  _hi_read_lines entries < <(grep -oE '^[[:space:]]*"[^":]+:[^":]+:[^"]+\.sh"$' "$_HI_TEST_RUN" | tr -d '" ')
+  while read -r _ _; do count=$((count + 1)); done < <(_hi_runner_list)
+
+  if [ "${#entries[@]}" -eq 0 ] || [ "${#entries[@]}" -ne "$count" ]; then
+    _hi_cecho " | parsed ${#entries[@]} table entries out of $_HI_TEST_RUN, runner reports $count suites" "$RED"
     return 1
   fi
 
   for entry in "${entries[@]}"; do
-    path="$_HI_ROOT/tests/${entry#*:}"
+    path="$_HI_ROOT/tests/${entry##*:}"
     [ -x "$path" ] || {
       _hi_cecho " | not executable: $path" "$RED"
       return 1
@@ -193,11 +502,45 @@ function run_runner_tests() {
   _hi_h2 "Testing: summary table"
   _hi_check "Lists every suite with a duration" test_summary_lists_every_suite_with_a_duration
   _hi_check "Pads names to the widest" test_summary_pads_names_to_the_widest
-  _hi_check "Each suite's own output still streams" test_each_suites_own_output_still_streams
+  _hi_check "Rows span _HI_MAX_WIDTH" test_summary_rows_span_hi_max_width
+  _hi_check "Tracks a wider _HI_MAX_WIDTH" test_summary_tracks_a_wider_hi_max_width
+  _hi_check "A narrow width doesn't truncate names" test_summary_narrow_width_does_not_truncate_names
+
+  _hi_h2 "Testing: collapsed output and the recap"
+  _hi_check "A passing suite's output is collapsed" test_passing_suite_output_is_collapsed
+  _hi_check "A failing suite's output replays" test_failing_suite_output_replays
+  _hi_check "_HI_VERBOSE=1 streams passing output" test_verbose_streams_passing_output
+  _hi_check "CI folds passing output into a ::group::" test_ci_folds_passing_output_into_a_group
+  _hi_check "CI annotates failures, unfolded" test_ci_annotates_failures_unfolded
+  _hi_check "Failing cases recapped under the summary" test_failing_cases_are_recapped_under_the_summary
+  _hi_check "A green run has no recap" test_a_green_run_has_no_recap
+
+  _hi_h2 "Testing: summary case counts"
+  _hi_check "Has a column header" test_summary_has_a_column_header
+  _hi_check "Shows each suite's pass/fail counts" test_summary_shows_each_suites_case_counts
+  _hi_check "Shows each suite's skip count" test_summary_shows_suite_skip_counts
+  _hi_check "Shows - when a suite reported no counts" test_summary_shows_dashes_when_no_counts_were_reported
+  _hi_check "Totals sum every suite's cases" test_summary_totals_sum_every_suites_cases
+  _hi_check "Totals sum the skip counts" test_summary_totals_sum_skip_counts
+  _hi_check "Totals ignore suites without counts" test_summary_totals_ignore_suites_without_counts
+
+  _hi_h2 "Testing: skipped suites"
+  _hi_check "Reported as SKIPPED, not PASS" test_a_skipping_suite_is_reported_as_skipped
+  _hi_check "Not a failure" test_a_skipping_suite_is_not_a_failure
+  _hi_check "Not counted as passed" test_a_skipping_suite_is_not_counted_as_passed
+  _hi_check "Contributes no cases" test_a_skipping_suite_contributes_no_cases
+  _hi_check "--require-run turns a skip into a failure" test_require_run_fails_when_a_suite_skips
+  _hi_check "--require-run passes when nothing skips" test_require_run_passes_when_nothing_skips
+  _hi_check "--require-run adds skips to the exit code" test_require_run_adds_skips_to_the_failure_exit_code
+  _hi_check "--require-run appears in --help" test_require_run_is_listed_in_help
 
   _hi_h2 "Testing: the shipped table"
-  _hi_check "Still has every CI and backend suite name" test_shipped_table_still_has_every_suite_name
+  _hi_check "Lists a group and name per suite" test_shipped_table_lists_a_group_and_name_per_suite
+  _hi_check "--list-paths adds a readable path" test_list_paths_adds_a_readable_path_per_suite
+  _hi_check "--list-paths agrees with --list" test_list_paths_matches_list
   _hi_check "Every shipped path exists and is executable" test_every_shipped_suite_script_exists_and_is_executable
+  _hi_check "CI runs every group in the table" test_ci_runs_every_group_in_the_table
+  _hi_check "Each group selects only its own" test_every_group_selects_only_its_own_suites
 
   _hi_suite_end "test_runner.sh"
 }

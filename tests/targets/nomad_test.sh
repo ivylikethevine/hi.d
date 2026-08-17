@@ -17,8 +17,8 @@
 # shellcheck disable=SC2329
 set -euo pipefail
 
-# shellcheck source=../../common/bootstrap.sh
-source "${_HI_HOME:-$HOME}/hi.d/common/bootstrap.sh"
+# shellcheck source=../../common/core.sh
+source "${_HI_HOME:-$HOME}/hi.d/common/core.sh"
 # shellcheck source=../test_lib.sh
 source "$_HI_TEST_LIB"
 
@@ -27,7 +27,6 @@ declare -a _HI_JOBS=()
 
 function _hi_nomad_cleanup() {
   local j
-  export NOMAD_ADDR="http://127.0.0.1:4646"
   for j in "${_HI_JOBS[@]:-}"; do
     [ -n "$j" ] && nomad job stop -purge "$j" >/dev/null 2>&1 || true
   done
@@ -37,7 +36,7 @@ function _hi_nomad_cleanup() {
   fi
 }
 
-_HI_MARKER="HI_NOMAD_TEST_OK"
+_HI_TEST_MARKER="HI_NOMAD_TEST_OK"
 
 # first running allocation ID for a job, once it has one
 function _hi_first_running_alloc() {
@@ -95,7 +94,7 @@ EOF
   fi
   _hi_cecho " | Allocation: $alloc"
 
-  _hi_exec_case "$label" "nomad path" "$_HI_MARKER" "$timeout_s" "$alloc" "$cmd" _hi_dump_alloc_status && ok=1
+  _hi_exec_case "$label" "nomad path" "$_HI_TEST_MARKER" "$timeout_s" "$alloc" "$cmd" _hi_dump_alloc_status && ok=1
   nomad job stop -purge "$job" >/dev/null 2>&1
   [ "$ok" -eq 1 ]
 }
@@ -107,16 +106,34 @@ function run_nomad_test() {
 
   _hi_h1 "Testing hi's nomad path against a throwaway dev agent"
 
-  _hi_h2 "Starting nomad agent -dev"
+  # An agent on the well-known 4646 collides with any real nomad on this
+  # machine, and its cleanup would then purge that agent's jobs rather than
+  # its own. Take three consecutive free ports instead - dev mode needs http,
+  # rpc and serf - the same way the ssh fixtures let docker pick an ephemeral
+  # one. NOMAD_ADDR is exported so every nomad call in this suite, hi.sh's
+  # backend probe included, reaches this agent and not another.
+  local port_base
+  port_base="$(_hi_free_port_base 3)" ||
+    _hi_stand_down "no free ports" "couldn't find three free ports for the dev agent, skipping"
+  cat >"$_HI_WORKDIR/agent.hcl" <<EOF
+ports {
+  http = $port_base
+  rpc  = $((port_base + 1))
+  serf = $((port_base + 2))
+}
+EOF
+
+  _hi_h2 "Starting nomad agent -dev on port $port_base"
   nomad agent -dev -data-dir="$_HI_WORKDIR/data" -log-level=WARN \
+    -config="$_HI_WORKDIR/agent.hcl" \
     >"$_HI_WORKDIR/agent.log" 2>&1 &
   _HI_NOMAD_PID=$!
-  export NOMAD_ADDR="http://127.0.0.1:4646"
+  export NOMAD_ADDR="http://127.0.0.1:$port_base"
 
   function _hi_nomad_alive() { kill -0 "$_HI_NOMAD_PID" 2>/dev/null; }
   if ! _hi_poll_bool -a _hi_nomad_alive 60 0.5 nomad node status; then
-    _hi_cecho "Nomad dev agent never came up (see $_HI_WORKDIR/agent.log), skipping" "$YELLOW"
-    exit 0
+    _hi_stand_down "nomad dev agent never came up" \
+      "Nomad dev agent never came up (see $_HI_WORKDIR/agent.log), skipping"
   fi
   _hi_cecho " | Dev agent up: $NOMAD_ADDR" "$GREEN"
 
@@ -124,12 +141,12 @@ function run_nomad_test() {
 
   _hi_suite_begin
 
-  _hi_case _hi_run_case bash debian:bookworm-slim "$(_hi_probe_cmd "$_HI_MARKER" bash)"
-  _hi_case _hi_run_case sh alpine:3.20 "$(_hi_probe_cmd "$_HI_MARKER" fallback)"
+  _hi_case _hi_run_case bash debian:bookworm-slim "$(_hi_probe_cmd "$_HI_TEST_MARKER" bash)"
+  _hi_case _hi_run_case sh alpine:3.20 "$(_hi_probe_cmd "$_HI_TEST_MARKER" fallback)"
 
   _hi_suite_end "" \
-      "hi's nomad path survived every driver shape tested ($_HI_TOTAL cases)" \
-      "hi's nomad path FAILED: $_HI_FAILED/$_HI_TOTAL cases"
+    "hi's nomad path survived every driver shape tested ($_HI_TOTAL cases)" \
+    "hi's nomad path FAILED: $_HI_FAILED/$_HI_TOTAL cases"
 }
 
 run_nomad_test

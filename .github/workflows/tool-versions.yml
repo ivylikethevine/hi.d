@@ -1,0 +1,26 @@
+name: Tool versions
+
+# Weekly drift check over the curl-installed tools inside the setup-*
+# composite actions - the one class of pin dependabot cannot see (its own
+# config says so). A red run with ::warning annotations is the signal; the
+# bump itself stays a one-line edit to the action's `version:` default.
+on:
+  schedule:
+    - cron: "23 7 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: composite-action tool pins vs upstream
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Compare pinned defaults to upstream releases
+        run: .github/scripts/check_tool_versions.sh

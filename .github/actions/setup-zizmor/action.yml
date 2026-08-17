@@ -1,0 +1,28 @@
+name: Setup zizmor
+# a single upstream Rust binary, pinned the same way shellcheck is - bump the
+# default here and every consumer follows
+description: Install a pinned upstream zizmor binary, with caching
+
+inputs:
+  version:
+    description: zizmor version to install
+    required: false
+    default: "1.29.0"
+
+runs:
+  using: composite
+  steps:
+    - name: Cache zizmor
+      id: zizmor-cache
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: /usr/local/bin/zizmor
+        key: zizmor-${{ inputs.version }}-linux-x86_64
+
+    - name: Install zizmor
+      if: steps.zizmor-cache.outputs.cache-hit != 'true'
+      shell: bash
+      env:
+        ZIZMOR_VERSION: ${{ inputs.version }}
+      # body in install.sh so the lint suite reads it (see setup-shellcheck)
+      run: '"$GITHUB_ACTION_PATH/install.sh"'

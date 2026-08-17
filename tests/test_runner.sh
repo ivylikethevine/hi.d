@@ -7,50 +7,193 @@
 #   name ...    - run only the named suite(s), e.g. `tests/test_runner.sh docker kube`
 set -euo pipefail
 
-# shellcheck source=../common/bootstrap.sh
-source "${_HI_HOME:-$HOME}/hi.d/common/bootstrap.sh"
+# Default _HI_HOME to this checkout's parent (an explicit env var still wins),
+# so a fresh clone and CI can run this with no setup - and no run ever falls
+# back to ~/hi.d by accident. Exported, so every child suite inherits it.
+if [ -z "${_HI_HOME:-}" ]; then
+  _HI_HOME="$(cd -P "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+fi
+export _HI_HOME
+# shellcheck source=../common/core.sh
+source "$_HI_HOME/hi.d/common/core.sh"
 
-# name:path (relative to this directory), in the order they run - fast local
-# checks first, the docker/kind/nomad-backed end-to-end tests after.
+# group:name:path (relative to this directory), in the order they run - fast
+# local checks first, the docker/kind/nomad-backed end-to-end tests after.
+#
+# The group is here rather than in .github/workflows/ci.yml because CI used to
+# spell out which suites were fast and which were e2e, and a suite added to
+# this table but missed there silently never ran on a push (which is what
+# happened to the `hi` suite). `--group fast` is now the only list, so the two
+# cannot disagree.
 if ! declare -p _HI_TESTS >/dev/null 2>&1; then
   _HI_TESTS=(
-    "aliases:compat/alias_test.sh"
-    "alias_fallthrough:compat/alias_fallthrough_test.sh"
-    "shellcheck:compat/shellcheck_test.sh"
-    "install:scripts/install_test.sh"
-    "uninstall:scripts/uninstall_test.sh"
-    "check:compat/check_test.sh"
-    "header:compat/header_test.sh"
-    "shared:compat/shared_test.sh"
-    "git_prompt:compat/git_prompt_test.sh"
-    "targets:compat/targets_test.sh"
-    "load:compat/load_test.sh"
-    "test_lib:harness/test_lib_test.sh"
-    "test_runner:harness/runner_test.sh"
-    "ssh:targets/ssh_test.sh"
-    "ssh_disconnect:targets/ssh_disconnect_test.sh"
-    "docker:targets/docker_test.sh"
-    "podman:targets/podman_test.sh"
-    "nomad:targets/nomad_test.sh"
-    "kube:targets/kube_test.sh"
+    "fast:aliases:shells/alias_test.sh"
+    "fast:alias_fallthrough:shells/alias_fallthrough_test.sh"
+    "fast:osc52:shells/osc52_test.sh"
+    "fast:tmux:shells/tmux_test.sh"
+    "fast:shellcheck:shells/shellcheck_test.sh"
+    "fast:install:scripts/install_test.sh"
+    "fast:packaging:scripts/packaging_test.sh"
+    "fast:hi:shells/hi_test.sh"
+    "fast:header:common/header_test.sh"
+    "fast:core:common/core_test.sh"
+    "fast:git_prompt:common/git_prompt_test.sh"
+    "fast:targets:common/targets_test.sh"
+    "fast:paths:common/paths_test.sh"
+    "fast:color_preview:scripts/color_preview_test.sh"
+    "fast:doctor:scripts/doctor_test.sh"
+    "fast:load:shells/load_test.sh"
+    "fast:rc:shells/rc_test.sh"
+    "fast:test_lib:harness/lib_test.sh"
+    "fast:test_runner:harness/runner_test.sh"
+    "bench:bench:bench/bench_test.sh"
+    "e2e:ssh:targets/ssh_test.sh"
+    "e2e:ssh_disconnect:targets/ssh_disconnect_test.sh"
+    "e2e:docker:targets/docker_test.sh"
+    "e2e:framework:targets/framework_test.sh"
+    "backends:podman:targets/podman_test.sh"
+    "backends:nomad:targets/nomad_test.sh"
+    "backends:kube:targets/kube_test.sh"
   )
 fi
 
+# <group>:<name>:<path> -> the parts every consumer below wants. Kept as
+# accessors so nothing else has to know the field order.
+function _hi_test_group() { printf '%s' "${1%%:*}"; }
+function _hi_test_name() {
+  local rest="${1#*:}"
+  printf '%s' "${rest%%:*}"
+}
+function _hi_test_path() { printf '%s' "${1##*:}"; }
+
+function _hi_test_names() {
+  local t
+  for t in "${_HI_TESTS[@]}"; do
+    _hi_test_name "$t"
+    printf ' '
+  done
+}
+
+function _hi_test_groups() {
+  local t
+  for t in "${_HI_TESTS[@]}"; do
+    _hi_test_group "$t"
+    printf '\n'
+  done | awk '!seen[$0]++' | tr '\n' ' '
+}
+
+# "  <group>  <name>" per suite, for --help
+function _hi_test_listing() {
+  local t
+  for t in "${_HI_TESTS[@]}"; do
+    printf '  %-10s %s\n' "$(_hi_test_group "$t")" "$(_hi_test_name "$t")"
+  done
+}
+
 _HI_TESTS_DIR="${_HI_TESTS_DIR:-$_HI_ROOT/tests}"
 
+# Checked before suite matching so `--help` can't be mistaken for a suite name
+# and rejected as unknown. The suite list comes from $_HI_TESTS rather than
+# being spelled out again, so it can't drift.
+# TODO: Add a --verbose flag
+_HI_GROUP=""
+_HI_LIST=0
+_HI_LIST_PATHS=0
+_HI_REQUIRE_RUN=0
+declare -a _HI_ARGS=()
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+  -h | --help)
+    cat <<EOF
+Usage: test_runner.sh [--group <group>] [suite ...]
+
+Runs every test suite, or just the named ones, timing each and printing a
+pass/fail summary table at the end. Exits with the number of failed suites.
+
+A suite that stands down because its backend isn't installed reports SKIPPED
+rather than PASS, so a green run can't overstate what actually ran.
+
+  suite ...        one or more of the names below (default: all of them)
+  --group <group>  every suite in one group: $(_hi_test_groups)
+  --list           print "<group> <name>" per suite and exit
+  --list-paths     the same, plus each suite's absolute path as a third column
+  --require-run    treat SKIPPED suites as failures - for CI runners where a
+                   skip means the runner is broken, not the backend optional
+  -h, --help       this text
+
+A passing suite's transcript is collapsed to one status line; failures and
+skips replay in full, and every failing case is repeated under the summary.
+Set _HI_VERBOSE=1 to stream every transcript live instead. Under GitHub
+Actions, passing transcripts fold into ::group:: blocks and failing cases
+are emitted as ::error annotations.
+
+Suites, in the order they run:
+$(_hi_test_listing)
+
+\$_HI_HOME defaults to this checkout's parent; set it to test another tree.
+EOF
+    exit 0
+    ;;
+  # handled after selection below, so `--group X --list` lists that group
+  --list) _HI_LIST=1 ;;
+  # a third column would land in $name for every `read -r group name` consumer
+  # (runner_test.sh has two), so the path gets its own flag rather than widening
+  # --list. tests/coverage.sh is the caller: it traces each suite script as the
+  # top-level process, which needs the path, not the name.
+  --list-paths)
+    _HI_LIST=1
+    _HI_LIST_PATHS=1
+    ;;
+  --require-run) _HI_REQUIRE_RUN=1 ;;
+  --group)
+    [ "$#" -ge 2 ] || {
+      _hi_cecho "test_runner.sh: --group needs a value" "$RED" >&2
+      exit 1
+    }
+    _HI_GROUP="$2"
+    shift
+    ;;
+  --group=*) _HI_GROUP="${1#--group=}" ;;
+  *) _HI_ARGS+=("$1") ;;
+  esac
+  shift
+done
+
 declare -a _HI_SELECTED=()
-if [ "$#" -eq 0 ]; then
+if [ -n "$_HI_GROUP" ]; then
+  for _hi_t in "${_HI_TESTS[@]}"; do
+    [ "$(_hi_test_group "$_hi_t")" = "$_HI_GROUP" ] && _HI_SELECTED+=("$_hi_t")
+  done
+  if [ "${#_HI_SELECTED[@]}" -eq 0 ]; then
+    _hi_cecho "no test group matches: $_HI_GROUP (known: $(_hi_test_groups))" "$RED"
+    exit 1
+  fi
+elif [ "${#_HI_ARGS[@]}" -eq 0 ]; then
   _HI_SELECTED=("${_HI_TESTS[@]}")
 else
   for _hi_t in "${_HI_TESTS[@]}"; do
-    for _hi_arg in "$@"; do
-      [ "${_hi_t%%:*}" = "$_hi_arg" ] && _HI_SELECTED+=("$_hi_t")
+    for _hi_arg in "${_HI_ARGS[@]}"; do
+      [ "$(_hi_test_name "$_hi_t")" = "$_hi_arg" ] && _HI_SELECTED+=("$_hi_t")
     done
   done
   if [ "${#_HI_SELECTED[@]}" -eq 0 ]; then
-    _hi_cecho "no test suite matches: $* (known: $(printf '%s ' "${_HI_TESTS[@]%%:*}"))" "$RED"
+    _hi_cecho "no test suite matches: ${_HI_ARGS[*]} (known: $(_hi_test_names))" "$RED"
     exit 1
   fi
+fi
+
+# "<group> <name>" per selected suite - the machine-readable view of the table,
+# which tests/harness/runner_test.sh reads instead of parsing an error message
+if [ "$_HI_LIST" = 1 ]; then
+  for _hi_t in "${_HI_SELECTED[@]}"; do
+    if [ "$_HI_LIST_PATHS" = 1 ]; then
+      printf '%s %s %s\n' "$(_hi_test_group "$_hi_t")" "$(_hi_test_name "$_hi_t")" \
+        "$_HI_HOME/hi.d/tests/$(_hi_test_path "$_hi_t")"
+    else
+      printf '%s %s\n' "$(_hi_test_group "$_hi_t")" "$(_hi_test_name "$_hi_t")"
+    fi
+  done
+  exit 0
 fi
 
 _hi_h1 "Running ${#_HI_SELECTED[@]} test suite(s)"
@@ -69,63 +212,213 @@ function _hi_restore_tty() {
   [ -n "$_HI_TTY_STATE" ] || return 0
   stty "$_HI_TTY_STATE" </dev/tty 2>/dev/null || true
 }
-trap _hi_restore_tty EXIT
 
-declare -a _HI_NAMES=() _HI_STATUSES=() _HI_DURATIONS=()
+# Each suite runs as its own process, so its case tally can't come back in a
+# variable - _hi_suite_end writes "<total> <failed>" here instead. Assigned
+# unconditionally (never defaulted from the environment) so that a runner
+# nested inside another run - which is exactly what harness/runner_test.sh
+# does - gets its own file and can't clobber its parent's.
+_HI_COUNTS_FILE="$(mktemp -t hi.counts.XXXXXX)"
+export _HI_COUNTS_FILE
+
+# The failing cases' labels ride the same per-suite channel (_hi_note_failure
+# appends, the runner truncates between suites), repeated under the summary so
+# finding what broke never means scrolling the whole transcript. The suite log
+# is where a suite's output lands when it is being collapsed - see the output
+# modes below.
+_HI_FAILS_FILE="$(mktemp -t hi.fails.XXXXXX)"
+export _HI_FAILS_FILE
+_HI_SUITE_LOG="$(mktemp -t hi.suitelog.XXXXXX)"
+
+# shellcheck disable=SC2064 # the paths are fixed by now; expand them here
+trap "_hi_restore_tty; rm -f '$_HI_COUNTS_FILE' '$_HI_FAILS_FILE' '$_HI_SUITE_LOG'" EXIT
+
+# Output modes. Default: a passing suite's transcript collapses to one status
+# line and the full text replays only on failure or skip, so a green run fits
+# on a screen. _HI_VERBOSE=1 streams everything live - the old behavior. Under
+# GitHub Actions a passing transcript is kept but folded into a ::group::
+# block (complete logs, bench numbers included, failures never the thing
+# folded), and every failing case gets an ::error annotation under the summary.
+_HI_VERBOSE="${_HI_VERBOSE:-0}"
+_HI_CI="${GITHUB_ACTIONS:-}"
+
+# One row per suite, tab-joined:
+# <name>\t<status>\t<pass>\t<fail>\t<skip>\t<duration>.
+# Six arrays appended in lockstep from two places meant a missed append in one
+# of them silently shifted every later row's data.
+declare -a _HI_ROWS=()
+declare -a _HI_FAIL_NOTES=()
 _HI_SUITE_FAILED=0
+_HI_SUITE_SKIPPED=0
+_HI_CASES_PASSED=0
+_HI_CASES_FAILED=0
+_HI_CASES_SKIPPED=0
 _HI_RUN_T0="$(_hi_now)"
 
 for _hi_t in "${_HI_SELECTED[@]}"; do
-  _hi_name="${_hi_t%%:*}"
-  _hi_path="$_HI_TESTS_DIR/${_hi_t#*:}"
+  _hi_name="$(_hi_test_name "$_hi_t")"
+  _hi_path="$_HI_TESTS_DIR/$(_hi_test_path "$_hi_t")"
 
   if [ ! -f "$_hi_path" ]; then
     _hi_cecho " | $_hi_name: script missing ($_hi_path), skipping" "$YELLOW"
-    _HI_NAMES+=("$_hi_name")
-    _HI_STATUSES+=("MISSING")
-    _HI_DURATIONS+=("-")
+    _HI_ROWS+=("$_hi_name"$'\t'MISSING$'\t'-$'\t'-$'\t'-$'\t'-)
+    _HI_FAIL_NOTES+=("$_hi_name: script missing ($_hi_path)")
     _HI_SUITE_FAILED=$((_HI_SUITE_FAILED + 1))
     continue
   fi
 
-  _hi_h2 "Running $_hi_name ($_hi_path)"
+  _hi_h2 "Running $_hi_name"
+  : >"$_HI_COUNTS_FILE"
+  : >"$_HI_FAILS_FILE"
   _hi_t0="$(_hi_now)"
-  if "$_hi_path"; then
-    _hi_code=0
+  if [ "$_HI_VERBOSE" = 1 ]; then
+    if "$_hi_path"; then _hi_code=0; else _hi_code=$?; fi
   else
-    _hi_code=$?
+    if "$_hi_path" >"$_HI_SUITE_LOG" 2>&1; then _hi_code=0; else _hi_code=$?; fi
   fi
   _hi_dur="$(_hi_elapsed "$_hi_t0" "$(_hi_now)")s"
   _hi_restore_tty
 
-  _HI_NAMES+=("$_hi_name")
-  _HI_DURATIONS+=("$_hi_dur")
-  if [ "$_hi_code" -eq 0 ]; then
-    _HI_STATUSES+=("PASS")
+  # empty unless the suite reached _hi_suite_end - a suite that reports its own
+  # way contributes no cases. A leading SKIP instead of a tally is _hi_require's
+  # doing: the suite stood down (no backend, no binary) without running a case,
+  # and exits 0 doing it, so only this tells the two apart from a real pass.
+  # The tally is "<total> <failed> [skipped]"; the SKIP reason is read whole
+  # rather than through the same fields, since it may contain spaces.
+  _hi_pass="-"
+  _hi_fail="-"
+  _hi_skipcnt="-"
+  _hi_skip=""
+  if [ -s "$_HI_COUNTS_FILE" ]; then
+    read -r _hi_cases _hi_rest <"$_HI_COUNTS_FILE"
+    if [ "$_hi_cases" = SKIP ]; then
+      _hi_skip="${_hi_rest:-skipped}"
+    else
+      read -r _hi_bad _hi_skipcnt <<<"$_hi_rest"
+      _hi_skipcnt="${_hi_skipcnt:-0}"
+      _hi_pass=$((_hi_cases - _hi_bad))
+      _hi_fail="$_hi_bad"
+      _HI_CASES_PASSED=$((_HI_CASES_PASSED + _hi_pass))
+      _HI_CASES_FAILED=$((_HI_CASES_FAILED + _hi_bad))
+      _HI_CASES_SKIPPED=$((_HI_CASES_SKIPPED + _hi_skipcnt))
+    fi
+  fi
+
+  if [ -n "$_hi_skip" ]; then
+    _hi_status="SKIPPED"
+    _HI_SUITE_SKIPPED=$((_HI_SUITE_SKIPPED + 1))
+  elif [ "$_hi_code" -eq 0 ]; then
+    _hi_status="PASS"
   else
-    _HI_STATUSES+=("FAILED ($_hi_code)")
+    _hi_status="FAILED ($_hi_code)"
     _HI_SUITE_FAILED=$((_HI_SUITE_FAILED + 1))
+  fi
+  _HI_ROWS+=("$_hi_name"$'\t'"$_hi_status"$'\t'"$_hi_pass"$'\t'"$_hi_fail"$'\t'"$_hi_skipcnt"$'\t'"$_hi_dur")
+
+  # collect the failing case labels the suite noted; a suite that failed
+  # without noting any still gets one line, so the recap can't be empty for a
+  # red run
+  if [ "$_hi_status" != PASS ] && [ "$_hi_status" != SKIPPED ]; then
+    if [ -s "$_HI_FAILS_FILE" ]; then
+      while IFS= read -r _hi_line; do
+        [ -n "$_hi_line" ] && _HI_FAIL_NOTES+=("$_hi_name: $_hi_line")
+      done <"$_HI_FAILS_FILE"
+    else
+      _HI_FAIL_NOTES+=("$_hi_name: suite exited $_hi_code with no per-case detail")
+    fi
+  fi
+
+  # collapsed mode: a passing transcript folds away (into a ::group:: on CI,
+  # dropped locally - the status line and summary carry the result); anything
+  # else replays in full, so failure context is never the thing collapsed
+  if [ "$_HI_VERBOSE" != 1 ]; then
+    if [ "$_hi_status" = PASS ]; then
+      if [ -n "$_HI_CI" ]; then
+        printf '::group::%s\n' "$_hi_name"
+        cat "$_HI_SUITE_LOG"
+        printf '::endgroup::\n'
+      fi
+    else
+      cat "$_HI_SUITE_LOG"
+    fi
+    _hi_cases_note=""
+    [ "$_hi_pass" != - ] && _hi_cases_note="$_hi_pass passed, "
+    [ "$_hi_skipcnt" != - ] && [ "$_hi_skipcnt" != 0 ] && _hi_cases_note="$_hi_cases_note$_hi_skipcnt skipped, "
+    case "$_hi_status" in
+    PASS) _hi_cecho " | $_hi_name: PASS ($_hi_cases_note$_hi_dur)" "$GREEN" ;;
+    SKIPPED) _hi_cecho " | $_hi_name: SKIPPED ($_hi_skip)" "$YELLOW" ;;
+    *) _hi_cecho " | $_hi_name: $_hi_status ($_hi_cases_note$_hi_dur)" "$RED" ;;
+    esac
   fi
 done
 
 _hi_h1 "Summary"
-_hi_width=0
-for _hi_name in "${_HI_NAMES[@]}"; do
+_hi_width=5 # "TOTAL" is the widest the name column can need on its own
+for _hi_row in "${_HI_ROWS[@]}"; do
+  _hi_name="${_hi_row%%$'\t'*}"
   ((${#_hi_name} > _hi_width)) && _hi_width=${#_hi_name}
 done
 
-for _hi_i in "${!_HI_NAMES[@]}"; do
-  _hi_color="$GREEN"
-  [ "${_HI_STATUSES[_hi_i]}" = PASS ] || _hi_color="$RED"
-  # shellcheck disable=SC2059 # _hi_width is a computed field-width, not user data
-  _hi_cecho "$(printf " | %-${_hi_width}s  %-14s  %s" "${_HI_NAMES[_hi_i]}" "${_HI_STATUSES[_hi_i]}" "${_HI_DURATIONS[_hi_i]}")" "$_hi_color"
+# Stretch the name column so a row spans exactly _HI_MAX_WIDTH, lining the
+# table up with the _hi_h1 rules above and below it. 55 is everything a row
+# spends outside that column: the " | " prefix (3), the five fixed columns
+# (14 + 6 + 6 + 6 + 10) and the two-space gap between each pair (10). A width
+# too narrow to fit the names leaves the column at its natural size and lets
+# the row overflow, rather than truncating a suite name into ambiguity.
+_HI_SUMMARY_FIXED=55
+_hi_avail=$((${_HI_MAX_WIDTH:-80} - _HI_SUMMARY_FIXED))
+((_hi_avail > _hi_width)) && _hi_width=$_hi_avail
+
+# one format for the header, every suite row, and the totals row, so the
+# columns can't drift apart; cases are right-aligned to read as numbers
+# shellcheck disable=SC2059 # _hi_width is a computed field-width, not user data
+function _hi_summary_row() {
+  printf " | %-${_hi_width}s  %-14s  %6s  %6s  %6s  %10s" "$1" "$2" "$3" "$4" "$5" "$6"
+}
+
+_hi_cecho "$(_hi_summary_row SUITE STATUS PASS FAIL SKIP TIME)" "$BRBLUE"
+
+for _hi_row in "${_HI_ROWS[@]}"; do
+  IFS=$'\t' read -r _hi_name _hi_status _hi_pass _hi_fail _hi_skipcnt _hi_dur <<<"$_hi_row"
+  case "$_hi_status" in
+  PASS) _hi_color="$GREEN" ;;
+  SKIPPED) _hi_color="$YELLOW" ;; # ran nothing: neither a pass nor a failure
+  *) _hi_color="$RED" ;;
+  esac
+  _hi_cecho "$(_hi_summary_row "$_hi_name" "$_hi_status" "$_hi_pass" "$_hi_fail" "$_hi_skipcnt" "$_hi_dur")" "$_hi_color"
 done
 
 _HI_TOTAL_DUR="$(_hi_elapsed "$_HI_RUN_T0" "$(_hi_now)")s"
+
+# totals row: suites across the status column, summed cases across the rest
+_hi_cecho "$(_hi_summary_row TOTAL "${#_HI_SELECTED[@]} suite(s)" \
+  "$_HI_CASES_PASSED" "$_HI_CASES_FAILED" "$_HI_CASES_SKIPPED" "$_HI_TOTAL_DUR")" "$BRBLUE"
+
+# every failing case again, in one place - the transcript above may be
+# thousands of lines and the table only says how many broke, not which
+if [ "${#_HI_FAIL_NOTES[@]}" -gt 0 ]; then
+  _hi_h2 "Failing cases" "$RED"
+  for _hi_note in "${_HI_FAIL_NOTES[@]}"; do
+    _hi_cecho " | $_hi_note" "$RED"
+    [ -n "$_HI_CI" ] && printf '::error title=%s::%s\n' "test failure" "$_hi_note"
+  done
+fi
+
+_HI_SKIP_NOTE=""
+[ "$_HI_SUITE_SKIPPED" -gt 0 ] && _HI_SKIP_NOTE=", $_HI_SUITE_SKIPPED skipped"
+
 if [ "$_HI_SUITE_FAILED" -eq 0 ]; then
-  _hi_h1 "All ${#_HI_SELECTED[@]} test suites passed ($_HI_TOTAL_DUR)"
+  # never claim the skipped ones passed - that's the whole point of the status
+  _hi_h1 "$((${#_HI_SELECTED[@]} - _HI_SUITE_SKIPPED))/${#_HI_SELECTED[@]} test suites passed ($_HI_TOTAL_DUR$_HI_SKIP_NOTE)" "$BRGREEN"
 else
-  _hi_h1 "$_HI_SUITE_FAILED/${#_HI_SELECTED[@]} test suites FAILED ($_HI_TOTAL_DUR)" "$RED"
+  _hi_h1 "$_HI_SUITE_FAILED/${#_HI_SELECTED[@]} test suites FAILED ($_HI_TOTAL_DUR$_HI_SKIP_NOTE)" "$RED"
+fi
+
+# a runner missing its backends skips everything and exits 0 - at the job
+# level that reads as a pass; --require-run makes it a failure
+if [ "$_HI_REQUIRE_RUN" = 1 ] && [ "$_HI_SUITE_SKIPPED" -gt 0 ]; then
+  _hi_h1 "$_HI_SUITE_SKIPPED suite(s) skipped, but --require-run was given" "$RED"
+  exit $((_HI_SUITE_FAILED + _HI_SUITE_SKIPPED))
 fi
 
 exit "$_HI_SUITE_FAILED"

@@ -1,0 +1,29 @@
+name: Setup nushell
+# not in ubuntu's apt at all; a pinned install is what turns the rc suite's
+# real-nu cases (config.nu is the one shipped shell file no linter can parse)
+# from yellow skips into gates - bump the default here and CI follows
+description: Install a pinned upstream nushell binary, with caching
+
+inputs:
+  version:
+    description: nushell version to install
+    required: false
+    default: "0.115.0"
+
+runs:
+  using: composite
+  steps:
+    - name: Cache nu
+      id: nu-cache
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: /usr/local/bin/nu
+        key: nu-${{ inputs.version }}-linux-x86_64
+
+    - name: Install nu
+      if: steps.nu-cache.outputs.cache-hit != 'true'
+      shell: bash
+      env:
+        NU_VERSION: ${{ inputs.version }}
+      # body in install.sh so the lint suite reads it (see setup-shellcheck)
+      run: '"$GITHUB_ACTION_PATH/install.sh"'

@@ -1,0 +1,31 @@
+name: Scorecard
+
+# OpenSSF Scorecard, dispatch-only for now: run it, read the report from the
+# artifact, and only then decide about publishing results and a README badge
+# (publish_results and a schedule are the follow-up, not the first step).
+on:
+  workflow_dispatch:
+
+permissions: read-all
+
+jobs:
+  analysis:
+    name: supply-chain scorecard
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: ossf/scorecard-action@2d1146689b8cda280b9bc96326124645441f03bc # v2.4.4
+        with:
+          results_file: results.sarif
+          results_format: sarif
+          publish_results: false
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: scorecard-results
+          path: results.sarif
+          if-no-files-found: error

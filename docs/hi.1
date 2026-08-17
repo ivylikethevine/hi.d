@@ -1,0 +1,183 @@
+.TH HI 1 "2026" "hi.d" "User Commands"
+.SH NAME
+hi \- your shell config, on every host you say hi to
+.SH SYNOPSIS
+.B hi
+.RI [ ssh\-options ]
+.I target
+.RI [ command ...]
+.SH DESCRIPTION
+.B hi
+copies your
+.B hi.d
+configuration tree (prompt, colors, aliases, vim/nano configs, connect
+header) to a target, starts a session there, and removes every trace when
+the session ends. It is sshrc, supercharged.
+.PP
+With no
+.IR command ,
+.B hi
+opens an interactive session on the target: your login shell when hi
+styles it (bash, zsh, fish \- or nushell, when it is your login shell or
+named in
+.BR _HI_SHELL_PREFERENCE ),
+otherwise the best of fish > zsh > bash. A target with no bash at all
+falls back to the best of zsh > fish > ksh > mksh > sh, with hi's aliases
+and colored prompt \- ksh and mksh keep a live git segment \- but no
+header. With a trailing
+.IR command ,
+it runs that command on the target and exits, like
+.BR ssh (1)
+does.
+.PP
+The payload is base64\-armored through the target's login shell for ssh
+targets, unpacked into a private
+.BR mktemp (1)
+directory, and removed by cleanup traps on exit \- including on an abrupt
+disconnect. If the target has a permanent
+.B ~/hi.d
+(installed with
+.BR install.sh ),
+that copy is used in place and left alone.
+.SH TARGET RESOLUTION
+.I target
+is tried against each backend, in order; the first match wins:
+.TP
+.B 1. ssh host
+a literal
+.B Host
+entry in
+.B ~/.ssh/config
+(wildcard entries are not matched).
+.TP
+.B 2. docker, then podman container
+a running container, by name or ID.
+.TP
+.B 3. nomad allocation
+a running allocation, by ID or ID prefix.
+.TP
+.B 4. kubernetes pod
+a running pod in the current
+.BR kubectl (1)
+context and namespace.
+.PP
+A name matching none of these is handed to
+.BR ssh (1)
+anyway, so unlisted hosts still work.
+.SH OPTIONS
+.TP
+.B \-h\fR, \fB\-\-help
+print a usage summary \- the synopsis, the target resolution order, and hi's
+own options \- and exit. Everything here in short form; this page is the long
+one. Caught before the pass\-through below, so it never reaches
+.BR ssh (1).
+.TP
+.B \-\-doctor \fR[\fItarget\fR]
+print a read\-only pre\-flight report instead of connecting: the local tree,
+the config overlay, every backend probed and timed, and \- with a target \-
+which backend the name resolves to plus an ssh reachability check.
+.TP
+.B \-\-tmux\fR, \fB\-\-no\-tmux
+run the session inside a named tmux on the target
+.RB ( tmux
+.B new\-session \-A
+against
+.BR $_HI_TMUX_SESSION ,
+default
+.BR hi ),
+so a dropped connection detaches instead of losing the session. May appear
+anywhere before the target.
+.B _HI_TMUX_ATTACH=1
+in
+.B settings.sh
+makes it the default and
+.B \-\-no\-tmux
+turns it back off. Offered only where hi.d is permanently installed on the
+target: a disposable tree is removed when the session ends, and a detached
+tmux would outlive it \- hi says so and continues without it.
+.TP
+.B \-\-version
+print the version and exit: the version stamped in at packaging time, or
+.B git describe
+output in a checkout.
+.PP
+Everything else is passed through to
+.BR ssh (1)
+unchanged \-
+.BR \-p ,
+.BR \-i ,
+.BR \-J ,
+.BR \-o ,
+and the rest behave exactly as they do there. Only the first
+non\-option word is taken as the target; everything after it is the
+remote command.
+.SH CONFIGURATION
+Configuration lives outside the tree, in
+.B ~/.config/hi.d/
+.RB ( settings.sh ,
+.BR colors ,
+.BR packages ,
+.BR tmux.conf ,
+and additive personal
+.BR aliases.sh ),
+written by
+.B hi_configure
+and carried along to every target. Every feature is an environment
+variable toggle \- header, prompt, git status, aliases, editors \- each on
+by default and documented in the README. The tree itself can be
+root\-owned (a package\-manager install): nothing hi does writes into it.
+.SH FILES
+.TP
+.B /usr/share/hi.d
+the tree, for package\-manager installs (a git checkout at
+.B ~/hi.d
+works identically).
+.TP
+.B ~/.config/hi.d/settings.sh
+feature toggles, written by
+.BR hi_configure .
+.TP
+.B ~/.config/hi.d/colors, ~/.config/hi.d/packages, ~/.config/hi.d/tmux.conf
+per\-user overrides of the tree's defaults.
+.TP
+.B ~/.config/hi.d/aliases.sh
+your own aliases, sourced after the shipped set so yours win.
+.SH ENVIRONMENT
+.TP
+.B _HI_HOME
+the parent of the
+.B hi.d
+directory; set by
+.B /etc/profile.d/hi.d.sh
+for packaged installs.
+.TP
+.B _HI_SHELL_PREFERENCE
+ordered list of session shells to try
+.RB ( login
+means your login shell); default
+.BR "login fish zsh bash" .
+.TP
+.B _HI_DISABLE_HEADER, _HI_DISABLE_PROMPT, ...
+per\-feature opt\-outs; see the README's Configuration section for the
+full table.
+.SH EXAMPLES
+.TP
+.B hi prod-db
+interactive session on the ssh host
+.BR prod\-db ,
+with your prompt, colors and aliases.
+.TP
+.B hi -J bastion internal 'df -h'
+run a command on
+.B internal
+through a jump host.
+.TP
+.B hi 8f41c2
+session inside a running container or allocation with that ID.
+.SH SEE ALSO
+.BR ssh (1),
+.BR tmux (1)
+.PP
+Full documentation, including every toggle and the testing story, in the
+README:
+.I https://github.com/ivylikethevine/hi.d

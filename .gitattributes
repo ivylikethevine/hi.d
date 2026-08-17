@@ -1,0 +1,6 @@
+# Everything text checks out LF everywhere. Git for Windows defaults
+# core.autocrlf=true and actions/checkout does not override it, so without
+# this the windows-e2e runner would hand Git Bash a CRLF ./hi.sh - a
+# first-run failure that has nothing to do with Windows support itself.
+* text=auto eol=lf
+*.gif binary

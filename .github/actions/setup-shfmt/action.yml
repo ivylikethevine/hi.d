@@ -1,0 +1,30 @@
+name: Setup shfmt
+# a single upstream Go binary, pinned the same way shellcheck is - bump the
+# default here and every consumer follows. Version drift matters more for a
+# formatter than most linters: two shfmt versions can disagree about the one
+# true formatting, and the gate compares against exactly one of them.
+description: Install a pinned upstream shfmt binary, with caching
+
+inputs:
+  version:
+    description: shfmt version to install
+    required: false
+    default: "3.13.1"
+
+runs:
+  using: composite
+  steps:
+    - name: Cache shfmt
+      id: shfmt-cache
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: /usr/local/bin/shfmt
+        key: shfmt-${{ inputs.version }}-linux-x86_64
+
+    - name: Install shfmt
+      if: steps.shfmt-cache.outputs.cache-hit != 'true'
+      shell: bash
+      env:
+        SHFMT_VERSION: ${{ inputs.version }}
+      # body in install.sh so the lint suite reads it (see setup-shellcheck)
+      run: '"$GITHUB_ACTION_PATH/install.sh"'

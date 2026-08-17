@@ -1,0 +1,58 @@
+# Maintainer: Ivy Duggan <ivylikethevine@gmail.com>
+#
+# The VCS package, built from the branch. Identical to ../hi.d/ except for
+# where the source comes from - keep package() in the two in step.
+
+pkgname=hi.d-git
+pkgver=r0.0000000
+pkgrel=1
+pkgdesc="sshrc supercharged - your shell config, on every host you say hi to (git)"
+arch=('any')
+url="https://github.com/ivylikethevine/hi.d"
+license=('MIT')
+# coreutils is in `base`, which packaging guidelines say to assume; openssh is
+# not, and hi runs ssh itself
+depends=('bash' 'openssh')
+makedepends=('git')
+provides=('hi.d')
+conflicts=('hi.d')
+optdepends=('zsh: zsh support on the client'
+  'fish: fish support on the client'
+  'docker: container targets'
+  'podman: container targets'
+  'nomad: allocation targets'
+  'kubectl: pod targets')
+# The `hi.d::` alias is load-bearing, not cosmetic: install.sh looks for a
+# checkout named exactly hi.d under $srcdir, and without the alias git would
+# clone to hi.d-git. It is also why this one needs no prepare().
+source=("hi.d::git+$url.git#branch=main")
+# SKIP is correct for a VCS source - there is no fixed tarball to sum
+b2sums=('SKIP')
+
+pkgver() {
+  cd "$srcdir/hi.d"
+  # no tags exist yet, so the rN.shorthash form rather than a git describe;
+  # switch to describe once v1.0.0 is out and this package can sort against it
+  printf 'r%s.%s' "$(git rev-list --count HEAD)" "$(git rev-parse --short HEAD)"
+}
+
+package() {
+  # see ../hi.d/PKGBUILD for why this is one line
+  DESTDIR="$pkgdir" "$srcdir/hi.d/scripts/install.sh" --prefix /usr/share
+
+  # Stamped here too, for the same reason the versioned package stamps: the
+  # installed tree has no .git for `hi --version` to fall back on (install.sh
+  # copies $_HI_PACKAGE_CONTENTS, which does not include it), so without this a
+  # -git install answers "unknown (no stamp, no git)". $pkgver is the
+  # rN.shorthash pkgver() computed above.
+  sed -i "s/^_HI_RELEASE=.*/_HI_RELEASE=\"$pkgver\"/" "$pkgdir/usr/share/hi.d/hi.sh"
+
+  # `man hi`'s footer gets the same stamp, through the gzip install_tree
+  # produced (makepkg sets SOURCE_DATE_EPOCH, so the date is reproducible)
+  gzip -d "$pkgdir/usr/share/man/man1/hi.1.gz"
+  sed -i "s/^\.TH .*/.TH HI 1 \"$(date -u -d "@$SOURCE_DATE_EPOCH" +%Y-%m-%d)\" \"hi.d $pkgver\" \"User Commands\"/" \
+    "$pkgdir/usr/share/man/man1/hi.1"
+  gzip -9n "$pkgdir/usr/share/man/man1/hi.1"
+
+  install -Dm644 "$srcdir/hi.d/docs/LICENSE.md" "$pkgdir/usr/share/licenses/$pkgname/LICENSE.md"
+}

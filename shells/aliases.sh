@@ -3,21 +3,18 @@
 # parse: `alias`, `export`, `&&` chains - no if/then/fi, no $(...) conditionals.
 # shellcheck disable=SC2139 # aliases are meant to expand $_HI_* now, not later
 # shellcheck disable=SC2155
-# the following syntax resolves to the first command installed, changing order
-# changes preference (for users taste)
-# export z="$(command -v a || command -v b || command -v c)"
-# This file is an example of my personal setup. Feel free to change it to suit your needs,
-# but these are the only patterns that are safe to use, since this file must be
-# POSIX+fish compliant.
+# shellcheck disable=SC2089 # the *_OPTS quotes are literal alias text; the overlay source below makes the linter guess otherwise
+# GLOSSARY: command -v fallthrough - first-installed wins; reorder to taste
+# This file is an example of my personal setup. Feel free to change it to suit
+# your needs, but only in the POSIX+fish subset above.
 
-# nano, vim, cat, ls, exa and eza all get aliased further down for unrelated
-# reasons (rcfile flags, color defaults, options). In zsh, dash and POSIX sh
-# (unlike bash/fish), `command -v` returns an *alias's* definition instead of
-# skipping to the real binary once that alias exists - so any fallthrough
-# chain below that can reach one of those names has to resolve before that
-# alias is defined. Resolving them all here, before anything else in this
-# file sets an alias, keeps every chain below immune to that regardless of
-# where it's used.
+# Backstop toggle defaults, in an eval gated on a builtin fish lacks; `-` not
+# `:-` so intentional empties survive. GLOSSARY: toggle defaulting
+command -v getopts >/dev/null 2>&1 &&
+  eval 'export _HI_DISABLE_EDITORS="${_HI_DISABLE_EDITORS-0}" _HI_DISABLE_ALIASES="${_HI_DISABLE_ALIASES-0}" _HI_DISABLE_OSC52="${_HI_DISABLE_OSC52-0}" _HI_OSC52="${_HI_OSC52-}" _HI_DISABLE_TMUX="${_HI_DISABLE_TMUX-0}" _HI_TMUXCONF="${_HI_TMUXCONF-}" _HI_CLEANUP="${_HI_CLEANUP-}" _HI_CONFIG_DIR="${_HI_CONFIG_DIR-}"' || true
+
+# Resolve these before any alias exists: zsh/dash `command -v` returns an
+# alias's definition once one is set, poisoning later fallthrough chains.
 export _HI_EDITOR_BIN="$(command -v nano || command -v micro || command -v pico || command -v vim || command -v vi)"
 export _HI_BATCAT_BIN="$(command -v bat || command -v batcat || command -v ccat || command -v cat)"
 # exa and eza intentionally differ in preference order (exa picks exa first,
@@ -25,15 +22,26 @@ export _HI_BATCAT_BIN="$(command -v bat || command -v batcat || command -v ccat 
 export _HI_EXA_BIN="$(command -v exa || command -v eza || command -v ls)"
 export _HI_EZA_BIN="$(command -v eza || command -v exa || command -v ls)"
 
-# skipped when _HI_DISABLE_EDITORS=1, leaving nano/vim at their own defaults.
-# `|| true`: some sourcers run under `set -e`, where a plain failed `[ ]`
-# guard would otherwise abort the whole shell.
+# off on _HI_DISABLE_EDITORS=1; `|| true` keeps set -e sourcers alive when
+# the guard fails
 [ "$_HI_DISABLE_EDITORS" != 1 ] && alias nano="nano --rcfile $_HI_NANORC" || true
 [ "$_HI_DISABLE_EDITORS" != 1 ] && alias vim="$(command -v nvim || command -v vim) -u $_HI_VIMRC" || true
 
-# everything below this line is purely personal preference, freely editable
-# without touching hi's own functionality (that all lives in
-# common/bootstrap.sh now). Skip it wholesale when _HI_DISABLE_ALIASES=1.
+# stdin -> the client's clipboard (shells/osc52.sh). The `[ -f ]` earns its
+# place: the container fallback ships this file without paths.sh, where an
+# empty $_HI_OSC52 would make `sh ` an alias that opens a shell.
+[ "$_HI_DISABLE_OSC52" != 1 ] && [ -f "$_HI_OSC52" ] && alias hi_copy="sh $_HI_OSC52" || true
+
+# tmux with hi's config, permanent trees only ($_HI_CLEANUP marks disposable
+# ones): a detached tmux would wake up reading a deleted tree.
+[ "$_HI_DISABLE_TMUX" != 1 ] && [ -z "$_HI_CLEANUP" ] && [ -f "$_HI_TMUXCONF" ] && alias tmux="tmux -f $_HI_TMUXCONF" || true
+
+# styles eza itself, not an alias - above the early return so disabling
+# personal aliases keeps the theme for an eza run directly
+export EZA_CONFIG_DIR="$_HI_THEME_DIR"
+
+# everything below is personal preference, freely editable without touching hi's
+# own functionality. Skipped wholesale when _HI_DISABLE_ALIASES=1.
 [ "$_HI_DISABLE_ALIASES" = 1 ] && return || true
 
 alias sudo="command sudo " # works in bash/zsh, fish has a sudo wrapper in config.fish
@@ -60,8 +68,6 @@ alias now='echo "LOCAL: $(date $_HI_HUMAN_SHORT_DATE) => UTC: $(date -u $_HI_HUM
 alias zed="$(command -v zeditor || command -v zed || command -v echo)"
 alias ehi="zed $_HI_ROOT"
 alias essh="zed $_HI_SSH_DIR"
-# TODO: add script/compat for local config changes?
-alias elinks="zed ~/projects/links"
 
 # docker compose
 alias dcl="docker container ls && docker compose ls"
@@ -77,6 +83,7 @@ alias ps="ps aux"
 
 # good safety mechanism
 alias rm="rm -iv"
+alias rmv="rm -rv"
 
 # default recursive copy with progress
 alias cp="cp -rv"
@@ -92,8 +99,6 @@ alias ctar="tar -zcvf"
 alias utar="tar -zxvf"
 
 # file diffing
-# TODO: test out these diffing tools
-# alias diff="$(command -v diff-so-fancy || command -v icdiff || command -v diff)"
 alias mindiff="diff -Bdw"
 
 # fallthrough aliases for improved basics
@@ -113,7 +118,6 @@ alias lsr="lsa -R"
 
 # eza/exa (its predecessor) improved ls; time format per
 # https://docs.rs/chrono/latest/chrono/format/strftime/index.html
-export EZA_CONFIG_DIR="$_HI_ROOT/misc" # eza theme customization, misc/theme.yml
 export _HI_EXA_SHARED_OPTS='-F -1 -l -m --group-directories-first'
 export _HI_EXA_OPTS="$_HI_EXA_SHARED_OPTS --group --no-filesize"
 export _HI_EZA_OPTS="$_HI_EXA_SHARED_OPTS"' --smart-group --time-style="+%b %d %Y %H:%M"'
@@ -182,3 +186,8 @@ alias fw_update="fwupdmgr update"
 alias sctl="sudo systemctl"
 alias chron="cron"
 alias chrontab="crontab"
+
+# Last on purpose: the user's own aliases.sh - ~/.config/hi.d/aliases.sh at
+# home, shipped into misc/ by the overlay stream on a target - wins over
+# anything above by coming after it. Same POSIX+fish subset as this file.
+[ -f "$_HI_CONFIG_DIR/aliases.sh" ] && . "$_HI_CONFIG_DIR/aliases.sh" || true

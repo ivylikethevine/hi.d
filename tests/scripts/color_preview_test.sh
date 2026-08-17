@@ -1,0 +1,253 @@
+#!/bin/bash
+# Unit tests for scripts/color_preview.sh - the `hi_color_preview` table.
+#
+# Its job is to render the same answers the live prompt would give, so what
+# matters is that its own precedence logic (_hi_color_source) agrees with
+# common/core.sh's _hi_resolve_color, and that the helpers feeding the table
+# read misc/colors the way the rest of hi does. Everything runs against a
+# fixture misc/colors and ~/.ssh/config in the scratch dir, so the output is
+# fixed rather than "whatever this machine is configured with".
+#
+# Nearly every function below is invoked indirectly - by name, through
+# _hi_case's "$@" - which SC2329 can't see.
+# shellcheck disable=SC2329
+set -euo pipefail
+
+# shellcheck source=../../common/core.sh
+source "${_HI_HOME:-$HOME}/hi.d/common/core.sh"
+# shellcheck source=../test_lib.sh
+source "$_HI_TEST_LIB"
+# shellcheck source=../../scripts/color_preview.sh
+source "$_HI_COLOR_PREVIEW"
+
+function _hi_write_fixtures() {
+  cat >"$_HI_WORKDIR/colors" <<'EOF'
+#type,name,color
+username,alice,brmagenta
+username,LOCALUSER,brgreen
+usertag,ops,brred
+hostname,pinned,brcyan
+hosttag,work,bryellow
+EOF
+
+  cat >"$_HI_WORKDIR/ssh_config" <<'EOF'
+Host plain
+  User nobody
+
+Host pinned
+  User nobody
+
+# Tags: work
+Host tagged
+  User nobody
+
+# Tags: unlisted
+Host othertag
+  User nobody
+EOF
+
+  export _HI_COLORS="$_HI_WORKDIR/colors"
+  export _HI_SSH_CONFIG="$_HI_WORKDIR/ssh_config"
+  # pin the "local" identities so LOCALUSER/LOCALHOSTNAME don't depend on
+  # whoever happens to be running the suite
+  export _HI_LOCAL_USER=localdev
+  export _HI_LOCAL_HOSTNAME=localbox
+}
+
+# --- _hi_color_source: why a name resolves the way it does -------------------
+
+function test_source_reports_an_exact_hostname_override() {
+  [ "$(_hi_color_source hostname pinned)" = "override:hostname" ]
+}
+
+function test_source_reports_an_exact_username_override() {
+  [ "$(_hi_color_source username alice)" = "override:username" ]
+}
+
+function test_source_reports_the_ssh_tag_that_matched() {
+  [ "$(_hi_color_source hostname tagged)" = "tag:work" ]
+}
+
+function test_source_falls_back_to_default() {
+  [ "$(_hi_color_source hostname plain)" = default ]
+}
+
+# a host carrying a tag with no hosttag entry has nothing to inherit, so it
+# must read as default rather than claiming a tag it can't resolve
+function test_source_ignores_a_tag_without_an_override() {
+  [ "$(_hi_color_source hostname othertag)" = default ]
+}
+
+# usernames have no ssh config to carry tags, so the tag branch must not fire
+# for them even when a usertag of that name exists
+function test_source_never_reports_a_tag_for_a_username() {
+  [[ "$(_hi_color_source username ops)" != tag:* ]]
+}
+
+# --- agreement with the live prompt -----------------------------------------
+
+# the preview exists to show what the prompt will do; if these two ever
+# disagree the table is confidently wrong, which is worse than no table
+function test_source_agrees_with_resolve_color_on_overrides() {
+  [ "$(_hi_resolve_color hostname pinned)" = brcyan ] &&
+    [ "$(_hi_color_source hostname pinned)" = "override:hostname" ]
+}
+
+function test_source_agrees_with_resolve_color_on_tags() {
+  [ "$(_hi_resolve_color hostname tagged)" = bryellow ] &&
+    [ "$(_hi_color_source hostname tagged)" = "tag:work" ]
+}
+
+function test_default_source_still_resolves_to_a_palette_color() {
+  local color
+  color="$(_hi_resolve_color hostname plain)"
+  [ "$(_hi_color_source hostname plain)" = default ] &&
+    printf '%s\n' "${_HI_COLOR_NAMES[@]}" | grep -qxF "$color"
+}
+
+# --- the helpers that populate the tables -----------------------------------
+
+function test_known_users_includes_the_current_user() {
+  _hi_known_users | grep -qxF "$(whoami)"
+}
+
+function test_known_users_includes_override_names() {
+  _hi_known_users | grep -qxF alice
+}
+
+# LOCALUSER is a placeholder for "whoever is running this", not a login name -
+# listing it verbatim would offer a user that doesn't exist
+function test_known_users_excludes_the_localuser_placeholder() {
+  ! _hi_known_users | grep -qxF LOCALUSER
+}
+
+function test_known_users_are_deduplicated() {
+  [ "$(_hi_known_users | sort | uniq -d | wc -l)" -eq 0 ]
+}
+
+function test_known_usertags_lists_only_usertags() {
+  local out
+  out="$(_hi_known_usertags)"
+  printf '%s\n' "$out" | grep -qxF ops || return 1
+  ! printf '%s\n' "$out" | grep -qxF work # that one's a hosttag
+}
+
+function test_preview_users_adds_a_row_per_usertag() {
+  _hi_preview_users | grep -qxF ops
+}
+
+function test_preview_users_are_deduplicated() {
+  [ "$(_hi_preview_users | sort | uniq -d | wc -l)" -eq 0 ]
+}
+
+# --- the box-drawing helpers ------------------------------------------------
+
+# each column is padded by one space either side, so a width of n renders n+2
+# dashes between the separators
+function test_hbar_sizes_each_column() {
+  [ "$(_hi_hbar 3 1)" = "+-----+---+" ]
+}
+
+function test_hbar_handles_a_single_column() {
+  [ "$(_hi_hbar 2)" = "+----+" ]
+}
+
+# widths are per-host: user_width + a space + the host name, plus two spaces
+# between each pair of groups
+function test_group_preview_width_sums_its_hosts() {
+  local user_width=4
+  [ "$(_hi_group_preview_width abc de)" = "$((4 + 1 + 3 + 4 + 1 + 2 + 2))" ]
+}
+
+# --- the whole thing actually runs ------------------------------------------
+
+# Running the real script can't reuse the exported fixtures above: paths.sh
+# re-exports $_HI_COLORS from $_HI_ROOT and $_HI_SSH_CONFIG from $HOME every
+# time it's sourced, so the only way to point the script at fixtures is to
+# give it a scratch tree and a scratch $HOME to derive them from.
+function _hi_render_preview() {
+  HOME="$_HI_WORKDIR/tree" _HI_HOME="$_HI_WORKDIR/tree" \
+    _HI_LOCAL_USER=localdev _HI_LOCAL_HOSTNAME=localbox \
+    "$_HI_WORKDIR/tree/hi.d/scripts/color_preview.sh" 2>&1
+}
+
+function _hi_write_preview_tree() {
+  local home
+  home="$(_hi_scratch_tree tree common misc scripts)"
+  mkdir -p "$home/.ssh"
+  cp "$_HI_WORKDIR/colors" "$home/hi.d/misc/colors"
+  cp "$_HI_WORKDIR/ssh_config" "$home/.ssh/config"
+}
+
+# The tables are wide, colored and layout-heavy; asserting their exact shape
+# would test the formatting rather than the resolution, so these prove they
+# render every group they should without erroring under set -e. One render
+# (the slowest thing this suite does - a full script run plus targets.sh)
+# shared by all three cases; each reads the whole output from a variable
+# rather than piping into grep, because under `set -o pipefail` an
+# early-exiting `grep -q` SIGPIPEs the script and a negated case then passes
+# no matter what the table said.
+_HI_PREVIEW_OUT=""
+
+function test_tables_render_without_error() {
+  _HI_PREVIEW_OUT="$(_hi_render_preview)" || return 1
+  [[ "$_HI_PREVIEW_OUT" == *pinned* && "$_HI_PREVIEW_OUT" == *tagged* && "$_HI_PREVIEW_OUT" == *alice* ]]
+}
+
+# a host with no override and no usable tag would render identically to a bare
+# `hi`, so it's deliberately left out of the table
+function test_tables_skip_hosts_that_render_by_default() {
+  ! printf '%s\n' "$_HI_PREVIEW_OUT" | grep -q '\bplain\b'
+}
+
+# the tag column has to name the tag that actually matched, since that's the
+# line a user reads to work out which misc/colors entry to edit
+function test_tables_name_the_matching_tag() {
+  printf '%s\n' "$_HI_PREVIEW_OUT" | grep -q 'tag:work'
+}
+
+function run_color_preview_tests() {
+  _hi_workdir colorpreviewtest
+  _hi_write_fixtures
+  _hi_write_preview_tree
+
+  _hi_h1 "Testing scripts/color_preview.sh"
+
+  _hi_suite_begin
+
+  _hi_h2 "Testing: _hi_color_source"
+  _hi_check "Exact hostname override" test_source_reports_an_exact_hostname_override
+  _hi_check "Exact username override" test_source_reports_an_exact_username_override
+  _hi_check "Names the ssh tag that matched" test_source_reports_the_ssh_tag_that_matched
+  _hi_check "Falls back to default" test_source_falls_back_to_default
+  _hi_check "Ignores a tag with no override" test_source_ignores_a_tag_without_an_override
+  _hi_check "Never reports a tag for a username" test_source_never_reports_a_tag_for_a_username
+
+  _hi_h2 "Testing: agreement with _hi_resolve_color"
+  _hi_check "Agrees on overrides" test_source_agrees_with_resolve_color_on_overrides
+  _hi_check "Agrees on tags" test_source_agrees_with_resolve_color_on_tags
+  _hi_check "Default still resolves to a palette color" test_default_source_still_resolves_to_a_palette_color
+
+  _hi_h2 "Testing: table inputs"
+  _hi_check "Known users include the current user" test_known_users_includes_the_current_user
+  _hi_check "Known users include override names" test_known_users_includes_override_names
+  _hi_check "Known users exclude the LOCALUSER placeholder" test_known_users_excludes_the_localuser_placeholder
+  _hi_check "Known users are deduplicated" test_known_users_are_deduplicated
+  _hi_check "Known usertags exclude hosttags" test_known_usertags_lists_only_usertags
+  _hi_check "Preview users add a row per usertag" test_preview_users_adds_a_row_per_usertag
+  _hi_check "Preview users are deduplicated" test_preview_users_are_deduplicated
+
+  _hi_h2 "Testing: layout helpers"
+  _hi_check "hbar sizes each column" test_hbar_sizes_each_column
+  _hi_check "hbar handles a single column" test_hbar_handles_a_single_column
+  _hi_check "Group preview width sums its hosts" test_group_preview_width_sums_its_hosts
+
+  _hi_h2 "Testing: the rendered tables"
+  _hi_check "Render without error" test_tables_render_without_error
+  _hi_check "Skip hosts that render by default" test_tables_skip_hosts_that_render_by_default
+  _hi_check "Name the matching tag" test_tables_name_the_matching_tag
+
+  _hi_suite_end "color_preview.sh"
+}
+
+run_color_preview_tests

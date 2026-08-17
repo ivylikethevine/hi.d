@@ -7,6 +7,8 @@
 **local**
 **personal**
 
+.claude
+
 *.js
 *.ts
 *.bat
@@ -40,15 +42,10 @@
 *.tsv
 *.csv
 *.sql
-*.json
-!.zed/settings.json
 *.toml
-*.yaml
-*.yml
-!theme.yml
-!.github/workflows/*.yml
 
-*docker*
-!*docker_test.sh
-
-!.markdownlint.yaml
+# where packaging/mkpkg.sh stages the tree and drops the built packages.
+# Deliberately a name none of the blanket rules above already cover - a
+# "build/" or "output/" would have been swallowed by **build**/**output** and
+# looked like it was working right up until someone cloned the repo.
+dist/

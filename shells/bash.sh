@@ -2,8 +2,8 @@
 # set -euo pipefail # cannot be enabled: an interactive shell would exit on the first error
 
 # === start required configuration ===
-# shellcheck source=../common/bootstrap.sh
-source "${_HI_HOME:-$HOME}/hi.d/common/bootstrap.sh"
+# shellcheck source=../common/core.sh
+source "${_HI_HOME:-$HOME}/hi.d/common/core.sh"
 # shellcheck source=../common/git_prompt.sh
 source "$_HI_GIT_PROMPT"
 # shellcheck source=./aliases.sh
@@ -12,8 +12,12 @@ source "$_HI_ALIASES"
 _hi_interactive_extras
 export GCC_COLORS='error=01;31:warning=01;35:note=01;36:caret=01;32:locus=01:quote=01'
 
-if [[ "${_HI_DISABLE_PROMPT:-0}" != 1 ]]; then
-  if tput setaf 1 >/dev/null 2>&1; then
+if [[ "${_HI_DISABLE_PROMPT:-0}" != 1 ]] && ! _hi_wants_starship; then
+  _hi_prime_identity
+  # the character this prompt ends with (`\$` here, which bash renders as $ for
+  # a user and # for root) - see _hi_prompt_end in common/core.sh
+  HI_PS1_END="$(_hi_prompt_end BASH '\$')"
+  if _hi_has_color; then
     HI_PS1=" ${debian_chroot:-}$(_hi_user_escape)\u$(_hi_at_color)@$(_hi_host_escape)\h$NC $BRBLUE\w$NC"
   else
     HI_PS1=" ${debian_chroot:-}\u@\h:\w"
@@ -21,35 +25,56 @@ if [[ "${_HI_DISABLE_PROMPT:-0}" != 1 ]]; then
 fi
 
 if ! shopt -oq posix; then
+  # $BASH_COMPLETION_VERSINFO is the loader's own sentinel: the host's stock
+  # rc (Debian's skeleton, notably) often sourced it before hi's grafted
+  # block runs, and re-parsing the ~2000-line script costs every shell start
+  # 20-50ms for nothing
   # shellcheck disable=SC1091
-  source /usr/share/bash-completion/bash_completion 2>/dev/null ||
+  [ -n "${BASH_COMPLETION_VERSINFO-}" ] ||
+    source /usr/share/bash-completion/bash_completion 2>/dev/null ||
     source /etc/bash_completion 2>/dev/null
 fi
 
 # complete `hi` from the same target list zsh/fish use, and make `exa` complete
 # exactly the way `eza` does, whatever bash-completion bound to it
 function _hi_complete() {
-  mapfile -t COMPREPLY < <(compgen -W "$(sh "$_HI_TARGETS" | cut -f1)" -- "${COMP_WORDS[COMP_CWORD]}")
+  local -a rows=()
+  _hi_read_lines rows < <(sh "$_HI_TARGETS")
+  # names are field 1; the tab strip is a builtin, sparing a `cut` per TAB
+  _hi_read_lines COMPREPLY < <(compgen -W "${rows[*]%%$'\t'*}" -- "${COMP_WORDS[COMP_CWORD]}")
 }
 complete -F _hi_complete hi
-command -v _completion_loader &>/dev/null && _completion_loader eza &>/dev/null
-_hi_eza_spec=$(complete -p eza 2>/dev/null) && eval "${_hi_eza_spec% eza} exa"
-unset _hi_eza_spec
+
+# Deferred to the first TAB after `exa` - startup shouldn't parse a multi-KB
+# spec most sessions never use. 124 is bash-completion's "retry".
+function _hi_load_exa_completion() {
+  local spec
+  command -v _completion_loader &>/dev/null && _completion_loader eza &>/dev/null
+  spec=$(complete -p eza 2>/dev/null) || return 1
+  eval "${spec% eza} exa"
+  return 124
+}
+complete -F _hi_load_exa_completion exa
 
 # modified from: https://github.com/riobard/bash-powerline/blob/master/bash-powerline.sh
 if [[ "${_HI_DISABLE_PROMPT:-0}" != 1 ]]; then
-  function ps1() {
-    # Bash expands the content of PS1 unless promptvars is disabled, so the git
-    # info goes through another layer of reference - expanding user provided
-    # strings would be a security issue. POC: https://github.com/njhartwell/pw3nage
-    if shopt -q promptvars; then
-      __powerline_git_info="$(_hi_git_prompt)"
-      PS1="$HI_PS1\${__powerline_git_info}$NC \$ "
-    else
-      PS1="$HI_PS1$(_hi_git_prompt)$NC \$ "
-    fi
-  }
-  PROMPT_COMMAND="ps1${PROMPT_COMMAND:+; $PROMPT_COMMAND}"
+  if _hi_wants_starship; then
+    # deference, chosen in settings.sh - see _hi_wants_starship in core.sh
+    eval "$(starship init bash)"
+  else
+    function ps1() {
+      # git info through a reference, never expanded into PS1 - expanding user
+      # strings is the pw3nage class of bug (github.com/njhartwell/pw3nage)
+      if shopt -q promptvars; then
+        _hi_git_prompt __powerline_git_info # out-var form: no $( ) fork per prompt
+        # shellcheck disable=SC2154 # assigned by the printf -v one line up
+        PS1="$HI_PS1\${__powerline_git_info}$NC $HI_PS1_END "
+      else
+        PS1="$HI_PS1$(_hi_git_prompt)$NC $HI_PS1_END "
+      fi
+    }
+    PROMPT_COMMAND="ps1${PROMPT_COMMAND:+; $PROMPT_COMMAND}"
+  fi
 fi
 # === end required configuration ===
 
@@ -60,7 +85,10 @@ if [[ "${_HI_DISABLE_PERSONAL:-0}" != 1 ]]; then
   export HISTIGNORE="&:[ ]*:exit:ls:bg:fg:history:clear"
   PROMPT_DIRTRIM=2
 
-  shopt -s histappend checkwinsize globstar cmdhist
+  shopt -s histappend checkwinsize cmdhist
+  # globstar is bash 4; on bash 3.2 (macOS) `shopt -s` on an unknown option is an
+  # error, which under an rc file that keeps going is just noise on every prompt
+  shopt -s globstar 2>/dev/null || true
 
   bind "set completion-ignore-case on"
   bind "set completion-map-case on"

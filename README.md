@@ -700,13 +700,20 @@ questions asked every time a suite passes on one machine and fails on another. C
 
 Suite names: `aliases`, `alias_fallthrough`, `osc52`, `tmux`, `shellcheck`, `install`, `hi`, `header`, `core`,
 `git_prompt`, `targets`, `paths`, `color_preview`, `load`, `test_lib`, `test_runner` are fast and dependency-free - they're the first thing CI
-runs on every push/PR (the last two are the harness testing itself). `ssh`, `ssh_disconnect`, `docker`, `podman`,
-`nomad`, `kube`, `framework` are end-to-end:
+runs on every push/PR (the last two are the harness testing itself). `ssh`, `ssh_disconnect`, `ssh_relay`, `docker`,
+`podman`, `nomad`, `kube`, `framework` are end-to-end:
 they spin up real throwaway containers/clusters/agents and drive `hi.sh`'s actual connection paths against them, so
 they're slower and need the relevant backend installed - each skips cleanly with a warning instead of failing if its
-backend isn't available. CI runs `ssh`, `ssh_disconnect` and `docker` as a second job once the fast ones pass, which
-between them cover both halves of `hi.sh` (`_say_hi` and `_say_hi_container`). Every test script is also directly
-executable on its own, e.g. `tests/shells/shellcheck_test.sh`.
+backend isn't available. CI runs `ssh`, `ssh_disconnect`, `ssh_relay` and `docker` as a second job once the fast ones
+pass, which between them cover both halves of `hi.sh` (`_say_hi` and `_say_hi_container`). Every test script is also
+directly executable on its own, e.g. `tests/shells/shellcheck_test.sh`.
+
+**Relaying.** `hi` chains: from a session on B you can `hi C`, and the second hop is a full hi session like the
+first. That works from a *disposable* session too, because `hi.sh` rides every bash-capable one - it is not in the
+payload tar, but both transports write it to the target alongside the tree. `ssh_relay` is the proof: A → B → C,
+the config intact on the final hop, and the cleanup traps firing on **both** B and C, on a clean exit and on the
+link being killed mid-relay. The one tier that cannot relay is the container transport's bash-less fallback, which
+ships `aliases.sh` alone and never loads `paths.sh` - there `hi` is simply not defined.
 
 The tests are local-only: `tests/` is one of the directories `hi.sh` strips from the payload, so `hi_test` on a
 target tells you so rather than running (the same goes for `hi_install`, `hi_configure`, `hi_check_configs` and

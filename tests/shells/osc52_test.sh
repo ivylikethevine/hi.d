@@ -134,17 +134,9 @@ function _hi_refuses_oversize() {
 }
 
 # Every shell aliases.sh has to parse, since the alias line sits in that file's
-# POSIX+fish subset. fish is a function rather than an alias, hence the two
-# probe shapes.
+# POSIX+fish subset - test_lib.sh's _hi_alias_probe holds the two dialects.
 function _hi_alias_defined_in() {
-  local shell="$1" disable="$2" want="$3" out script
-  if [ "$shell" = fish ]; then
-    script="source $_HI_ROOT/common/paths.sh; source $_HI_ALIASES; functions -q -- hi_copy; and echo yes; or echo no"
-  else
-    script=". $_HI_ROOT/common/paths.sh; . $_HI_ALIASES; alias hi_copy >/dev/null 2>&1 && echo yes || echo no"
-  fi
-  out="$(env _HI_HOME="$_HI_HOME" _HI_DISABLE_OSC52="$disable" "$shell" -c "$script" 2>/dev/null)"
-  [ "$out" = "$want" ]
+  [ "$(_hi_alias_probe "$1" hi_copy _HI_DISABLE_OSC52="$2")" = "$3" ]
 }
 
 # The container fallback path copies aliases.sh alone, with no paths.sh to

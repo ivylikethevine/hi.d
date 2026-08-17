@@ -211,29 +211,21 @@ function test_this_checkout_was_never_touched() {
 # Which shell the session runs in - $_HI_SHELL_PREFERENCE is the whole rule, and
 # load.sh's own comment says why `login` leads its default.
 
-# _hi_shell_answer <fake-bin...> [NAME=VALUE ...] - the shell chosen when those
-# binaries, and only those, are on $PATH.
-#
-# $PATH is *replaced*, not prefixed: the point is which shells exist, and this
-# machine's real fish would answer for itself otherwise. The few real tools
-# _hi_login_shell needs are symlinked in, and the interpreter is named by
-# absolute path since one of the fakes is called `bash`.
 # _hi_shell_answer <"bins..."> [NAME=VALUE ...] - the shell chosen when those
 # binaries, and only those, are on $PATH.
 #
 # $PATH is *replaced*, not prefixed: the question is which shells exist, and
-# this machine's real fish would answer for itself otherwise. The few real tools
-# _hi_login_shell needs are symlinked in, and the interpreter is named by
-# absolute path since one of the fakes is called `bash`.
+# this machine's real fish would answer for itself otherwise. The few real
+# tools _hi_login_shell needs ride a second _hi_real_path entry, and the
+# interpreter is named by absolute path since one of the fakes is called
+# `bash`.
 function _hi_shell_answer() {
-  local bins="$1" dir real
+  local bins="$1" dir
   shift
   # shellcheck disable=SC2086 # a deliberate word split into the fake list
   dir="$(_hi_fake_path "shells-${bins// /-}" $bins)"
-  for real in id awk getent sh; do
-    command -v "$real" >/dev/null 2>&1 && ln -sf "$(command -v "$real")" "$dir/$real"
-  done
-  env -i "$@" PATH="$dir" HOME="$_HI_WORKDIR" _HI_HOME="$_HI_HOME" "$BASH" -c '
+  env -i "$@" PATH="$dir:$(_hi_real_path shell-tools id awk getent sh)" \
+    HOME="$_HI_WORKDIR" _HI_HOME="$_HI_HOME" "$BASH" -c '
     _HI_LOAD_NO_INIT=1
     source "$_HI_HOME/hi.d/common/core.sh"
     source "$_HI_HOME/hi.d/load.sh"

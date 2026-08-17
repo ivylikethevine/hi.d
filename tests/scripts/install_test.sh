@@ -735,14 +735,14 @@ function run_install_tests() {
   _hi_check "No backup for an empty target" test_config_shell_no_backup_for_empty_target
 
   _hi_h2 "Testing: settings are sourced ahead of paths.sh"
+  _hi_check "common/core.sh" test_core_sources_settings_first
+  _hi_check "shells/config.fish" test_fish_config_sources_settings_first
+
   _hi_h2 "Testing: config_prompt_ends"
   _hi_check "Defaults write nothing" test_prompt_ends_writes_nothing_for_the_defaults
   _hi_check "An existing override is kept" test_prompt_ends_keeps_an_existing_override
   _hi_check "Written values are quoted" test_prompt_ends_quotes_what_it_writes
   _hi_check "Skipped when the prompt is off" test_prompt_ends_skipped_when_the_prompt_is_off
-
-  _hi_check "common/core.sh" test_core_sources_settings_first
-  _hi_check "shells/config.fish" test_fish_config_sources_settings_first
 
   _hi_h2 "Testing: overlay_init / overlay_commit"
   _hi_check_requires git "Init makes a repo with a first commit" test_overlay_init_creates_a_repo_with_a_first_commit

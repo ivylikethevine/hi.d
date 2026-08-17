@@ -36,13 +36,27 @@ _HI_RELEASE_WF="$_HI_ROOT/.github/workflows/release.yml"
 source "$_HI_PKG_DIR/bump.sh"
 
 # The staging root every packager builds from, laid down exactly the way
-# packaging/mkpkg.sh lays it down. Prints the DESTDIR.
+# packaging/mkpkg.sh lays it down. Prints the DESTDIR. Staged once and
+# shared: every caller only reads it, and install_tree is the expensive part
+# of this suite.
 function stage_fixture() {
   local dest="$_HI_WORKDIR/stage"
-  local _HI_PREFIX="/usr/share" DESTDIR="$dest"
-  mkdir -p "$dest"
-  install_tree >/dev/null
+  if [ ! -d "$dest" ]; then
+    local _HI_PREFIX="/usr/share" DESTDIR="$dest"
+    mkdir -p "$dest"
+    install_tree >/dev/null
+  fi
   printf '%s' "$dest"
+}
+
+# One shared `mkpkg.sh --stage-only --version 9.9.9` output for the read-only
+# stamp cases, same run-once contract. Prints the outdir; empty on failure.
+function _hi_staged_999() {
+  local out="$_HI_WORKDIR/stage999"
+  if [ ! -d "$out" ]; then
+    "$_HI_PKG_DIR/mkpkg.sh" --stage-only --version 9.9.9 --outdir "$out" >/dev/null 2>&1 || return 1
+  fi
+  printf '%s' "$out"
 }
 
 # --- nfpm.yaml vs install_tree ------------------------------------------------
@@ -442,8 +456,8 @@ function test_formula_stamps_the_release() {
 }
 
 function test_package_sh_stamps_the_staged_launcher() {
-  local out="$_HI_WORKDIR/pkgstamp"
-  "$_HI_PKG_DIR/mkpkg.sh" --stage-only --version 9.9.9 --outdir "$out" >/dev/null 2>&1 &&
+  local out
+  out="$(_hi_staged_999)" &&
     grep -qF '_HI_RELEASE="9.9.9"' "$out/staging/usr/share/hi.d/hi.sh"
 }
 
@@ -460,11 +474,11 @@ function test_formula_stamps_the_man_page() {
   grep -qF 'inreplace "docs/hi.1"' "$_HI_FORMULA"
 }
 
-# through the same --stage-only run shape as the launcher's check: the staged
-# gz must open to a .TH carrying the asked-for version and a real date
+# through the same --stage-only run as the launcher's check: the staged gz
+# must open to a .TH carrying the asked-for version and a real date
 function test_package_sh_stamps_the_staged_man_page() {
-  local out="$_HI_WORKDIR/manstamp"
-  "$_HI_PKG_DIR/mkpkg.sh" --stage-only --version 9.9.9 --outdir "$out" >/dev/null 2>&1 &&
+  local out
+  out="$(_hi_staged_999)" &&
     gzip -dc "$out/staging/usr/share/man/man1/hi.1.gz" |
     grep -qE '^\.TH HI 1 "[0-9]{4}-[0-9]{2}-[0-9]{2}" "hi\.d 9\.9\.9"'
 }

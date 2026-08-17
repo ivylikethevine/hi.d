@@ -23,39 +23,10 @@ source "$_HI_TEST_LIB"
 # shellcheck source=../../hi.sh
 source "$_HI_LAUNCHER"
 
+# The fake backend CLIs come from test_lib.sh's _hi_probe_shims - the one
+# home of the exact argv shapes hi.sh's predicates make. "yes" is
+# running/Running, anything else is not.
 _HI_SHIM_PATH=""
-
-# Each shim answers only the exact invocation hi.sh makes and fails anything
-# else, so a changed command shape shows up as a failing predicate rather than
-# a silently passing test. "yes" is running/Running, "no" is not.
-function _hi_write_shims() {
-  local dir="$_HI_WORKDIR/shims"
-  mkdir -p "$dir"
-
-  cat >"$dir/docker" <<'EOF'
-#!/bin/sh
-[ "$1 $2 $3" = "container inspect -f" ] || exit 1
-case "$5" in yes) printf 'true\n' ;; *) printf 'false\n' ;; esac
-EOF
-
-  # podman is a drop-in for docker in hi.sh, so the shim is the same file
-  cp "$dir/docker" "$dir/podman"
-
-  cat >"$dir/nomad" <<'EOF'
-#!/bin/sh
-[ "$1 $2 $3" = "alloc status -t" ] || exit 1
-case "$5" in yes) printf 'running\n' ;; *) printf 'pending\n' ;; esac
-EOF
-
-  cat >"$dir/kubectl" <<'EOF'
-#!/bin/sh
-[ "$1 $2 $4" = "get pod -o" ] || exit 1
-case "$3" in yes) printf 'Running\n' ;; *) printf 'Pending\n' ;; esac
-EOF
-
-  chmod +x "$dir"/*
-  _HI_SHIM_PATH="$dir:$PATH"
-}
 
 # _hi_parse writes to the globals DOMAIN/CMDARG/SSHARGS and can exit outright,
 # so every case runs it in a subshell and prints what it produced. Fields are
@@ -357,42 +328,62 @@ function test_basher_shim_refuses_a_misnamed_clone() {
 # drift guard on that copy - the segment rendering itself is proven against a
 # real mksh in tests/targets/ssh_test.sh, which is where a prompt belongs.
 
-# every escape ksh.sh defines has to be the one core.sh defines under the same
-# name, or the two tiers disagree about what "dirty" looks like
-function test_ksh_colors_match_core() {
-  local name val core_val
-  for name in NC RED YELLOW BRGREEN BRBLUE BRPURPLE; do
-    val="$(sed -n "s/^_HI_KSH_$name='\(.*\)'$/\1/p" "$_HI_ROOT/shells/ksh.sh")"
-    [ -n "$val" ] || return 1
-    # core.sh writes them as \e, ksh.sh as \033 - the same byte, spelled for a
-    # shell with no `echo -e`
-    core_val="$(eval "printf '%s' \"\${$name}\"" | sed 's/\\e/\\033/')"
-    [ "$val" = "$core_val" ] || {
-      _hi_cecho " | $name: ksh.sh has '$val', core.sh has '$core_val'" "$RED"
-      return 1
-    }
-  done
+# _hi_ksh_values <name...> - "<name>=<value>" per line, read from a child bash
+# that sourced the real shells/ksh.sh (one spawn for the whole list, and no
+# assertion on how the constants are spelled - re-quoting one can't fail a
+# guard, only a changed value can). $_HI_ASCII rides the environment.
+function _hi_ksh_values() {
+  bash -c '
+    source "$_HI_ROOT/shells/ksh.sh" >/dev/null 2>&1
+    for name in "$@"; do
+      eval "printf \"%s=%s\\n\" \"$name\" \"\$_HI_KSH_$name\""
+    done' _ "$@"
 }
 
-# the same for the glyph pair, both halves: a new glyph in core.sh's
-# _hi_choose_glyphs that never reaches ksh.sh is the drift this catches
-function test_ksh_glyphs_match_core() {
-  local name val ascii core="" # core is set by the eval below, which shellcheck can't see
-  for ascii in 0 1; do
-    for name in AHEAD BEHIND STAGED DIRTY INVALID UNTRACKED STASH CLEAN ELLIPSIS; do
-      val="$(_HI_ASCII="$ascii" bash -c '
-        source "$_HI_ROOT/shells/ksh.sh" >/dev/null 2>&1
-        eval "printf %s \"\$_HI_KSH_'"$name"'\""')"
-      _HI_ASCII="$ascii" _hi_choose_glyphs
-      eval "core=\"\$_HI_GLYPH_$name\""
-      [ "$val" = "$core" ] || {
-        _hi_cecho " | _HI_ASCII=$ascii $name: ksh.sh '$val' vs core.sh '$core'" "$RED"
-        _hi_choose_glyphs
-        return 1
-      }
+# ...and core.sh's answer for the same names, from a subshell so the suite's
+# own glyph choice is untouched. <prefix> is the core-side variable family.
+function _hi_core_values() {
+  local prefix="$1" ascii="$2" name
+  shift 2
+  (
+    _HI_ASCII="$ascii"
+    _hi_choose_glyphs
+    for name in "$@"; do
+      eval "printf '%s=%s\n' \"$name\" \"\${$prefix$name}\""
     done
+  )
+}
+
+function _hi_blocks_agree() {
+  local label="$1" a="$2" b="$3"
+  [ -n "$a" ] && [ "$a" = "$b" ] && return 0
+  _hi_cecho " | $label: ksh.sh and core.sh disagree -" "$RED"
+  printf 'ksh.sh:\n%s\ncore.sh:\n%s\n' "$a" "$b" | sed 's/^/      /'
+  return 1
+}
+
+# every escape ksh.sh defines has to be the one core.sh defines under the same
+# name, or the two tiers disagree about what "dirty" looks like
+_HI_KSH_COLOR_NAMES=(NC RED YELLOW BRGREEN BRBLUE BRPURPLE)
+function test_ksh_colors_match_core() {
+  # core.sh writes them as \e, ksh.sh as \033 - the same byte, spelled for a
+  # shell with no `echo -e`
+  _hi_blocks_agree colors \
+    "$(_hi_ksh_values "${_HI_KSH_COLOR_NAMES[@]}")" \
+    "$(_hi_core_values "" 0 "${_HI_KSH_COLOR_NAMES[@]}" | sed 's/\\e/\\033/')"
+}
+
+# the same for the glyph set, both halves of the ASCII switch: a new glyph in
+# core.sh's _hi_choose_glyphs that never reaches ksh.sh is the drift this
+# catches
+_HI_KSH_GLYPH_NAMES=(AHEAD BEHIND STAGED DIRTY INVALID UNTRACKED STASH CLEAN ELLIPSIS)
+function test_ksh_glyphs_match_core() {
+  local ascii
+  for ascii in 0 1; do
+    _hi_blocks_agree "glyphs (_HI_ASCII=$ascii)" \
+      "$(_HI_ASCII="$ascii" _hi_ksh_values "${_HI_KSH_GLYPH_NAMES[@]}")" \
+      "$(_hi_core_values _HI_GLYPH_ "$ascii" "${_HI_KSH_GLYPH_NAMES[@]}")" || return 1
   done
-  _hi_choose_glyphs # leave the suite's own glyph set as it was
 }
 
 # the wiring: the ksh arm sources ksh.sh and asks for the git-carrying prompt,
@@ -686,7 +677,8 @@ function test_fallback_rc_points_config_dir_at_the_shipped_tree() {
 
 function run_hi_tests() {
   _hi_workdir hitest
-  _hi_write_shims
+  _hi_probe_shims "$_HI_WORKDIR/shims"
+  _HI_SHIM_PATH="$_HI_WORKDIR/shims:$PATH"
 
   _hi_suite_begin
 
@@ -726,6 +718,7 @@ function run_hi_tests() {
   _hi_check "Fallback rc sources paths and aliases" test_fallback_rc_sources_paths_and_aliases
   _hi_check "Fallback rc appends the command" test_fallback_rc_appends_the_command
   _hi_check "Fallback rc sources settings before paths" test_fallback_rc_sources_settings_before_paths
+  _hi_check "Fallback rc points at the shipped tree" test_fallback_rc_points_config_dir_at_the_shipped_tree
 
   _hi_h2 "Testing: remote shell handoff"
   _hi_check "The bash handoff is explicitly interactive" test_remote_suffix_forces_an_interactive_bash
@@ -751,13 +744,12 @@ function run_hi_tests() {
   _hi_check "Nothing sent without an overlay" test_overlay_is_empty_without_one
   _hi_check "Seen when present" test_overlay_is_seen_when_present
   _hi_check "Members are bare names" test_overlay_tar_members_are_bare_names
+  _hi_check "Carries only what exists" test_overlay_tar_carries_only_what_exists
   _hi_check "aliases.sh rides the stream" test_overlay_tar_carries_aliases
 
   _hi_h2 "Testing: the basher shim (bin/hi)"
   _hi_check "Works through a symlink" test_basher_shim_works_through_a_symlink
   _hi_check "Refuses a clone not named hi.d" test_basher_shim_refuses_a_misnamed_clone
-  _hi_check "Carries only what exists" test_overlay_tar_carries_only_what_exists
-  _hi_check "Fallback rc points at the shipped tree" test_fallback_rc_points_config_dir_at_the_shipped_tree
 
   _hi_h2 "Testing: the bash-less prompt"
   _hi_check "Carries user, host, color and separator" test_fallback_prompt_carries_user_host_and_color

@@ -65,33 +65,23 @@ function test_path_prefers_a_user_copy() {
 
 # --- the alias ---------------------------------------------------------------
 
-# _hi_alias_in <shell> <NAME=VALUE ...> - "yes"/"no" for the tmux alias
-function _hi_alias_in() {
-  local shell="$1" script
-  shift
-  if [ "$shell" = fish ]; then
-    script="source $_HI_ROOT/common/paths.sh; source $_HI_ALIASES; functions -q -- tmux; and echo yes; or echo no"
-  else
-    script=". $_HI_ROOT/common/paths.sh; . $_HI_ALIASES; alias tmux >/dev/null 2>&1 && echo yes || echo no"
-  fi
-  env -u _HI_CLEANUP _HI_HOME="$_HI_HOME" "$@" "$shell" -c "$script" 2>/dev/null
-}
-
+# the tmux alias, asked for through test_lib.sh's _hi_alias_probe (which
+# holds the fish-vs-POSIX dialect split and scrubs _HI_CLEANUP)
 function test_alias_defined_on_a_permanent_tree() {
   local shell="$1"
-  [ "$(_hi_alias_in "$shell")" = yes ]
+  [ "$(_hi_alias_probe "$shell" tmux)" = yes ]
 }
 
 function test_alias_off_by_toggle() {
   local shell="$1"
-  [ "$(_hi_alias_in "$shell" _HI_DISABLE_TMUX=1)" = no ]
+  [ "$(_hi_alias_probe "$shell" tmux _HI_DISABLE_TMUX=1)" = no ]
 }
 
 # the one that matters: a disposable tree is deleted when the session ends, and
 # a detached tmux would still be reading it
 function test_alias_absent_on_a_disposable_tree() {
   local shell="$1"
-  [ "$(_hi_alias_in "$shell" _HI_CLEANUP=/tmp/whatever.hi)" = no ]
+  [ "$(_hi_alias_probe "$shell" tmux _HI_CLEANUP=/tmp/whatever.hi)" = no ]
 }
 
 # the container fallback ships aliases.sh with no paths.sh to define

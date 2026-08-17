@@ -193,47 +193,39 @@ function _hi_build_frameworks() {
   done
 }
 
+# the shared driver's feeder hook: types the probe for the framework family
+# under test into the live session (see _hi_interactive_case's -f)
+function _hi_type_framework_probe() {
+  _hi_framework_probe "$_HI_FW_FAMILY"
+}
+
 # One interactive session per framework - a command-shaped run replaces load()
-# outright and never reaches the rc graft, which is where collisions live. Its
-# own pty driver rather than _hi_interactive_case only because it needs to type
-# a second line (the probe); everything else follows that helper's shape.
+# outright and never reaches the rc graft, which is where collisions live. The
+# probe (a second typed line) rides _hi_interactive_case's feeder hook.
 function _hi_run_framework_case() {
-  local label="$1" login_shell="$2" family="$3" name out ok=0 exit_code t0 t1
+  local label="$1" login_shell="$2" name ok=0
+  _HI_FW_FAMILY="$3"
+
+  # checked before the container boots, not after: with no pty to drive there
+  # is nothing a booted container could add to the skip
+  if [ "${#_HI_PTY_FORCED[@]}" -eq 0 ]; then
+    _hi_skip "[$label]" "no python3 to drive an interactive pty"
+    return 0
+  fi
 
   name="hi-fwtest-$label-c-$$"
-  out="$_HI_WORKDIR/$label.interactive.out"
   _hi_h3 "Testing framework: $label ($login_shell)"
   _hi_sshd_container "$name" "hi-fwtest-$label-$$" -e "LOGIN_SHELL=$login_shell" || return 1
   _hi_ssh_launch "$_HI_SSH_PORT"
 
-  if [ "${#_HI_PTY_FORCED[@]}" -eq 0 ]; then
-    _hi_skip "[$label]" "no python3 to drive an interactive pty"
-    docker rm -f "$name" >/dev/null 2>&1
-    return 0
-  fi
-
-  t0="$(_hi_now)"
-  : >"$out"
-  # shellcheck disable=SC2094 # separate processes; the reader only polls
-  {
-    _hi_poll_bool "$((${_HI_INTERACTIVE_SETTLE:-4} * 4))" 0.25 _hi_session_ready "$out" || true
-    printf "printf '%%s-%%s\\n' %s INTERACTIVE\n" "$_HI_TEST_MARKER"
-    _hi_framework_probe "$family"
-    printf 'exit\n'
-    _hi_poll_bool 20 0.25 grep -q "hi closing" "$out" || true
-  } | "${_HI_PTY_FORCED[@]}" "${_HI_SSH_LAUNCH_BARE[@]}" >"$out" 2>&1 &
-  _hi_wait_pid "$!" 90 _hi_timed_out "$label" 90
-  exit_code="$_HI_WAIT_EXIT"
-  t1="$(_hi_now)"
-
-  if _hi_case_result "$label" "framework" "$exit_code" "$t0" "$t1" "$out" \
-    "$_HI_TEST_MARKER-INTERACTIVE" "hi closing" "HI_FW-CLEAN"; then
+  if _hi_interactive_case -f _hi_type_framework_probe -m "HI_FW-CLEAN" \
+    "$label" framework "$_HI_TEST_MARKER" 90 "${_HI_SSH_LAUNCH_BARE[@]}"; then
     # the assertion this suite exists for: hi and the framework coexisting
     # without either one printing at the user
-    _hi_transcript_is_clean "$label" "$out" && ok=1
+    _hi_transcript_is_clean "$label" "$_HI_WORKDIR/$label.interactive.out" && ok=1
   fi
 
-  docker rm -f "$name" >/dev/null 2>&1
+  _hi_rm_container "$name"
   [ "$ok" -eq 1 ]
 }
 

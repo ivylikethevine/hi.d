@@ -95,6 +95,7 @@ _HI_TESTS_DIR="${_HI_TESTS_DIR:-$_HI_ROOT/tests}"
 # Checked before suite matching so `--help` can't be mistaken for a suite name
 # and rejected as unknown. The suite list comes from $_HI_TESTS rather than
 # being spelled out again, so it can't drift.
+# TODO: Add a --verbose flag
 _HI_GROUP=""
 _HI_LIST=0
 _HI_LIST_PATHS=0
@@ -266,7 +267,7 @@ for _hi_t in "${_HI_SELECTED[@]}"; do
     continue
   fi
 
-  _hi_h2 "Running $_hi_name ($_hi_path)"
+  _hi_h2 "Running $_hi_name"
   : >"$_HI_COUNTS_FILE"
   : >"$_HI_FAILS_FILE"
   _hi_t0="$(_hi_now)"

@@ -49,7 +49,9 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y zsh fish
 
       # same pinned upstream binary ci.yml uses - the distro package lags badly
-      - uses: ./.github/actions/setup-shellcheck
+      - uses: ./.github/actions/setup-tool
+        with:
+          tool: shellcheck
 
       # The tarball both channels checksum only exists once the tag does, so
       # the bump runs here, not before tagging (which needed a force-retag).
@@ -90,7 +92,9 @@ jobs:
       - name: Run fast test suites
         run: "${{ github.workspace }}/tests/test_runner.sh --group fast"
 
-      - uses: ./.github/actions/setup-nfpm
+      - uses: ./.github/actions/setup-tool
+        with:
+          tool: nfpm
 
       # The apk signing key, when the APK_SIGNING_KEY repo secret exists.
       # Absent (forks, before-first-release), the apk builds unsigned exactly
@@ -111,10 +115,29 @@ jobs:
             echo "no APK_SIGNING_KEY secret - the apk will be unsigned"
           fi
 
-      # asserts one artifact per format and writes dist/SHA256SUMS itself
+      # asserts one artifact per format and writes dist/SHA256SUMS and
+      # dist/ARTIFACTS itself
       - name: Build the packages
         run: packaging/mkpkg.sh
 
+      # What the release consists of, read from mkpkg.sh's dist/ARTIFACTS
+      # rather than respelled as *.deb *.rpm *.apk in three places here.
+      # A multiline output, which is the shape both actions below take.
+      - name: List what the release ships
+        id: artifacts
+        run: |
+          set -euo pipefail
+          {
+            echo 'paths<<HI_ARTIFACTS_EOF'
+            sed 's|^|dist/|' dist/ARTIFACTS
+            echo 'HI_ARTIFACTS_EOF'
+          } >>"$GITHUB_OUTPUT"
+
+      # Not folded into a shared list: the four places manifests are named
+      # here are four *different subsets* for four destinations - all five
+      # into the artifact, the three bump.sh rewrites back onto main, the one
+      # formula to the tap, the two AUR files to the AUR. A single list would
+      # have to be re-subsetted at each, which is more code than four cp lines.
       - name: Collect the manifests alongside them
         run: |
           set -euo pipefail
@@ -131,21 +154,15 @@ jobs:
       #   gh attestation verify <file> --repo <owner>/<repo>
       - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
-          subject-path: |
-            dist/*.deb
-            dist/*.rpm
-            dist/*.apk
-            dist/SHA256SUMS
+          subject-path: ${{ steps.artifacts.outputs.paths }}
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: packages
           path: |
-            dist/*.deb
-            dist/*.rpm
-            dist/*.apk
-            dist/SHA256SUMS
+            ${{ steps.artifacts.outputs.paths }}
             dist/manifests/*
+            dist/ARTIFACTS
           if-no-files-found: error
 
   # The only job that publishes, and it waits for you.
@@ -177,7 +194,9 @@ jobs:
           name: packages
           path: dist
 
-      - uses: ./.github/actions/setup-minisign
+      - uses: ./.github/actions/setup-tool
+        with:
+          tool: minisign
 
       # The offline half of release verification: the attestation proves which
       # workflow run built the artifacts but needs gh and GitHub to check; a
@@ -209,7 +228,11 @@ jobs:
             gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --generate-notes
           # The manifests ride along with the packages so that updating the AUR
           # and the tap is a copy rather than a re-derivation of the same sums.
-          files=(dist/*.deb dist/*.rpm dist/*.apk dist/SHA256SUMS dist/manifests/*)
+          # the package list comes from mkpkg.sh's dist/ARTIFACTS; read line by
+          # line rather than with mapfile, which is bash 4
+          files=()
+          while IFS= read -r f; do files+=("dist/$f"); done <dist/ARTIFACTS
+          files+=(dist/manifests/*)
           [ -f dist/SHA256SUMS.minisig ] && files+=(dist/SHA256SUMS.minisig)
           gh release upload "$GITHUB_REF_NAME" --clobber "${files[@]}"
 

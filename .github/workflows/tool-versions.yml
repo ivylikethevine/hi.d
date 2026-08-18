@@ -1,9 +1,9 @@
 name: Tool versions
 
-# Weekly drift check over the curl-installed tools inside the setup-*
-# composite actions - the one class of pin dependabot cannot see (its own
-# config says so). A red run with ::warning annotations is the signal; the
-# bump itself stays a one-line edit to the action's `version:` default.
+# Weekly drift check over the curl-installed tools in setup-tool's tools.txt -
+# the one class of pin dependabot cannot see (its own config says so). A red
+# run with ::warning annotations is the signal; the bump itself stays a
+# one-line edit to that file's version column.
 on:
   schedule:
     - cron: "23 7 * * 1"

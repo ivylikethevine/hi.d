@@ -26,7 +26,9 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y zsh fish kcov
 
       # the shellcheck suite runs under kcov too; same pinned binary as ci.yml
-      - uses: ./.github/actions/setup-shellcheck
+      - uses: ./.github/actions/setup-tool
+        with:
+          tool: shellcheck
 
       - name: Run the fast suites under kcov
         run: tests/coverage.sh coverage-report

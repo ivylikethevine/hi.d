@@ -7,7 +7,7 @@
 #
 # What is deliberately NOT here: building a real .deb or a real .pkg.tar.zst.
 # That needs the toolchains and belongs in the verification runbook
-# (packaging/README.md), not in the fast group.
+# (docs/PACKAGING.md), not in the fast group.
 #
 # Nearly every function below is invoked indirectly - by name, through
 # _hi_case's "$@" - which SC2329 can't see.

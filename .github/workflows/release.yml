@@ -172,7 +172,7 @@ jobs:
   # CONFIGURED BY THIS FILE - it is a repo setting, and until it exists the
   # environment imposes no gate at all and this job runs unattended. One-time
   # setup: Settings -> Environments -> New environment -> "release" -> tick
-  # "Required reviewers" and add yourself. See packaging/README.md.
+  # "Required reviewers" and add yourself. See docs/PACKAGING.md.
   publish:
     name: publish to the release (manual approval)
     needs: build
@@ -273,7 +273,7 @@ jobs:
   # that check gets recorded before the formula goes live.
   #
   # Every step no-ops loudly without HOMEBREW_TAP_TOKEN, which is what lets this
-  # land before the tap repo exists. See packaging/README.md.
+  # land before the tap repo exists. See docs/PACKAGING.md.
   tap:
     name: open a PR against the Homebrew tap
     needs: publish
@@ -297,7 +297,7 @@ jobs:
           set -euo pipefail
           if [ -z "${GH_TOKEN:-}" ]; then
             echo "no HOMEBREW_TAP_TOKEN secret - the tap formula was NOT updated;"
-            echo "copy dist/manifests/hi.d.rb to Formula/hi.d.rb by hand (packaging/README.md)"
+            echo "copy dist/manifests/hi.d.rb to Formula/hi.d.rb by hand (docs/PACKAGING.md)"
             exit 0
           fi
           branch="hi.d-$GITHUB_REF_NAME"
@@ -339,7 +339,7 @@ jobs:
   # Two things this job deliberately does NOT do:
   #   - run namcap. It is the hard gate before an AUR submission and it needs an
   #     Arch box, which this runner is not. The first push of each package is
-  #     therefore still a manual, namcap'd one (packaging/README.md); this job
+  #     therefore still a manual, namcap'd one (docs/PACKAGING.md); this job
   #     is for the releases after that.
   #   - touch hi.d-git. That package builds from `main` and has no version to
   #     bump, so a release has nothing to say to it.
@@ -369,7 +369,7 @@ jobs:
           if [ -z "${AUR_SSH_KEY:-}" ]; then
             echo "no AUR_SSH_KEY secret - the AUR package was NOT updated;"
             echo "copy dist/manifests/PKGBUILD and .SRCINFO to the aur/hi.d repo by hand,"
-            echo "after running the namcap gate in packaging/README.md"
+            echo "after running the namcap gate in docs/PACKAGING.md"
             exit 0
           fi
           # the key never touches the workspace: $RUNNER_TEMP is outside it, and

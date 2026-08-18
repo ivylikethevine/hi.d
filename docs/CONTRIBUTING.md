@@ -14,7 +14,8 @@ tests/test_runner.sh                    # every suite
 tests/test_runner.sh header shellcheck  # just the named suites
 tests/test_runner.sh --group fast       # what CI runs on every push
 tests/test_runner.sh --group bench      # hot-path timings vs ceilings
-tests/test_runner.sh --group e2e        # real containers; needs docker
+tests/test_runner.sh --group e2e        # ssh/docker/framework; needs docker
+tests/test_runner.sh --group backends   # podman/nomad/kube; its own CI job
 tests/test_runner.sh --host-report      # ...plus what this machine is
 tests/test_runner.sh --verbose          # every transcript, nothing collapsed
 ```
@@ -49,7 +50,7 @@ all of them:
 3. **The bash-3.2 grep**: no `mapfile`, no associative arrays, no namerefs,
    no `${x,,}` - macOS ships bash 3.2 and hi runs there. Every
    deliberately-odd construct this forces is explained once in
-   [docs/GLOSSARY.md](docs/GLOSSARY.md); code references entries with
+   [GLOSSARY.md](GLOSSARY.md); code references entries with
    `# GLOSSARY: <entry>` tags rather than re-explaining.
 4. **shfmt** as a formatting gate. The style comes from `.editorconfig`;
    fix a red run with `shfmt -w .`.

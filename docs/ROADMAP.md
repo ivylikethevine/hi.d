@@ -16,13 +16,6 @@ only what's left.
 
 ### Release & packaging
 
-- [ ] **Channel publish automation** — updating the AUR and the tap used to be
-      hand-copying manifests. Both are now jobs behind the one release gate.
-      Ticks when both have run for real.
-
-  - **Homebrew tap PR** — _Written._ `release.yml`'s `tap` job (`needs: publish`, same `environment: release`) opens a PR against `<owner>/homebrew-tap` with the regenerated formula and the `brew install`/`test`/`audit` checklist in its body. No-ops loudly without `HOMEBREW_TAP_TOKEN`, which is what makes it safe to land before the tap repo exists.
-  - **AUR push** — _Written; the account is the remaining half._ The `aur` job pushes the regenerated `PKGBUILD` and `.SRCINFO` to `ssh://aur@aur.archlinux.org/hi.d.git` behind the same gate, key in `$RUNNER_TEMP` and the host key keyscanned rather than trusted on first use. Refuses a checkout with untracked files; no-ops loudly without `AUR_SSH_KEY`. It deliberately does not run namcap — that needs an Arch box — so each package's _first_ push stays manual and this job is for the releases after. `hi.d-git` is never touched: it builds from `main` and has no version to bump.
-
 - [ ] **Source tarball under the provenance chain** — _Blocked on: v1._ Both
       manifests checksum GitHub's auto-generated `/archive/` tarball, the one
       released artifact with no attestation and no signature over it. The
@@ -51,40 +44,32 @@ What is left here are three **recommendations against** doing the work, kept
 because each is a question that will be asked again. The rosters, the version
 stamp and the CI tooling shipped; git history is the ledger.
 
-- [ ] **Unify the two fallback-launch recipes** — recommendation: leave both.
-      The launch idiom is already shared (`_hi_fallback_rc`,
-      `_hi_ladder_probe`, `_hi_fallback_prompt`, `_hi_armored_line`); what
-      remains diverges by mechanism, not by accident. ssh writes the rc and
-      has the _target_ append per arm, because the payload has to be armored;
-      the container composes client-side and writes once, because `exec -i`
-      takes raw bytes. A shared renderer would have to emit into both, which
-      is more machinery than the three duplicated arms it would remove.
-- [ ] **One git-segment implementation** — recommendation: keep both, for the
-      same reason the bash-less tier has no header. Retiring
-      `common/git_prompt.sh` in favor of `shells/ksh.sh`'s POSIX segment costs
-      bash and zsh a `$( )` fork per prompt (their out-var call exists to
-      avoid exactly that, and POSIX has no `printf -v`), adds ksh.sh's
-      heredoc subshell and temp file per prompt, leaks `_hi_kg_*` into the
-      user's shell for want of `local`, and loses `REBASE-i 3/7` and the
-      rebase `head-name` branch recovery. The payload win is ~119 lines
-      against 39KB used of a 48KB budget — the one thing not in short supply.
-- [ ] **Runner parallelism** — `test_runner.sh --jobs N`, still waiting until
-      the serial wall clock actually hurts. Two things to know before
-      starting: `_HI_SSHD_IMAGE` is a _fixed_ tag four e2e suites share on
-      purpose so a full run builds it once, so parallelising that group means
-      either serialising it anyway or losing the sharing; and bash 3.2 has no
-      `wait -n`, so the pool has to poll `kill -0` the way `_hi_wait_pid`
-      does. `fast`'s 19 suites are the subset that would parallelise cleanly.
+- **Unify the two fallback-launch recipes** — recommendation: leave both.
+  The launch idiom is already shared (`_hi_fallback_rc`,
+  `_hi_ladder_probe`, `_hi_fallback_prompt`, `_hi_armored_line`); what
+  remains diverges by mechanism, not by accident. ssh writes the rc and
+  has the _target_ append per arm, because the payload has to be armored;
+  the container composes client-side and writes once, because `exec -i`
+  takes raw bytes. A shared renderer would have to emit into both, which
+  is more machinery than the three duplicated arms it would remove.
+- **One git-segment implementation** — recommendation: keep both, for the
+  same reason the bash-less tier has no header. Retiring
+  `common/git_prompt.sh` in favor of `shells/ksh.sh`'s POSIX segment costs
+  bash and zsh a `$( )` fork per prompt (their out-var call exists to
+  avoid exactly that, and POSIX has no `printf -v`), adds ksh.sh's
+  heredoc subshell and temp file per prompt, leaks `_hi_kg_*` into the
+  user's shell for want of `local`, and loses `REBASE-i 3/7` and the
+  rebase `head-name` branch recovery. The payload win is ~119 lines
+  against 39KB used of a 48KB budget — the one thing not in short supply.
+- **Runner parallelism** — `test_runner.sh --jobs N`, still waiting until
+  the serial wall clock actually hurts. Two things to know before
+  starting: `_HI_SSHD_IMAGE` is a _fixed_ tag four e2e suites share on
+  purpose so a full run builds it once, so parallelising that group means
+  either serialising it anyway or losing the sharing; and bash 3.2 has no
+  `wait -n`, so the pool has to poll `kill -0` the way `_hi_wait_pid`
+  does. `fast`'s 19 suites are the subset that would parallelise cleanly.
 
 ### Docs
-
-- [ ] **The packaging runbook itself** — seven places point at
-      `packaging/README.md` (release.yml five times, this file's AUR entry,
-      packaging_test.sh's header) and CLAUDE.md points at `docs/packaging.md`.
-      Neither file exists. The content is real and mostly written down already,
-      scattered: the pre-submit namcap gate, the tap's `brew audit --strict
-      --new` gate, and what the release workflow does and does not automate.
-      One file, and the eight references pointed at it.
 
 - [ ] **Jekyll GitHub Pages site** — _Written; the one click is the remaining
       half._ `pages.yml` builds the repo's markdown with the stock
@@ -186,22 +171,33 @@ Two keypairs. **The in-repo half of both is written and tested** — CI consumes
     minisign -G -W -p minisign.pub -s minisign.key
     ```
 
-- [ ] **Homebrew tap token** — only once the tap-PR job (see [Code
-      work](#code-work)) has something to push to. The job no-ops cleanly
-      without it.
+### Release channels
 
-  - **Where:** a fine-grained PAT, then Settings → Secrets and variables → Actions
-  - **Do:** create a token scoped to the `homebrew-tap` repo with contents + pull-requests write, add it as `HOMEBREW_TAP_TOKEN`.
-  - **Ticks when:** the secret exists and a release has opened a tap PR.
+Both jobs are written and behind the release gate; what's left in each is
+human — an account, a key, and (once) a real machine or a real box to run the
+gate namcap needs. The full walkthrough (commands, what a clean run prints,
+what's already been verified) is [PACKAGING.md](PACKAGING.md)'s
+_Publishing each channel_ section — these two entries are just the remaining
+human steps and their tick conditions.
 
-- [ ] **AUR deploy key** — only once the account exists and each package has
-      been pushed by hand once (that first push is where namcap gates, and no
-      runner here can run it). The `aur` job keeps the versioned package
-      current after that, and no-ops loudly without the secret.
+- [ ] **AUR** — register an account; `ssh-keygen -t ed25519`, add the public
+      half there, add the private half as the `AUR_SSH_KEY` repo secret and
+      delete the local copy. For each package's first push, re-run the
+      namcap gate against the published source and push only `PKGBUILD` +
+      `.SRCINFO` — that first push is manual, `release.yml`'s `aur` job
+      handles the versioned package after.
 
-  - **Where:** a terminal, then Settings → Secrets and variables → Actions
-  - **Do:** `ssh-keygen -t ed25519`, add the public half to your AUR account, add the private half as `AUR_SSH_KEY`, delete the local private half.
-  - **Ticks when:** the secret exists and a release has pushed to the AUR.
+  - **Ticks when:** both packages are live on the AUR and the `aur` job has
+    kept `hi.d` current for one real release.
+
+- [ ] **Homebrew tap** — create the `homebrew-tap` repo (a plain GitHub repo
+      with a `Formula/` directory), add a fine-grained PAT scoped to it
+      (contents + pull-requests write) as `HOMEBREW_TAP_TOKEN`, then re-run
+      the `brew install`/`test`/`audit` gate on an actual Mac (the keg lives
+      under `/opt/homebrew` there, not Linuxbrew's prefix used so far).
+
+  - **Ticks when:** `brew install ivy/tap/hi.d` works, from a release the
+    `tap` job opened a PR for.
 
 ### CI runs to dispatch
 
@@ -237,21 +233,6 @@ All three are written, committed, and dispatch-only. They need nothing but the r
 
 ### External accounts & submissions
 
-Each needs an account or a repo that doesn't exist yet; all of it waits for v1.
-
-- [ ] **AUR** — no account, no submission yet. Two packages: `hi.d-git` (works
-      today, no tag needed) and `hi.d` (once v1.0.0 exists).
-
-  - **Do:** register an AUR account and add an SSH key, then run the pre-submit gate in `packaging/README.md` for **each** package — `makepkg -f`, `namcap PKGBUILD`, `namcap ./*.pkg.tar.zst`, `pacman -Qlp`. namcap is a hard gate, not a suggestion. Push only `PKGBUILD` + `.SRCINFO`. Never submit the versioned package with `b2sums=('SKIP')` — `SKIP` is correct only on `hi.d-git`.
-  - **Ticks when:** both packages are live on the AUR.
-
-- [ ] **Homebrew tap** — a tap is just a GitHub repo named `homebrew-tap` with
-      a `Formula/` directory. No review, no approval, which is exactly why the
-      local gate matters.
-
-  - **Do:** create the repo, then `brew install --build-from-source`, `brew test hi.d`, and `brew audit --strict --new hi.d` must all pass before the formula is copied in.
-  - **Ticks when:** `brew install ivy/tap/hi.d` works.
-
 - [ ] **tldr page** — five example lines reach everyone who types `tldr hi`
       before anyone reads a man page. Upstream has its own style guide and
       review, so this is a submission, not a file here; the draft is at
@@ -259,35 +240,6 @@ Each needs an account or a repo that doesn't exist yet; all of it waits for v1.
 
   - **Do:** open the PR against tldr-pages **after v1**, once the CLI surface is frozen — examples that churn are worse than no page.
   - **Ticks when:** it is merged upstream.
-
-### Needs a machine this repo's CI doesn't have
-
-Not GitHub-button work: human actions purely because no runner covers them, listed apart so they aren't mistaken for something a workflow could take over.
-
-- [ ] **Homebrew formula verification** — _the formula is verified; the mac is
-      not._ `brew install --build-from-source`, `brew test` and
-      `brew audit --strict --new` have all run in the `homebrew/brew` container
-      against a local tarball, and the keg was exercised (`hi --version`
-      reports the formula's version, the man page lands, the wrapper exports
-      `_HI_HOME`, `hi --doctor` reads the keg). Two findings came out and are
-      fixed: the description needed a capital, and audit rejects
-      `uses_from_macos "openssh"` — the formula now declares no dependencies,
-      which is right, since `ssh` and `base64` ship with every system that
-      could install it. Audit's only remaining complaints are the unreachable
-      homepage and HEAD URL, i.e. the repo not being public yet.
-
-  - **Ticks when:** the same three commands pass on an actual mac, where the keg lives under `/opt/homebrew` rather than Linuxbrew's prefix.
-
-- [ ] **AUR package verification** — _the local half is done_: both PKGBUILDs
-      built with `makepkg`, linted with `namcap` (recipe silent, package down
-      to three documented false positives), installed into a clean
-      `archlinux:base` container, exercised and removed. Two fixes came out —
-      `coreutils` dropped from `depends` (it is in `base`), and `hi.d-git` now
-      stamps `$pkgver`, since the installed tree has no `.git` for
-      `hi --version` to fall back on. What's left needs the real thing: the
-      same run against the published source, once the repo is public.
-
-  - **Ticks when:** run clean for both packages against the published source.
 
 Nice to have -
 

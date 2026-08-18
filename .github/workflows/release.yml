@@ -32,7 +32,7 @@ jobs:
   # that a bad tag is caught before anyone is asked to approve anything.
   build:
     name: build packages
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.RUNNER_LABEL || 'ubuntu-latest' }}
     timeout-minutes: 30
     # the provenance attestation below needs these two; contents stays read
     permissions:
@@ -162,7 +162,7 @@ jobs:
     # hard gate, not just the environment: a rehearsal dispatch must never be
     # able to publish, however the environment happens to be configured
     if: github.event_name == 'push'
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.RUNNER_LABEL || 'ubuntu-latest' }}
     timeout-minutes: 15
     environment: release
     permissions:
@@ -255,7 +255,7 @@ jobs:
     name: open a PR against the Homebrew tap
     needs: publish
     if: github.event_name == 'push'
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.RUNNER_LABEL || 'ubuntu-latest' }}
     timeout-minutes: 15
     environment: release
     permissions:
@@ -327,7 +327,7 @@ jobs:
     name: push the AUR package
     needs: publish
     if: github.event_name == 'push'
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.RUNNER_LABEL || 'ubuntu-latest' }}
     timeout-minutes: 15
     environment: release
     permissions:

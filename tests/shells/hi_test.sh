@@ -225,7 +225,7 @@ function test_fallback_rc_sources_paths_and_aliases() {
   local out
   out="$(CMDARG="" _hi_fallback_rc)"
   # shellcheck disable=SC2016 # same as above - $_HI_ROOT is the target's to expand
-  [[ "$out" == *'$_HI_ROOT/common/paths.sh'* && "$out" == *'$_HI_ROOT/shells/aliases.sh'* ]]
+  [[ "$out" == *'$_HI_ROOT/common/paths.sh'* && "$out" == *'$_HI_ROOT/misc/aliases.sh'* ]]
 }
 
 function test_fallback_rc_appends_the_command() {
@@ -236,7 +236,7 @@ function test_fallback_rc_appends_the_command() {
 # settings ahead of paths.sh - paths.sh's local-only gate reads them, so lines
 # arriving after it would be set too late to have any effect
 function test_fallback_rc_sources_settings_before_paths() {
-  _hi_before "$(CMDARG="" _hi_fallback_rc)" 'misc/settings\.sh' 'common/paths\.sh'
+  _hi_before "$(CMDARG="" _hi_fallback_rc)" 'config/settings\.sh' 'common/paths\.sh'
 }
 
 # bash reads an --rcfile only when it is interactive, and decides that from its
@@ -310,8 +310,8 @@ function test_overlay_is_seen_when_present() {
 }
 
 # members land at the archive's top level under their plain names, since it is
-# unpacked *over* the target's misc/ - a "colors" that arrived as "hi.d/colors"
-# or "./config/colors" would be invisible to paths.sh
+# unpacked straight into the target's config/ - a "colors" that arrived as
+# "hi.d/colors" or "./config/colors" would be invisible to paths.sh
 function test_overlay_tar_members_are_bare_names() {
   local dir listing
   dir="$(_hi_overlay_fixture members colors packages settings.sh)"
@@ -328,7 +328,8 @@ function test_overlay_tar_carries_only_what_exists() {
 }
 
 # the additive personal aliases ride the same stream under their bare name,
-# which is where shells/aliases.sh's tail line looks on the target
+# which is where misc/aliases.sh's tail line ($_HI_CONFIG_DIR/aliases.sh, the
+# target's config/) looks - a separate file from the shipped one, on purpose
 function test_overlay_tar_carries_aliases() {
   local dir
   dir="$(_hi_overlay_fixture withaliases aliases.sh)"
@@ -741,12 +742,14 @@ function test_term_fallback_can_be_disabled() {
   [ "$(_hi_preamble_final_term TERM=hi-test-no-such-term _HI_TERM_FALLBACK=0)" = hi-test-no-such-term ]
 }
 
-# On a target, $_HI_CONFIG_DIR is the misc/ we just unpacked over, not
-# ${XDG_CONFIG_HOME:-...}: a ~/.config/hi.d belonging to whoever we logged in as
-# is not the config this session was asked to run with.
-function test_fallback_rc_points_config_dir_at_the_shipped_tree() {
+# On a target, $_HI_CONFIG_DIR is the config/ the overlay was unpacked into,
+# not ${XDG_CONFIG_HOME:-...}: a ~/.config/hi.d belonging to whoever we logged
+# in as is not the config this session was asked to run with. It must also not
+# be misc/, which holds the *shipped* aliases.sh - pointed there,
+# misc/aliases.sh's tail line sources itself forever.
+function test_fallback_rc_points_config_dir_at_the_overlay() {
   # shellcheck disable=SC2016 # $_HI_ROOT is the target's to expand, not ours
-  [[ "$(CMDARG="" _hi_fallback_rc)" == *'export _HI_CONFIG_DIR=$_HI_ROOT/misc'* ]]
+  [[ "$(CMDARG="" _hi_fallback_rc)" == *'export _HI_CONFIG_DIR=$_HI_ROOT/config'* ]]
 }
 
 function run_hi_tests() {
@@ -798,7 +801,7 @@ function run_hi_tests() {
   _hi_check "Fallback rc sources paths and aliases" test_fallback_rc_sources_paths_and_aliases
   _hi_check "Fallback rc appends the command" test_fallback_rc_appends_the_command
   _hi_check "Fallback rc sources settings before paths" test_fallback_rc_sources_settings_before_paths
-  _hi_check "Fallback rc points at the shipped tree" test_fallback_rc_points_config_dir_at_the_shipped_tree
+  _hi_check "Fallback rc points at the overlay config dir" test_fallback_rc_points_config_dir_at_the_overlay
 
   _hi_h2 "Testing: remote shell handoff"
   _hi_check "The bash handoff is explicitly interactive" test_remote_suffix_forces_an_interactive_bash

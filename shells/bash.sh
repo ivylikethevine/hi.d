@@ -6,7 +6,7 @@
 source "${_HI_HOME:-$HOME}/hi.d/common/core.sh"
 # shellcheck source=../common/git_prompt.sh
 source "$_HI_GIT_PROMPT"
-# shellcheck source=./aliases.sh
+# shellcheck source=../misc/aliases.sh
 source "$_HI_ALIASES"
 
 _hi_interactive_extras

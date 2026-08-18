@@ -26,9 +26,9 @@ done; this file is only ever what's left.
       entry ticks when both have run for real.
 
   - **Homebrew tap PR** — _Written._ `release.yml`'s `tap` job: `needs: publish`, inside the same `environment: release` so it stays behind the one approval, opening a PR against `<owner>/homebrew-tap` with the freshly regenerated formula and the `brew install`/`test`/`audit` checklist in its body. No-ops loudly without `HOMEBREW_TAP_TOKEN`, the same shape the apk and minisign steps use — which is what makes it safe to land before the tap repo exists.
-  - **AUR push** — _Written; the account is the remaining half._ The `aur` job pushes the regenerated `PKGBUILD` and `.SRCINFO` to `ssh://aur@aur.archlinux.org/hi.d.git` behind the same gate, with the key kept in `$RUNNER_TEMP` and the host key keyscanned rather than trusted on first use. It refuses to push a checkout with untracked files, and no-ops loudly without `AUR_SSH_KEY`. What it deliberately does not do is run namcap — that needs an Arch box — so the *first* push of each package stays manual and this job is for the releases after it. `hi.d-git` is never touched: it builds from `main` and has no version to bump.
+  - **AUR push** — _Written; the account is the remaining half._ The `aur` job pushes the regenerated `PKGBUILD` and `.SRCINFO` to `ssh://aur@aur.archlinux.org/hi.d.git` behind the same gate, with the key kept in `$RUNNER_TEMP` and the host key keyscanned rather than trusted on first use. It refuses to push a checkout with untracked files, and no-ops loudly without `AUR_SSH_KEY`. What it deliberately does not do is run namcap — that needs an Arch box — so the _first_ push of each package stays manual and this job is for the releases after it. `hi.d-git` is never touched: it builds from `main` and has no version to bump.
 
-- [ ] **Source tarball under the provenance chain** — *Blocked on: v1.* The
+- [ ] **Source tarball under the provenance chain** — _Blocked on: v1._ The
       PKGBUILD and formula checksum GitHub's auto-generated `/archive/`
       tarball — the one released artifact with no attestation and no minisign
       signature over it. The release already builds the identical shape
@@ -50,7 +50,7 @@ done; this file is only ever what's left.
     git segment earned that cost, a header would not.
   - **elvish and xonsh** — each needs its own language for any of it; **tcsh**
     has no `$ENV` equivalent to hook. Decide per shell whether that is worth
-    it — as a *login* shell they all work today.
+    it — as a _login_ shell they all work today.
 
 ### Cleanup & structure
 
@@ -64,7 +64,7 @@ meantime.
       `shells/ksh.sh` beside `aliases.sh` and sources it by absolute path,
       since that transport lands no tree), pinned by
       `test_container_fallback_gives_ksh_the_git_segment`. What that work
-      showed is that the *launch* idiom was already common — the container
+      showed is that the _launch_ idiom was already common — the container
       `*)` arm's `ENV=… exec $fallback -i` is the ssh ksh arm verbatim — so
       only the rc **contents** diverge, and a shared recipe function would
       have to render into two different mechanisms (armored heredoc vs.
@@ -232,7 +232,7 @@ All three workflows are written, committed, and dispatch-only. They need nothing
 
 - [ ] **Windows target e2e** (`.github/workflows/windows-e2e.yml`) — the README
       documents the Git Bash/WSL/PowerShell fallback ladder but no Windows job
-      has ever run. (This is the *target*-side job; the README's "Windows
+      has ever run. (This is the _target_-side job; the README's "Windows
       channels" gates the native channels on a separate client-side job — the
       fast suites under Git Bash — which is not written yet.) The job configures the
       stock sshd, sets the admin `authorized_keys` ACL, drives `hi localhost`
@@ -294,6 +294,7 @@ Not GitHub-button work: these are human actions purely because no runner covers 
       being public yet.
 
   - **Ticks when:** the same three commands pass on an actual mac, where the keg lives under `/opt/homebrew` rather than Linuxbrew's prefix.
+
 - [ ] **AUR package verification** — _the local half is done_: both PKGBUILDs
       have been built with `makepkg`, linted with `namcap` (recipe silent,
       package down to three documented false positives), installed into a clean
@@ -305,3 +306,10 @@ Not GitHub-button work: these are human actions purely because no runner covers 
       clone, which is only possible once the repo is public.
 
   - **Ticks when:** run clean for both packages against the published source.
+
+Nice to have -
+
+- built in configuration UI for host/tags/colors configuration as well as users
+- built in package color/priority modification
+- package groups/conditional loading
+- evaluate moving hi.sh and load.sh to common or bin (revise directory structure)

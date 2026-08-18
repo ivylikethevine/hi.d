@@ -114,6 +114,12 @@ function write_checksums() {
   done
   (cd "$_HI_DIST" && sha256_lines "${built[@]}" >SHA256SUMS)
   _hi_cecho " $_HI_DIST/SHA256SUMS :)" "$GREEN"
+
+  # ...and the same list as plain lines, which is what makes the claim above
+  # true: release.yml reads this instead of respelling *.deb *.rpm *.apk in
+  # YAML, so adding a packager is one edit to _HI_PACKAGERS.
+  printf '%s\n' "${built[@]}" SHA256SUMS >"$_HI_DIST/ARTIFACTS"
+  _hi_cecho " $_HI_DIST/ARTIFACTS :)" "$GREEN"
 }
 
 # sourcing stops here (tests reach the functions above) - install.sh's pattern

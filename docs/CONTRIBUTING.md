@@ -16,11 +16,12 @@ tests/test_runner.sh --group fast       # what CI runs on every push
 tests/test_runner.sh --group bench      # hot-path timings vs ceilings
 tests/test_runner.sh --group e2e        # real containers; needs docker
 tests/test_runner.sh --host-report      # ...plus what this machine is
+tests/test_runner.sh --verbose          # every transcript, nothing collapsed
 ```
 
 A passing suite's transcript is collapsed to one status line; failures
-replay in full and are recapped under the summary table. `_HI_VERBOSE=1`
-streams everything live. A suite whose backend is missing reports
+replay in full and are recapped under the summary table. `--verbose` (or
+`_HI_VERBOSE=1`) streams everything live. A suite whose backend is missing reports
 **SKIPPED**, never a green pass, and `--require-run` (what CI's e2e jobs
 pass) turns those skips into failures.
 
@@ -42,7 +43,7 @@ which arms of `install.sh`/`bump.sh` the cases never touch.
 all of them:
 
 1. **shellcheck** over every `*.sh` (CI pins the version - see
-   `.github/actions/setup-shellcheck`).
+   `.github/actions/setup-tool/tools.txt`).
 2. **Native syntax checks**: `zsh -n` / `fish --no-execute` over the files
    those shells parse for themselves.
 3. **The bash-3.2 grep**: no `mapfile`, no associative arrays, no namerefs,

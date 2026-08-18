@@ -1,36 +1,22 @@
 #!/bin/bash
 # The gap .github/dependabot.yml documents: dependabot moves the SHA-pinned
-# `uses:` but cannot see the curl-installed tools inside the setup-* composite
-# actions. This prints each action's pinned default next to the upstream's
-# latest release and exits non-zero if any differ - the tool-versions workflow
-# runs it on a schedule, and it runs standalone from a checkout too:
+# `uses:` but cannot see the tools setup-tool curls in. This prints each
+# pinned version next to the upstream's latest release and exits non-zero if
+# any differ - the tool-versions workflow runs it on a schedule, and it runs
+# standalone from a checkout too:
 #
 #   .github/scripts/check_tool_versions.sh
 #
-# Updating still happens by editing the action's `version:` default by hand;
-# this only makes the drift visible instead of remembered.
+# The roster is setup-tool's tools.txt, read here rather than copied: this
+# script used to name each action and scrape its pin back out of the YAML, so
+# a tool could be pinned and go unchecked. Updating is still a hand edit of
+# tools.txt; this only makes the drift visible instead of remembered.
 set -euo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")/../.."
 
-# "<action>|<kind>|<project>" - kind github asks the GitHub releases API,
-# kind gitlab asks a GitLab tags API (checkbashisms pins a devscripts tag on
-# salsa). Comparison strips a leading v from both sides, so it doesn't matter
-# which convention the pin or the upstream uses.
-_HI_TOOLS=(
-  "setup-shellcheck|github|koalaman/shellcheck"
-  "setup-shfmt|github|mvdan/sh"
-  "setup-actionlint|github|rhysd/actionlint"
-  "setup-zizmor|github|zizmorcore/zizmor"
-  "setup-nfpm|github|goreleaser/nfpm"
-  "setup-minisign|github|jedisct1/minisign"
-  "setup-checkbashisms|gitlab|debian%2Fdevscripts"
-  "setup-nu|github|nushell/nushell"
-)
-
-function _hi_pinned() {
-  sed -n 's/^    default: *"\([^"]*\)".*/\1/p' ".github/actions/$1/action.yml" | head -1
-}
+# shellcheck source=../actions/setup-tool/lib.sh
+source .github/actions/setup-tool/lib.sh
 
 function _hi_latest() {
   local kind="$1" project="$2"
@@ -48,25 +34,33 @@ function _hi_latest() {
   esac
 }
 
+# Process substitution, not a pipe: a piped `while` runs in a subshell, so
+# $bad would be lost and this would always exit 0.
 bad=0
-for entry in "${_HI_TOOLS[@]}"; do
-  IFS='|' read -r action kind project <<<"$entry"
-  pinned="$(_hi_pinned "$action")"
+while IFS='|' read -r tool pinned _ _ _ check; do
+  # `-` opts a row out of the drift report; kind github asks the GitHub
+  # releases API, kind gitlab a GitLab tags API (checkbashisms pins a
+  # devscripts tag on salsa)
+  [ "$check" = "-" ] && continue
+  kind="${check%%:*}"
+  project="${check#*:}"
   latest="$(_hi_latest "$kind" "$project")"
   if [ -z "$latest" ]; then
-    printf '%-22s %-12s (could not read the upstream release)\n' "$action" "$pinned"
+    printf '%-22s %-12s (could not read the upstream release)\n' "$tool" "$pinned"
     continue
   fi
+  # a leading v is stripped from both sides, so it does not matter which
+  # convention the pin or the upstream uses
   if [ "${pinned#v}" = "${latest#v}" ]; then
-    printf '%-22s %-12s current\n' "$action" "$pinned"
+    printf '%-22s %-12s current\n' "$tool" "$pinned"
   else
-    printf '%-22s %-12s OUTDATED (latest: %s)\n' "$action" "$pinned" "$latest"
+    printf '%-22s %-12s OUTDATED (latest: %s)\n' "$tool" "$pinned" "$latest"
     # surfaces in the workflow run's summary and annotations when run by CI
     [ -n "${GITHUB_ACTIONS:-}" ] &&
-      printf '::warning title=%s outdated::pinned %s, latest %s - bump the default in .github/actions/%s/action.yml\n' \
-        "$action" "$pinned" "$latest" "$action"
+      printf '::warning title=%s outdated::pinned %s, latest %s - bump its row in .github/actions/setup-tool/tools.txt\n' \
+        "$tool" "$pinned" "$latest"
     bad=$((bad + 1))
   fi
-done
+done < <(_hi_tool_rows)
 
 exit "$bad"

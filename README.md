@@ -1130,8 +1130,8 @@ packaging/mkpkg.sh && mv dist dist.first
 packaging/mkpkg.sh && diff dist.first/SHA256SUMS dist/SHA256SUMS
 ```
 
-One caveat: CI pins nfpm 2.47.0 (`.github/actions/setup-nfpm`) while `mkpkg.sh` takes whatever nfpm is
-on PATH — a different local nfpm can produce different (still internally reproducible) bytes.
+One caveat: CI pins nfpm 2.47.0 (`.github/actions/setup-tool/tools.txt`) while `mkpkg.sh` takes whatever
+nfpm is on PATH — a different local nfpm can produce different (still internally reproducible) bytes.
 
 The honest end-to-end check for the `/etc/profile.d` snippet, which is the part no unit test can prove:
 

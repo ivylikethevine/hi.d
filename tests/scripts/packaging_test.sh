@@ -29,6 +29,7 @@ _HI_FORMULA="$_HI_PKG_DIR/homebrew/hi.d.rb"
 _HI_PKGBUILD="$_HI_PKG_DIR/aur/hi.d/PKGBUILD"
 _HI_PKGBUILD_GIT="$_HI_PKG_DIR/aur/hi.d-git/PKGBUILD"
 _HI_RELEASE_WF="$_HI_ROOT/.github/workflows/release.yml"
+_HI_TOOLS_TXT="$_HI_ROOT/.github/actions/setup-tool/tools.txt"
 
 # bump.sh's functions (sha256_of, b2_of, rewrite, write/check_manifests) -
 # inert under its source guard, and its derived paths equal the ones above
@@ -285,12 +286,67 @@ function test_publish_job_signs_the_sums() {
   publish="$(sed -n '/^  publish:/,$p' "$_HI_RELEASE_WF")"
   printf '%s' "$publish" | grep -qF 'MINISIGN_SECRET_KEY' &&
     printf '%s' "$publish" | grep -qF 'minisign -S' &&
-    printf '%s' "$publish" | grep -qF 'setup-minisign'
+    printf '%s' "$publish" | grep -qF 'tool: minisign'
 }
 
+# release.yml's offline verification leans on minisign being pinned *and*
+# drift-checked; the general manifest guards below cannot know that.
 function test_minisign_pin_is_drift_checked() {
-  grep -qF 'setup-minisign|github|jedisct1/minisign' "$_HI_ROOT/.github/scripts/check_tool_versions.sh" &&
-    grep -q '^    default: "' "$_HI_ROOT/.github/actions/setup-minisign/action.yml"
+  [ -f "$_HI_TOOLS_TXT" ] || return 0 # a shipped tree has no .github
+  grep -qE '^minisign\|[0-9][^|]*\|.*\|github:jedisct1/minisign$' "$_HI_TOOLS_TXT"
+}
+
+# every row is six fields, a known kind, and a non-empty version and url - a
+# thin row reaches CI as a runtime failure nobody sees until the job runs
+function test_tool_manifest_rows_are_wellformed() {
+  [ -f "$_HI_TOOLS_TXT" ] || return 0
+  local row tool version kind url verify check rest bad=0
+  while IFS='|' read -r tool version kind url verify check rest; do
+    [ -n "$tool" ] && [ -n "$version" ] && [ -n "$url" ] &&
+      [ -n "$verify" ] && [ -n "$check" ] && [ -z "$rest" ] || {
+      _hi_cecho " | malformed row: $tool" "$RED"
+      bad=1
+      continue
+    }
+    case "$kind" in
+    raw | tar.gz | tar.xz) ;;
+    *)
+      _hi_cecho " | unknown kind '$kind' for $tool" "$RED"
+      bad=1
+      ;;
+    esac
+    case "$url" in
+    *%v*) ;;
+    *)
+      _hi_cecho " | $tool's url has no %v - it can never follow the pin" "$RED"
+      bad=1
+      ;;
+    esac
+  done < <(grep -v '^[[:space:]]*\(#\|$\)' "$_HI_TOOLS_TXT")
+  [ "$bad" = 0 ]
+}
+
+# ...and every setup-tool call names a row. Nothing used to check that a
+# `uses: ./.github/actions/setup-<x>` path existed at all, so this is stricter
+# than the literal roster grep it replaces. It reads `tool:` lines out of the
+# workflows, so an unrelated future `tool:` input would be checked too - which
+# fails loudly rather than silently, and is the right way round.
+function test_every_setup_tool_call_names_a_manifest_row() {
+  [ -f "$_HI_TOOLS_TXT" ] || return 0
+  local want bad=0
+  while read -r want; do
+    grep -q "^$want|" "$_HI_TOOLS_TXT" || {
+      _hi_cecho " | a workflow asks for '$want', which tools.txt does not list" "$RED"
+      bad=1
+    }
+  done < <(sed -n 's/^ *tool: *\([a-z0-9._-]*\) *$/\1/p' "$_HI_ROOT"/.github/workflows/*.yml | sort -u)
+  [ "$bad" = 0 ]
+}
+
+# the release ships what mkpkg.sh says it ships, not a second glob list in YAML
+function test_release_workflow_reads_the_artifact_list() {
+  [ -f "$_HI_RELEASE_WF" ] || return 0
+  grep -qF 'dist/ARTIFACTS' "$_HI_RELEASE_WF"
 }
 
 # --- the scripts themselves ---------------------------------------------------
@@ -494,6 +550,37 @@ function test_package_sh_stamps_the_staged_man_page() {
   out="$(_hi_staged_999)" &&
     gzip -dc "$out/staging/usr/share/man/man1/hi.1.gz" |
     grep -qE '^\.TH HI 1 "[0-9]{4}-[0-9]{2}-[0-9]{2}" "hi\.d 9\.9\.9"'
+}
+
+# write_checksums also writes dist/ARTIFACTS, which is what release.yml reads
+# instead of respelling *.deb *.rpm *.apk in YAML three times. Sourced rather
+# than run, so this needs no nfpm - the reason that function is separate.
+function test_write_checksums_lists_the_artifacts() {
+  local d="$_HI_WORKDIR/artifacts"
+  mkdir -p "$d"
+  : >"$d/hi.d_1.0.0_amd64.deb"
+  : >"$d/hi.d-1.0.0.x86_64.rpm"
+  : >"$d/hi.d-1.0.0.apk"
+  # sourced in a subshell rather than at suite level: mkpkg.sh's
+  # `[[ BASH_SOURCE == $0 ]] || return 0` guard is the seam, and the suite
+  # already sources bump.sh at the top - two of them would collide
+  (
+    # shellcheck source=../../packaging/mkpkg.sh
+    source "$_HI_PKG_DIR/mkpkg.sh"
+    _HI_DIST="$d"
+    write_checksums >/dev/null 2>&1
+  ) || return 1
+  [ -f "$d/ARTIFACTS" ] || {
+    _hi_cecho " | write_checksums wrote no ARTIFACTS" "$RED"
+    return 1
+  }
+  # every built file, plus SHA256SUMS, basenames only - and nothing else
+  diff <(sort "$d/ARTIFACTS") \
+    <(printf '%s\n' hi.d-1.0.0.apk hi.d-1.0.0.x86_64.rpm hi.d_1.0.0_amd64.deb SHA256SUMS | sort) ||
+    return 1
+  # ...and it agrees with what SHA256SUMS covers
+  diff <(awk '{ print $2 }' "$d/SHA256SUMS" | sort) \
+    <(grep -v '^SHA256SUMS$' "$d/ARTIFACTS" | sort)
 }
 
 # --- packaging/stamp.sh itself ------------------------------------------------
@@ -701,6 +788,10 @@ function run_packaging_tests() {
   _hi_check "Verifies the manifests against the tag" test_release_workflow_verifies_the_manifests
   _hi_check "The publish job signs the sums" test_publish_job_signs_the_sums
   _hi_check "The minisign pin is drift-checked" test_minisign_pin_is_drift_checked
+  _hi_check "Every tools.txt row is well-formed" test_tool_manifest_rows_are_wellformed
+  _hi_check "Every setup-tool call names a row" test_every_setup_tool_call_names_a_manifest_row
+  _hi_check "release.yml reads dist/ARTIFACTS" test_release_workflow_reads_the_artifact_list
+  _hi_check "write_checksums lists the artifacts" test_write_checksums_lists_the_artifacts
 
   _hi_h2 "Testing: mkpkg.sh / bump.sh"
   _hi_check "mkpkg.sh takes its version from the PKGBUILD" test_package_sh_reads_the_version_from_the_pkgbuild

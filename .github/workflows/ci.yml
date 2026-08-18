@@ -27,17 +27,25 @@ jobs:
       - name: Install zsh and fish
         run: sudo apt-get update && sudo apt-get install -y zsh fish
 
-      - uses: ./.github/actions/setup-shellcheck
+      - uses: ./.github/actions/setup-tool
+        with:
+          tool: shellcheck
 
       # the lint suite's shfmt/checkbashisms halves skip yellow when the tools
       # are absent - these pinned installs are what make them enforce here
-      - uses: ./.github/actions/setup-shfmt
+      - uses: ./.github/actions/setup-tool
+        with:
+          tool: shfmt
 
-      - uses: ./.github/actions/setup-checkbashisms
+      - uses: ./.github/actions/setup-tool
+        with:
+          tool: checkbashisms
 
       # same story for the rc suite's real-nu cases: config.nu is the one
       # shipped shell file nothing else in CI can parse
-      - uses: ./.github/actions/setup-nu
+      - uses: ./.github/actions/setup-tool
+        with:
+          tool: nu
 
       - name: Run fast test suites
         run: "${{ github.workspace }}/tests/test_runner.sh --host-report --group fast"
@@ -61,7 +69,9 @@ jobs:
 
       # pinned rather than brewed: a floating shellcheck here could red this
       # job with a warning the pinned ubuntu one has never seen
-      - uses: ./.github/actions/setup-shellcheck
+      - uses: ./.github/actions/setup-tool
+        with:
+          tool: shellcheck
 
       - name: Run fast test suites
         run: "${{ github.workspace }}/tests/test_runner.sh --host-report --group fast"
@@ -79,9 +89,13 @@ jobs:
 
       # actionlint shells out to shellcheck for run: blocks when it is on
       # PATH - pin it so both jobs lint shell with the same version
-      - uses: ./.github/actions/setup-shellcheck
+      - uses: ./.github/actions/setup-tool
+        with:
+          tool: shellcheck
 
-      - uses: ./.github/actions/setup-actionlint
+      - uses: ./.github/actions/setup-tool
+        with:
+          tool: actionlint
 
       - name: Lint the workflows
         run: actionlint -color
@@ -98,7 +112,9 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: ./.github/actions/setup-zizmor
+      - uses: ./.github/actions/setup-tool
+        with:
+          tool: zizmor
 
       - name: Audit the workflows
         env:
@@ -170,7 +186,9 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: ./.github/actions/setup-nfpm
+      - uses: ./.github/actions/setup-tool
+        with:
+          tool: nfpm
 
       # a throwaway key so the smoke covers the signed shape end to end - the
       # real key is the APK_SIGNING_KEY secret, release.yml's business only

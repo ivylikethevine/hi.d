@@ -364,6 +364,14 @@ function test_verbose_streams_passing_output() {
   [[ "$_HI_RUN_OUT" == *"ran:green"* ]]
 }
 
+# ...as does --verbose, which is the same mode reached by flag. The fixture
+# environment unsets _HI_VERBOSE, so a pass here is the flag's doing and
+# nothing else's.
+function test_verbose_flag_streams_passing_output() {
+  _hi_run_runner $'a:green.sh' --verbose
+  [[ "$_HI_RUN_OUT" == *"ran:green"* ]]
+}
+
 # under GitHub Actions a passing transcript is kept, folded into a group...
 function test_ci_folds_passing_output_into_a_group() {
   _HI_RUN_WITH="GITHUB_ACTIONS=1" _hi_run_runner $'a:green.sh'
@@ -554,6 +562,7 @@ function run_runner_tests() {
   _hi_check "A passing suite's output is collapsed" test_passing_suite_output_is_collapsed
   _hi_check "A failing suite's output replays" test_failing_suite_output_replays
   _hi_check "_HI_VERBOSE=1 streams passing output" test_verbose_streams_passing_output
+  _hi_check "--verbose streams passing output" test_verbose_flag_streams_passing_output
   _hi_check "CI folds passing output into a ::group::" test_ci_folds_passing_output_into_a_group
   _hi_check "CI annotates failures, unfolded" test_ci_annotates_failures_unfolded
   _hi_check "Failing cases recapped under the summary" test_failing_cases_are_recapped_under_the_summary

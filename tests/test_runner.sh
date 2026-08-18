@@ -108,7 +108,6 @@ _HI_TESTS_DIR="${_HI_TESTS_DIR:-$_HI_ROOT/tests}"
 # Checked before suite matching so `--help` can't be mistaken for a suite name
 # and rejected as unknown. The suite list comes from $_HI_TESTS rather than
 # being spelled out again, so it can't drift.
-# TODO: Add a --verbose flag
 _HI_GROUP=""
 _HI_LIST=0
 _HI_LIST_PATHS=0
@@ -119,7 +118,7 @@ while [ "$#" -gt 0 ]; do
   case "$1" in
   -h | --help)
     cat <<EOF
-Usage: test_runner.sh [--group <group>] [suite ...]
+Usage: test_runner.sh [--group <group>] [--verbose] [suite ...]
 
 Runs every test suite, or just the named ones, timing each and printing a
 pass/fail summary table at the end. Exits with the number of failed suites.
@@ -133,6 +132,8 @@ rather than PASS, so a green run can't overstate what actually ran.
   --list-paths     the same, plus each suite's absolute path as a third column
   --require-run    treat SKIPPED suites as failures - for CI runners where a
                    skip means the runner is broken, not the backend optional
+  --verbose        stream every suite's transcript live instead of collapsing
+                   the passing ones. _HI_VERBOSE=1 does the same
   --host-report    print what this machine is before running anything: bash,
                    OS, GNU/BSD/busybox userland, which tree \$_HI_HOME resolves
                    to, which backends answer, and the lint tools' versions.
@@ -141,7 +142,7 @@ rather than PASS, so a green run can't overstate what actually ran.
 
 A passing suite's transcript is collapsed to one status line; failures and
 skips replay in full, and every failing case is repeated under the summary.
-Set _HI_VERBOSE=1 to stream every transcript live instead. Under GitHub
+--verbose (or _HI_VERBOSE=1) streams every transcript live instead. Under GitHub
 Actions, passing transcripts fold into ::group:: blocks and failing cases
 are emitted as ::error annotations.
 
@@ -164,6 +165,9 @@ EOF
     _HI_LIST_PATHS=1
     ;;
   --require-run) _HI_REQUIRE_RUN=1 ;;
+  # the flag half of _HI_VERBOSE; the default below is `:-0`, so setting it
+  # here wins and the two spellings need no further reconciling
+  --verbose) _HI_VERBOSE=1 ;;
   --group)
     [ "$#" -ge 2 ] || {
       _hi_cecho "test_runner.sh: --group needs a value" "$RED" >&2
@@ -265,7 +269,8 @@ trap "_hi_restore_tty; rm -f '$_HI_COUNTS_FILE' '$_HI_FAILS_FILE' '$_HI_SUITE_LO
 
 # Output modes. Default: a passing suite's transcript collapses to one status
 # line and the full text replays only on failure or skip, so a green run fits
-# on a screen. _HI_VERBOSE=1 streams everything live - the old behavior. Under
+# on a screen. --verbose (which sets $_HI_VERBOSE during argument parsing
+# above) or _HI_VERBOSE=1 streams everything live - the old behavior. Under
 # GitHub Actions a passing transcript is kept but folded into a ::group::
 # block (complete logs, bench numbers included, failures never the thing
 # folded), and every failing case gets an ::error annotation under the summary.

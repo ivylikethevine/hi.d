@@ -98,103 +98,9 @@ For ssh targets, hi first checks — over the same connection, so it costs no ex
 
 #### How the files relate
 
-The steps above are the prose; this diagram is the mechanism. Boxes are files
-(or the few directories acting as one), and every arrow is one of the four ways
-a file here ever reaches another:
-
-- **sources** - shell `source`/`.`, same process
-- **shells out** - a `bash -c "source ...; fn"` subprocess (how fish and nu
-  reach code written in bash)
-- **runs** - executed as its own subprocess, never sourced
-- **generates / writes** - the file exists only because another wrote it
-
-Deliberately coarse: file granularity, those four edge kinds. What is _not_
-drawn matters too — `hi.sh` itself, `scripts/`, `tests/` and `docs/` never
-ship; the payload is `$_HI_PAYLOAD`, and the bench suite enforces its size.
-
-```mermaid
-flowchart TB
-  subgraph client["client machine (stays home)"]
-    hish["hi.sh"]
-    overlay["~/.config/hi.d/<br/>settings.sh · colors · packages · tmux.conf · aliases.sh"]
-  end
-
-  subgraph target["target (payload, unpacked into /tmp or a permanent ~/hi.d)"]
-    subgraph generated["generated per connect"]
-      bootrc["hi.bashrc /<br/>.hi_fallback_rc"]
-      grafts["rc grafts<br/>(guarded blocks in the host's rc files)"]
-    end
-    loadsh["load.sh"]
-    core["common/core.sh"]
-    pathssh["common/paths.sh"]
-    headersh["common/header.sh"]
-    gitp["common/git_prompt.sh"]
-    targetssh["common/targets.sh"]
-    aliases["misc/aliases.sh"]
-    bashrc["shells/bash.sh"]
-    zshrc["shells/zsh.zsh"]
-    fishrc["shells/config.fish"]
-    nurc["shells/config.nu"]
-    kshrc["shells/ksh.sh"]
-    osc52["shells/osc52.sh"]
-    miscfiles["misc/<br/>colors · packages · theme.yml · vim.rc · nano.rc · tmux.conf"]
-    configdir["config/ ($_HI_CONFIG_DIR)<br/>the overlay, as shipped"]
-  end
-
-  hish -->|"generates, ships over stdin"| bootrc
-  hish -->|"ships (payload stream)"| loadsh
-  overlay -->|"ships (second stream, lands in config/)"| configdir
-
-  bootrc -->|sources| loadsh
-  loadsh -->|sources| core
-  loadsh -->|sources| headersh
-  loadsh -->|"writes (from shells/*)"| grafts
-
-  grafts -->|"carry the content of"| bashrc
-  grafts -->|"carry the content of"| zshrc
-  grafts -->|"carry the content of"| fishrc
-  grafts -->|"carry the content of"| nurc
-
-  core -->|sources| pathssh
-  pathssh -->|"prefers, per file"| configdir
-  bashrc -->|sources| core
-  bashrc -->|sources| gitp
-  bashrc -->|sources| aliases
-  zshrc -->|sources| core
-  zshrc -->|sources| gitp
-  zshrc -->|sources| aliases
-  fishrc -->|sources| pathssh
-  fishrc -->|sources| aliases
-  fishrc -->|"shells out to"| core
-  fishrc -->|"shells out to"| headersh
-  nurc -->|"shells out to"| core
-  nurc -->|"shells out to"| headersh
-  nurc -->|"shells out to"| gitp
-  bootrc -.->|"sources (no-bash tier, via $ENV)"| kshrc
-
-  aliases -->|"sources (overlay aliases.sh, last)"| configdir
-  aliases -->|"runs (hi_copy)"| osc52
-  miscfiles -->|"runs (vim.rc's yank autocmd)"| osc52
-  hish -->|"runs (completion, on every TAB)"| targetssh
-```
-
-Three edges carry most of the design:
-
-- **`hi.sh` never ships.** Everything on the target side has to work without
-  it, which is why `load.sh` is the target's entry point and a peer of
-  `hi.sh` at the tree root rather than a `common/` library.
-- **fish and nu never source bash.** Their arrows to `core.sh`,
-  `header.sh` and `git_prompt.sh` are _shell-outs_ - one implementation of
-  the header, palette and git segment, rented per call, instead of three
-  kept in sync (GLOSSARY: nu session tier).
-- **`osc52.sh` is only ever run.** Both `hi_copy` and vim's yank autocmd
-  execute it as a file at `$_HI_OSC52`, which is why the tmux/screen/zellij
-  wrapping lives in one place and the file cannot be merged into
-  `aliases.sh`.
-
-The grafts deserve one footnote: each carries a tree-exists guard
-(GLOSSARY: graft crash guard), so an arrow into a deleted `/tmp` tree goes
-quiet instead of erroring - the diagram's dashed reality after a hard kill.
+The steps above are the prose; [docs/DIAGRAM.md](docs/DIAGRAM.md) is the mechanism - a mermaid flowchart of
+every file here and the four ways one reaches another (sources, shells out, runs, generates/writes), plus
+the three edges that carry most of the design.
 
 ### Docker / Podman containers
 
@@ -584,7 +490,9 @@ tests/test_runner.sh --group fast
 
 ## More docs
 
+- [docs/DIAGRAM.md](docs/DIAGRAM.md) - how the shipped files relate, as a mermaid flowchart
 - [docs/FEATURES.md](docs/FEATURES.md) - the config overlay, every feature toggle and environment variable hi reads
+- [docs/FILES.md](docs/FILES.md) - what every shipped file does, one line each
 - [docs/TESTING.md](docs/TESTING.md) - the test runner, suite groups, the lint gate, relaying
 - [docs/GLOSSARY.md](docs/GLOSSARY.md) - the named idioms the code's `GLOSSARY:` comment tags point at; load-bearing for reading `common/`, and drift-checked by the lint suite
 - [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) - the dev loop and how a change should arrive (PR titles become release notes)
@@ -595,39 +503,10 @@ tests/test_runner.sh --group fast
 
 ### File list
 
-| file                                            | what it does                                                                                                                                                            |
-| ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `hi.sh`                                         | runs on the client: pick the target, copy hi.d, chainload `load.sh`                                                                                                     |
-| `load.sh`                                       | runs on the target: header, rc grafting, shell handoff, cleanup                                                                                                         |
-| `common/paths.sh`                               | every path hi uses (the only file fish and sh both source)                                                                                                              |
-| `common/core.sh`                                | the entry point every bash/zsh script sources: settings, paths, palette, `_hi_cecho`, color resolution                                                                  |
-| `common/header.sh`                              | the connect/disconnect banner, shared by every shell, plus the `misc/packages` check it ends with                                                                       |
-| `common/git_prompt.sh`                          | bash/zsh git prompt, matching fish's built-in `fish_vcs_prompt`                                                                                                         |
-| `common/targets.sh`                             | every `hi` target (ssh/docker/podman/nomad/kube), for all three completions - cached and timeout-bounded                                                                |
-| `shells/osc52.sh`                               | stdin to the _client's_ clipboard over OSC 52 - tmux/screen passthrough, raw under zellij - behind `hi_copy` and `vim.rc`'s yank autocmd, off via `_HI_DISABLE_OSC52=1` |
-| `shells/bash.sh`                                | bash config                                                                                                                                                             |
-| `shells/zsh.zsh`                                | zsh config                                                                                                                                                              |
-| `shells/config.fish`                            | fish config                                                                                                                                                             |
-| `shells/config.nu`                              | nushell config - shells out to bash for the header, palette and git segment                                                                                             |
-| `shells/ksh.sh`                                 | the ksh/mksh tier's POSIX git segment, the one prompt piece written without bash                                                                                        |
-| `misc/aliases.sh`                               | personal aliases shared by bash, zsh and fish - freely editable, off wholesale via `_HI_DISABLE_ALIASES=1`                                                              |
-| `misc/vim.rc`, `misc/nano.rc`, `misc/theme.yml` | vim, nano and eza configs                                                                                                                                               |
-| `misc/tmux.conf`                                | tmux config, reached via the `tmux` alias - override in `~/.config/hi.d/tmux.conf`, off via `_HI_DISABLE_TMUX=1`                                                        |
-| `misc/packages`                                 | default for the packages check, as `cmd:priority[,alternative:priority]` - override in `~/.config/hi.d/packages`                                                        |
-| `misc/colors`                                   | default color pins for hostnames/usernames/hosttags - override in `~/.config/hi.d/colors`                                                                               |
-| `scripts/install.sh`                            | configure the local shells, install, update and uninstall - `--prefix`/`$DESTDIR` for packagers                                                                         |
-| `scripts/uninstall.sh`                          | one-line shim onto `install.sh --uninstall` (`hi_uninstall`)                                                                                                            |
-| `scripts/color_preview.sh`                      | preview what every ssh host/user resolves to (`hi_color_preview`)                                                                                                       |
-| `scripts/doctor.sh`                             | pre-flight report: tree, config, timed backend probes, and a target's resolution + ssh reachability (`hi_doctor`, `hi --doctor`)                                        |
-| `packaging/`                                    | build-time only, never installed: `mkpkg.sh`, `stamp.sh`, `bump.sh`, and the AUR/Homebrew/nfpm manifests                                                                |
-| `bin/hi`                                        | the basher shim - resolves through the cellar symlink and exports `_HI_HOME`                                                                                            |
-| `tests/test_runner.sh`                          | unified runner - times and summarizes every test below (or a chosen subset) (`hi_test`)                                                                                 |
-| `tests/test_lib.sh`                             | the whole suite skeleton: asserts/counters, scratch dir, skip preamble, probe commands, poll/pty helpers                                                                |
-
-The test suites are deliberately not repeated here: each suite's opening
-comment block says exactly what it covers, and `tests/test_runner.sh --list-paths`
-prints the live list — group, name, and path — so the truth can't drift the
-way a second copy of it in this table once did.
+What every shipped file does, one line each, is [docs/FILES.md](docs/FILES.md). The test suites aren't
+repeated there: each suite's opening comment block says exactly what it covers, and
+`tests/test_runner.sh --list-paths` prints the live list — group, name, and path — so the truth can't drift
+the way a second copy of it once did.
 
 #### Hostname, username, and group/tag colors
 

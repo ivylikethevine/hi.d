@@ -6,18 +6,12 @@ set -euo pipefail # must be disabled after our code (this file is part of the in
 # shellcheck source=./common/core.sh
 source "${_HI_HOME:-$HOME}/hi.d/common/core.sh"
 
-# The `hi --version` answer: empty in git (checkouts use `git describe`),
-# sedded by every packager at build time; the ${...:-} default keeps the env
-# seam open for sessions until a stamped literal wins.
 _HI_RELEASE="${_HI_RELEASE:-}"
 
-# The synopsis, kept identical to docs/hi.1's .SH SYNOPSIS. Named the way
-# scripts/install.sh names its own, so both entry points answer -h in one shape.
+# The synopsis, kept identical to docs/hi.1's .SH SYNOPSIS
 _HI_USAGE="Usage: hi [ssh-options] <target> [command ...]"
 
-# What ships to a target - an allow list, not excludes: new tree content
-# stays off the wire until it earns a place. (_HI_PACKAGE_CONTENTS answers
-# the different "installed copy" question.)
+# What ships to a target - an allow list instead of a deny list
 _HI_PAYLOAD=(common misc shells load.sh)
 
 # The user's config overlay, by the names it lands under in the target's
@@ -42,9 +36,6 @@ export _HI_SHELL_LADDER="zsh fish ksh mksh sh"
 _HI_SIZE_TOKEN="@@SIZE@@"
 
 _HI_ARMOR="base64"
-# the decode ladder alone (what the stdin transport interpolates - armor
-# arrives there byte for byte, needing no fold), and the general shape with
-# the tr fold in front of it
 _HI_UNARMOR_RAW="{ base64 -d 2>/dev/null || base64 -D; }"
 _HI_UNARMOR="tr -s ' ' '\n' | $_HI_UNARMOR_RAW"
 
@@ -78,15 +69,10 @@ function _hi_session_env() {
   return 0
 }
 
-# The target's color. Stateless on purpose: both callers sit inside command
-# substitutions, where a memo assigned here dies with the subshell before any
-# second call could read it.
 function _hi_target_color() {
   _hi_resolve_color hostname "${DOMAIN##*@}"
 }
 
-# The overlay files actually present in $_HI_CONFIG_DIR, one per line - the
-# one home of the presence scan _hi_has_overlay and _hi_overlay_tar share.
 function _hi_overlay_files() {
   local f
   for f in "${_HI_OVERLAY_FILES[@]}"; do
@@ -95,8 +81,6 @@ function _hi_overlay_files() {
   return 0
 }
 
-# True when any overlay exists - asked first, because an empty archive is an
-# "unexpected EOF" to tar, and an unconfigured user must pay nothing.
 function _hi_has_overlay() {
   [ -n "$(_hi_overlay_files)" ]
 }
@@ -127,13 +111,12 @@ function _hi_is_ssh_host() {
   [ $? -ne 1 ]
 }
 
-# podman's CLI is a drop-in for docker's here, so only the binary differs. Both
-# named wrappers stay - the dispatcher and hi_test.sh call them by name.
 function _hi_is_container_running() {
   command -v "$1" >/dev/null 2>&1 &&
     [ "$("$1" container inspect -f '{{.State.Running}}' "$2" 2>/dev/null)" = true ]
 }
 
+# docker and podman are identical for this
 function _hi_is_docker_container() { _hi_is_container_running docker "$1"; }
 function _hi_is_podman_container() { _hi_is_container_running podman "$1"; }
 
@@ -533,10 +516,8 @@ $(_hi_remote_suffix)"
   return "$ec"
 }
 
-# Four backends share this: docker, podman (drop-in CLI), nomad, kube. The
-# case below picks the command shape; everything past it is identical.
-# _say_hi_container <label> <errlog> <copy_start> - the last two used to be
-# read straight out of _hi's locals, which made the coupling invisible.
+# Four backends share this: docker, podman (drop-in CLI), nomad, kube
+# _say_hi_container <label> <errlog> <copy_start>
 function _say_hi_container() {
   local label="$1" tmp="$2" copy_start="$3"
   local shell_end root fallback exit_code shell_secs size prefix tarball env_kv n v
@@ -630,8 +611,7 @@ function _say_hi_container() {
   shell_secs="$(_hi_elapsed "$_HI_SHELL_START" "$shell_end")"
   _hi_cecho " shell: ${shell_secs}s " "$BLUE" 1
 
-  # staged to a file so the announced size is the one actually sent; no
-  # armor - `exec -i` takes raw bytes
+  # staged to a file so the announced size is the one actually sent
   tarball="$tmp.tar.gz"
   if ! _hi_payload_tar >"$tarball"; then
     _hi_cecho " failed to archive hi.d for [$DOMAIN]" "$BRRED"
@@ -651,8 +631,7 @@ function _say_hi_container() {
   rm -f "$tarball"
 
   # the overlay, a second stream into its own config/ beside the tree just
-  # laid down (see the ssh path); failing to place it is not worth losing the
-  # session over
+  # laid down (see the ssh path)
   if _hi_has_overlay &&
     ! _hi_overlay_tar |
     "${cp[@]}" sh -c "mkdir -p '$root/hi.d/config' && tar mxzf - -C '$root/hi.d/config'" 2>"$tmp"; then
@@ -681,8 +660,7 @@ function _hi_parse() {
   while [ $# -gt 0 ]; do
     case $1 in
     # every ssh option taking a separate value, so the value is never mistaken
-    # for the target. -B/-J especially: without them `hi -J bastion myhost`
-    # would treat "bastion" as the target and connect to the wrong host
+    # for the target
     -B | -b | -c | -D | -E | -e | -F | -I | -i | -J | -L | -l | -m | -O | -o | -p | -Q | -R | -S | -W | -w)
       [ "$#" -ge 2 ] || {
         _hi_cecho "hi: $1 needs a value" "$RED" >&2
@@ -691,8 +669,6 @@ function _hi_parse() {
       SSHARGS+=("$1" "$2")
       shift
       ;;
-    # hi's own flags, allowed anywhere before the target and never forwarded to
-    # ssh - unlike --doctor/--version, dispatched on $1 alone below
     --tmux) _HI_TMUX_ATTACH=1 ;;
     --no-tmux) _HI_TMUX_ATTACH=0 ;;
     -*) SSHARGS+=("$1") ;;
@@ -713,20 +689,6 @@ function _hi_parse() {
   }
 }
 
-# Which backend is $DOMAIN, printed - or nothing, for "hand it to ssh". The
-# roster's predicates are independent of each other and each is a CLI call
-# against a daemon that may be down, so they are started together and read
-# back **in roster order**: the answer is still the first row that matches,
-# exactly as walking the list gave, but a kube target no longer pays docker's
-# and podman's and nomad's timeouts on the way there. `wait <pid>` yields that
-# job's status, which is all a predicate returns, so no temp files are needed.
-# (`wait -n` would be the obvious tool and is bash 4.3 - the lint suite greps
-# for it, because macOS ships 3.2.)
-# Rows whose CLI isn't installed answer immediately (every predicate leads
-# with `command -v`), so the cost of starting all of them is the cost of the
-# ones that could have matched anyway. What does change: a target that is a
-# docker container now also gets asked of the backends after it in the roster,
-# and their answers are simply not waited for once a row ahead has matched.
 function _hi_resolve_backend() {
   local target="$1" row i=0
   local -a pids=()
@@ -757,20 +719,11 @@ function _hi() {
   # shellcheck disable=SC2016 # $tmp is resolved when the trap fires
   _hi_on_exit 'rm -f "$tmp"'
 
-  # parse the args and determine the target type
   _hi_parse "$@"
   _HI_SHELL_START="$(_hi_now)"
-  # one redirect around the whole dispatch, not one per arm. The predicates'
-  # stderr lands in $tmp too; each already sends its probe to /dev/null, and
-  # $tmp only prints when the session failed. ssh leads (its predicate isn't
-  # a backend row), then _HI_BACKENDS in order; no match falls through to
-  # ssh, so any name ssh can reach still works.
-  # shellcheck disable=SC2094 # $tmp rides as an argument; the container path
-  # writes it under this same redirect on purpose (one error log per run)
+  # shellcheck disable=SC2094 # $tmp rides as an argument
   {
     backend=""
-    # ssh's own predicate stays first and on its own: it is fork-free (a walk
-    # of the ssh config), so there is nothing to overlap it with
     if ! _hi_is_ssh_host "$DOMAIN"; then
       backend="$(_hi_resolve_backend "$DOMAIN")"
     fi
@@ -793,9 +746,8 @@ function _hi() {
 
 set +euo pipefail # the connection paths below run against unknown hosts, where a probe that fails is normal, not fatal
 
-# Same hatch as scripts/install.sh: sourcing this file defines its functions
-# without connecting to anything, which tests/shells/hi_test.sh needs. Executed
-# normally, $0 is this file and we dispatch.
+# sourcing this file defines its functions
+# without connecting to anything, for testing
 [[ "${BASH_SOURCE[0]}" == "$0" ]] || return 0
 
 # hi's own flags, dispatched on $1 alone: _hi_parse hands every other -flag
@@ -842,9 +794,6 @@ so it survives an upgrade. See \`man hi\` and the README for all of it.
 EOF
   exit 0
   ;;
-# `hi --doctor [target]` hands off to the pre-flight report. Checkouts and
-# packaged installs have scripts/; a hi session on a target does not, and
-# says so rather than silently connecting somewhere.
 --doctor)
   shift
   [ -f "$_HI_DOCTOR" ] && exec "$_HI_DOCTOR" "$@"

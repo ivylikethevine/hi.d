@@ -274,7 +274,7 @@ function _hi_fallback_prompt() {
   printf '_hi_u=$(id -un 2>/dev/null || echo "${USER:-?}")\n'
   printf 'PS1=" %s${_hi_u}%s@%s%s%s%s %s "\n' \
     "$(_hi_user_escape)" "$nc" "$(_hi_color_escape "$(_hi_target_color)")" \
-    "$host" "$nc" "$git" "$(_hi_prompt_end SH '\$')"
+    "$host" "$nc" "$git" "$(_hi_prompt_end SH)"
 }
 
 # The tree on disk, uncompressed - not what a session sends (that is

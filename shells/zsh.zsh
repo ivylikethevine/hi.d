@@ -24,7 +24,7 @@ if [[ "${_HI_DISABLE_PROMPT:-0}" != 1 ]]; then
     precmd_functions+=(__hi_git_precmd)
     # concatenated onto the $'...' strings, not interpolated - those stay
     # literal so zsh's prompt expansion happens at render time, not assignment
-    HI_PS1_END="$(_hi_prompt_end ZSH '>')"
+    HI_PS1_END="$(_hi_prompt_end ZSH)"
     if _hi_has_color; then
       export CLICOLOR=1
       export LSCOLORS=gafacadabaegedabagacad

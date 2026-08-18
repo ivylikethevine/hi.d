@@ -84,8 +84,11 @@ function doctor_local() {
   # (a gzipped tar, base64-armored for the ssh path) and how big the thing is
   # once it lands. The first is the one people mean by "what does hi cost".
   doctor_row payload "$(_hi_wire_estimate) over the wire per ssh session, $(_hi_size) unpacked (${_HI_PAYLOAD[*]})"
+  # the shell column of core.sh's _HI_SHELL_TABLE, so this report cannot fall
+  # behind the roster install.sh and load.sh wire up
   local s have=""
-  for s in bash zsh fish nu; do
+  # shellcheck disable=SC2119 # the flag filter is optional; no flag means all
+  for s in $(_hi_shell_rows | cut -d'|' -f1); do
     command -v "$s" >/dev/null 2>&1 && have="$have$s "
   done
   doctor_row shells "local: ${have:-none?!}"

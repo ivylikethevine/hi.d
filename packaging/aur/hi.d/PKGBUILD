@@ -42,17 +42,12 @@ package() {
   # here instead would be a second copy of that list, free to drift.
   DESTDIR="$pkgdir" "$srcdir/hi.d/scripts/install.sh" --prefix /usr/share
 
-  # The installed copy answers `hi --version` with pkgver. Stamped at build
+  # `hi --version` and `man hi`'s footer answer with pkgver. Stamped at build
   # time because the tarball cannot carry it: bump.sh's manifest pass runs
   # after the tag exists, so a committed stamp would always be stale here.
-  sed -i "s/^_HI_RELEASE=.*/_HI_RELEASE=\"$pkgver\"/" "$pkgdir/usr/share/hi.d/hi.sh"
-
-  # `man hi`'s footer gets the same stamp, through the gzip install_tree
-  # produced (makepkg sets SOURCE_DATE_EPOCH, so the date is reproducible)
-  gzip -d "$pkgdir/usr/share/man/man1/hi.1.gz"
-  sed -i "s/^\.TH .*/.TH HI 1 \"$(date -u -d "@$SOURCE_DATE_EPOCH" +%Y-%m-%d)\" \"hi.d $pkgver\" \"User Commands\"/" \
-    "$pkgdir/usr/share/man/man1/hi.1"
-  gzip -9n "$pkgdir/usr/share/man/man1/hi.1"
+  # packaging/stamp.sh is the one implementation every channel calls; makepkg
+  # sets SOURCE_DATE_EPOCH, so the man page's date is reproducible.
+  "$srcdir/hi.d/packaging/stamp.sh" --root "$pkgdir" --version "$pkgver"
 
   # Arch wants the licence here as well; install_tree's copy lives inside the
   # tree, where it is what `hi` ships to a target rather than what pacman reads.

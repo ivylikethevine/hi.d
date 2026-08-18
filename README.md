@@ -694,7 +694,12 @@ colored pass/fail summary at the end:
 tests/test_runner.sh                    # every suite
 tests/test_runner.sh aliases shellcheck # just the named suite(s)
 tests/test_runner.sh --host-report      # ...prefixed with what this machine is
+tests/test_runner.sh --verbose          # every transcript, nothing collapsed
 ```
+
+A passing suite's transcript collapses to one status line - `--verbose`
+(`_HI_VERBOSE=1`) streams every suite's output live instead, which is what you want when a case is failing only
+under the runner.
 
 `--host-report` (`_HI_HOST_REPORT=1`) prints bash, the OS, whether the userland is GNU/BSD/busybox, which tree
 `$_HI_HOME` resolves to, which backends answer and the lint tools' versions before the first suite runs - the
@@ -773,19 +778,22 @@ cannot: `install_tree` hardcodes `/usr/bin` and `/etc/profile.d`, neither of whi
 
 | path | what it is |
 | --- | --- |
-| `mkpkg.sh` | stages the tree, stamps the staged `hi.sh` with the version, then builds deb/rpm/apk with nfpm |
+| `mkpkg.sh` | stages the tree, stamps it, then builds deb/rpm/apk with nfpm |
+| `stamp.sh` | writes the version into a built tree's `hi.sh` and man page; every channel calls it |
 | `bump.sh` | writes the version + real checksums into every manifest; `--check` verifies |
 | `aur/hi.d/` | the versioned AUR package (`PKGBUILD`, `.SRCINFO`) |
 | `aur/hi.d-git/` | the same package built from `main` |
 | `homebrew/hi.d.rb` | the tap formula |
 | `nfpm/nfpm.yaml` | deb/rpm/apk, built from the staged tree |
 
-**The version stamp.** Every channel seds `_HI_RELEASE=` into the `hi.sh` it installs, at build time:
-`mkpkg.sh` stamps the staged copy for deb/rpm/apk, the PKGBUILD's `package()` and the formula's
-`inreplace` stamp theirs. It cannot live in git: `bump.sh` runs only after the tag exists (its checksums
-need the tarball), so a committed stamp would always be one release stale in the very tarball Homebrew
-and the AUR build from. A git checkout answers `hi --version` with `git describe` instead, so the
-committed line stays empty. `tests/scripts/packaging_test.sh` guards the line and all three stampers.
+**The version stamp.** `packaging/stamp.sh` writes `_HI_RELEASE=` into the `hi.sh` a channel installs
+and the version into the man page's `.TH` line. All four channels call it - `mkpkg.sh` for deb/rpm/apk,
+both `PKGBUILD`s' `package()`, the formula's `install` - so there is one implementation rather than four
+seds. It cannot live in git: `bump.sh` runs only after the tag exists (its checksums need the tarball),
+so a committed stamp would always be one release stale in the very tarball Homebrew and the AUR build
+from. A git checkout answers `hi --version` with `git describe` instead, so the committed line stays
+empty. The formula passes `--date <version>` because a brew build has no `SOURCE_DATE_EPOCH` to date the
+page by, and `stamp.sh` refuses to guess one. `tests/scripts/packaging_test.sh` guards all of it.
 
 ### Cutting a release
 

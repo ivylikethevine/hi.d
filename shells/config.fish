@@ -24,6 +24,26 @@ end
 source $_HI_HOME/hi.d/common/paths.sh
 source $_HI_ALIASES
 
+# misc/aliases.sh (and yours in the overlay) stay `alias` for bash/zsh/fish
+# compatibility, so fish turns them into opaque functions - no preview of
+# what they expand to before you run them. `alias` with no args lists every
+# one it defined, in `alias name 'value'` form, which is itself valid fish
+# syntax; swapping the leading word for `abbr -a --` and eval'ing it reuses
+# fish's own quoting round-trip rather than re-escaping by hand.
+function hi_abbr_aliases --description 'add a fish abbr for every alias hi defined, so it expands in place'
+  for hi_abbr_line in (alias)
+    set -l hi_abbr_name (string match -rg '^alias (\S+) ' -- $hi_abbr_line)
+    test -n "$hi_abbr_name"; or continue
+    abbr -q -- $hi_abbr_name; and continue
+    eval "abbr -a -- "(string replace -r '^alias \S+ ' "$hi_abbr_name " -- $hi_abbr_line)
+  end
+end
+# on by default - fish-only, so it isn't in core.sh's shared _HI_TOGGLES list;
+# turning every alias into an abbr changes what your command line and
+# history literally look like, which is what the toggle is for
+set -q _HI_DISABLE_FISH_ALIAS_ABBR; or set -gx _HI_DISABLE_FISH_ALIAS_ABBR 0
+test "$_HI_DISABLE_FISH_ALIAS_ABBR" != 1; and hi_abbr_aliases
+
 complete -c hi -f -a '(sh $_HI_TARGETS)' # "<target>\ttype" lines
 complete exa --wraps eza
 

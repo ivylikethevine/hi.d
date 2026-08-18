@@ -34,9 +34,15 @@ source "$_HI_HEADER"
 _HI_CONFIG_START="# hi-config-start"
 _HI_CONFIG_END="# hi-config-end"
 
-# rc file <- hi config; fish/nu only when installed (no config dir otherwise)
-_HI_CONFIGS=("$_HI_BASHRC:$_HI_HOME_BASHRC" "$_HI_ZSHRC:$_HI_HOME_ZSHRC"
-  "$_HI_FISH_CONFIG:$_HI_HOME_FISH_CONFIG" "$_HI_NU_CONFIG:$_HI_HOME_NU_CONFIG")
+# rc file <- hi config; fish/nu only when installed (no config dir otherwise).
+# The pairs come from core.sh's _HI_SHELL_TABLE, filtered to the rows flagged
+# `graft` - the same roster scripts/install.sh reads for its local half, so a
+# shell cannot be wired up there and silently skipped here.
+_HI_CONFIGS=()
+while IFS='|' read -r _hi_shell _hi_label _hi_tree_rc _hi_home_rc _hi_check _hi_flags; do
+  _HI_CONFIGS+=("$_hi_tree_rc:$_hi_home_rc")
+done < <(_hi_shell_rows graft)
+unset _hi_shell _hi_label _hi_tree_rc _hi_home_rc _hi_check _hi_flags
 
 function configure_files() {
   local pair target src open body

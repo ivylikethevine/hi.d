@@ -421,6 +421,99 @@ function test_ksh_glyphs_match_core() {
   done
 }
 
+# --- the fish git segment ----------------------------------------------------
+#
+# fish renders its git segment with its own __fish_git_prompt, so config.fish
+# carries a third copy of the glyphs and palette - one hi.d never guarded. The
+# cases below read the file rather than running fish: the copy is a set of
+# literals, so parsing them is the whole check, and it holds on a runner with
+# no fish installed (which is where the drift would land unnoticed).
+
+# <role>=<value> per line, for the char_/color_ family named by $1
+function _hi_fish_settings() {
+  sed -n "s/^ *set -g __fish_git_prompt_$1_\([a-z_]*\) '\{0,1\}\([^']*\)'\{0,1\}\$/\1=\2/p" \
+    "$_HI_ROOT/shells/config.fish"
+}
+
+function _hi_fish_agrees() {
+  local label="$1" a="$2" b="$3"
+  [ -n "$a" ] && [ "$a" = "$b" ] && return 0
+  _hi_cecho " | $label: config.fish and core.sh disagree -" "$RED"
+  printf 'config.fish:\n%s\ncore.sh:\n%s\n' "$a" "$b" | sed 's/^/      /'
+  return 1
+}
+
+# config.fish only overrides the glyphs on the ASCII side - the UTF-8 ones are
+# fish's own - so the ASCII set is the copy, and this is the guard on it. Role
+# names are fish's; the values have to be core.sh's _HI_ASCII=1 answers.
+_HI_FISH_GLYPH_ROLES=("upstream_ahead:AHEAD" "upstream_behind:BEHIND"
+  "stagedstate:STAGED" "dirtystate:DIRTY" "invalidstate:INVALID"
+  "untrackedfiles:UNTRACKED" "stashstate:STASH" "cleanstate:CLEAN")
+function test_fish_ascii_glyphs_match_core() {
+  local pair role name want=""
+  for pair in "${_HI_FISH_GLYPH_ROLES[@]}"; do
+    role="${pair%%:*}"
+    name="${pair#*:}"
+    want="$want$role=$(_hi_core_values _HI_GLYPH_ 1 "$name" | sed 's/^[A-Z_]*=//')"$'\n'
+  done
+  _hi_fish_agrees "ascii glyphs" "$(_hi_fish_settings char)" "$(printf '%s' "$want")"
+}
+
+# the palette copy: fish names colors, core.sh spells escapes, and
+# _hi_color_escape is the bridge - so a renamed color that no longer resolves
+# to the escape the bash tier uses for the same role fails here
+_HI_FISH_COLOR_ROLES=("branch:BRPURPLE" "stagedstate:YELLOW"
+  "invalidstate:RED" "cleanstate:BRGREEN")
+function test_fish_colors_match_core() {
+  local pair role var fish_name got want mismatch=""
+  for pair in "${_HI_FISH_COLOR_ROLES[@]}"; do
+    role="${pair%%:*}"
+    var="${pair#*:}"
+    fish_name="$(_hi_fish_settings color | sed -n "s/^$role=//p")"
+    [ -n "$fish_name" ] || {
+      _hi_cecho " | config.fish sets no color for $role" "$RED"
+      return 1
+    }
+    got="$(_hi_color_escape "$fish_name")"
+    eval "want=\"\${$var}\""
+    want="$(printf '%b' "$want")"
+    [ "$got" = "$want" ] || mismatch="$mismatch $role($fish_name vs $var)"
+  done
+  [ -z "$mismatch" ] || {
+    _hi_cecho " | color roles disagree:$mismatch" "$RED"
+    return 1
+  }
+}
+
+# fish's default is `|`, bash's `\$`, zsh's `>` - three answers, and config.fish
+# cannot call _hi_prompt_end_default to get its own. This is that pin.
+function test_fish_prompt_end_default_matches_core() {
+  local fish_default core_default
+  fish_default="$(sed -n "s/^set -g _hi_prompt_end '\(.*\)'\$/\1/p" \
+    "$_HI_ROOT/shells/config.fish")"
+  core_default="$(_hi_prompt_end_default FISH)"
+  [ -n "$fish_default" ] && [ "$fish_default" = "$core_default" ] || {
+    _hi_cecho " | config.fish: '$fish_default'  core.sh: '$core_default'" "$RED"
+    return 1
+  }
+}
+
+# the branch is shortened at the same width in all three implementations, or
+# the same repo renders a different branch name per shell
+function test_branch_shorten_length_agrees() {
+  local missing=""
+  grep -q 'shorten_branch_len 32' "$_HI_ROOT/shells/config.fish" ||
+    missing="$missing config.fish"
+  grep -q '#ref} > 32' "$_HI_ROOT/common/git_prompt.sh" ||
+    missing="$missing git_prompt.sh"
+  grep -q -- '-gt 32' "$_HI_ROOT/shells/ksh.sh" ||
+    missing="$missing ksh.sh"
+  [ -z "$missing" ] || {
+    _hi_cecho " | not shortening at 32:$missing" "$RED"
+    return 1
+  }
+}
+
 # the wiring: the ksh arm sources ksh.sh and asks for the git-carrying prompt,
 # and the sh/ash/dash arm still gets neither - busybox ash would print the text
 # of the command substitution rather than running it
@@ -852,6 +945,12 @@ function run_hi_tests() {
   _hi_h2 "Testing: the ksh/mksh git segment"
   _hi_check "ksh.sh's colors match core.sh" test_ksh_colors_match_core
   _hi_check "ksh.sh's glyphs match core.sh" test_ksh_glyphs_match_core
+
+  _hi_h2 "Testing: the fish git segment's copies"
+  _hi_check "config.fish's ascii glyphs match core.sh" test_fish_ascii_glyphs_match_core
+  _hi_check "config.fish's colors match core.sh" test_fish_colors_match_core
+  _hi_check "config.fish's prompt end matches core.sh" test_fish_prompt_end_default_matches_core
+  _hi_check "All three segments shorten at 32" test_branch_shorten_length_agrees
   _hi_check "The ksh arm sources it" test_remote_suffix_gives_ksh_the_segment
   _hi_check "The segment is expanded per prompt" test_fallback_prompt_git_segment_is_deferred
   _hi_check "No segment for sh/ash/dash" test_fallback_prompt_has_no_segment_by_default

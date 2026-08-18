@@ -34,6 +34,35 @@ if [ -z "${_hi_core_loaded:-}" ]; then
   source "$_HI_HOME/hi.d/common/paths.sh"
 fi
 
+# Every shell hi wires up, one row each:
+# <shell>|<rc label>|<hi's rc>|<the user's rc>|<syntax check>|<flags>.
+# Flags name the mechanism: `local` is install.sh appending to the user's own
+# rc, `graft` is load.sh copying hi's rc into a target's. The mechanisms stay
+# separate (see install.sh's config_shell); only the roster is single-homed,
+# since three copies is what let a shell go missing from one. nu is graft-only
+# - config.nu needs env a hi session exports and a local nu never has.
+_HI_SHELL_TABLE=(
+  "bash|bashrc|$_HI_BASHRC|$_HI_HOME_BASHRC|bash -n|local,graft"
+  "zsh|zshrc|$_HI_ZSHRC|$_HI_HOME_ZSHRC|zsh -n|local,graft"
+  "fish|config.fish|$_HI_FISH_CONFIG|$_HI_HOME_FISH_CONFIG|fish --no-execute|local,graft"
+  "nu|config.nu|$_HI_NU_CONFIG|$_HI_HOME_NU_CONFIG|nu --commands true|graft"
+)
+
+# _hi_shell_rows [flag] - the roster, or only rows carrying <flag>. One per
+# line, for `while IFS='|' read` callers.
+function _hi_shell_rows() {
+  local row
+  for row in "${_HI_SHELL_TABLE[@]}"; do
+    if [ -z "${1:-}" ]; then
+      printf '%s\n' "$row"
+      continue
+    fi
+    case ",${row##*|}," in
+    *",$1,"*) printf '%s\n' "$row" ;;
+    esac
+  done
+}
+
 # color names match fish's set_color vocabulary; greys are skipped, since fish has none.
 _HI_COLOR_NAMES=(red green yellow blue magenta cyan brred brgreen bryellow brblue brmagenta brcyan)
 
@@ -180,14 +209,34 @@ function _hi_on_exit() {
   fi
 }
 
-# _hi_prompt_end <SHELL> <default> - the prompt's end character: per-shell
-# setting, then the all-three one, then the default. Empty counts as unset
+# What each shell's prompt ends with unless overridden, <SHELL>:<char>. Five
+# different characters, so they are data rather than something each call site
+# repeats. SH is the ksh/mksh/sh fallback prompt hi.sh bakes on the client.
+# config.fish keeps its own copy (fish parses no bash); hi_test pins it here.
+_HI_PROMPT_END_DEFAULTS=('BASH:\$' 'ZSH:>' 'FISH:|' 'NU:>' 'SH:\$')
+
+# _hi_prompt_end_default <SHELL> - the shipped default for one shell, empty if
+# the roster does not name it.
+function _hi_prompt_end_default() {
+  local row
+  for row in "${_HI_PROMPT_END_DEFAULTS[@]}"; do
+    [ "${row%%:*}" = "$1" ] && {
+      printf '%s' "${row#*:}"
+      return 0
+    }
+  done
+}
+
+# _hi_prompt_end <SHELL> [default] - the prompt's end character: per-shell
+# setting, then the all-three one, then the roster's default (or the one given,
+# which is how a caller outside the roster asks). Empty counts as unset
 # (`' '` still means "none"); reaches $PS1 unescaped on purpose, so `%#` and
 # `\$` keep their meaning. config.fish keeps its own copy of this rule.
 function _hi_prompt_end() {
-  local specific
+  local specific fallback="${2:-}"
+  [ -n "$fallback" ] || fallback="$(_hi_prompt_end_default "$1")"
   eval "specific=\"\${_HI_PROMPT_END_$1:-}\""
-  printf '%s' "${specific:-${_HI_PROMPT_END:-$2}}"
+  printf '%s' "${specific:-${_HI_PROMPT_END:-$fallback}}"
 }
 
 function _hi_at_color() {

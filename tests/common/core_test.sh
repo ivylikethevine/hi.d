@@ -292,6 +292,80 @@ function test_zsh_rc_survives_ksharrays_being_on() {
   [ -n "$out" ]
 }
 
+# --- _HI_SHELL_TABLE ---------------------------------------------------------
+
+# Every row has all six fields, both rc paths are absolute, and the flags
+# column names only mechanisms that exist. A row short a field silently
+# hands install.sh an empty rc path, which is a `touch ""` at install time.
+function test_shell_table_rows_are_wellformed() {
+  local row shell label tree home check flags rest
+  for row in "${_HI_SHELL_TABLE[@]}"; do
+    IFS='|' read -r shell label tree home check flags rest <<<"$row"
+    [ -n "$shell" ] && [ -n "$label" ] && [ -n "$check" ] || {
+      _hi_cecho " | thin row: $row" "$RED"
+      return 1
+    }
+    [ -z "$rest" ] || {
+      _hi_cecho " | too many fields: $row" "$RED"
+      return 1
+    }
+    case "$tree$home" in
+    /*/*) ;;
+    *)
+      _hi_cecho " | rc paths must be absolute: $row" "$RED"
+      return 1
+      ;;
+    esac
+    case ",$flags," in
+    *,local,* | *,graft,*) ;;
+    *)
+      _hi_cecho " | no known mechanism in flags: $row" "$RED"
+      return 1
+      ;;
+    esac
+  done
+}
+
+# The roster is the table; paths.sh is the data. A shell given path vars there
+# and no row here reaches neither install.sh's local half nor load.sh's graft -
+# it just quietly does nothing, which is how the two lists drifted before.
+function test_shell_table_covers_every_rc_path_var() {
+  local var value missing=""
+  for var in _HI_BASHRC _HI_ZSHRC _HI_FISH_CONFIG _HI_NU_CONFIG \
+    _HI_HOME_BASHRC _HI_HOME_ZSHRC _HI_HOME_FISH_CONFIG _HI_HOME_NU_CONFIG; do
+    eval "value=\"\${$var:-}\""
+    [ -n "$value" ] || {
+      _hi_cecho " | paths.sh exports no $var" "$RED"
+      return 1
+    }
+    case "$(printf '%s\n' "${_HI_SHELL_TABLE[@]}")" in
+    *"|$value|"* | *"|$value") ;;
+    *) missing="$missing $var" ;;
+    esac
+  done
+  [ -z "$missing" ] || {
+    _hi_cecho " | in paths.sh but in no _HI_SHELL_TABLE row:$missing" "$RED"
+    return 1
+  }
+}
+
+# _hi_shell_rows with no argument is the whole roster; with one, only the rows
+# carrying that flag - and `local` must be a strict subset of `graft`, since a
+# shell wired up on this machine has to be graftable on a target too.
+function test_shell_rows_filters_by_flag() {
+  local all local_rows graft_rows
+  all="$(_hi_shell_rows | wc -l)"
+  local_rows="$(_hi_shell_rows local | wc -l)"
+  graft_rows="$(_hi_shell_rows graft | wc -l)"
+  [ "$all" -eq "${#_HI_SHELL_TABLE[@]}" ] || return 1
+  [ "$local_rows" -gt 0 ] && [ "$graft_rows" -gt 0 ] || return 1
+  [ "$local_rows" -le "$graft_rows" ] || {
+    _hi_cecho " | more local rows than graft rows" "$RED"
+    return 1
+  }
+  [ -z "$(_hi_shell_rows nosuchflag)" ]
+}
+
 function run_core_tests() {
   _hi_workdir sharedtest
 
@@ -329,6 +403,11 @@ function run_core_tests() {
   _hi_check "No match fails" test_override_color_no_match_fails
   _hi_check "LOCALUSER special case" test_override_color_localuser_special_case
   _hi_check "LOCALHOSTNAME special case" test_override_color_localhostname_special_case
+
+  _hi_h2 "Testing: _HI_SHELL_TABLE"
+  _hi_check "Every row is six well-formed fields" test_shell_table_rows_are_wellformed
+  _hi_check "Every paths.sh rc var has a row" test_shell_table_covers_every_rc_path_var
+  _hi_check "_hi_shell_rows filters by flag" test_shell_rows_filters_by_flag
 
   _hi_h2 "Testing: _hi_ssh_host_tag"
   _hi_check "Leftmost tag of a multi-tag comment" test_ssh_host_tag_leftmost_of_multiple

@@ -112,8 +112,7 @@ function _hi_repeat() {
 }
 
 # _hi_hrule <label> <bar-char> <inset> <color> - the worker behind the three
-# heading levels: a _HI_MAX_WIDTH rule with the label centered, inset per
-# level. Green/yellow/red are reserved for verdicts, passed explicitly.
+# heading levels: a _HI_MAX_WIDTH rule with the label centered
 function _hi_hrule() {
   local pad label width=$((${_HI_MAX_WIDTH:-80} - 1)) total left right lbar rbar
   _hi_repeat pad "$3" ' '
@@ -141,7 +140,6 @@ function _hi_h3() {
   _hi_hrule "$1" '~' 3 "${2:-$BRPURPLE}"
 }
 
-# high-res-ish timestamp that falls back to whole seconds on bash <5
 function _hi_now() {
   printf '%s' "${EPOCHREALTIME:-$(date +%s)}"
 }
@@ -151,7 +149,6 @@ function _hi_elapsed() {
 }
 
 # total size of the given paths; --apparent-size is GNU-only, probed per call
-# - no caller runs this twice in one shell, so a memo here could never hit
 function _hi_du_size() {
   local flags=""
   du --version 2>/dev/null | grep -q "GNU coreutils" && flags="--apparent-size"
@@ -248,9 +245,7 @@ function _hi_at_color() {
 # included - keeps hi's own prompt, and a missing starship falls back to it
 # silently. Never auto-detected: a target that happens to carry starship
 # must not surprise a user who chose hi's prompt. (bash/zsh/fish only: nu
-# would need `starship init nu` sourced at parse time, which nu cannot do
-# conditionally.) Shipping starship itself is a deliberate no - a multi-MB
-# binary against the payload budget.
+# would need `starship init nu` sourced at parse time, which nu cannot do)
 function _hi_wants_starship() {
   [ "${_HI_PROMPT:-}" = starship ] && command -v starship >/dev/null 2>&1
 }
@@ -384,11 +379,7 @@ function _hi_override_color() {
 
 # The "# Tags: a, b" comment directly above a "Host <alias>" line in
 # ~/.ssh/config; unknown host returns 1, a known host with no tag returns 2 -
-# which is what lets hi.sh's _hi_is_ssh_host ride this walker instead of
-# keeping a fourth copy of the Host grammar. `Host` matches case-insensitively
-# (ssh reads its keywords that way; the awks in targets.sh already agree).
-# `case` over `[[ =~ ]]`: zsh fills $match, not $BASH_REMATCH, so regex
-# captures returned nothing there.
+# `Host` matches case-insensitively (ssh reads its keywords that way
 function _hi_ssh_host_tag() {
   local line trimmed rest tag="" aliases
   [ -f "$_HI_SSH_CONFIG" ] || return 1

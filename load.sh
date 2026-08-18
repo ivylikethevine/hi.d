@@ -36,8 +36,7 @@ _HI_CONFIG_END="# hi-config-end"
 
 # rc file <- hi config; fish/nu only when installed (no config dir otherwise).
 # The pairs come from core.sh's _HI_SHELL_TABLE, filtered to the rows flagged
-# `graft` - the same roster scripts/install.sh reads for its local half, so a
-# shell cannot be wired up there and silently skipped here.
+# `graft` - the same roster scripts/install.sh reads for its local half
 _HI_CONFIGS=()
 while IFS='|' read -r _hi_shell _hi_label _hi_tree_rc _hi_home_rc _hi_check _hi_flags; do
   _HI_CONFIGS+=("$_hi_tree_rc:$_hi_home_rc")
@@ -46,8 +45,7 @@ unset _hi_shell _hi_label _hi_tree_rc _hi_home_rc _hi_check _hi_flags
 
 function configure_files() {
   local pair target src open body
-  # nu makes its config dir on first run, not install - so a fresh nu would
-  # dodge the loop's dir gate; making it here is what nu itself does next
+  # nu makes its config dir on first run, not install - so a fresh nu would dodge the loop's dir gate
   command -v nu >/dev/null 2>&1 && mkdir -p "$_HI_HOME_NU_DIR"
   for pair in "${_HI_CONFIGS[@]}"; do
     target="${pair#*:}"
@@ -93,8 +91,6 @@ function clean_all() {
   return 0
 }
 
-# The user's login shell, by name: $SHELL when sshd set it (it does), the passwd
-# entry otherwise (container `exec` paths often have neither).
 function _hi_login_shell() {
   local shell="${SHELL:-}" user
   if [ -z "$shell" ]; then
@@ -105,12 +101,9 @@ function _hi_login_shell() {
   printf '%s' "${shell##*/}"
 }
 
-# Which shell this session runs in.
 # GLOSSARY: session-shell ranking - login-first, and nu's allow-list-only seat
 function _hi_session_shell() {
   local want
-  # the ranking is appended rather than kept as a second loop: a preference
-  # that names nothing installed falls through to it either way
   for want in ${_HI_SHELL_PREFERENCE:-login fish zsh bash} fish zsh bash; do
     [ "$want" = login ] && want="$(_hi_login_shell)"
     case "$want" in
@@ -165,8 +158,7 @@ function load() {
   _hi_cecho "$greeting" "$color" 1
   _hi_cecho " | load: $(_hi_elapsed "$start" "$(_hi_now)")s | copy: ${_HI_COPY_TIME:--1}s"
 
-  # keep the session's own status: `hi <target>` should report a shell that
-  # exited non-zero rather than always claiming success
+  # keep the session's own status
   local shell_ec=0
   local -a shell_cmd=("$shell" -i)
   # the header above is our greeting
@@ -181,7 +173,6 @@ function load() {
   fi
 
   local size
-  # the whole unpacked tree, unlike hi.sh's _hi_size (client tree has extras)
   size="$(_hi_du_size "$_HI_ROOT")"
   _hi_cecho " $size" "$NC" 1
   if [[ "${_HI_DISABLE_HEADER:-0}" != 1 ]]; then

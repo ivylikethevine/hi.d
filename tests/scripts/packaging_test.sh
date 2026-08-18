@@ -7,7 +7,7 @@
 #
 # What is deliberately NOT here: building a real .deb or a real .pkg.tar.zst.
 # That needs the toolchains and belongs in the verification runbook
-# (packaging/README.md), not in the fast group.
+# (docs/PACKAGING.md), not in the fast group.
 #
 # Nearly every function below is invoked indirectly - by name, through
 # _hi_case's "$@" - which SC2329 can't see.
@@ -29,6 +29,7 @@ _HI_FORMULA="$_HI_PKG_DIR/homebrew/hi.d.rb"
 _HI_PKGBUILD="$_HI_PKG_DIR/aur/hi.d/PKGBUILD"
 _HI_PKGBUILD_GIT="$_HI_PKG_DIR/aur/hi.d-git/PKGBUILD"
 _HI_RELEASE_WF="$_HI_ROOT/.github/workflows/release.yml"
+_HI_TOOLS_TXT="$_HI_ROOT/.github/actions/setup-tool/tools.txt"
 
 # bump.sh's functions (sha256_of, b2_of, rewrite, write/check_manifests) -
 # inert under its source guard, and its derived paths equal the ones above
@@ -285,12 +286,67 @@ function test_publish_job_signs_the_sums() {
   publish="$(sed -n '/^  publish:/,$p' "$_HI_RELEASE_WF")"
   printf '%s' "$publish" | grep -qF 'MINISIGN_SECRET_KEY' &&
     printf '%s' "$publish" | grep -qF 'minisign -S' &&
-    printf '%s' "$publish" | grep -qF 'setup-minisign'
+    printf '%s' "$publish" | grep -qF 'tool: minisign'
 }
 
+# release.yml's offline verification leans on minisign being pinned *and*
+# drift-checked; the general manifest guards below cannot know that.
 function test_minisign_pin_is_drift_checked() {
-  grep -qF 'setup-minisign|github|jedisct1/minisign' "$_HI_ROOT/.github/scripts/check_tool_versions.sh" &&
-    grep -q '^    default: "' "$_HI_ROOT/.github/actions/setup-minisign/action.yml"
+  [ -f "$_HI_TOOLS_TXT" ] || return 0 # a shipped tree has no .github
+  grep -qE '^minisign\|[0-9][^|]*\|.*\|github:jedisct1/minisign$' "$_HI_TOOLS_TXT"
+}
+
+# every row is six fields, a known kind, and a non-empty version and url - a
+# thin row reaches CI as a runtime failure nobody sees until the job runs
+function test_tool_manifest_rows_are_wellformed() {
+  [ -f "$_HI_TOOLS_TXT" ] || return 0
+  local row tool version kind url verify check rest bad=0
+  while IFS='|' read -r tool version kind url verify check rest; do
+    [ -n "$tool" ] && [ -n "$version" ] && [ -n "$url" ] &&
+      [ -n "$verify" ] && [ -n "$check" ] && [ -z "$rest" ] || {
+      _hi_cecho " | malformed row: $tool" "$RED"
+      bad=1
+      continue
+    }
+    case "$kind" in
+    raw | tar.gz | tar.xz) ;;
+    *)
+      _hi_cecho " | unknown kind '$kind' for $tool" "$RED"
+      bad=1
+      ;;
+    esac
+    case "$url" in
+    *%v*) ;;
+    *)
+      _hi_cecho " | $tool's url has no %v - it can never follow the pin" "$RED"
+      bad=1
+      ;;
+    esac
+  done < <(grep -v '^[[:space:]]*\(#\|$\)' "$_HI_TOOLS_TXT")
+  [ "$bad" = 0 ]
+}
+
+# ...and every setup-tool call names a row. Nothing used to check that a
+# `uses: ./.github/actions/setup-<x>` path existed at all, so this is stricter
+# than the literal roster grep it replaces. It reads `tool:` lines out of the
+# workflows, so an unrelated future `tool:` input would be checked too - which
+# fails loudly rather than silently, and is the right way round.
+function test_every_setup_tool_call_names_a_manifest_row() {
+  [ -f "$_HI_TOOLS_TXT" ] || return 0
+  local want bad=0
+  while read -r want; do
+    grep -q "^$want|" "$_HI_TOOLS_TXT" || {
+      _hi_cecho " | a workflow asks for '$want', which tools.txt does not list" "$RED"
+      bad=1
+    }
+  done < <(sed -n 's/^ *tool: *\([a-z0-9._-]*\) *$/\1/p' "$_HI_ROOT"/.github/workflows/*.yml | sort -u)
+  [ "$bad" = 0 ]
+}
+
+# the release ships what mkpkg.sh says it ships, not a second glob list in YAML
+function test_release_workflow_reads_the_artifact_list() {
+  [ -f "$_HI_RELEASE_WF" ] || return 0
+  grep -qF 'dist/ARTIFACTS' "$_HI_RELEASE_WF"
 }
 
 # --- the scripts themselves ---------------------------------------------------
@@ -427,10 +483,12 @@ function test_bump_rewrite_preserves_file_mode() {
 
 # --- the version stamp ----------------------------------------------------------
 #
-# Every channel seds `^_HI_RELEASE=` into the hi.sh it installs, at build time
-# (mkpkg.sh's stamp_launcher, the PKGBUILD's package(), the formula's
-# inreplace) - the stamp cannot live in git because bump.sh only runs after
-# the tag exists. These keep the line and all three stampers agreeing.
+# Every channel stamps `^_HI_RELEASE=` into the hi.sh it installs, and the
+# version into the man page's .TH line, at build time - the stamp cannot live
+# in git because bump.sh only runs after the tag exists. All four now do it
+# through packaging/stamp.sh, so these cases split in two: greps that every
+# channel calls the one implementation and none kept a private sed, and
+# behavioral cases running stamp.sh against a fixture tree.
 
 # exactly one stampable line, and committed empty - a literal in git would
 # ship a stale version in the tag tarball
@@ -440,19 +498,41 @@ function test_launcher_release_line_is_unique_and_empty() {
     grep -qF '_HI_RELEASE="${_HI_RELEASE:-}"' "$_HI_ROOT/hi.sh"
 }
 
-# shellcheck disable=SC2016 # $pkgver is makepkg's, quoted as literal text
-# both AUR packages, not just the versioned one: the installed tree never
-# carries .git, so an unstamped -git package answers "unknown (no stamp, no
-# git)" - which an install in a clean Arch container is how we found out
-function test_pkgbuild_stamps_the_release() {
+# All four channels, the -git one included: the installed tree never carries
+# .git, so an unstamped -git package answers "unknown (no stamp, no git)" -
+# which an install in a clean Arch container is how we found out.
+function test_every_channel_stamps_through_stamp_sh() {
   local f
-  for f in "$_HI_PKGBUILD" "$_HI_PKGBUILD_GIT"; do
-    grep -qF 's/^_HI_RELEASE=.*/_HI_RELEASE=\"$pkgver\"/' "$f" || return 1
+  for f in "$_HI_PKG_DIR/mkpkg.sh" "$_HI_PKGBUILD" "$_HI_PKGBUILD_GIT" "$_HI_FORMULA"; do
+    # comment lines dropped first: every one of these files *mentions*
+    # stamp.sh in the prose explaining why it calls it, so grepping the whole
+    # file would pass on a channel that had quietly stopped calling it
+    grep -v '^[[:space:]]*#' "$f" | grep -qF 'packaging/stamp.sh' || {
+      _hi_cecho " | $f does not call packaging/stamp.sh" "$RED"
+      return 1
+    }
   done
 }
 
-function test_formula_stamps_the_release() {
-  grep -qF 'inreplace libexec/"hi.d/hi.sh", /^_HI_RELEASE=.*$/' "$_HI_FORMULA"
+# ...and none kept its own sed alongside the call. A half-migration leaves both
+# in place and passes the grep above while still stamping twice.
+# shellcheck disable=SC2016 # the sed bodies are literal text, not expansions
+function test_no_channel_kept_a_private_stamp() {
+  local f
+  for f in "$_HI_PKG_DIR/mkpkg.sh" "$_HI_PKGBUILD" "$_HI_PKGBUILD_GIT" "$_HI_FORMULA"; do
+    grep -qE 's/\^_HI_RELEASE=|inreplace libexec/"hi\.d/hi\.sh"' "$f" && {
+      _hi_cecho " | $f still carries its own stamp" "$RED"
+      return 1
+    }
+  done
+  return 0
+}
+
+# The formula dates the .TH line with the version, not a day, and it is the
+# only channel that does: it has no $SOURCE_DATE_EPOCH, and stamp.sh refuses
+# to guess. Pinned so it cannot be "fixed" into an irreproducible Time.now.
+function test_formula_stamps_the_th_date_with_the_version() {
+  grep -qF -- '"--date", version' "$_HI_FORMULA"
 }
 
 function test_package_sh_stamps_the_staged_launcher() {
@@ -461,18 +541,7 @@ function test_package_sh_stamps_the_staged_launcher() {
     grep -qF '_HI_RELEASE="9.9.9"' "$out/staging/usr/share/hi.d/hi.sh"
 }
 
-# --- the man-page stamp: the same three channels, sedding .TH instead -----------
-
-function test_pkgbuild_stamps_the_man_page() {
-  local f
-  for f in "$_HI_PKGBUILD" "$_HI_PKGBUILD_GIT"; do
-    grep -qF 's/^\.TH .*/' "$f" || return 1
-  done
-}
-
-function test_formula_stamps_the_man_page() {
-  grep -qF 'inreplace "docs/hi.1"' "$_HI_FORMULA"
-}
+# --- the man-page stamp -------------------------------------------------------
 
 # through the same --stage-only run as the launcher's check: the staged gz
 # must open to a .TH carrying the asked-for version and a real date
@@ -481,6 +550,149 @@ function test_package_sh_stamps_the_staged_man_page() {
   out="$(_hi_staged_999)" &&
     gzip -dc "$out/staging/usr/share/man/man1/hi.1.gz" |
     grep -qE '^\.TH HI 1 "[0-9]{4}-[0-9]{2}-[0-9]{2}" "hi\.d 9\.9\.9"'
+}
+
+# write_checksums also writes dist/ARTIFACTS, which is what release.yml reads
+# instead of respelling *.deb *.rpm *.apk in YAML three times. Sourced rather
+# than run, so this needs no nfpm - the reason that function is separate.
+function test_write_checksums_lists_the_artifacts() {
+  local d="$_HI_WORKDIR/artifacts"
+  mkdir -p "$d"
+  : >"$d/hi.d_1.0.0_amd64.deb"
+  : >"$d/hi.d-1.0.0.x86_64.rpm"
+  : >"$d/hi.d-1.0.0.apk"
+  # sourced in a subshell rather than at suite level: mkpkg.sh's
+  # `[[ BASH_SOURCE == $0 ]] || return 0` guard is the seam, and the suite
+  # already sources bump.sh at the top - two of them would collide
+  (
+    # shellcheck source=../../packaging/mkpkg.sh
+    source "$_HI_PKG_DIR/mkpkg.sh"
+    _HI_DIST="$d"
+    write_checksums >/dev/null 2>&1
+  ) || return 1
+  [ -f "$d/ARTIFACTS" ] || {
+    _hi_cecho " | write_checksums wrote no ARTIFACTS" "$RED"
+    return 1
+  }
+  # every built file, plus SHA256SUMS, basenames only - and nothing else
+  diff <(sort "$d/ARTIFACTS") \
+    <(printf '%s\n' hi.d-1.0.0.apk hi.d-1.0.0.x86_64.rpm hi.d_1.0.0_amd64.deb SHA256SUMS | sort) ||
+    return 1
+  # ...and it agrees with what SHA256SUMS covers
+  diff <(awk '{ print $2 }' "$d/SHA256SUMS" | sort) \
+    <(grep -v '^SHA256SUMS$' "$d/ARTIFACTS" | sort)
+}
+
+# --- packaging/stamp.sh itself ------------------------------------------------
+#
+# The greps above prove every channel calls it; these prove what it does. A
+# fixture tree per case, since each one mutates it.
+
+# _hi_stamp_fixture [plain] - an install_tree-shaped tree under $_HI_WORKDIR,
+# echoed. With `plain`, the man page is left ungzipped (the Homebrew shape).
+# shellcheck disable=SC2016 # hi.sh's ${...:-} default, written as literal text
+function _hi_stamp_fixture() {
+  local dir="$_HI_WORKDIR/stamp.$$.$RANDOM"
+  mkdir -p "$dir/usr/share/hi.d" "$dir/usr/share/man/man1"
+  printf '#!/bin/bash\n_HI_RELEASE="${_HI_RELEASE:-}"\n' >"$dir/usr/share/hi.d/hi.sh"
+  chmod 755 "$dir/usr/share/hi.d/hi.sh"
+  printf '.TH HI 1 "1970-01-01" "hi.d 0.0.0" "User Commands"\n.SH NAME\n' \
+    >"$dir/usr/share/man/man1/hi.1"
+  [ "${1:-}" = plain ] || gzip -9n "$dir/usr/share/man/man1/hi.1"
+  printf '%s' "$dir"
+}
+
+function _hi_stamp() { "$_HI_PKG_DIR/stamp.sh" "$@"; }
+
+function test_stamp_writes_the_release_line() {
+  local d
+  d="$(_hi_stamp_fixture)"
+  _hi_stamp --root "$d" --version 9.9.9 --date 2026-01-02 &&
+    grep -qF '_HI_RELEASE="9.9.9"' "$d/usr/share/hi.d/hi.sh"
+}
+
+function test_stamp_writes_the_th_line() {
+  local d
+  d="$(_hi_stamp_fixture)"
+  _hi_stamp --root "$d" --version 9.9.9 --date 2026-01-02 &&
+    gzip -dc "$d/usr/share/man/man1/hi.1.gz" |
+    grep -qF '.TH HI 1 "2026-01-02" "hi.d 9.9.9" "User Commands"'
+}
+
+# no --date: the day of $SOURCE_DATE_EPOCH, which is what makes the packaged
+# page reproducible rather than "whenever this built"
+function test_stamp_dates_from_source_date_epoch() {
+  local d
+  d="$(_hi_stamp_fixture)"
+  SOURCE_DATE_EPOCH=946684800 _hi_stamp --root "$d" --version 1.0.0 &&
+    gzip -dc "$d/usr/share/man/man1/hi.1.gz" | grep -qF '"2000-01-01"'
+}
+
+# neither --date nor an epoch is a build failure, not a silent `date +%F` -
+# a "today" stamp is exactly the irreproducible build the epoch prevents
+function test_stamp_refuses_to_guess_a_date() {
+  local d
+  d="$(_hi_stamp_fixture)"
+  env -u SOURCE_DATE_EPOCH "$_HI_PKG_DIR/stamp.sh" --root "$d" --version 1.0.0 >/dev/null 2>&1 &&
+    return 1
+  return 0
+}
+
+# two runs, same inputs, same bytes - gzip -9n carries no timestamp, so the
+# reproducible-build diff stays empty across a re-stage
+function test_stamp_is_idempotent() {
+  local d
+  d="$(_hi_stamp_fixture)"
+  _hi_stamp --root "$d" --version 3.3.3 --date 2026-01-02 || return 1
+  cp "$d/usr/share/hi.d/hi.sh" "$d/launcher.first"
+  cp "$d/usr/share/man/man1/hi.1.gz" "$d/man.first"
+  _hi_stamp --root "$d" --version 3.3.3 --date 2026-01-02 || return 1
+  cmp -s "$d/launcher.first" "$d/usr/share/hi.d/hi.sh" &&
+    cmp -s "$d/man.first" "$d/usr/share/man/man1/hi.1.gz"
+}
+
+# the launcher has to stay executable - `cat` back rather than `mv`, the same
+# reason lib.sh's rewrite does (see test_bump_rewrite_preserves_file_mode)
+# shellcheck disable=SC2012 # ls -l for the mode column is the point
+function test_stamp_keeps_the_launcher_exec_bit() {
+  local d before after
+  d="$(_hi_stamp_fixture)"
+  before="$(ls -l "$d/usr/share/hi.d/hi.sh" | awk '{ print $1 }')"
+  _hi_stamp --root "$d" --version 4.4.4 --date 2026-01-02 || return 1
+  after="$(ls -l "$d/usr/share/hi.d/hi.sh" | awk '{ print $1 }')"
+  [ "$before" = "$after" ]
+}
+
+# a renamed line used to make every channel's bare sed a silent no-op; this is
+# the case that turns it into a failed build instead
+function test_stamp_fails_on_a_missing_release_line() {
+  local d
+  d="$(_hi_stamp_fixture)"
+  printf '#!/bin/bash\necho hi\n' >"$d/usr/share/hi.d/hi.sh"
+  _hi_stamp --root "$d" --version 1.0.0 --date 2026-01-02 >/dev/null 2>&1 && return 1
+  return 0
+}
+
+# the Homebrew shape: two unrelated paths, a plain page, and no .gz made
+function test_stamp_takes_explicit_paths() {
+  local d
+  d="$(_hi_stamp_fixture plain)"
+  _hi_stamp --version 5.5.5 --date 5.5.5 \
+    --launcher "$d/usr/share/hi.d/hi.sh" \
+    --man "$d/usr/share/man/man1/hi.1" || return 1
+  grep -qF '_HI_RELEASE="5.5.5"' "$d/usr/share/hi.d/hi.sh" &&
+    grep -qF '.TH HI 1 "5.5.5" "hi.d 5.5.5"' "$d/usr/share/man/man1/hi.1" &&
+    [ ! -f "$d/usr/share/man/man1/hi.1.gz" ]
+}
+
+# install_tree leaves the page out on a host with no gzip, so an absent one is
+# a skip rather than a failure - the launcher still gets stamped
+function test_stamp_skips_a_missing_man_page() {
+  local d
+  d="$(_hi_stamp_fixture)"
+  rm -f "$d/usr/share/man/man1/hi.1.gz"
+  _hi_stamp --root "$d" --version 6.6.6 --date 2026-01-02 &&
+    grep -qF '_HI_RELEASE="6.6.6"' "$d/usr/share/hi.d/hi.sh"
 }
 
 # --- mkpkg.sh, offline half ---------------------------------------------------
@@ -576,6 +788,10 @@ function run_packaging_tests() {
   _hi_check "Verifies the manifests against the tag" test_release_workflow_verifies_the_manifests
   _hi_check "The publish job signs the sums" test_publish_job_signs_the_sums
   _hi_check "The minisign pin is drift-checked" test_minisign_pin_is_drift_checked
+  _hi_check "Every tools.txt row is well-formed" test_tool_manifest_rows_are_wellformed
+  _hi_check "Every setup-tool call names a row" test_every_setup_tool_call_names_a_manifest_row
+  _hi_check "release.yml reads dist/ARTIFACTS" test_release_workflow_reads_the_artifact_list
+  _hi_check "write_checksums lists the artifacts" test_write_checksums_lists_the_artifacts
 
   _hi_h2 "Testing: mkpkg.sh / bump.sh"
   _hi_check "mkpkg.sh takes its version from the PKGBUILD" test_package_sh_reads_the_version_from_the_pkgbuild
@@ -600,12 +816,22 @@ function run_packaging_tests() {
 
   _hi_h2 "Testing: the version stamp"
   _hi_check "hi.sh's stamp line is unique and empty" test_launcher_release_line_is_unique_and_empty
-  _hi_check "The PKGBUILD stamps it" test_pkgbuild_stamps_the_release
-  _hi_check "The formula stamps it" test_formula_stamps_the_release
+  _hi_check "Every channel calls stamp.sh" test_every_channel_stamps_through_stamp_sh
+  _hi_check "...and none kept a private stamp" test_no_channel_kept_a_private_stamp
+  _hi_check "The formula dates .TH with the version" test_formula_stamps_the_th_date_with_the_version
   _hi_check "mkpkg.sh stamps the staged copy" test_package_sh_stamps_the_staged_launcher
-  _hi_check "The PKGBUILDs stamp the man page" test_pkgbuild_stamps_the_man_page
-  _hi_check "The formula stamps the man page" test_formula_stamps_the_man_page
   _hi_check "mkpkg.sh stamps the staged man page" test_package_sh_stamps_the_staged_man_page
+
+  _hi_h2 "Testing: packaging/stamp.sh"
+  _hi_check "Writes the release line" test_stamp_writes_the_release_line
+  _hi_check "Writes the .TH line" test_stamp_writes_the_th_line
+  _hi_check "Dates from SOURCE_DATE_EPOCH" test_stamp_dates_from_source_date_epoch
+  _hi_check "Refuses to guess a date" test_stamp_refuses_to_guess_a_date
+  _hi_check "Is idempotent" test_stamp_is_idempotent
+  _hi_check "Keeps the launcher exec bit" test_stamp_keeps_the_launcher_exec_bit
+  _hi_check "Fails on a missing release line" test_stamp_fails_on_a_missing_release_line
+  _hi_check "Takes explicit launcher/man paths" test_stamp_takes_explicit_paths
+  _hi_check "Skips a missing man page" test_stamp_skips_a_missing_man_page
 
   _hi_h2 "Testing: mkpkg.sh (offline half)"
   _hi_check "--stage-only stages without nfpm" test_package_sh_stage_only_needs_no_nfpm

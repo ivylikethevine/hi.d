@@ -36,7 +36,7 @@ export _HI_TMUXCONF="$_HI_ROOT/misc/tmux.conf"
 [ -f "$_HI_CONFIG_DIR/tmux.conf" ] && export _HI_TMUXCONF="$_HI_CONFIG_DIR/tmux.conf"
 # eza reads its theme from a *directory* (misc/theme.yml), not a file path
 export _HI_THEME_DIR="$_HI_ROOT/misc"
-export _HI_ALIASES="$_HI_ROOT/shells/aliases.sh"
+export _HI_ALIASES="$_HI_ROOT/misc/aliases.sh"
 export _HI_OSC52="$_HI_ROOT/shells/osc52.sh"
 export _HI_BASHRC="$_HI_ROOT/shells/bash.sh"
 export _HI_ZSHRC="$_HI_ROOT/shells/zsh.zsh"

@@ -115,7 +115,7 @@ function test_paths_sources_cleanly_under_strict_mode() {
 
 # --- toggle defaults --------------------------------------------------------
 #
-# shells/aliases.sh and shells/config.fish read the toggles bare, and neither
+# misc/aliases.sh and shells/config.fish read the toggles bare, and neither
 # can use ${X:-0} because fish sources both and has no such expansion. So the
 # entry points guarantee the variables exist instead. Getting this wrong is
 # invisible until something runs under `set -u`, where an unset toggle is fatal
@@ -149,6 +149,22 @@ function test_aliases_source_cleanly_under_nounset() {
   bash -c 'set -euo pipefail
     source "$_HI_HOME/hi.d/common/core.sh"
     source "$_HI_ALIASES"' 2>/dev/null
+}
+
+# The overlay's aliases.sh is additive - misc/aliases.sh's last line sources
+# $_HI_CONFIG_DIR/aliases.sh so the user's definitions win. Point
+# $_HI_CONFIG_DIR at the tree's own misc/ and that line becomes the file
+# sourcing itself, forever: exactly what a target does when the overlay is
+# unpacked over misc/ instead of into its own config/, and what hung every ssh
+# session until the overlay got a directory of its own. Backgrounded and
+# waited on because a hang, not a failure, is the symptom - a bare call here
+# would take the whole suite down with it.
+function test_aliases_do_not_source_themselves() {
+  _HI_CONFIG_DIR="$_HI_ROOT/misc" bash -c 'set -eu
+    . "$_HI_HOME/hi.d/common/paths.sh"
+    . "$_HI_ALIASES"' >/dev/null 2>&1 &
+  _hi_wait_pid "$!" 10
+  [ "$_HI_WAIT_EXIT" != 124 ]
 }
 
 function test_settings_beat_the_defaults() {
@@ -233,7 +249,7 @@ function test_settings_point_at_the_overlay_before_it_exists() {
 # Every overlay file hi ships (hi.sh's _HI_OVERLAY_FILES) needs a local
 # override guard in paths.sh - except settings.sh (unguarded by design: the
 # overlay is its only home) and aliases.sh (consumed additively by
-# shells/aliases.sh's last line, not through a path var). A missed guard
+# misc/aliases.sh's last line, not through a path var). A missed guard
 # fails asymmetrically: the file works on targets but local sessions ignore
 # the override - the same silent drift the toggle-gate pin above catches.
 function test_overlay_guards_match_the_roster() {
@@ -278,6 +294,7 @@ function run_paths_tests() {
   _hi_h2 "Testing: the toggles are always defined"
   _hi_check "core.sh defines every toggle" test_core_defines_every_toggle
   _hi_check "aliases.sh sources cleanly under set -u" test_aliases_source_cleanly_under_nounset
+  _hi_check "aliases.sh does not source itself" test_aliases_do_not_source_themselves
   _hi_check "Settings beat the defaults" test_settings_beat_the_defaults
   _hi_check "The environment beats the defaults" test_environment_beats_the_defaults
 

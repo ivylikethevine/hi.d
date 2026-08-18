@@ -361,7 +361,7 @@ function _hi_tmux_preview() {
   printf 'tmux -> tmux -f %s\n' "$_HI_TMUXCONF"
 }
 
-# alias count plus a handful of names, read straight from shells/aliases.sh
+# alias count plus a handful of names, read straight from misc/aliases.sh
 # rather than duplicating its fallthrough logic here
 function _hi_aliases_preview() {
   local names count
@@ -386,7 +386,7 @@ _HI_FEATURE_PROMPTS=(
   "_HI_DISABLE_PERSONAL|1|| Enable personal shell settings (history size, keybindings, completion tweaks)?"
   "_HI_DISABLE_GIT_STATUS|1|_hi_git_status_preview| Enable git status in the prompt?"
   "_HI_DISABLE_EDITORS|1|_hi_editors_preview| Enable the vim/nano config overrides?"
-  "_HI_DISABLE_ALIASES|1|_hi_aliases_preview| Enable the personal aliases in shells/aliases.sh (sudo, cat/eza, git, docker, pacman/apt, etc)?"
+  "_HI_DISABLE_ALIASES|1|_hi_aliases_preview| Enable the personal aliases in misc/aliases.sh (sudo, cat/eza, git, docker, pacman/apt, etc)?"
   "_HI_DISABLE_OSC52|1|_hi_osc52_preview| Enable the OSC 52 clipboard (a yank on a target lands in your local clipboard)?"
   "_HI_DISABLE_TMUX|1|_hi_tmux_preview| Enable hi's tmux config (permanent installs only - a detached tmux would outlive a disposable tree)?"
   "_HI_DISABLE_LOCAL|1|| Enable all of the above on this machine (the one hi.d is installed on), not just when you hi elsewhere?"
@@ -479,22 +479,21 @@ function config_max_width() {
   _HI_SETTING_LINES+=("${value:+export _HI_MAX_WIDTH=$value}")
 }
 
-# What each shell's prompt ends with - one question each, since that is the
-# point: the shipped defaults (`\$`, `>`, `|`) are three different answers.
+# What each shell's prompt ends with - one question per shell wired up locally
+# (_HI_RC_TABLE's roster), since that is the point: the shipped defaults are
+# different characters per shell. Those defaults come from core.sh's
+# _hi_prompt_end_default rather than being spelled here a second time.
 # Skipped when the prompt is off, like config_header_details; entering the
 # default clears the override rather than writing it, as config_max_width does
 # with 80. Values are single-quoted on the way out (a separator is as likely to
 # be `$` as a letter), so `'` itself is refused.
-_HI_PROMPT_END_ROWS=("bash:BASH:\\\$" "zsh:ZSH:>" "fish:FISH:|")
-
 function config_prompt_ends() {
   setting_off _HI_DISABLE_PROMPT "$_HI_SETTINGS" 1 && return 0
   local row name shell default var current value
-  for row in "${_HI_PROMPT_END_ROWS[@]}"; do
-    name="${row%%:*}"
-    shell="${row#*:}"
-    shell="${shell%%:*}"
-    default="${row##*:}"
+  for row in "${_HI_RC_TABLE[@]}"; do
+    name="${row%%|*}"
+    shell="$(printf '%s' "$name" | tr '[:lower:]' '[:upper:]')"
+    default="$(_hi_prompt_end_default "$shell")"
     var="_HI_PROMPT_END_$shell"
     current="$(grep -oE "^export $var='.*'\$" "$_HI_SETTINGS" 2>/dev/null | sed -E "s/^export $var='//; s/'\$//")"
     value="$(ask_value "Character to end the $name prompt with?" "$current" "$default" \
@@ -593,17 +592,18 @@ function check_one_config() {
 # check cmd>. Validation, install and uninstall all loop this roster (the
 # install-time line bodies stay in a case beside the loop - the one per-shell
 # irregular part), so adding a shell is one row plus its lines rather than
-# three disjoint edits. load.sh's _HI_CONFIGS is the same roster for a
-# *session* graft; the two mechanisms stay separate on purpose (see the note
-# above config_shell). nu is deliberately absent even though load.sh grafts
-# it on targets: shells/config.nu is gated on the env a hi session exports
-# (_HI_CORE and friends), which a plain local nu never has - wiring it up
-# locally needs an env bridge first, not an rc line.
-_HI_RC_TABLE=(
-  "bash|bashrc|$_HI_HOME_BASHRC|bash -n"
-  "zsh|zshrc|$_HI_HOME_ZSHRC|zsh -n"
-  "config.fish|config.fish|$_HI_HOME_FISH_CONFIG|fish --no-execute"
-)
+# three disjoint edits.
+#
+# The rows themselves come from core.sh's _HI_SHELL_TABLE, filtered to the
+# ones flagged `local` - so nu (grafted on targets, not wired up here) drops
+# out without being spelled as an absence, and a shell added to the roster
+# cannot reach load.sh's graft and miss this. Only the columns this file uses
+# are kept, so the three loops below read the same four fields they always did.
+_HI_RC_TABLE=()
+while IFS='|' read -r _hi_shell _hi_label _hi_tree_rc _hi_home_rc _hi_check _hi_flags; do
+  _HI_RC_TABLE+=("$_hi_shell|$_hi_label|$_hi_home_rc|$_hi_check")
+done < <(_hi_shell_rows local)
+unset _hi_shell _hi_label _hi_tree_rc _hi_home_rc _hi_check _hi_flags
 
 # Validates whatever of the roster's rc files already exist, before
 # install.sh's own lines get appended to them. Returns non-zero if anything

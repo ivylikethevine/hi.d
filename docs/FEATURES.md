@@ -1,0 +1,111 @@
+# Configuration
+
+Your config lives **outside the checkout**, in `${XDG_CONFIG_HOME:-$HOME/.config}/hi.d/` (`$_HI_CONFIG_DIR`).
+`colors` and `packages` there override the tree's copies, one file at a time - anything you haven't
+overridden keeps tracking the default the tree ships, so `hi_update` still delivers changes to the rest.
+`settings.sh` has no in-tree counterpart at all: `hi_configure` only ever writes it here.
+
+| overlay file                 | overrides        | what it is                                                                                                                            |
+| ----------------------------- | ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `~/.config/hi.d/settings.sh` | -                | what `hi_configure` writes                                                                                                            |
+| `~/.config/hi.d/colors`      | `misc/colors`    | your color pins                                                                                                                       |
+| `~/.config/hi.d/packages`    | `misc/packages`  | what the package check looks for                                                                                                      |
+| `~/.config/hi.d/tmux.conf`   | `misc/tmux.conf` | your tmux config                                                                                                                      |
+| `~/.config/hi.d/aliases.sh`  | -                | your own aliases, sourced **after** `misc/aliases.sh` so yours win - additive, never a replacement, and in the same POSIX+fish subset |
+
+This is what keeps configuring hi.d from dirtying the checkout (so `hi_update`'s `git pull` keeps applying
+cleanly), and why the tree never has to be writable at all - it can be root-owned, installed by a package
+manager. All of it rides along to every host you say `hi` to, in its own small archive.
+
+Want history on it? `hi_overlay_init` makes `~/.config/hi.d` a git repo _in place_: from then on
+`hi_configure` commits its own settings writes, `hi_doctor` reports the commit count, and a push remote is one
+`git remote add` away. Entirely optional. (Keeping the same directory in chezmoi or yadm works just as well -
+see the README's [hi.d and the alternatives](../README.md#hid-and-the-alternatives).)
+
+Everything below is an environment variable, checked where it's used. `hi_configure` writes your answers to
+`~/.config/hi.d/settings.sh`, which every shell sources ahead of `common/paths.sh` - a plain `#!/bin/sh` script
+of `export NAME=value` lines, valid in sh, bash, zsh and fish alike. You never have to use `hi_configure`:
+exporting any of these by hand works just as well, and takes precedence for that shell.
+
+## Features
+
+Each is **on by default**; set it to `1` to turn that piece off.
+
+| variable                 | turns off                                                                                                                             |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `_HI_DISABLE_HEADER`     | the whole connect/disconnect header, every line of it                                                                                 |
+| `_HI_DISABLE_PROMPT`     | the colored `user@host` prompt, leaving your shell's own                                                                              |
+| `_HI_DISABLE_PERSONAL`   | personal shell settings - history size, keybindings, completion tweaks                                                                |
+| `_HI_DISABLE_GIT_STATUS` | the git segment in the prompt                                                                                                         |
+| `_HI_DISABLE_EDITORS`    | the `vim`/`nano` config overrides                                                                                                     |
+| `_HI_DISABLE_ALIASES`    | the personal aliases in `misc/aliases.sh` (not nu's subset - `alias` is parse-time there and cannot be gated; see `shells/config.nu`) |
+| `_HI_DISABLE_OSC52`      | the OSC 52 clipboard - yanks in `vim` and the `hi_copy` alias                                                                         |
+| `_HI_DISABLE_TMUX`       | the `tmux` config override (offered on permanent installs only)                                                                       |
+| `_HI_DISABLE_LOCAL`      | all of the above **on this machine only** - hi still styles the hosts you visit                                                       |
+
+`_HI_DISABLE_LOCAL` is the odd one out: "leave my own machine alone, but give me hi everywhere I connect to".
+It's told apart from a real session by `_HI_REMOTE_SESSION`, which `load.sh` exports on a target and a local
+shell's own rc never does.
+
+`_HI_DISABLE_OSC52` turns off the one feature that reaches back _through_ the connection: a yank in `vim` on a
+target, or anything piped into `hi_copy`, is base64'd into an [OSC 52](https://invisible-island.net/xterm/ctlseqs/ctlseqs.html#h4-Operating-System-Commands)
+escape and written to the tty, so your local terminal emulator - not the host - puts it on **your** clipboard. No X11
+forwarding, no clipboard daemon, nothing installed on the target. Only the unnamed register is sent, so `"ay` stays
+local. Terminal support varies (tmux needs `set -g allow-passthrough on`; zellij handles OSC 52 itself, so under
+`$ZELLIJ` the escape goes through raw and unwrapped), which is why it's a toggle like
+everything else; `shells/osc52.sh` is the whole implementation if you want to read what gets emitted.
+
+## tmux
+
+`misc/tmux.conf` is reached the way `vim.rc` is - through an alias, `tmux -f <conf>` - and overridden the same
+way, by dropping your own `~/.config/hi.d/tmux.conf`. Beyond the usual defaults it does one hi-specific thing:
+it appends the `_HI_*` variables to tmux's `update-environment`, so a window opened **after** attaching gets a
+shell that can still find hi. Without it, `tmux new-window` on a remote box gives a bare prompt, the tmux
+server predating the connection and knowing nothing about `$_HI_HOME`.
+
+Two limits worth stating plainly:
+
+- `-f` is read when the tmux **server** starts, not when a client attaches, so attaching to an already-running
+  server applies none of the config - tmux's rule, not hi's. The `update-environment` half still works, being
+  refreshed on every attach.
+- The alias is defined **only where hi.d is permanent** - your own machine, or a target where
+  `scripts/install.sh` has been run. On a disposable target hi deletes the tree on exit and a detached tmux
+  outlives the session, so every shell inside it would wake up reading a directory that is gone. Plain `tmux`
+  still works there, without hi's config.
+
+## Header details
+
+Each is **on by default**; set it to `0` to hide that line. All are ignored when `_HI_DISABLE_HEADER=1`.
+
+| variable               | hides                                                            |
+| ---------------------- | ---------------------------------------------------------------- |
+| `_HI_HEADER_BANNER`    | the `~~~ Connected [host] ~~~` line, on connect _and_ disconnect |
+| `_HI_HEADER_TIMESTAMP` | the date/time line                                               |
+| `_HI_HEADER_SYSINFO`   | the OS / CPU / RAM line                                          |
+| `_HI_HEADER_IDENTITY`  | the git identity / containers / ssh key line                     |
+| `_HI_HEADER_CHECK`     | the installed-packages check (`misc/packages`)                   |
+
+## Everything else
+
+| variable               | default               | what it does                                                                                                                                                                                                                                                                                                   |
+| ----------------------- | ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `_HI_MAX_WIDTH`        | `80`                  | terminal columns the header and banner are drawn to                                                                                                                                                                                                                                                            |
+| `_HI_HOME`             | `$HOME`               | the **parent** of your `hi.d` directory - everything resolves `$_HI_HOME/hi.d`                                                                                                                                                                                                                                 |
+| `_HI_TARGETS_TTL`      | `5`                   | seconds `hi <TAB>` reuses its target list for; `0` disables the cache                                                                                                                                                                                                                                          |
+| `_HI_PROBE_TIMEOUT`    | `2`                   | seconds any one backend CLI gets, during completion and in the header                                                                                                                                                                                                                                          |
+| `_HI_SSH_CONFIG`       | `~/.ssh/config`       | where ssh hosts and their `# Tags:` comments are read from                                                                                                                                                                                                                                                     |
+| `_HI_ASCII`            | by locale             | `1` forces ASCII stand-ins for the banner/prompt/packages glyphs (`^ ok x` for `↑ ✓ ✗`), `0` forces the glyphs; unset asks the locale, so a `LANG=C` target degrades cleanly instead of printing mojibake                                                                                                      |
+| `NO_COLOR`             | unset                 | not hi's variable but [the convention](https://no-color.org): any non-empty value renders everything - header, prompts, git segment - without color, and hi ships your client-side choice to the target next to `_HI_ASCII`                                                                                    |
+| `_HI_PROMPT`           | unset                 | `starship` hands the prompt to [starship](https://starship.rs) when the target has it, keeping hi's header and aliases (bash/zsh/fish; nu keeps hi's prompt). Never auto-detected, and a target without starship silently keeps hi's own. hi does not ship starship - a multi-MB binary against a 39KB payload |
+| `_HI_SHELL_PREFERENCE` | `login fish zsh bash` | which shell a session runs in: an ordered list of `bash`/`zsh`/`fish`/`nu`, plus `login` for "your own login shell". First one installed on the target wins; `bash` is the floor, since that is what `load.sh` needs to run at all. `nu` is never picked unless it is your login shell or you name it here     |
+| `_HI_PROMPT_END`       | per shell             | the character each prompt ends with, when you want the same one everywhere; the three below win over it                                                                                                                                                                                                        |
+| `_HI_PROMPT_END_BASH`  | `\$`                  | bash's prompt separator (`\$` is bash's own escape for "`$`, or `#` for root")                                                                                                                                                                                                                                 |
+| `_HI_PROMPT_END_ZSH`   | `>`                   | zsh's prompt separator - zsh prompt escapes work here, so `%#` behaves as it does anywhere else in `PS1`                                                                                                                                                                                                        |
+| `_HI_PROMPT_END_FISH`  | `\|`                  | fish's prompt separator; root still gets `#` regardless                                                                                                                                                                                                                                                        |
+| `_HI_TERM_FALLBACK`    | `1`                   | on ssh targets missing a terminfo entry for your `TERM` (ghostty's `xterm-ghostty`, typically), swap it for `xterm-256color` before the session starts; `0` keeps the original `TERM`                                                                                                                          |
+| `_HI_HEADER_GHZ`       | `0`                   | `1` shows the header's CPU line as `x.xxx/x.xxx GHz` instead of the default whole-MHz pair; ignored when `_HI_HEADER_SYSINFO=0`                                                                                                                                                                                |
+| `_HI_DISABLE_FISH_ALIAS_ABBR` | `0`             | fish only, on by default: every alias hi defines gets a real `abbr`, so it expands to the full command on the line before you run it (`hi_abbr_aliases` does the work, callable by hand too). `1` skips this - not in the `_HI_DISABLE_*` table above since it's fish-specific, not one of `core.sh`'s shared toggles |
+
+`_HI_TARGETS_TTL` and `_HI_PROBE_TIMEOUT` exist because completion runs on **every TAB** and the header runs
+**before you get a shell**: a docker daemon that's down or a `kubectl` pointed at a dead cluster would
+otherwise hang there with no upper bound.

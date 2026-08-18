@@ -83,14 +83,7 @@ function run_kube_test() {
 
   _hi_pty_stdin auto "no tty and no python3 to fake one - kubectl exec -it will fail outright, results may be unreliable"
 
-  _hi_suite_begin
-
-  _hi_case _hi_run_case bash debian:bookworm-slim "$(_hi_probe_cmd "$_HI_TEST_MARKER" bash)"
-  _hi_case _hi_run_case sh alpine:3.20 "$(_hi_probe_cmd "$_HI_TEST_MARKER" fallback)"
-
-  _hi_suite_end "" \
-    "hi's kube path survived every shape tested ($_HI_TOTAL cases)" \
-    "hi's kube path FAILED: $_HI_FAILED/$_HI_TOTAL cases"
+  _hi_backend_pair_cases kube "shape"
 }
 
 run_kube_test

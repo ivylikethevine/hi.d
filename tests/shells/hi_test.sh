@@ -225,7 +225,7 @@ function test_fallback_rc_sources_paths_and_aliases() {
   local out
   out="$(CMDARG="" _hi_fallback_rc)"
   # shellcheck disable=SC2016 # same as above - $_HI_ROOT is the target's to expand
-  [[ "$out" == *'$_HI_ROOT/common/paths.sh'* && "$out" == *'$_HI_ROOT/shells/aliases.sh'* ]]
+  [[ "$out" == *'$_HI_ROOT/common/paths.sh'* && "$out" == *'$_HI_ROOT/misc/aliases.sh'* ]]
 }
 
 function test_fallback_rc_appends_the_command() {
@@ -236,7 +236,7 @@ function test_fallback_rc_appends_the_command() {
 # settings ahead of paths.sh - paths.sh's local-only gate reads them, so lines
 # arriving after it would be set too late to have any effect
 function test_fallback_rc_sources_settings_before_paths() {
-  _hi_before "$(CMDARG="" _hi_fallback_rc)" 'misc/settings\.sh' 'common/paths\.sh'
+  _hi_before "$(CMDARG="" _hi_fallback_rc)" 'config/settings\.sh' 'common/paths\.sh'
 }
 
 # bash reads an --rcfile only when it is interactive, and decides that from its
@@ -310,8 +310,8 @@ function test_overlay_is_seen_when_present() {
 }
 
 # members land at the archive's top level under their plain names, since it is
-# unpacked *over* the target's misc/ - a "colors" that arrived as "hi.d/colors"
-# or "./config/colors" would be invisible to paths.sh
+# unpacked straight into the target's config/ - a "colors" that arrived as
+# "hi.d/colors" or "./config/colors" would be invisible to paths.sh
 function test_overlay_tar_members_are_bare_names() {
   local dir listing
   dir="$(_hi_overlay_fixture members colors packages settings.sh)"
@@ -328,7 +328,8 @@ function test_overlay_tar_carries_only_what_exists() {
 }
 
 # the additive personal aliases ride the same stream under their bare name,
-# which is where shells/aliases.sh's tail line looks on the target
+# which is where misc/aliases.sh's tail line ($_HI_CONFIG_DIR/aliases.sh, the
+# target's config/) looks - a separate file from the shipped one, on purpose
 function test_overlay_tar_carries_aliases() {
   local dir
   dir="$(_hi_overlay_fixture withaliases aliases.sh)"
@@ -418,6 +419,99 @@ function test_ksh_glyphs_match_core() {
       "$(_HI_ASCII="$ascii" _hi_ksh_values "${_HI_KSH_GLYPH_NAMES[@]}")" \
       "$(_hi_core_values _HI_GLYPH_ "$ascii" "${_HI_KSH_GLYPH_NAMES[@]}")" || return 1
   done
+}
+
+# --- the fish git segment ----------------------------------------------------
+#
+# fish renders its git segment with its own __fish_git_prompt, so config.fish
+# carries a third copy of the glyphs and palette - one hi.d never guarded. The
+# cases below read the file rather than running fish: the copy is a set of
+# literals, so parsing them is the whole check, and it holds on a runner with
+# no fish installed (which is where the drift would land unnoticed).
+
+# <role>=<value> per line, for the char_/color_ family named by $1
+function _hi_fish_settings() {
+  sed -n "s/^ *set -g __fish_git_prompt_$1_\([a-z_]*\) '\{0,1\}\([^']*\)'\{0,1\}\$/\1=\2/p" \
+    "$_HI_ROOT/shells/config.fish"
+}
+
+function _hi_fish_agrees() {
+  local label="$1" a="$2" b="$3"
+  [ -n "$a" ] && [ "$a" = "$b" ] && return 0
+  _hi_cecho " | $label: config.fish and core.sh disagree -" "$RED"
+  printf 'config.fish:\n%s\ncore.sh:\n%s\n' "$a" "$b" | sed 's/^/      /'
+  return 1
+}
+
+# config.fish only overrides the glyphs on the ASCII side - the UTF-8 ones are
+# fish's own - so the ASCII set is the copy, and this is the guard on it. Role
+# names are fish's; the values have to be core.sh's _HI_ASCII=1 answers.
+_HI_FISH_GLYPH_ROLES=("upstream_ahead:AHEAD" "upstream_behind:BEHIND"
+  "stagedstate:STAGED" "dirtystate:DIRTY" "invalidstate:INVALID"
+  "untrackedfiles:UNTRACKED" "stashstate:STASH" "cleanstate:CLEAN")
+function test_fish_ascii_glyphs_match_core() {
+  local pair role name want=""
+  for pair in "${_HI_FISH_GLYPH_ROLES[@]}"; do
+    role="${pair%%:*}"
+    name="${pair#*:}"
+    want="$want$role=$(_hi_core_values _HI_GLYPH_ 1 "$name" | sed 's/^[A-Z_]*=//')"$'\n'
+  done
+  _hi_fish_agrees "ascii glyphs" "$(_hi_fish_settings char)" "$(printf '%s' "$want")"
+}
+
+# the palette copy: fish names colors, core.sh spells escapes, and
+# _hi_color_escape is the bridge - so a renamed color that no longer resolves
+# to the escape the bash tier uses for the same role fails here
+_HI_FISH_COLOR_ROLES=("branch:BRPURPLE" "stagedstate:YELLOW"
+  "invalidstate:RED" "cleanstate:BRGREEN")
+function test_fish_colors_match_core() {
+  local pair role var fish_name got want mismatch=""
+  for pair in "${_HI_FISH_COLOR_ROLES[@]}"; do
+    role="${pair%%:*}"
+    var="${pair#*:}"
+    fish_name="$(_hi_fish_settings color | sed -n "s/^$role=//p")"
+    [ -n "$fish_name" ] || {
+      _hi_cecho " | config.fish sets no color for $role" "$RED"
+      return 1
+    }
+    got="$(_hi_color_escape "$fish_name")"
+    eval "want=\"\${$var}\""
+    want="$(printf '%b' "$want")"
+    [ "$got" = "$want" ] || mismatch="$mismatch $role($fish_name vs $var)"
+  done
+  [ -z "$mismatch" ] || {
+    _hi_cecho " | color roles disagree:$mismatch" "$RED"
+    return 1
+  }
+}
+
+# fish's default is `|`, bash's `\$`, zsh's `>` - three answers, and config.fish
+# cannot call _hi_prompt_end_default to get its own. This is that pin.
+function test_fish_prompt_end_default_matches_core() {
+  local fish_default core_default
+  fish_default="$(sed -n "s/^set -g _hi_prompt_end '\(.*\)'\$/\1/p" \
+    "$_HI_ROOT/shells/config.fish")"
+  core_default="$(_hi_prompt_end_default FISH)"
+  [ -n "$fish_default" ] && [ "$fish_default" = "$core_default" ] || {
+    _hi_cecho " | config.fish: '$fish_default'  core.sh: '$core_default'" "$RED"
+    return 1
+  }
+}
+
+# the branch is shortened at the same width in all three implementations, or
+# the same repo renders a different branch name per shell
+function test_branch_shorten_length_agrees() {
+  local missing=""
+  grep -q 'shorten_branch_len 32' "$_HI_ROOT/shells/config.fish" ||
+    missing="$missing config.fish"
+  grep -q '#ref} > 32' "$_HI_ROOT/common/git_prompt.sh" ||
+    missing="$missing git_prompt.sh"
+  grep -q -- '-gt 32' "$_HI_ROOT/shells/ksh.sh" ||
+    missing="$missing ksh.sh"
+  [ -z "$missing" ] || {
+    _hi_cecho " | not shortening at 32:$missing" "$RED"
+    return 1
+  }
 }
 
 # the wiring: the ksh arm sources ksh.sh and asks for the git-carrying prompt,
@@ -741,12 +835,14 @@ function test_term_fallback_can_be_disabled() {
   [ "$(_hi_preamble_final_term TERM=hi-test-no-such-term _HI_TERM_FALLBACK=0)" = hi-test-no-such-term ]
 }
 
-# On a target, $_HI_CONFIG_DIR is the misc/ we just unpacked over, not
-# ${XDG_CONFIG_HOME:-...}: a ~/.config/hi.d belonging to whoever we logged in as
-# is not the config this session was asked to run with.
-function test_fallback_rc_points_config_dir_at_the_shipped_tree() {
+# On a target, $_HI_CONFIG_DIR is the config/ the overlay was unpacked into,
+# not ${XDG_CONFIG_HOME:-...}: a ~/.config/hi.d belonging to whoever we logged
+# in as is not the config this session was asked to run with. It must also not
+# be misc/, which holds the *shipped* aliases.sh - pointed there,
+# misc/aliases.sh's tail line sources itself forever.
+function test_fallback_rc_points_config_dir_at_the_overlay() {
   # shellcheck disable=SC2016 # $_HI_ROOT is the target's to expand, not ours
-  [[ "$(CMDARG="" _hi_fallback_rc)" == *'export _HI_CONFIG_DIR=$_HI_ROOT/misc'* ]]
+  [[ "$(CMDARG="" _hi_fallback_rc)" == *'export _HI_CONFIG_DIR=$_HI_ROOT/config'* ]]
 }
 
 function run_hi_tests() {
@@ -798,7 +894,7 @@ function run_hi_tests() {
   _hi_check "Fallback rc sources paths and aliases" test_fallback_rc_sources_paths_and_aliases
   _hi_check "Fallback rc appends the command" test_fallback_rc_appends_the_command
   _hi_check "Fallback rc sources settings before paths" test_fallback_rc_sources_settings_before_paths
-  _hi_check "Fallback rc points at the shipped tree" test_fallback_rc_points_config_dir_at_the_shipped_tree
+  _hi_check "Fallback rc points at the overlay config dir" test_fallback_rc_points_config_dir_at_the_overlay
 
   _hi_h2 "Testing: remote shell handoff"
   _hi_check "The bash handoff is explicitly interactive" test_remote_suffix_forces_an_interactive_bash
@@ -849,6 +945,12 @@ function run_hi_tests() {
   _hi_h2 "Testing: the ksh/mksh git segment"
   _hi_check "ksh.sh's colors match core.sh" test_ksh_colors_match_core
   _hi_check "ksh.sh's glyphs match core.sh" test_ksh_glyphs_match_core
+
+  _hi_h2 "Testing: the fish git segment's copies"
+  _hi_check "config.fish's ascii glyphs match core.sh" test_fish_ascii_glyphs_match_core
+  _hi_check "config.fish's colors match core.sh" test_fish_colors_match_core
+  _hi_check "config.fish's prompt end matches core.sh" test_fish_prompt_end_default_matches_core
+  _hi_check "All three segments shorten at 32" test_branch_shorten_length_agrees
   _hi_check "The ksh arm sources it" test_remote_suffix_gives_ksh_the_segment
   _hi_check "The segment is expanded per prompt" test_fallback_prompt_git_segment_is_deferred
   _hi_check "No segment for sh/ash/dash" test_fallback_prompt_has_no_segment_by_default

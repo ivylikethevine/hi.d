@@ -38,24 +38,9 @@ Symptom of forgetting: suites report fewer/MISSING cases, or a script runs
   four-shell plain-export subset, aliases.sh's POSIX+fish subset, targets.sh
   and bin/hi standalone POSIX. Respect the stated subset over "cleaner" bash.
 
-## Workflow with Ivy
+## Workflow
 
-- Commit per logical chunk during long sessions, but the prose is disposable:
-  Ivy squashes unpushed agent commits (`git reset --soft origin/<branch>`) and
-  writes the final message themselves. Offer the squash when a session wraps.
 - `docs/ROADMAP.md` is a to-do list, not a changelog: finished entries are
   deleted (git history is the ledger); entries whose code half shipped but
   which wait on a human step stay unticked, rewritten to say what shipped and
   what the tick now means.
-
-## Reference
-
-Packaging decisions are argued in two published artifacts (the second is
-mirrored at `docs/windows.md`; the first has no in-repo copy):
-
-- **Shipping hi.d** — <https://claude.ai/code/artifact/a7d6ace8-9a90-4a99-8c5f-ce02b85d59d9>
-  — AUR, Homebrew tap, nfpm→Releases, OBS, install script, Nix/mise/Snap.
-- **hi.d on Windows** — <https://claude.ai/code/artifact/187b96ee-b16c-4171-8522-687498267fe4>
-  — Scoop, winget, Chocolatey, MSYS2, Cygwin, WSL; assessment only.
-
-`docs/packaging.md` is the publishing runbook that came out of both.

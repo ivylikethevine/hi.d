@@ -49,36 +49,13 @@ function stage_tree() {
   rm -rf "$_HI_DIST/staging"
   mkdir -p "$_HI_DIST/staging"
   DESTDIR="$_HI_DIST/staging" "$installer" --prefix /usr/share
-  stamp_launcher
-  stamp_manpage
+  # `hi --version` and `man hi`'s footer, stamped at build time by the one
+  # script every channel calls - never in git, because bump.sh only runs after
+  # the tag exists and a committed stamp would always be a release stale.
+  # touch_epoch follows it: the man page is recompressed above, so its mtime
+  # needs clamping after, not before.
+  "$_HI_ROOT/packaging/stamp.sh" --root "$_HI_DIST/staging" --version "$_HI_VERSION"
   touch_epoch
-}
-
-# The staged copy answers `hi --version` with the packaged version. Stamped
-# here at build time, never in git: bump.sh only runs after the tag exists, so
-# a committed stamp would always be one release stale in the tag tarball (the
-# PKGBUILD and the Homebrew formula stamp their own copies the same way).
-# lib.sh's rewrite keeps the staged file's exec bit.
-function stamp_launcher() {
-  rewrite "$_HI_DIST/staging/usr/share/hi.d/hi.sh" \
-    "s/^_HI_RELEASE=.*/_HI_RELEASE=\"$_HI_VERSION\"/"
-}
-
-# `man hi`'s footer answers with the packaged version too: the same build-time
-# stamp, sedded into the .TH line through the gzip install_tree produced. The
-# date is $SOURCE_DATE_EPOCH's day (GNU -d first, BSD -r second - same dual
-# shape as touch_epoch), and -9n plus the epoch clamp that follows keep the
-# reproducible-build diff empty. The PKGBUILDs and the formula stamp their own
-# copies, and tests/scripts/packaging_test.sh holds all three together.
-function stamp_manpage() {
-  local gz="$_HI_DIST/staging/usr/share/man/man1/hi.1.gz" page day
-  [ -f "$gz" ] || return 0
-  page="${gz%.gz}"
-  day="$(date -u -d "@$SOURCE_DATE_EPOCH" +%Y-%m-%d 2>/dev/null ||
-    date -u -r "$SOURCE_DATE_EPOCH" +%Y-%m-%d)"
-  gzip -d "$gz"
-  rewrite "$page" "s/^\.TH .*/.TH HI 1 \"$day\" \"hi.d $_HI_VERSION\" \"User Commands\"/"
-  gzip -9n "$page"
 }
 
 # Clamp every staged mtime to $SOURCE_DATE_EPOCH: install_tree's cp stamps
@@ -137,6 +114,12 @@ function write_checksums() {
   done
   (cd "$_HI_DIST" && sha256_lines "${built[@]}" >SHA256SUMS)
   _hi_cecho " $_HI_DIST/SHA256SUMS :)" "$GREEN"
+
+  # ...and the same list as plain lines, which is what makes the claim above
+  # true: release.yml reads this instead of respelling *.deb *.rpm *.apk in
+  # YAML, so adding a packager is one edit to _HI_PACKAGERS.
+  printf '%s\n' "${built[@]}" SHA256SUMS >"$_HI_DIST/ARTIFACTS"
+  _hi_cecho " $_HI_DIST/ARTIFACTS :)" "$GREEN"
 }
 
 # sourcing stops here (tests reach the functions above) - install.sh's pattern

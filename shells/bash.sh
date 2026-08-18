@@ -6,7 +6,7 @@
 source "${_HI_HOME:-$HOME}/hi.d/common/core.sh"
 # shellcheck source=../common/git_prompt.sh
 source "$_HI_GIT_PROMPT"
-# shellcheck source=./aliases.sh
+# shellcheck source=../misc/aliases.sh
 source "$_HI_ALIASES"
 
 _hi_interactive_extras
@@ -16,7 +16,7 @@ if [[ "${_HI_DISABLE_PROMPT:-0}" != 1 ]] && ! _hi_wants_starship; then
   _hi_prime_identity
   # the character this prompt ends with (`\$` here, which bash renders as $ for
   # a user and # for root) - see _hi_prompt_end in common/core.sh
-  HI_PS1_END="$(_hi_prompt_end BASH '\$')"
+  HI_PS1_END="$(_hi_prompt_end BASH)"
   if _hi_has_color; then
     HI_PS1=" ${debian_chroot:-}$(_hi_user_escape)\u$(_hi_at_color)@$(_hi_host_escape)\h$NC $BRBLUE\w$NC"
   else

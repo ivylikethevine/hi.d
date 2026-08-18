@@ -11,7 +11,7 @@
 # Backstop toggle defaults, in an eval gated on a builtin fish lacks; `-` not
 # `:-` so intentional empties survive. GLOSSARY: toggle defaulting
 command -v getopts >/dev/null 2>&1 &&
-  eval 'export _HI_DISABLE_EDITORS="${_HI_DISABLE_EDITORS-0}" _HI_DISABLE_ALIASES="${_HI_DISABLE_ALIASES-0}" _HI_DISABLE_OSC52="${_HI_DISABLE_OSC52-0}" _HI_OSC52="${_HI_OSC52-}" _HI_DISABLE_TMUX="${_HI_DISABLE_TMUX-0}" _HI_TMUXCONF="${_HI_TMUXCONF-}" _HI_CLEANUP="${_HI_CLEANUP-}" _HI_CONFIG_DIR="${_HI_CONFIG_DIR-}"' || true
+  eval 'export _HI_DISABLE_EDITORS="${_HI_DISABLE_EDITORS-0}" _HI_DISABLE_ALIASES="${_HI_DISABLE_ALIASES-0}" _HI_DISABLE_OSC52="${_HI_DISABLE_OSC52-0}" _HI_OSC52="${_HI_OSC52-}" _HI_DISABLE_TMUX="${_HI_DISABLE_TMUX-0}" _HI_TMUXCONF="${_HI_TMUXCONF-}" _HI_CLEANUP="${_HI_CLEANUP-}" _HI_CONFIG_DIR="${_HI_CONFIG_DIR-}" _HI_ROOT="${_HI_ROOT-}"' || true
 
 # Resolve these before any alias exists: zsh/dash `command -v` returns an
 # alias's definition once one is set, poisoning later fallthrough chains.
@@ -59,7 +59,7 @@ export _HI_BAT_OPTS='-P --tabs 2 --theme Monokai\ Extended\ Bright --style chang
 alias batcat="$_HI_BATCAT_BIN"
 alias bat="batcat $_HI_BAT_OPTS"
 alias batn="batcat $_HI_BAT_OPTS,numbers"
-alias cat="batcat"
+alias cat="bat"
 alias catn="batn"
 
 alias now='echo "LOCAL: $(date $_HI_HUMAN_SHORT_DATE) => UTC: $(date -u $_HI_HUMAN_SHORT_DATE)"'
@@ -76,7 +76,7 @@ alias dcud="docker compose up -d"
 alias dcd="docker compose down"
 alias dps="dcl"
 alias dsp="docker system prune -fa"
-
+alias dil="docker image ls"
 # defaults for basics
 alias grep="grep --color=auto"
 alias ps="ps aux"
@@ -153,7 +153,7 @@ alias gss="git stash show"
 alias gsl="git stash list"
 alias gsa="git stash apply"
 alias gsd="git stash drop"
-alias gsda="git stash drop --all"
+alias gsda="git stash clear"
 alias gd="git diff --color=always"
 alias gps="echo ' Okay. Where are we going?'"
 alias gpsh='git push --set-upstream origin $(git rev-parse --abbrev-ref HEAD)'
@@ -188,6 +188,13 @@ alias chron="cron"
 alias chrontab="crontab"
 
 # Last on purpose: the user's own aliases.sh - ~/.config/hi.d/aliases.sh at
-# home, shipped into misc/ by the overlay stream on a target - wins over
+# home, shipped into the target's config/ by the overlay stream - wins over
 # anything above by coming after it. Same POSIX+fish subset as this file.
-[ -f "$_HI_CONFIG_DIR/aliases.sh" ] && . "$_HI_CONFIG_DIR/aliases.sh" || true
+#
+# The first test is the guard against $_HI_CONFIG_DIR being this file's own
+# directory, which would make the line source the file it is in, forever. hi
+# no longer lands the overlay over misc/, so nothing in the tree points here
+# any more - but an unbounded recursion is a hang, not an error, and this is
+# one comparison.
+[ "$_HI_CONFIG_DIR/aliases.sh" != "$_HI_ROOT/misc/aliases.sh" ] &&
+  [ -f "$_HI_CONFIG_DIR/aliases.sh" ] && . "$_HI_CONFIG_DIR/aliases.sh" || true

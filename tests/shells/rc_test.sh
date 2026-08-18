@@ -313,12 +313,17 @@ function run_rc_tests() {
   _hi_check_requires nu "_HI_DISABLE_GIT_STATUS silences it" test_nu_git_segment_respects_the_toggle
 
   _hi_h2 "Testing: the prompt separator"
-  local row shell var default
-  for row in 'bash:_HI_PROMPT_END_BASH:$' 'zsh:_HI_PROMPT_END_ZSH:>' 'fish:_HI_PROMPT_END_FISH:|'; do
-    shell="${row%%:*}"
-    var="${row#*:}"
-    var="${var%%:*}"
-    default="${row##*:}"
+  # the shells install.sh wires up locally, and their shipped defaults, both
+  # read off core.sh's rosters rather than spelled again here
+  local shell upper var default
+  for shell in $(_hi_shell_rows local | cut -d'|' -f1); do
+    upper="$(printf '%s' "$shell" | tr '[:lower:]' '[:upper:]')"
+    var="_HI_PROMPT_END_$upper"
+    # bash's default ships as the two characters `\$`, which bash renders as $
+    # for a user and # for root; these cases run as a user, so the leading
+    # backslash comes off before comparing against a rendered prompt.
+    default="$(_hi_prompt_end_default "$upper")"
+    default="${default#\\}"
     _hi_check_requires "$shell" "[$shell] default is '$default'" test_prompt_end_default "$shell" "$default"
     _hi_check_requires "$shell" "[$shell] $var wins" test_prompt_end_shell_specific "$shell" "$var"
     _hi_check_requires "$shell" "[$shell] _HI_PROMPT_END covers it" test_prompt_end_global_fallback "$shell"

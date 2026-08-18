@@ -105,7 +105,7 @@ function _hi_tmux_session_listed() {
 }
 
 function _hi_run_tmux_case() {
-  local name="hi-sshtest-tmux-$$" ok=0 session_pid out
+  local name="hi-sshtest-tmux-$$" ok=0 session_pid out cut
   local -a launch
 
   _hi_h3 "Testing interactive session: tmux (--tmux, permanent install)"
@@ -115,16 +115,26 @@ function _hi_run_tmux_case() {
   # own flags anywhere ahead of the first bare word
   launch=("${_HI_SSH_LAUNCH_BARE[0]}" --tmux "${_HI_SSH_LAUNCH_BARE[@]:1}")
   out="$_HI_WORKDIR/tmux.interactive.out"
+  cut="$_HI_WORKDIR/tmux.cut"
   : >"$out"
+  rm -f "$cut"
 
-  # held open by a sleep rather than fed an `exit`: this session is meant to be
-  # interrupted, not ended politely
+  # Held open rather than fed an `exit`: this session is meant to be
+  # interrupted, not ended politely. What holds it open waits on $cut - a file
+  # touched below the instant the client has been killed - rather than on a
+  # flat `sleep 120`, because `wait` on a background *pipeline* waits for every
+  # process in it: a sleep still counting down after the client it was holding
+  # open for is dead sat here for its full two minutes, which was 120s of this
+  # suite's 157 (the other 22 cases take about a second each). Same 120s
+  # ceiling, reached only if the kill never happens.
   # shellcheck disable=SC2094 # separate processes; the reader only polls
-  { sleep 120; } | "${_HI_PTY_FORCED[@]}" "${launch[@]}" >"$out" 2>&1 &
+  { _hi_poll_bool 480 0.25 test -f "$cut" || true; } |
+    "${_HI_PTY_FORCED[@]}" "${launch[@]}" >"$out" 2>&1 &
   session_pid=$!
 
   if _hi_poll_bool 60 0.5 _hi_tmux_session_listed "$name"; then
     kill -9 "$session_pid" 2>/dev/null || true
+    : >"$cut"
     wait "$session_pid" 2>/dev/null || true
     # the session outlived the client that started it, which is the feature
     if _hi_poll_bool 20 0.5 _hi_tmux_session_listed "$name"; then
@@ -135,6 +145,7 @@ function _hi_run_tmux_case() {
     fi
   else
     kill -9 "$session_pid" 2>/dev/null || true
+    : >"$cut"
     wait "$session_pid" 2>/dev/null || true
     _hi_h3 " | [tmux] -- no tmux session was ever created" "$RED"
     sed 's/^/      /' "$out" | tail -5

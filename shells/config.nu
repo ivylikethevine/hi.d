@@ -48,7 +48,7 @@ if $_hi_live {
     let _hi_id = (^bash -c ("source " + $env._HI_CORE + '
     _hi_prime_identity
     printf "%s\n" "$(_hi_userhost)"
-    _hi_prompt_end NU ">"') | lines)
+    _hi_prompt_end NU') | lines)
     $env._HI_NU_USERHOST = ($_hi_id | get 0)
     $env._HI_NU_END = ($_hi_id | get 1)
 

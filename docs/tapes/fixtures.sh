@@ -75,7 +75,10 @@ function up_ssh() {
   demo_keypair
   demo_sshd_image
   docker rm -f hi-demo-ssh >/dev/null 2>&1 || true
-  docker run -d --rm --name hi-demo-ssh -p 127.0.0.1::22 \
+  # --hostname: docker's own default is a random 12-char hex ID, which makes
+  # for an ugly, meaningless color in the header's user@host line. web-1
+  # gives the color-hash demo something real to hash.
+  docker run -d --rm --name hi-demo-ssh --hostname web-1 -p 127.0.0.1::22 \
     -e PUBKEY="$(cat "$_HI_DEMO_DIR/key.pub")" hi-demo-sshd >/dev/null
   local port
   port="$(docker port hi-demo-ssh 22/tcp | head -1)"
@@ -99,9 +102,13 @@ EOF
   return 1
 }
 
-# a bare shell-only image per flavor, the docker/podman e2e shape
-function up_container() { # <backend> <name> <flavor: debian|zsh|fish|ash>
-  local backend="$1" name="$2" flavor="$3" image
+# a bare shell-only image per flavor, the docker/podman e2e shape. <hostname>
+# is optional - pass one to give the header's color-hash line something
+# meaningful to hash instead of the backend's random container ID; omitted
+# for the tapes that are demonstrating hi against whatever a target happens
+# to be named.
+function up_container() { # <backend> <name> <flavor: debian|zsh|fish|ash> [hostname]
+  local backend="$1" name="$2" flavor="$3" hostname="${4:-}" image
   case "$flavor" in
   debian) image=debian:bookworm-slim ;;
   ash) image=alpine:3.20 ;;
@@ -116,7 +123,11 @@ function up_container() { # <backend> <name> <flavor: debian|zsh|fish|ash>
     ;;
   esac
   "$backend" rm -f "$name" >/dev/null 2>&1 || true
-  "$backend" run -d --rm --name "$name" "$image" tail -f /dev/null >/dev/null
+  if [ -n "$hostname" ]; then
+    "$backend" run -d --rm --name "$name" --hostname "$hostname" "$image" tail -f /dev/null >/dev/null
+  else
+    "$backend" run -d --rm --name "$name" "$image" tail -f /dev/null >/dev/null
+  fi
 }
 
 function up_nomad() {
@@ -187,8 +198,8 @@ mkdir -p "$_HI_DEMO_DIR"
 case "${1:-}:${2:-}" in
 up:ssh) up_ssh ;;
 up:docker)
-  up_container docker hi-demo debian
-  up_container docker hi-demo-zsh zsh
+  up_container docker hi-demo debian db-prod
+  up_container docker hi-demo-zsh zsh cache-1
   ;;
 up:podman) up_container podman hi-demo-fish fish ;;
 up:nomad) up_nomad ;;

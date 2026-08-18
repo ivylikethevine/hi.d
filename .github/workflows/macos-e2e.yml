@@ -13,7 +13,7 @@ permissions:
 jobs:
   loopback:
     name: hi localhost (BSD both ends)
-    runs-on: macos-latest
+    runs-on: ${{ vars.MACOS_RUNNER_LABEL || 'macos-latest' }}
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

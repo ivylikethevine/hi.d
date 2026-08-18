@@ -286,7 +286,7 @@ function test_tmux_wanted_on_when_asked_for() {
 }
 
 # a disposable tree is deleted when this session ends; a tmux that outlived it
-# would be reading a directory that is gone - the same test shells/aliases.sh
+# would be reading a directory that is gone - the same test misc/aliases.sh
 # makes before defining the `tmux` alias
 function test_tmux_wanted_refuses_a_disposable_tree() {
   local out

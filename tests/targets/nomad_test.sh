@@ -139,14 +139,7 @@ EOF
 
   _hi_pty_stdin force "no python3 to give the launcher its own pty - nomad alloc exec's attach may not get a real pty, results may be unreliable"
 
-  _hi_suite_begin
-
-  _hi_case _hi_run_case bash debian:bookworm-slim "$(_hi_probe_cmd "$_HI_TEST_MARKER" bash)"
-  _hi_case _hi_run_case sh alpine:3.20 "$(_hi_probe_cmd "$_HI_TEST_MARKER" fallback)"
-
-  _hi_suite_end "" \
-    "hi's nomad path survived every driver shape tested ($_HI_TOTAL cases)" \
-    "hi's nomad path FAILED: $_HI_FAILED/$_HI_TOTAL cases"
+  _hi_backend_pair_cases nomad "driver shape"
 }
 
 run_nomad_test

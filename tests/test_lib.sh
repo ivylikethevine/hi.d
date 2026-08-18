@@ -1219,3 +1219,24 @@ function _hi_container_backend_test() {
     "hi's $backend path survived every shell environment tested ($_HI_TOTAL cases)" \
     "hi's $backend path FAILED: $_HI_FAILED/$_HI_TOTAL cases"
 }
+
+# _hi_backend_pair_cases <label> <thing tested> - the bash-present + bash-less
+# case pair every ephemeral-cluster suite (kube, nomad) ends with, once its
+# own cluster/agent is up, $_HI_TEST_MARKER is set, and a suite-local
+# _hi_run_case is in scope. _say_hi_container's fallback logic past the
+# initial `command -v bash` probe is identical for every backend and already
+# proven by _hi_container_backend_test above, so these suites only need to
+# prove their own backend's probe/attach argument shapes - once with bash
+# present, once without.
+function _hi_backend_pair_cases() {
+  local label="$1" thing="$2"
+
+  _hi_suite_begin
+
+  _hi_case _hi_run_case bash debian:bookworm-slim "$(_hi_probe_cmd "$_HI_TEST_MARKER" bash)"
+  _hi_case _hi_run_case sh alpine:3.20 "$(_hi_probe_cmd "$_HI_TEST_MARKER" fallback)"
+
+  _hi_suite_end "" \
+    "hi's $label path survived every $thing tested ($_HI_TOTAL cases)" \
+    "hi's $label path FAILED: $_HI_FAILED/$_HI_TOTAL cases"
+}

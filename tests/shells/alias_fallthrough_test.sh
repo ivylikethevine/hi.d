@@ -1,5 +1,5 @@
 #!/bin/bash
-# The two pieces of shells/aliases.sh that alias_test.sh doesn't cover: the
+# The two pieces of misc/aliases.sh that alias_test.sh doesn't cover: the
 # `command -v a || command -v b || ...` fallthrough chains, and the
 # _HI_DISABLE_* guards that skip parts of the file. The split from
 # alias_test.sh is deliberate and considered-and-kept (2026-08): that suite
@@ -13,7 +13,7 @@
 # It is also the regression test for the bug that motivated it: in zsh, dash and
 # sh (not bash, not fish) `command -v name` returns an *alias's* definition once
 # one exists, so any chain reachable from an aliased name silently broke - see
-# the resolve-before-aliasing block at the top of shells/aliases.sh.
+# the resolve-before-aliasing block at the top of misc/aliases.sh.
 #
 # Nearly every function below is invoked indirectly - by name, through
 # _hi_case's "$@" - which SC2329 can't see.

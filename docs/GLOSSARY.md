@@ -2,7 +2,7 @@
 
 hi.d's shell code has three masters: **bash 3.2** (macOS's `/bin/bash`, the
 floor CI enforces), **POSIX sh** (dash/ash/busybox source parts of it), and
-**fish** (which parses `common/paths.sh`, `shells/aliases.sh` and
+**fish** (which parses `common/paths.sh`, `misc/aliases.sh` and
 `settings.sh` natively). On top of that, targets split between **GNU and BSD
 userlands**. Each entry below is a construct that looks odd until you know
 which master it serves.
@@ -113,7 +113,7 @@ math around user-visible strings computes column counts explicitly (see
 ## command -v fallthrough
 
 `alias x="$(command -v tool-a || command -v tool-b || command -v fallback)"`
-in `shells/aliases.sh`: resolved at source time, valid in sh, bash, zsh _and_
+in `misc/aliases.sh`: resolved at source time, valid in sh, bash, zsh _and_
 fish (modern fish parses `$(...)`), and never leaves the alias pointing at a
 missing binary. The `|| command -v echo` tail keeps `set -u`/`set -e` shells
 alive when nothing matches.
@@ -187,9 +187,10 @@ still win. `_HI_REMOTE_SESSION=1` is exported because this path never reaches
 target as local and strips hi for anyone with `_HI_DISABLE_LOCAL=1`.
 `settings.sh` keeps its `[ -f ]` guard because nothing writes it until
 install.sh runs, and a bare `.` on a missing file abandons the rest of the
-file in ash/dash. `_HI_CONFIG_DIR` points at the target's own `misc/`, where
+file in ash/dash. `_HI_CONFIG_DIR` points at the target's own `config/`, where
 the shipped overlay was unpacked - not a `~/.config/hi.d` belonging to
-whoever we logged in as.
+whoever we logged in as, and not `misc/`, which holds the *shipped* copies of
+the same names.
 
 ## split-quoted prompt segment
 
@@ -284,7 +285,7 @@ says so in the ksh row.
 ## nu session tier
 
 Nu is the first shell hi styles that is not POSIX at all: nothing in
-`shells/aliases.sh` or `common/` can be sourced there - no `source` of a .sh
+`misc/aliases.sh` or `common/` can be sourced there - no `source` of a .sh
 file, no `$( )`, no `[ -f x ]`. `shells/config.nu` therefore does what
 `config.fish` already does for the same reason: shell out to `bash -c` for
 the parts `common/` owns, so the header, palette and git segment stay one

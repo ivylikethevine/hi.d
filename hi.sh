@@ -21,9 +21,12 @@ _HI_USAGE="Usage: hi [ssh-options] <target> [command ...]"
 _HI_PAYLOAD=(common misc shells load.sh)
 
 # The user's config overlay, by the names it lands under in the target's
-# misc/ - its own second stream, since it lives outside the tree. aliases.sh
-# is additive, not a replacement: the shipped shells/aliases.sh sources it
-# from $_HI_CONFIG_DIR as its last act, so the user's definitions win.
+# config/ - its own second stream, since it lives outside the tree. It gets a
+# directory of its own rather than being unpacked over misc/, because
+# aliases.sh is additive, not a replacement: the shipped misc/aliases.sh
+# sources $_HI_CONFIG_DIR/aliases.sh as its last act, so the user's
+# definitions win. Landed in misc/ the two would be the same file - the
+# shipped aliases overwritten, and then sourcing itself forever.
 _HI_OVERLAY_FILES=(settings.sh colors packages tmux.conf aliases.sh)
 
 # GLOSSARY: base64 armor - why base64 over openssl, the -d/-D ladder, the tr
@@ -98,9 +101,9 @@ function _hi_has_overlay() {
   [ -n "$(_hi_overlay_files)" ]
 }
 
-# The overlay tar, unpacked over the target's misc/: explicit member names
-# rather than GNU --transform, so bsdtar works and members land where
-# paths.sh already looks.
+# The overlay tar, unpacked into the target's config/ - the $_HI_CONFIG_DIR
+# of that session: explicit member names rather than GNU --transform, so
+# bsdtar works and members land where paths.sh already looks.
 function _hi_overlay_tar() {
   local -a present=()
   _hi_read_lines present < <(_hi_overlay_files)
@@ -235,11 +238,11 @@ function _hi_fallback_rc() {
     printf '. %s/aliases.sh 2>/dev/null\n' "$aliases_dir"
   else
     # shellcheck disable=SC2016 # $_HI_ROOT is the target's to expand
-    printf 'export _HI_CONFIG_DIR=$_HI_ROOT/misc\n'
+    printf 'export _HI_CONFIG_DIR=$_HI_ROOT/config\n'
     # shellcheck disable=SC2016 # $_HI_ROOT is the target's to expand
-    printf '[ -f $_HI_ROOT/misc/settings.sh ] && . $_HI_ROOT/misc/settings.sh\n'
+    printf '[ -f $_HI_ROOT/config/settings.sh ] && . $_HI_ROOT/config/settings.sh\n'
     # shellcheck disable=SC2016 # $_HI_ROOT is the target's to expand
-    printf '. $_HI_ROOT/common/paths.sh 2>/dev/null\n. $_HI_ROOT/shells/aliases.sh 2>/dev/null\n'
+    printf '. $_HI_ROOT/common/paths.sh 2>/dev/null\n. $_HI_ROOT/misc/aliases.sh 2>/dev/null\n'
   fi
   [ -n "${CMDARG:-}" ] && printf '%s\n' "$CMDARG"
   return 0
@@ -457,11 +460,15 @@ REMOTE
     bootloader="$(_hi_bootloader | $_HI_ARMOR)"
     tree="$(_hi_payload_tar | $_HI_ARMOR)"
     # second, tiny stream: the overlay lives outside the tree, so it cannot
-    # ride the payload; omitted entirely when empty. _HI_CONFIG_DIR then
-    # points at the shipped misc/, not the login user's ~/.config/hi.d.
+    # ride the payload; omitted entirely when empty. It lands in its own
+    # config/ beside misc/ - never over it - and _HI_CONFIG_DIR points there,
+    # not at the login user's ~/.config/hi.d. mkdir on its own line: the dir
+    # is not in the payload, and _hi_armored_line's command string is a
+    # single pipeline sink with nowhere to hang an `&&`.
     # shellcheck disable=SC2016 # $_HI_ROOT is the target's to expand
     if _hi_has_overlay; then
-      overlay_line="$(_hi_overlay_tar | _hi_armored_line '|' 'tar mxzf - -C "$_HI_ROOT/misc"')"
+      overlay_line="mkdir -p \"\$_HI_ROOT/config\"
+$(_hi_overlay_tar | _hi_armored_line '|' 'tar mxzf - -C "$_HI_ROOT/config"')"
     fi
     # not known yet: everything above is armored again with the rest of the
     # script, so the figure can only be measured once it is assembled
@@ -470,7 +477,7 @@ REMOTE
       cat <<REMOTE
       export _HI_HOME=\$(mktemp -d -t $(_hi_whoami).hi.XXXXXX) # busybox mktemp needs exactly six X
       export _HI_ROOT=\$_HI_HOME/hi.d
-      export _HI_CONFIG_DIR=\$_HI_ROOT/misc
+      export _HI_CONFIG_DIR=\$_HI_ROOT/config
       export _HI_CLEANUP=\$_HI_HOME
       mkdir "\$_HI_ROOT"
       trap 'rm -rf \$_HI_CLEANUP' exit
@@ -643,10 +650,12 @@ function _say_hi_container() {
   fi
   rm -f "$tarball"
 
-  # the overlay, a second stream over the misc/ just laid down (see the ssh
-  # path); failing to place it is not worth losing the session over
+  # the overlay, a second stream into its own config/ beside the tree just
+  # laid down (see the ssh path); failing to place it is not worth losing the
+  # session over
   if _hi_has_overlay &&
-    ! _hi_overlay_tar | "${cp[@]}" sh -c "tar mxzf - -C '$root/hi.d/misc'" 2>"$tmp"; then
+    ! _hi_overlay_tar |
+    "${cp[@]}" sh -c "mkdir -p '$root/hi.d/config' && tar mxzf - -C '$root/hi.d/config'" 2>"$tmp"; then
     _hi_cecho " failed to copy your hi.d config overlay into [$DOMAIN], using defaults" "$YELLOW"
   fi
 
@@ -659,7 +668,7 @@ function _say_hi_container() {
   # are this transport's own.
   env_kv=""
   while IFS=$'\t' read -r n v; do env_kv+=" $n='$v'"; done < <(_hi_session_env)
-  "${attach[@]}" sh -c "export$env_kv _HI_HOME='$root' _HI_ROOT='$root/hi.d' _HI_CONFIG_DIR='$root/hi.d/misc' _HI_CLEANUP='$root' _HI_COPY_TIME='$(_hi_copy_time "$copy_start" "$_HI_SHELL_START" "$shell_end")' _HI_CONNECT_PREFIX='$prefix'; exec bash --rcfile '$root/hi.d/hi.bashrc'"
+  "${attach[@]}" sh -c "export$env_kv _HI_HOME='$root' _HI_ROOT='$root/hi.d' _HI_CONFIG_DIR='$root/hi.d/config' _HI_CLEANUP='$root' _HI_COPY_TIME='$(_hi_copy_time "$copy_start" "$_HI_SHELL_START" "$shell_end")' _HI_CONNECT_PREFIX='$prefix'; exec bash --rcfile '$root/hi.d/hi.bashrc'"
   exit_code=$?
 
   "${probe[@]}" rm -rf "$root" >/dev/null 2>&1

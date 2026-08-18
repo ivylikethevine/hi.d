@@ -87,7 +87,7 @@ hi's aliases-only fallback. Client: zsh.
 ### How it works
 
 1. `hi.sh` runs on the client. It archives `hi.d/` and sends it to the target. What it leaves out is `hi.sh` itself, `.git`, `scripts/`, `tests/`, `docs/`, `.github/`, this README and the editor/tooling dotfiles - see `$_HI_PAYLOAD` at the top of `hi.sh` for the authoritative allow list. The target unpacks it into a `/tmp` directory. `_HI_ROOT` is `$INSTALL_DIR/hi.d` on the client and `$_HI_HOME/hi.d` on the target.
-   Your own `settings.sh`, `colors`, `packages`, `tmux.conf` and `aliases.sh` live outside the tree (see [Configuration](#configuration)), so they follow in a second, much smaller archive unpacked over the target's `misc/` - `$_HI_OVERLAY_FILES` in `hi.sh`. Nothing is sent if you haven't overridden anything.
+   Your own `settings.sh`, `colors`, `packages`, `tmux.conf` and `aliases.sh` live outside the tree (see [Configuration](#configuration)), so they follow in a second, much smaller archive unpacked into a `config/` of its own beside the target's `misc/` - `$_HI_OVERLAY_FILES` in `hi.sh`, and `$_HI_CONFIG_DIR` on the target. Its own directory rather than over `misc/`, so your `aliases.sh` stays additive to the shipped one instead of replacing it. Nothing is sent if you haven't overridden anything.
    The whole thing - the tar, `hi.sh` and the bootloader, each base64-armored - is assembled into one script, armored again, and written to the target over the **stdin** of the first of two calls multiplexed on a single ssh connection; the second call runs it. Not as a command-line argument, which is what it used to be: Linux caps a single argv entry at 128KB regardless of `ARG_MAX`, and the payload had grown within a few kilobytes of that. The size hi prints on connect is that armored total - what the connection actually carries, roughly 4/3 of the gzipped payload the badge above measures.
 2. On the target, `$_HI_ROOT/hi.bashrc` sources `$_HI_ROOT/load.sh` and calls `load`.
 3. `load.sh` prints the header, appends hi's shell configs to the host's own rc files, and starts a session in **your login shell** when hi styles it (bash, zsh or fish), falling back to whichever of `fish > zsh > bash` the target has. `_HI_SHELL_PREFERENCE` is that rule as a setting - see [Configuration](#configuration). The `zsh > fish > ksh > sh` order quoted elsewhere is the **no-bash fallback**, ranking what's left when bash turned out to be missing.
@@ -135,7 +135,7 @@ flowchart TB
     headersh["common/header.sh"]
     gitp["common/git_prompt.sh"]
     targetssh["common/targets.sh"]
-    aliases["shells/aliases.sh"]
+    aliases["misc/aliases.sh"]
     bashrc["shells/bash.sh"]
     zshrc["shells/zsh.zsh"]
     fishrc["shells/config.fish"]
@@ -143,11 +143,12 @@ flowchart TB
     kshrc["shells/ksh.sh"]
     osc52["shells/osc52.sh"]
     miscfiles["misc/<br/>colors · packages · theme.yml · vim.rc · nano.rc · tmux.conf"]
+    configdir["config/ ($_HI_CONFIG_DIR)<br/>the overlay, as shipped"]
   end
 
   hish -->|"generates, ships over stdin"| bootrc
   hish -->|"ships (payload stream)"| loadsh
-  overlay -->|"ships (second stream, lands in misc/)"| miscfiles
+  overlay -->|"ships (second stream, lands in config/)"| configdir
 
   bootrc -->|sources| loadsh
   loadsh -->|sources| core
@@ -160,6 +161,7 @@ flowchart TB
   grafts -->|"carry the content of"| nurc
 
   core -->|sources| pathssh
+  pathssh -->|"prefers, per file"| configdir
   bashrc -->|sources| core
   bashrc -->|sources| gitp
   bashrc -->|sources| aliases
@@ -175,7 +177,7 @@ flowchart TB
   nurc -->|"shells out to"| gitp
   bootrc -.->|"sources (no-bash tier, via $ENV)"| kshrc
 
-  aliases -->|"sources (overlay aliases.sh, last)"| miscfiles
+  aliases -->|"sources (overlay aliases.sh, last)"| configdir
   aliases -->|"runs (hi_copy)"| osc52
   miscfiles -->|"runs (vim.rc's yank autocmd)"| osc52
   hish -->|"runs (completion, on every TAB)"| targetssh
@@ -584,7 +586,7 @@ overridden keeps tracking the default the tree ships, so `hi_update` still deliv
 | `~/.config/hi.d/colors`      | `misc/colors`    | your color pins                  |
 | `~/.config/hi.d/packages`    | `misc/packages`  | what the package check looks for |
 | `~/.config/hi.d/tmux.conf`   | `misc/tmux.conf` | your tmux config                 |
-| `~/.config/hi.d/aliases.sh`  | -                | your own aliases, sourced **after** `shells/aliases.sh` so yours win - additive, never a replacement, and in the same POSIX+fish subset |
+| `~/.config/hi.d/aliases.sh`  | -                | your own aliases, sourced **after** `misc/aliases.sh` so yours win - additive, never a replacement, and in the same POSIX+fish subset |
 
 This is what keeps configuring hi.d from dirtying the checkout (so `hi_update`'s `git pull` keeps applying
 cleanly), and it is why the tree never has to be writable at all - it can be root-owned, installed by a package
@@ -614,7 +616,7 @@ Each is **on by default**; set it to `1` to turn that piece off.
 | `_HI_DISABLE_PERSONAL`   | personal shell settings - history size, keybindings, completion tweaks          |
 | `_HI_DISABLE_GIT_STATUS` | the git segment in the prompt                                                   |
 | `_HI_DISABLE_EDITORS`    | the `vim`/`nano` config overrides                                               |
-| `_HI_DISABLE_ALIASES`    | the personal aliases in `shells/aliases.sh` (not nu's subset - `alias` is parse-time there and cannot be gated; see `shells/config.nu`) |
+| `_HI_DISABLE_ALIASES`    | the personal aliases in `misc/aliases.sh` (not nu's subset - `alias` is parse-time there and cannot be gated; see `shells/config.nu`) |
 | `_HI_DISABLE_OSC52`      | the OSC 52 clipboard - yanks in `vim` and the `hi_copy` alias                   |
 | `_HI_DISABLE_TMUX`       | the `tmux` config override (offered on permanent installs only)                 |
 | `_HI_DISABLE_LOCAL`      | all of the above **on this machine only** - hi still styles the hosts you visit |
@@ -739,6 +741,15 @@ is not repeated here: it lives as a checklist, with the exact commands, in
 [docs/ROADMAP.md](docs/ROADMAP.md)'s _GitHub repo settings_ and _Secrets & keys_
 sections. Until those exist, a pushed `v*` tag publishes unattended and the
 release ships unsigned sums.
+
+Every workflow's `runs-on:` reads from a repo/org Actions variable first —
+`vars.RUNNER_LABEL` (`vars.MACOS_RUNNER_LABEL` / `vars.WINDOWS_RUNNER_LABEL`
+for the two OS-locked e2e jobs) — falling back to the matching GitHub-hosted
+label when unset, so nothing changes until you set one. Jobs that install
+apt packages or touch the Docker socket (`ci.yml`'s `test`, `bench`,
+`packaging-smoke`, `e2e`, `e2e-backends`, and `coverage.yml`) need a
+self-hosted runner that provides those; `macos-e2e.yml` and `windows-e2e.yml`
+need a same-OS self-hosted runner if substituted.
 
 ### The one idea
 
@@ -1152,11 +1163,11 @@ The tree is root-owned and holds nobody's settings. Each user runs, once:
 | `common/header.sh`                              | the connect/disconnect banner, shared by every shell, plus the `misc/packages` check it ends with                                                                      |
 | `common/git_prompt.sh`                          | bash/zsh git prompt, matching fish's built-in `fish_vcs_prompt`                                                                                                        |
 | `common/targets.sh`                             | every `hi` target (ssh/docker/podman/nomad/kube), for all three completions - cached and timeout-bounded                                                               |
-| `shells/aliases.sh`                             | personal aliases shared by bash, zsh and fish - freely editable, off wholesale via `_HI_DISABLE_ALIASES=1`                                                             |
 | `shells/osc52.sh`                               | stdin to the *client's* clipboard over OSC 52 - tmux/screen passthrough, raw under zellij - behind `hi_copy` and `vim.rc`'s yank autocmd, off via `_HI_DISABLE_OSC52=1` |
 | `shells/bash.sh`                                | bash config                                                                                                                                                            |
 | `shells/zsh.zsh`                                | zsh config                                                                                                                                                             |
 | `shells/config.fish`                            | fish config                                                                                                                                                            |
+| `misc/aliases.sh`                               | personal aliases shared by bash, zsh and fish - freely editable, off wholesale via `_HI_DISABLE_ALIASES=1`                                                             |
 | `misc/vim.rc`, `misc/nano.rc`, `misc/theme.yml` | vim, nano and eza configs                                                                                                                                              |
 | `misc/tmux.conf`                                | tmux config, reached via the `tmux` alias - override in `~/.config/hi.d/tmux.conf`, off via `_HI_DISABLE_TMUX=1`                                                        |
 | `misc/packages`                                 | default for the packages check, as `cmd:priority[,alternative:priority]` - override in `~/.config/hi.d/packages`                                                       |

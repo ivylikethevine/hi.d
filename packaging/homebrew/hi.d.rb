@@ -38,17 +38,24 @@ class HiD < Formula
                              "hi.sh", "load.sh", "docs/LICENSE.md", "README.md"
     chmod 0755, libexec/"hi.d/hi.sh"
 
-    # The keg's copy answers `hi --version` with the formula's version. The
-    # tarball itself carries no stamp - every channel seds it in at build time
-    # (see packaging/mkpkg.sh's stamp_launcher for why not in git).
-    inreplace libexec/"hi.d/hi.sh", /^_HI_RELEASE=.*$/, "_HI_RELEASE=\"#{version}\""
-
-    # same page install_tree gzips into /usr/share/man for the other channels;
-    # brew wants it plain and puts it on the manpath itself
-    # man hi's footer answers with the formula's version, same as hi.sh's
-    # stamp above; the date field carries the version too - a formula build
-    # has no reproducible date to offer
-    inreplace "docs/hi.1", /^\.TH .*$/, ".TH HI 1 \"#{version}\" \"hi.d #{version}\" \"User Commands\""
+    # The keg's copy of hi.sh, and the man page's .TH footer, answer with the
+    # formula's version. The tarball carries no stamp - every channel writes it
+    # at build time, and packaging/stamp.sh is the one implementation they all
+    # call (see its header for why not in git). packaging/ rides the tarball
+    # but is deliberately not installed: it is build-time only.
+    #
+    # --date is the version here rather than a day, and only here: the other
+    # channels have a real $SOURCE_DATE_EPOCH to date the page by, and a
+    # formula build has none - Time.now would make every keg build differ.
+    # stamp.sh refuses to guess a date, so this has to be said out loud.
+    #
+    # Two explicit paths rather than --root: brew's launcher and man page are
+    # unrelated locations, not one install_tree layout. The page is installed
+    # plain, on brew's manpath, rather than gzipped into /usr/share.
+    system buildpath/"packaging/stamp.sh", "--version", version,
+           "--date", version,
+           "--launcher", libexec/"hi.d/hi.sh",
+           "--man", buildpath/"docs/hi.1"
     man1.install "docs/hi.1"
 
     # A wrapper rather than bin.install_symlink: hi.sh sources

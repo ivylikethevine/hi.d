@@ -16,31 +16,27 @@ _Don't `ssh`ush your hosts, say `hi`!_
 ![hi connecting to a container: banner, header, packages check, colored prompt, and the cleanup on exit](docs/demo.gif)
 
 More of these — every backend (ssh with a permanent install, docker, podman, nomad, kubernetes) across a
-variety of shells on both sides — [just below](#every-target-the-same-session).
+variety of shells on both sides — [just below](#every-target-the-same-session). How it compares to `sshrc`,
+`xxh`, `kyrat` or `chezmoi`, including where one of those is the better tool:
+[hi.d and the alternatives](#hid-and-the-alternatives).
 
-Wondering how this compares to `sshrc`, `xxh`, `kyrat` or just using `chezmoi` — including where one of
-those is the better tool? [hi.d and the alternatives](#hid-and-the-alternatives).
-
-The payload badge above is enforced, not aspirational: the bench suite rebuilds the real payload
-(`$_HI_PAYLOAD` only - no tests, docs or CI ever ride along) and fails CI when the badge drifts more
-than a kilobyte from the truth.
+The payload badge is enforced, not aspirational: the bench suite rebuilds the real payload (`$_HI_PAYLOAD`
+only — no tests, docs or CI ever ride along) and fails CI when the badge drifts more than a kilobyte.
 
 ## Every target, the same session
 
 The pitch is that `hi` behaves identically whatever is on the other end — an
 ssh host, a container, an allocation, a pod — and whatever shell each side
-happens to run. One GIF per backend, deliberately varying both sides. Each is
-rendered from the tape next to it (`vhs docs/tapes/<name>.tape`, from the repo
-root, with the backend running and `hi` on PATH; `docs/tapes/fixtures.sh`
-builds every target the tapes connect to and `fixtures.sh down` removes them
-all). Manual artifacts, reviewed by eye — regenerate whenever the header or
-prompt changes.
+runs. One GIF per backend, deliberately varying both sides, each rendered from
+the tape beside it (`vhs docs/tapes/<name>.tape` from the repo root, with the
+backend running and `hi` on PATH; `docs/tapes/fixtures.sh` builds every target
+the tapes connect to, `fixtures.sh down` removes them). Manual artifacts,
+reviewed by eye — regenerate whenever the header or prompt changes.
 
 Two things to get right when you do: `hi` on `$PATH` must be *this* checkout
-(`/usr/bin/hi` may point at another install), and the target image is built
-from `HEAD`, so uncommitted work shows on the client side of the GIF but not
-the target's. Render from a commit, or set `HI_DEMO_SOURCE=worktree` to build
-the target from the working tree instead.
+(`/usr/bin/hi` may point elsewhere), and the target image builds from `HEAD`,
+so uncommitted work shows on the client side of the GIF but not the target's.
+Render from a commit, or set `HI_DEMO_SOURCE=worktree`.
 
 ### ssh, with a permanent install
 
@@ -80,31 +76,31 @@ hi's aliases-only fallback. Client: zsh.
 ## Requirements
 
 - **Client**: `bash` and `base64` (for ssh targets - armors the bootstrap payload through the login shell; coreutils, busybox, macOS/BSD and Git Bash all ship one) or `docker`/`podman`/`nomad`/`kubectl` for the container/alloc/pod backends.
-- **bash version**: 3.2 or newer, on both ends. That is what macOS still ships, so hi stays clear of every bash-4-only construct - no `mapfile`/`readarray` (`_hi_read_lines` in `common/core.sh` does that job), no associative arrays, no namerefs, no `${x,,}`. Two things enforce it: `tests/shells/shellcheck_test.sh` greps for those constructs, and `tests/targets/ssh_test.sh` runs a real bash 3.2 target in a container and fails if the session prints so much as one shell error.
-- **Target**: `base64` for ssh targets (effectively everywhere - coreutils, busybox, macOS/BSD); nothing extra for container/alloc/pod targets. `bash` gets you the full experience (header, colors, git prompt, aliases, vim/nano configs); without it `hi` still lands you in the best available shell (`zsh` > `fish` > `ksh` > `sh`) with the aliases and, on the POSIX tiers, a colored prompt - rather than failing outright.
+- **bash version**: 3.2 or newer, on both ends - what macOS still ships, so hi stays clear of every bash-4-only construct: no `mapfile`/`readarray` (`_hi_read_lines` in `common/core.sh` does that job), no associative arrays, no namerefs, no `${x,,}`. Enforced twice: `tests/shells/shellcheck_test.sh` greps for those constructs, and `tests/targets/ssh_test.sh` runs a real bash 3.2 container target and fails on so much as one shell error.
+- **Target**: `base64` for ssh targets (effectively everywhere - coreutils, busybox, macOS/BSD); nothing extra for container/alloc/pod targets. `bash` gets the full experience (header, colors, git prompt, aliases, vim/nano configs); without it `hi` still lands you in the best available shell (`zsh` > `fish` > `ksh` > `sh`) with the aliases and, on the POSIX tiers, a colored prompt - rather than failing outright.
 - Everything else (client and target) is plain POSIX/bash/zsh/fish shell - no compiled artifacts, no package manager, no build step.
 
 ### How it works
 
-1. `hi.sh` runs on the client. It archives `hi.d/` and sends it to the target. What it leaves out is `hi.sh` itself, `.git`, `scripts/`, `tests/`, `docs/`, `.github/`, this README and the editor/tooling dotfiles - see `$_HI_PAYLOAD` at the top of `hi.sh` for the authoritative allow list. The target unpacks it into a `/tmp` directory. `_HI_ROOT` is `$INSTALL_DIR/hi.d` on the client and `$_HI_HOME/hi.d` on the target.
-   Your own `settings.sh`, `colors`, `packages`, `tmux.conf` and `aliases.sh` live outside the tree (see [Configuration](#configuration)), so they follow in a second, much smaller archive unpacked into a `config/` of its own beside the target's `misc/` - `$_HI_OVERLAY_FILES` in `hi.sh`, and `$_HI_CONFIG_DIR` on the target. Its own directory rather than over `misc/`, so your `aliases.sh` stays additive to the shipped one instead of replacing it. Nothing is sent if you haven't overridden anything.
-   The whole thing - the tar, `hi.sh` and the bootloader, each base64-armored - is assembled into one script, armored again, and written to the target over the **stdin** of the first of two calls multiplexed on a single ssh connection; the second call runs it. Not as a command-line argument, which is what it used to be: Linux caps a single argv entry at 128KB regardless of `ARG_MAX`, and the payload had grown within a few kilobytes of that. The size hi prints on connect is that armored total - what the connection actually carries, roughly 4/3 of the gzipped payload the badge above measures.
+1. `hi.sh` runs on the client, archives `hi.d/` and sends it to the target, which unpacks it into a `/tmp` directory. Left out: `hi.sh` itself, `.git`, `scripts/`, `tests/`, `docs/`, `.github/`, this README and the editor/tooling dotfiles — `$_HI_PAYLOAD` at the top of `hi.sh` is the authoritative allow list. `_HI_ROOT` is `$INSTALL_DIR/hi.d` on the client, `$_HI_HOME/hi.d` on the target.
+   Your `settings.sh`, `colors`, `packages`, `tmux.conf` and `aliases.sh` live outside the tree (see [Configuration](#configuration)) and follow in a second, much smaller archive — `$_HI_OVERLAY_FILES` in `hi.sh`, `$_HI_CONFIG_DIR` on the target. It lands in a `config/` of its own beside `misc/` rather than over it, so your `aliases.sh` stays additive. Nothing is sent if you have overridden nothing.
+   The tar, `hi.sh` and the bootloader are each base64-armored, assembled into one script, armored again, and written over the **stdin** of the first of two calls multiplexed on one ssh connection; the second runs it. Not as an argv entry, which it used to be: Linux caps a single one at 128KB regardless of `ARG_MAX`, and the payload had grown within a few kilobytes of that. The size hi prints on connect is that armored total — roughly 4/3 of the gzipped payload the badge measures.
 2. On the target, `$_HI_ROOT/hi.bashrc` sources `$_HI_ROOT/load.sh` and calls `load`.
-3. `load.sh` prints the header, appends hi's shell configs to the host's own rc files, and starts a session in **your login shell** when hi styles it (bash, zsh or fish), falling back to whichever of `fish > zsh > bash` the target has. `_HI_SHELL_PREFERENCE` is that rule as a setting - see [Configuration](#configuration). The `zsh > fish > ksh > sh` order quoted elsewhere is the **no-bash fallback**, ranking what's left when bash turned out to be missing.
+3. `load.sh` prints the header, appends hi's shell configs to the host's own rc files, and starts a session in **your login shell** when hi styles it (bash, zsh or fish), else the first of `fish > zsh > bash` the target has. `_HI_SHELL_PREFERENCE` is that rule as a setting. The `zsh > fish > ksh > sh` order quoted elsewhere is the **no-bash fallback**: what's left when bash turned out to be missing.
 4. When the session ends, `load.sh`'s `trap` strips those additions back out, and the `/tmp` directory is removed by the cleanup trap `hi.sh` set up on connect.
 5. `hi <target> 'some command'` skips the interactive session and just runs the command there, like `ssh` does.
 
-The setup in steps 1-2 is plain POSIX and runs under `sh`, so it works even if the target has no `bash` at all - `hi` still copies the whole of `~/hi.d` over in that case, but hands off to the best plain shell available (`zsh`/`fish`/`ksh`/`sh`) with just our aliases loaded, instead of the full `load.sh` experience, which needs `bash`.
+Steps 1-2 are plain POSIX under `sh`, so they work even where the target has no `bash`. hi still copies the whole tree, but hands off to the best plain shell available (`zsh`/`fish`/`ksh`/`sh`) with just the aliases loaded, rather than the full `load.sh`, which needs bash.
 
-For ssh targets specifically, `hi` first checks (over the same connection, so it costs no extra authentication) whether the target already has its own permanent `~/hi.d` - i.e. `scripts/install.sh` has been run there. If so, it skips the archive/copy step entirely and points `_HI_ROOT` straight at that existing copy instead, leaving it in place when the session ends.
+For ssh targets, hi first checks — over the same connection, so it costs no extra authentication — whether the target already has a permanent `~/hi.d` from `scripts/install.sh`. If so it skips the copy entirely, points `_HI_ROOT` at that copy, and leaves it in place at the end.
 
 **_IMPORTANT: Local-only changes MUST stay in `~/.bashrc`, `~/.zshrc`, `~/.config/fish/config.fish`, etc. - anything in this directory is copied to every host you say `hi` to._**
 
 #### How the files relate
 
-The steps above tell the story in prose; this diagram draws the mechanism.
-Boxes are files (or the few directories that act as one), and every arrow is
-one of four kinds - the four ways a file in this tree ever reaches another:
+The steps above are the prose; this diagram is the mechanism. Boxes are files
+(or the few directories acting as one), and every arrow is one of the four ways
+a file here ever reaches another:
 
 - **sources** - shell `source`/`.`, same process
 - **shells out** - a `bash -c "source ...; fn"` subprocess (how fish and nu
@@ -112,10 +108,9 @@ one of four kinds - the four ways a file in this tree ever reaches another:
 - **runs** - executed as its own subprocess, never sourced
 - **generates / writes** - the file exists only because another wrote it
 
-Deliberately coarse: file granularity and those four edge kinds only. What is
-*not* drawn also matters - `hi.sh` itself, `scripts/`, `tests/`, `docs/`
-(the GLOSSARY included) never ship; the payload is `$_HI_PAYLOAD` in `hi.sh`,
-and the bench suite enforces its size.
+Deliberately coarse: file granularity, those four edge kinds. What is *not*
+drawn matters too — `hi.sh` itself, `scripts/`, `tests/` and `docs/` never
+ship; the payload is `$_HI_PAYLOAD`, and the bench suite enforces its size.
 
 ```mermaid
 flowchart TB
@@ -203,20 +198,20 @@ quiet instead of erroring - the diagram's dashed reality after a hard kill.
 
 ### Docker / Podman containers
 
-`hi <name>` also works against a running docker or podman container - if `<name>` isn't a `Host` in `~/.ssh/config` but is a running container (by name or ID, docker checked first), `hi` copies `~/hi.d` in and chainloads `load.sh` exactly like the ssh path, for an identical session (colors, prompt, aliases, vim/nano configs, etc). No armoring is needed here (`docker exec -i`/`podman exec -i` pass stdin through as raw bytes), and cleanup happens once you exit. Podman's CLI is close enough to docker's that it reuses the exact same command shapes, just against `podman` instead. The container needs `bash` for the full experience; without it, `hi` drops you into the best plain shell available (`zsh`/`fish`/`ksh`/`sh`) with our aliases and a warning.
+`hi <name>` also works against a running docker or podman container. If `<name>` isn't a `Host` in `~/.ssh/config` but is a running container (by name or ID, docker checked first), `hi` copies `~/hi.d` in and chainloads `load.sh` exactly as the ssh path does, for an identical session. No armoring is needed (`docker exec -i`/`podman exec -i` pass stdin as raw bytes), and cleanup happens on exit. Podman's CLI is close enough to reuse the same command shapes. The container needs `bash` for the full experience; without it `hi` drops you into the best plain shell available (`zsh`/`fish`/`ksh`/`sh`) with the aliases and a warning.
 
 ### Windows hosts
 
 `hi <target>` works against Windows OpenSSH targets too, at whatever level the target supports:
 
 - **WSL, Git Bash, Cygwin or MSYS2 reachable on `PATH`**: the full experience (header, colors, git prompt, aliases) - same code path as any other ssh host.
-- **Stock Windows OpenSSH with no `bash` at all**: `hi` falls back to a plain interactive PowerShell session (no hi.d styling - that's bash-only) instead of failing outright. It still costs one authentication: hi writes its bootloader over the first of two calls multiplexed on the _same ssh connection_, and a target where that write can't run `sh -c` at all is a target with no POSIX shell, which is exactly the case the fallback is for. A target with `DefaultShell` set to PowerShell directly lands in the same fallback.
+- **Stock Windows OpenSSH with no `bash` at all**: `hi` falls back to a plain interactive PowerShell session (no hi.d styling - that's bash-only) rather than failing outright. It still costs one authentication: hi writes its bootloader over the first of two calls multiplexed on the _same ssh connection_, and a target where that write cannot run `sh -c` is a target with no POSIX shell, which is exactly what the fallback is for. `DefaultShell` set to PowerShell lands in the same place.
 
-**Installing hi _on_ Windows:** use WSL. The `.deb` from the releases page installs into a WSL distribution unchanged - `/etc/profile.d/hi.d.sh`, `/usr/bin/hi`, everything exactly as on any Debian - and WSL is where a Windows developer already using `ssh`/`docker`/`kubectl` most likely works anyway. Native channels (Scoop and friends) are assessed under [Windows channels](#windows-channels) and wait on a green client-side Windows CI job.
+**Installing hi _on_ Windows:** use WSL. The `.deb` from the releases page installs into a WSL distribution unchanged - `/etc/profile.d/hi.d.sh`, `/usr/bin/hi`, everything as on any Debian - and WSL is where a Windows developer already using `ssh`/`docker`/`kubectl` most likely works. Native channels (Scoop and friends) are assessed under [Windows channels](#windows-channels) and wait on a green client-side Windows CI job.
 
 ### Nomad allocations
 
-`hi <alloc-id>` also works against a running Nomad allocation (matched by ID/prefix, checked after the ssh-host and docker/podman-container checks) - same idea, same session, same code path as docker. Since `nomad alloc exec` has no `docker cp`/`-e` equivalent, files are streamed in with `exec -i` + `cat >` and env vars are set through a `sh -c "export ...; exec ..."` wrapper. Multi-task allocations would need `nomad alloc exec -task <name>`, which `hi` doesn't pass through, so they need a single unambiguous task.
+`hi <alloc-id>` also works against a running Nomad allocation (matched by ID/prefix, after the ssh-host and container checks) - same session, same code path as docker. Since `nomad alloc exec` has no `docker cp`/`-e` equivalent, files stream in with `exec -i` + `cat >` and env vars go through a `sh -c "export ...; exec ..."` wrapper. Multi-task allocations would need `nomad alloc exec -task <name>`, which `hi` doesn't pass through, so they need a single unambiguous task.
 
 ### Kubernetes pods
 
@@ -224,8 +219,8 @@ quiet instead of erroring - the diagram's dashed reality after a hard kill.
 
 ### Compatibility
 
-Three separate questions, because hi answers them at three different moments. **Legend:** ✅ exercised by a
-suite on every run · 🟡 expected to work, nobody has proven it · ⚠️ works, reduced · ❌ not supported.
+Three questions, because hi answers them at three different moments. **Legend:** ✅ exercised by a suite on
+every run · 🟡 expected to work, nobody has proven it · ⚠️ works, reduced · ❌ not supported.
 
 **1. The target's OS** — can hi land a session there at all?
 
@@ -264,7 +259,7 @@ suite on every run · 🟡 expected to work, nobody has proven it · ⚠️ work
 | PowerShell | ❌ | bash-only by design |
 
 **Shells hi does not style yet.** Each would need its own rc in `shells/` (prompt, aliases, completion) plus a
-tier in the fallback ladder in `hi.sh`'s `_hi_remote_suffix` and `load.sh`'s `load()`:
+tier in the fallback ladder in `hi.sh`'s `_hi_remote_suffix` and `load.sh`'s `load()`.
 
 | shell | why it is not here | what it would take |
 | --- | --- | --- |
@@ -274,56 +269,54 @@ tier in the fallback ladder in `hi.sh`'s `_hi_remote_suffix` and `load.sh`'s `lo
 | `tcsh`/`csh` | different rc syntax and no `$ENV` equivalent | its own rc, and honestly: ask whether anyone wants it |
 | PowerShell | not a POSIX shell; the greeting hi prints there is the whole extent of it | a separate project, really |
 
-If you use one of these as a *login* shell, hi still works — it lands you in bash (or the best of
-zsh/fish/sh) for the session. It is only the session shell that is limited.
+Using one of these as a *login* shell still works — hi lands you in bash (or the best of zsh/fish/sh) for the
+session. Only the session shell is limited.
 
-**If you use a shell framework**, hi lands you in your own login shell, so your framework loads normally —
-that is what `_HI_SHELL_PREFERENCE`'s default (`login fish zsh bash`) means. The frameworks are tested
-against hi in `tests/targets/framework_test.sh`: oh-my-zsh, powerlevel10k, starship and bash-it, each
-asserting the session comes up with no shell errors and that hi neither changed zsh's array base under them
-nor dropped their `PROMPT_COMMAND`.
+**If you use a shell framework**, hi lands you in your own login shell, so it loads normally — that is what
+`_HI_SHELL_PREFERENCE`'s default (`login fish zsh bash`) means. `tests/targets/framework_test.sh` tests
+oh-my-zsh, powerlevel10k, starship and bash-it against hi, each asserting the session comes up with no shell
+errors and that hi neither changed zsh's array base under them nor dropped their `PROMPT_COMMAND`.
 
 ## hi.d and the alternatives
 
 An honest look at what else solves this problem, where hi.d is genuinely
-different, and where one of the others is the better tool. Written for someone
+different, and where another tool is the better one. Written for someone
 deciding whether to use hi.d, not to sell it.
 
 ### The problem being solved
 
-You have a shell you have spent years tuning. You spend your day on machines
-that are not yours: production boxes, a colleague's server, a jump host, a
-container that will not exist in an hour. On those machines you get `sh-4.4$`
-and no `ll`.
+You have a shell you have spent years tuning, and you spend your day on
+machines that are not yours: production boxes, a colleague's server, a jump
+host, a container that will not exist in an hour. There you get `sh-4.4$` and
+no `ll`.
 
 There are two families of answer.
 
 **Install your config there.** Dotfile managers — [chezmoi], [yadm], [GNU Stow],
-[dotbot], [rcm] — or config management like Ansible. These are excellent and
-hi.d does not compete with them. They assume the machine is yours, that you will
-be back, and that leaving files behind is fine. That assumption fails for a
-shared production host, a box you touch once, or a container. The line has
-blurred at its edge — chezmoi's `--one-shot` applies your dotfiles to an
-ephemeral machine and then deletes chezmoi itself, and VS Code's devcontainers
-can clone a dotfiles repo into every container they build — but both need the
-*target* to reach your repo over the network, both leave the applied files
-behind, and neither does anything per-session. hi.d pushes from the client,
-needs no network on the target, and cleans up.
+[dotbot], [rcm] — or config management like Ansible. These are excellent, and
+hi.d does not compete with them: they assume the machine is yours, that you'll
+be back, and that leaving files behind is fine. That fails for a shared
+production host, a box you touch once, or a container. The line blurs at the
+edge — chezmoi's `--one-shot` applies dotfiles to an ephemeral machine then
+deletes chezmoi, and VS Code devcontainers can clone a dotfiles repo into every
+container — but both need the *target* to reach your repo over the network,
+both leave the files behind, and neither does anything per-session. hi.d pushes
+from the client, needs no network on the target, and cleans up.
 
 **Carry your config with you, per session.** The tool ships your config over the
 connection, uses it for that session, and gets out. That is the family hi.d is
 in, and everything below is a member of it.
 
-A third thing that looks similar but is not: **terminal emulators that help with
-ssh**, like [kitty's ssh kitten] and wezterm's ssh domains (which go further:
-an optional persistent `wezterm-mux-server` on the remote). Those solve the
-adjacent and very real problem of terminfo and shell integration — kitty's copies the
-`xterm-kitty` terminfo database and enables shell integration on the remote, and
-it can copy files you list too. If your pain is "backspace is broken over ssh",
-that is the fix, and it composes with hi.d rather than competing. hi.d handles
-the terminfo half itself (`_hi_remote_preamble` probes the target's terminfo tree
-and falls back to `xterm-256color`) precisely so it does not depend on your
-choice of terminal.
+A third thing that looks similar but is not: **terminal emulators that help
+with ssh**, like [kitty's ssh kitten] and wezterm's ssh domains (which go
+further, with an optional persistent `wezterm-mux-server` on the remote). Those
+solve the adjacent and very real terminfo/shell-integration problem — kitty's
+copies the `xterm-kitty` terminfo database, enables shell integration, and can
+copy files you list. If your pain is "backspace is broken over ssh", that is
+the fix, and it composes with hi.d rather than competing. hi.d handles the
+terminfo half itself (`_hi_remote_preamble` probes the target's terminfo tree,
+falling back to `xterm-256color`) precisely so it doesn't depend on your
+terminal.
 
 ### The direct alternatives, side by side
 
@@ -346,30 +339,30 @@ choice of terminal.
 
 hi.d is a fork of [sshrc] (via [cdown's] and [danrabinowitz's] lines), and the
 core idea is unchanged: tar your config, base64 it, hand it to the login shell,
-source it on the far side. Russell Stewart's original repository has since been
-deleted from GitHub outright — not archived — so the links here point at
-[cdown's] fork, which calls itself the maintained continuation and carries the
-design (64KB argv ceiling included) unchanged.
+source it on the far side. Russell Stewart's original repository was deleted
+from GitHub outright — not archived — so the links here point at [cdown's]
+fork, the self-described maintained continuation, which carries the design
+(64KB argv ceiling included) unchanged.
 
 **Where sshrc still wins:** it is smaller and simpler, and simplicity is a real
-feature in something that runs on every host you touch. If all you want is your
-`.bashrc` and `.vimrc` over there, sshrc does that in a fraction of the code, and
+feature in something that runs on every host you touch. If you just want your
+`.bashrc` and `.vimrc` over there, sshrc does it in a fraction of the code, and
 you can read all of it in one sitting.
 
 **Where hi.d went further, and why:**
 
-- **Transport.** sshrc's lineage passes the payload as a command-line argument.
-  Linux caps a single argv entry at 128KB regardless of `ARG_MAX`, and sshrc's
-  own README warns that past ~64KB "the server may block your sshrc attempts".
-  hi.d writes the payload over **stdin** of the first of two calls multiplexed on
-  one ssh connection, which removes that ceiling as a design constraint rather
-  than a documented caveat.
-- **Cleanup.** sshrc copies into `/tmp` and leaves it. hi.d's `load.sh` sets a
-  trap that strips its own lines back out of the host's rc files and removes the
+- **Transport.** sshrc's lineage passes the payload as an argv entry. Linux
+  caps a single one at 128KB regardless of `ARG_MAX`, and sshrc's own README
+  warns that past ~64KB "the server may block your sshrc attempts". hi.d writes
+  it over **stdin** of the first of two calls multiplexed on one ssh
+  connection, removing that ceiling as a design constraint rather than
+  documenting it as a caveat.
+- **Cleanup.** sshrc copies into `/tmp` and leaves it. hi.d's `load.sh` traps
+  on exit, strips its lines back out of the host's rc files and removes the
   tree, so a machine you visited looks untouched.
 - **It does not just copy files.** sshrc sources whatever you point it at. hi.d
   ships a designed session — header, hashed per-host colors, a git prompt,
-  aliases, editor configs — and degrades in defined tiers when the target cannot
+  aliases, editor configs — degrading in defined tiers when the target cannot
   support all of it.
 
 #### xxh — the one that solves a harder problem
@@ -378,16 +371,16 @@ you can read all of it in one sitting.
 the shell itself**, so you can use fish or zsh on a host that has neither.
 
 **Where xxh wins outright:** that capability. hi.d cannot give you a shell the
-target does not have — its no-bash ladder (`zsh > fish > ksh > mksh > sh`) picks
-the best of what is already installed and tells you it did. If you need *your*
-shell on a locked-down box that only ships `sh`, xxh is the answer and hi.d is
-not. Its plugin model is also more principled than copying dotfiles blind.
+target lacks — its no-bash ladder (`zsh > fish > ksh > mksh > sh`) picks the
+best of what is installed and says so. If you need *your* shell on a
+locked-down box that ships only `sh`, xxh is the answer and hi.d is not; its
+plugin model is also more principled than copying dotfiles blind.
 
 **Where hi.d wins:**
 
-- **Reach.** xxh's target support is "Linux on x86_64" — no ARM, no macOS, no
-  BSD. hi.d's floor is bash 3.2 (what macOS still ships) and `base64`, and its
-  test suite runs real Debian, Alpine/musl and bash-3.2 targets on every run.
+- **Reach.** xxh targets "Linux on x86_64" — no ARM, no macOS, no BSD. hi.d's
+  floor is bash 3.2 (what macOS still ships) and `base64`, and its suite runs
+  real Debian, Alpine/musl and bash-3.2 targets every time.
 - **Weight.** xxh uploads shells; hi.d uploads ~37KB and a CI job fails if that
   number drifts more than a kilobyte from the badge.
 - **Footprint.** xxh is hermetic but persistent — `~/.xxh` stays until you
@@ -401,24 +394,24 @@ not. Its plugin model is also more principled than copying dotfiles blind.
 command line, cleanup on exit, `KYRAT_SHELL` to pick bash/zsh/sh. If the table
 above looks like a description of hi.d, that is because it nearly is.
 
-The differences are narrow and concrete: kyrat requires **bash ≥ 4.0**, which
-rules out macOS's system bash — the exact constraint hi.d contorts itself to
-respect (no `mapfile`, no associative arrays, no namerefs, enforced by a grep in
-the lint suite and a real bash-3.2 container in CI). kyrat spawns bash, zsh or
-sh; hi.d styles bash, zsh, fish and nushell, and gives the POSIX tiers a colored
-prompt and — for ksh/mksh — a live git segment. And kyrat is ssh-only.
+The differences are narrow and concrete. kyrat requires **bash ≥ 4.0**, ruling
+out macOS's system bash — the exact constraint hi.d contorts itself to respect
+(no `mapfile`, no associative arrays, no namerefs, enforced by a lint grep and
+a real bash-3.2 container in CI). kyrat spawns bash, zsh or sh; hi.d styles
+bash, zsh, fish and nushell, and gives the POSIX tiers a colored prompt and —
+for ksh/mksh — a live git segment. And kyrat is ssh-only.
 
 #### sshdot
 
 [sshdot] is sshrc without the size limit, achieved by not squeezing through the
-command line. Narrower in scope than hi.d, and the honest summary is that it
-solves the one problem it names.
+command line. Narrower in scope than hi.d; the honest summary is that it solves
+the one problem it names.
 
 ### Adjacent tools, and how they compose
 
 None of these are alternatives — they touch the same session from a different
-side. Listed because people arrive here having conflated one of them with the
-family above, or because the composition has a wrinkle worth knowing.
+side. Listed because people conflate them with the family above, or because the
+composition has a wrinkle worth knowing.
 
 - **[mosh] / [Eternal Terminal]** replace ssh as the *transport*, to survive
   roaming and dropped connections. hi's ssh path is two calls multiplexed on
@@ -427,74 +420,68 @@ family above, or because the composition has a wrinkle worth knowing.
   (`scripts/install.sh`), then mosh in — and note `hi_copy` over mosh needs
   mosh ≥ 1.4, its first release with OSC 52.
 - **[Warp]'s SSH extension and "Warpify"** attack the same pain from the
-  terminal side: a persistent remote component under `~/.warp*`, plus a hook
-  line you are asked to add to the remote's rc files. What it ships is Warp's
-  features, not your config. The two coexist — hi.d appends and strips only
-  its own marker-delimited lines and leaves Warp's alone.
+  terminal side: a persistent remote component under `~/.warp*` plus a hook
+  line in the remote's rc files. It ships Warp's features, not your config.
+  The two coexist — hi.d touches only its own marker-delimited lines.
 - **[atuin] / [hishtory]** carry the one thing hi.d deliberately does not:
-  your shell history, synced across machines you own. Complementary — and a
-  target that already runs one of them binds the same `Ctrl-R` hi's session
-  lands you at, so the framework e2e suite proves the coexistence: it boots a
-  real atuin (and fzf, zoxide, direnv, mise) target and asserts the tool's
-  hooks survive hi's session.
+  your shell history, synced across machines you own. Complementary — and
+  since a target running one binds the same `Ctrl-R` hi's session lands you
+  at, the framework e2e suite boots a real atuin (plus fzf, zoxide, direnv,
+  mise) target and asserts its hooks survive hi's session.
 - **[chezmoi]/[yadm] as the overlay's keeper.** hi.d's per-user overlay lives
-  at `~/.config/hi.d/`; keep that directory in your dotfile manager and the
-  two compose cleanly — chezmoi versions it, hi ships it to every target,
-  per-session.
+  at `~/.config/hi.d/`. Keep it in your dotfile manager and the two compose
+  cleanly: chezmoi versions it, hi ships it to every target, per-session.
 - **[sshx]** shares a terminal you already have with other people through a
   browser — despite the name, not in this family at all. An sshx session
   started inside a hi session simply shares the styled session.
 - **[distrobox]/toolbox** containers share your real `$HOME`, so `hi` into one
   grafts into the same rc files your host shells read. The exit trap strips
-  them as everywhere else, and an uncleanly killed session is the one case
-  where graft lines outlive their tree in a file you care about — which is
-  why every graft is wrapped in a tree-exists guard that stands it down
-  silently (`load.sh`'s `configure_files`; the load suite proves a dead graft
-  makes no noise).
+  them as everywhere else; an uncleanly killed session is the one case where
+  graft lines outlive their tree in a file you care about, which is why every
+  graft is wrapped in a tree-exists guard that stands down silently
+  (`load.sh`'s `configure_files`, proven by the load suite).
 
 ### What actually makes hi.d different
 
 Two things, and it is worth being precise because the rest is degree, not kind.
 
 **1. It is not an ssh tool.** Every alternative above is an ssh wrapper. `hi`
-resolves a name through a ladder — ssh host, then docker container, then podman,
-then nomad allocation, then kubernetes pod — and gives you the *same session* on
-whichever it finds. `hi web-1` is your shell whether `web-1` is a `Host` in
-`~/.ssh/config` or a pod in the namespace your `kubectl` points at. For anyone
-who spends the day moving between a server and the containers on it, that is the
-feature; nothing else in this space does it.
+resolves a name through a ladder — ssh host, docker container, podman, nomad
+allocation, kubernetes pod — and gives the *same session* on whichever it
+finds. `hi web-1` is your shell whether `web-1` is a `Host` in `~/.ssh/config`
+or a pod in the namespace your `kubectl` points at. For anyone moving between a
+server and the containers on it that is the feature, and nothing else in this
+space does it.
 
 **2. It degrades in stated tiers rather than failing or lying.** The
-[compatibility tables](#compatibility) above answer three separate questions —
-can hi land a session here, what does your *login* shell have to survive, and
-what do you actually end up in — and mark every cell as proven-by-a-suite,
-expected, reduced, or unsupported. A target with no bash gets aliases and a
-colored prompt and a warning saying so. A Windows OpenSSH host with no POSIX
-shell at all gets a plain PowerShell session rather than an error. That is a
-design stance, and it is why the honest cells (🟡 "nobody has proven it") are in
+[compatibility tables](#compatibility) answer three questions — can hi land a
+session here, what must your *login* shell survive, what do you end up in — and
+mark every cell proven-by-a-suite, expected, reduced, or unsupported. A target
+with no bash gets aliases, a colored prompt, and a warning saying so; a Windows
+OpenSSH host with no POSIX shell gets a plain PowerShell session rather than an
+error. That stance is why the honest cells (🟡 "nobody has proven it") are in
 the table at all.
 
-Secondary, but real: a per-user config overlay (settings, colors, packages,
+Secondary but real: a per-user config overlay (settings, colors, packages,
 aliases) that rides along without dirtying the tree, `hi --doctor` for when
-something is slow, `--tmux` so a dropped connection detaches instead of
-losing work, and the ability to detect a permanent `~/hi.d` on the target and
-use it in place rather than shipping a copy.
+something is slow, `--tmux` so a dropped connection detaches instead of losing
+work, and detecting a permanent `~/hi.d` on the target to use in place.
 
 ### Where hi.d is the wrong choice
 
 - **You want your shell on a host that does not have it.** Use [xxh].
-- **The machine is yours and you will be back.** Use [chezmoi] or [yadm]. Per-session
-  copying is the wrong shape for a machine you own; install once instead.
+- **The machine is yours and you will be back.** Use [chezmoi] or [yadm] —
+  per-session copying is the wrong shape for a machine you own.
 - **You want the smallest thing that works.** [sshrc] or [kyrat] are less code,
   and less code on every host you touch is a legitimate preference.
 - **Your problem is terminfo or shell integration, not config.** Use your
   terminal's own helper — [kitty's ssh kitten] is excellent at exactly that.
-- **You need nushell, elvish or xonsh on a target with no bash.** hi.d's nushell
-  support needs bash present on the target (it shells out to it for the header,
-  palette and git segment); elvish and xonsh are not styled at all.
-- **You need something published and stable today.** hi.d is pre-1.0 and is not
-  yet on the AUR, Homebrew, or any other channel; you install it from a checkout
-  or a release artifact. The alternatives above have been installable for years.
+- **You need nushell, elvish or xonsh on a target with no bash.** hi.d's
+  nushell support needs bash there (it shells out for the header, palette and
+  git segment); elvish and xonsh are not styled at all.
+- **You need something published and stable today.** hi.d is pre-1.0 and on no
+  channel yet — you install from a checkout or a release artifact. The
+  alternatives have been installable for years.
 
 ### Sources
 
@@ -531,14 +518,14 @@ use it in place rather than shipping a copy.
 
 ## Installation/Usage
 
-- `hi.d/scripts/install.sh` (re-run it any time; it repairs its own lines, even if hi.d moved) - before touching your shell rc files it validates your existing `~/.bashrc`, `~/.zshrc` and `~/.config/fish/config.fish` (whichever are installed) with each shell's own syntax checker, and asks whether to continue if any of them have issues
-  - or `basher install ivylikethevine/hi.d` if [basher](https://github.com/basherpm/basher) manages your shell packages: it clones the repo and links `bin/hi` onto PATH (the shim exports `_HI_HOME` for the cellar location). The shell rc wiring, toggles and validation are still `scripts/install.sh`'s job - run it from the cloned package when you want the full setup
+- `hi.d/scripts/install.sh` (re-run it any time; it repairs its own lines, even if hi.d moved) - before touching your shell rc files it validates whichever of `~/.bashrc`, `~/.zshrc` and `~/.config/fish/config.fish` are installed with each shell's own syntax checker, and asks whether to continue if any have issues
+  - or `basher install ivylikethevine/hi.d` if [basher](https://github.com/basherpm/basher) manages your shell packages: it clones the repo and links `bin/hi` onto PATH (the shim exports `_HI_HOME` for the cellar location). The rc wiring, toggles and validation are still `scripts/install.sh`'s job - run it from the cloned package for the full setup
 - reload your shell!
 - run `hi_configure` any time afterward to revisit the feature toggle prompts - header, prompt, personal settings, git status, editors, aliases, header details, terminal width, and whether hi styles this machine too or only the hosts you say `hi` to - without touching the shell rc wiring. Answers land in `~/.config/hi.d/settings.sh`; see [Configuration](#configuration) below
 - run `hi_check_configs` any time to just re-run that shell rc validation, without the rest of the install
 - run `hi --help` (or `hi -h`) for the short version of all of this: the synopsis, the target resolution order, and every flag hi answers itself. `man hi` is the long version. Everything hi does not answer is passed to `ssh` unchanged
 - run `hi --version` to see what is installed - the packaged version, or `git describe` in a checkout; the doctor and the connect header show it too
-- run `hi --tmux <target>` to have the session live inside a named tmux on the target, so a dropped connection detaches instead of losing your work - reconnect with `hi --tmux <target>` again and you're back in it (`_HI_TMUX_ATTACH=1` makes it the default, `--no-tmux` turns it back off, `_HI_TMUX_SESSION` names the session). Offered only where hi.d is permanent on the target: a disposable tree is deleted when the session ends, and hi says so rather than leaving you a tmux pointing at nothing
+- run `hi --tmux <target>` to have the session live inside a named tmux on the target, so a dropped connection detaches instead of losing work - run it again to reattach (`_HI_TMUX_ATTACH=1` makes it the default, `--no-tmux` turns it off, `_HI_TMUX_SESSION` names the session). Offered only where hi.d is permanent on the target: a disposable tree is deleted when the session ends, and hi says so rather than leaving a tmux pointing at nothing
 - run `hi_doctor` (or `hi --doctor <target>`) when something is slow or failing: it reports the tree, the config overlay, every backend probed and timed with the same ceilings the header and completion use, and - with a target - which backend the name resolves to plus an ssh reachability/tooling check, all read-only
 - configure `~/.ssh/config` tags via sshm
 - [optional] pin specific colors in `~/.config/hi.d/colors` - everything else gets a color automatically. Copy `hi.d/misc/colors` there to start from the shipped defaults
@@ -546,8 +533,8 @@ use it in place rather than shipping a copy.
 - [optional] copy `hi.d/misc/packages` to `~/.config/hi.d/packages` and edit it to your preferences
 - say `hi`!
 - [optional] modify `~/hi.d/misc/*` and `~/hi.d/shells/*` to your liking - though anything with an overlay (`settings.sh`, `colors`, `packages`, `tmux.conf`, `aliases.sh`) is better edited in `~/.config/hi.d/`, which keeps the checkout clean for `hi_update`
-  - tip: `~/hi.d` is just a git checkout, so if you do edit it, push it to your own fork and clone that on your next device - same setup everywhere, and `hi_update`'s `git pull` keeps them in sync
-- done with it? `hi.d/scripts/uninstall.sh` (aliased to `hi_uninstall`, and a one-line shim onto `install.sh --uninstall`) is the inverse of the install: it strips hi's lines back out of your rc files, removes the `settings.sh` it wrote, and unlinks `/usr/bin/hi`. It leaves the `hi.d` directory itself alone - and your `colors`/`packages`, which are yours - delete those yourself if you want them gone
+  - tip: `~/hi.d` is a git checkout, so if you do edit it, push to your own fork and clone that on your next device - same setup everywhere, kept in sync by `hi_update`
+- done with it? `hi.d/scripts/uninstall.sh` (aliased to `hi_uninstall`, a one-line shim onto `install.sh --uninstall`) is the install's inverse: it strips hi's lines back out of your rc files, removes the `settings.sh` it wrote, and unlinks `/usr/bin/hi`. It leaves the `hi.d` directory alone, and your `colors`/`packages` too - delete those yourself if you want them gone
 
 ---
 
@@ -589,21 +576,18 @@ overridden keeps tracking the default the tree ships, so `hi_update` still deliv
 | `~/.config/hi.d/aliases.sh`  | -                | your own aliases, sourced **after** `misc/aliases.sh` so yours win - additive, never a replacement, and in the same POSIX+fish subset |
 
 This is what keeps configuring hi.d from dirtying the checkout (so `hi_update`'s `git pull` keeps applying
-cleanly), and it is why the tree never has to be writable at all - it can be root-owned, installed by a package
-manager. All of it rides along to every host you say `hi` to, in its own small archive unpacked over the
-target's `misc/`.
+cleanly), and why the tree never has to be writable at all - it can be root-owned, installed by a package
+manager. All of it rides along to every host you say `hi` to, in its own small archive.
 
-Want history on it? `hi_overlay_init` makes `~/.config/hi.d` a git repo *in place* - from then on
+Want history on it? `hi_overlay_init` makes `~/.config/hi.d` a git repo *in place*: from then on
 `hi_configure` commits its own settings writes, `hi_doctor` reports the commit count, and a push remote is one
-`git remote add` away. Entirely optional: an overlay you never init never hears about git. (Keeping the same
-directory in chezmoi or yadm instead works just as well - see [hi.d and the alternatives](#hid-and-the-alternatives).)
+`git remote add` away. Entirely optional. (Keeping the same directory in chezmoi or yadm works just as well -
+see [hi.d and the alternatives](#hid-and-the-alternatives).)
 
-Everything below is an environment variable, checked at the point it's used. `hi_configure` writes your answers to
-`~/.config/hi.d/settings.sh`, which every shell sources ahead of `common/paths.sh`. It is a plain `#!/bin/sh`
-script of `export NAME=value` lines, valid in sh, bash, zsh and fish alike.
-
-You never have to use `hi_configure` - exporting any of these by hand works just as well, and takes precedence for
-that shell.
+Everything below is an environment variable, checked where it's used. `hi_configure` writes your answers to
+`~/.config/hi.d/settings.sh`, which every shell sources ahead of `common/paths.sh` - a plain `#!/bin/sh` script
+of `export NAME=value` lines, valid in sh, bash, zsh and fish alike. You never have to use `hi_configure`:
+exporting any of these by hand works just as well, and takes precedence for that shell.
 
 ### Features
 
@@ -621,9 +605,9 @@ Each is **on by default**; set it to `1` to turn that piece off.
 | `_HI_DISABLE_TMUX`       | the `tmux` config override (offered on permanent installs only)                 |
 | `_HI_DISABLE_LOCAL`      | all of the above **on this machine only** - hi still styles the hosts you visit |
 
-`_HI_DISABLE_LOCAL` is the odd one out: it's for "I want my own machine left alone, but I still want hi everywhere
-I connect to". It's told apart from a real session by `_HI_REMOTE_SESSION`, which `load.sh` exports on a target and
-a local shell's own rc never does.
+`_HI_DISABLE_LOCAL` is the odd one out: "leave my own machine alone, but give me hi everywhere I connect to".
+It's told apart from a real session by `_HI_REMOTE_SESSION`, which `load.sh` exports on a target and a local
+shell's own rc never does.
 
 `_HI_DISABLE_OSC52` turns off the one feature that reaches back _through_ the connection: a yank in `vim` on a
 target, or anything piped into `hi_copy`, is base64'd into an [OSC 52](https://invisible-island.net/xterm/ctlseqs/ctlseqs.html#h4-Operating-System-Commands)
@@ -636,20 +620,20 @@ everything else; `shells/osc52.sh` is the whole implementation if you want to re
 ### tmux
 
 `misc/tmux.conf` is reached the way `vim.rc` is - through an alias, `tmux -f <conf>` - and overridden the same
-way, by dropping your own `~/.config/hi.d/tmux.conf`. Beyond the usual defaults it does one thing specific to
-hi: it appends the `_HI_*` variables to tmux's `update-environment`, so a window you open **after** attaching
-gets a shell that can still find hi. Without it, `tmux new-window` inside a session on a remote box gives you a
-bare prompt, because the tmux server predates the connection and knows nothing about `$_HI_HOME`.
+way, by dropping your own `~/.config/hi.d/tmux.conf`. Beyond the usual defaults it does one hi-specific thing:
+it appends the `_HI_*` variables to tmux's `update-environment`, so a window opened **after** attaching gets a
+shell that can still find hi. Without it, `tmux new-window` on a remote box gives a bare prompt, the tmux
+server predating the connection and knowing nothing about `$_HI_HOME`.
 
 Two limits worth stating plainly:
 
-- `-f` is read when the tmux **server** starts, not when a client attaches. Attach to a server that was already
-  running and none of the config applies - that's tmux's rule, not hi's. The `update-environment` half still
-  works, since that's refreshed on every attach.
+- `-f` is read when the tmux **server** starts, not when a client attaches, so attaching to an already-running
+  server applies none of the config - tmux's rule, not hi's. The `update-environment` half still works, being
+  refreshed on every attach.
 - The alias is defined **only where hi.d is permanent** - your own machine, or a target where
-  `scripts/install.sh` has been run. On a disposable target hi deletes the tree on exit, and a detached tmux
-  outlives the session; every shell inside it would wake up reading a directory that no longer exists. Plain
-  `tmux` still works there, just without hi's config.
+  `scripts/install.sh` has been run. On a disposable target hi deletes the tree on exit and a detached tmux
+  outlives the session, so every shell inside it would wake up reading a directory that is gone. Plain `tmux`
+  still works there, without hi's config.
 
 ### Header details
 
@@ -682,8 +666,9 @@ Each is **on by default**; set it to `0` to hide that line. All are ignored when
 | `_HI_PROMPT_END_FISH` | `\|`         | fish's prompt separator; root still gets `#` regardless                                                 |
 | `_HI_TERM_FALLBACK` | `1`             | on ssh targets missing a terminfo entry for your `TERM` (ghostty's `xterm-ghostty`, typically), swap it for `xterm-256color` before the session starts; `0` keeps the original `TERM` |
 
-The last two exist because completion runs on **every TAB** and the header runs **before you get a shell**: a
-docker daemon that's down or a `kubectl` pointed at a dead cluster would otherwise hang there with no upper bound.
+`_HI_TARGETS_TTL` and `_HI_PROBE_TIMEOUT` exist because completion runs on **every TAB** and the header runs
+**before you get a shell**: a docker daemon that's down or a `kubectl` pointed at a dead cluster would
+otherwise hang there with no upper bound.
 
 ## Testing
 
@@ -697,37 +682,36 @@ tests/test_runner.sh --host-report      # ...prefixed with what this machine is
 tests/test_runner.sh --verbose          # every transcript, nothing collapsed
 ```
 
-A passing suite's transcript collapses to one status line - `--verbose`
-(`_HI_VERBOSE=1`) streams every suite's output live instead, which is what you want when a case is failing only
+A passing suite's transcript collapses to one status line; `--verbose`
+(`_HI_VERBOSE=1`) streams every suite's output live instead, which is what you want when a case fails only
 under the runner.
 
 `--host-report` (`_HI_HOST_REPORT=1`) prints bash, the OS, whether the userland is GNU/BSD/busybox, which tree
 `$_HI_HOME` resolves to, which backends answer and the lint tools' versions before the first suite runs - the
 questions asked every time a suite passes on one machine and fails on another. CI passes it on every job.
 
-Suite names: `aliases`, `alias_fallthrough`, `osc52`, `tmux`, `shellcheck`, `install`, `hi`, `header`, `core`,
-`git_prompt`, `targets`, `paths`, `color_preview`, `load`, `test_lib`, `test_runner` are fast and dependency-free - they're the first thing CI
-runs on every push/PR (the last two are the harness testing itself). `ssh`, `ssh_disconnect`, `ssh_relay`, `docker`,
-`podman`, `nomad`, `kube`, `framework` are end-to-end:
-they spin up real throwaway containers/clusters/agents and drive `hi.sh`'s actual connection paths against them, so
-they're slower and need the relevant backend installed - each skips cleanly with a warning instead of failing if its
-backend isn't available. CI runs `ssh`, `ssh_disconnect`, `ssh_relay` and `docker` as a second job once the fast ones
-pass, which between them cover both halves of `hi.sh` (`_say_hi` and `_say_hi_container`). Every test script is also
-directly executable on its own, e.g. `tests/shells/shellcheck_test.sh`.
+Suite names: `aliases`, `alias_fallthrough`, `osc52`, `tmux`, `shellcheck`, `install`, `packaging`, `hi`, `header`,
+`core`, `git_prompt`, `targets`, `paths`, `color_preview`, `doctor`, `load`, `rc`, `test_lib`, `test_runner` are fast
+and dependency-free — the first thing CI runs on every push/PR (the last two are the harness testing itself).
+`ssh`, `ssh_disconnect`, `ssh_relay`, `docker`, `podman`, `nomad`, `kube`, `framework` are end-to-end: they spin up
+real throwaway containers/clusters/agents and drive `hi.sh`'s actual connection paths, so they're slower and need
+the backend installed — each skips cleanly with a warning rather than failing when it isn't. CI runs `ssh`,
+`ssh_disconnect`, `ssh_relay` and `docker` as a second job once the fast ones pass, covering both halves of `hi.sh`
+(`_say_hi` and `_say_hi_container`). Every test script also runs directly, e.g. `tests/shells/shellcheck_test.sh`.
 
-**Relaying.** `hi` chains: from a session on B you can `hi C`, and the second hop is a full hi session like the
-first. That works from a *disposable* session too, because `hi.sh` rides every bash-capable one - it is not in the
-payload tar, but both transports write it to the target alongside the tree. `ssh_relay` is the proof: A → B → C,
-the config intact on the final hop, and the cleanup traps firing on **both** B and C, on a clean exit and on the
-link being killed mid-relay. The one tier that cannot relay is the container transport's bash-less fallback, which
-ships `aliases.sh` alone and never loads `paths.sh` - there `hi` is simply not defined.
+**Relaying.** `hi` chains: from a session on B you can `hi C`, and the second hop is a full hi session. That works
+from a *disposable* session too, because `hi.sh` rides every bash-capable one — it is not in the payload tar, but
+both transports write it to the target alongside the tree. `ssh_relay` is the proof: A → B → C, config intact on the
+final hop, cleanup traps firing on **both** B and C, on a clean exit and on the link being killed mid-relay. The one
+tier that cannot relay is the container transport's bash-less fallback, which ships `aliases.sh` alone and never
+loads `paths.sh` — there `hi` is simply not defined.
 
-The tests are local-only: `tests/` is one of the directories `hi.sh` strips from the payload, so `hi_test` on a
-target tells you so rather than running (the same goes for `hi_install`, `hi_configure`, `hi_check_configs` and
-`hi_color_preview`). `hi_update` is the odd one out - it needs a `.git`, which is absent both in a hi session and
-in an install a package manager laid down, so it says where to update instead of running `git pull` in a non-repo.
+The tests are local-only: `tests/` is stripped from the payload, so `hi_test` on a target says so rather than
+running (likewise `hi_install`, `hi_configure`, `hi_check_configs`, `hi_color_preview`). `hi_update` is the odd one
+out — it needs a `.git`, absent both in a hi session and in a package-manager install, so it says where to update
+instead of running `git pull` in a non-repo.
 
-Any script here needs `_HI_HOME` set before it'll source correctly - point it at the _parent_ of your `hi.d`
+Any script here needs `_HI_HOME` set before it'll source correctly — point it at the _parent_ of your `hi.d`
 checkout:
 
 ```sh
@@ -738,23 +722,21 @@ tests/test_runner.sh
 ## Packaging & releases
 
 Everything needed to ship `hi` through a package manager. Nothing here publishes
-on its own — the release workflow's publishing job waits on a manual approval,
-and the AUR and the Homebrew tap are copies you make by hand. The **one-time
-setup** each channel needs first (the `release` approval gate, branch
-protection, the apk and minisign keypairs, the AUR deploy key, the tap token)
-is not repeated here: it lives as a checklist, with the exact commands, in
-[docs/ROADMAP.md](docs/ROADMAP.md)'s _GitHub repo settings_ and _Secrets & keys_
-sections. Until those exist, a pushed `v*` tag publishes unattended and the
-release ships unsigned sums.
+on its own — the publishing job waits on a manual approval, and the AUR and the
+Homebrew tap are copies you make by hand. The **one-time setup** each channel
+needs first (the `release` approval gate, branch protection, the apk and
+minisign keypairs, the AUR deploy key, the tap token) is a checklist with exact
+commands in [docs/ROADMAP.md](docs/ROADMAP.md)'s _GitHub repo settings_ and
+_Secrets & keys_ sections. Until those exist, a pushed `v*` tag publishes
+unattended and the release ships unsigned sums.
 
-Every workflow's `runs-on:` reads from a repo/org Actions variable first —
-`vars.RUNNER_LABEL` (`vars.MACOS_RUNNER_LABEL` / `vars.WINDOWS_RUNNER_LABEL`
-for the two OS-locked e2e jobs) — falling back to the matching GitHub-hosted
-label when unset, so nothing changes until you set one. Jobs that install
-apt packages or touch the Docker socket (`ci.yml`'s `test`, `bench`,
-`packaging-smoke`, `e2e`, `e2e-backends`, and `coverage.yml`) need a
-self-hosted runner that provides those; `macos-e2e.yml` and `windows-e2e.yml`
-need a same-OS self-hosted runner if substituted.
+Every workflow's `runs-on:` reads a repo/org Actions variable first —
+`vars.RUNNER_LABEL`, or `vars.MACOS_RUNNER_LABEL` / `vars.WINDOWS_RUNNER_LABEL`
+for the two OS-locked e2e jobs — falling back to the GitHub-hosted label when
+unset, so nothing changes until you set one. Jobs that install apt packages or
+touch the Docker socket (`ci.yml`'s `test`, `bench`, `packaging-smoke`, `e2e`,
+`e2e-backends`, and `coverage.yml`) need a self-hosted runner providing those;
+`macos-e2e.yml` and `windows-e2e.yml` need a same-OS one if substituted.
 
 ### The one idea
 
@@ -769,10 +751,10 @@ shell sources anything.
 | Homebrew | `<keg>/libexec/hi.d` | the `bin/hi` wrapper, plus the rc line `install.sh` writes |
 
 `scripts/install.sh --prefix /usr/share` (with `$DESTDIR`) does all of this and is the single decider of
-what a packaged install contains — see `_HI_PACKAGE_CONTENTS` and `install_tree()` in that file. The AUR
-PKGBUILDs and `mkpkg.sh` both call it. Only the Homebrew formula repeats the list, because a formula
-cannot: `install_tree` hardcodes `/usr/bin` and `/etc/profile.d`, neither of which exists in a brew prefix.
-`tests/scripts/packaging_test.sh` fails if that copy drifts.
+what a packaged install contains — `_HI_PACKAGE_CONTENTS` and `install_tree()` in that file. Both AUR
+PKGBUILDs and `mkpkg.sh` call it. Only the Homebrew formula repeats the list, because a formula cannot
+call it: `install_tree` hardcodes `/usr/bin` and `/etc/profile.d`, neither of which exists in a brew
+prefix. `tests/scripts/packaging_test.sh` fails if that copy drifts.
 
 ### Layout
 
@@ -786,14 +768,14 @@ cannot: `install_tree` hardcodes `/usr/bin` and `/etc/profile.d`, neither of whi
 | `homebrew/hi.d.rb` | the tap formula |
 | `nfpm/nfpm.yaml` | deb/rpm/apk, built from the staged tree |
 
-**The version stamp.** `packaging/stamp.sh` writes `_HI_RELEASE=` into the `hi.sh` a channel installs
-and the version into the man page's `.TH` line. All four channels call it - `mkpkg.sh` for deb/rpm/apk,
-both `PKGBUILD`s' `package()`, the formula's `install` - so there is one implementation rather than four
-seds. It cannot live in git: `bump.sh` runs only after the tag exists (its checksums need the tarball),
-so a committed stamp would always be one release stale in the very tarball Homebrew and the AUR build
-from. A git checkout answers `hi --version` with `git describe` instead, so the committed line stays
-empty. The formula passes `--date <version>` because a brew build has no `SOURCE_DATE_EPOCH` to date the
-page by, and `stamp.sh` refuses to guess one. `tests/scripts/packaging_test.sh` guards all of it.
+**The version stamp.** `packaging/stamp.sh` writes `_HI_RELEASE=` into the `hi.sh` a channel installs and
+the version into the man page's `.TH` line. All four call it — `mkpkg.sh` for deb/rpm/apk, both
+`PKGBUILD`s' `package()`, the formula's `install` — so there is one implementation rather than four seds.
+It cannot live in git: `bump.sh` runs only after the tag exists (its checksums need the tarball), so a
+committed stamp would always be one release stale in the very tarball Homebrew and the AUR build from. A
+checkout answers `hi --version` with `git describe` instead, so the committed line stays empty. The
+formula passes `--date <version>`, having no `SOURCE_DATE_EPOCH`, and `stamp.sh` refuses to guess one.
+`tests/scripts/packaging_test.sh` guards all of it.
 
 ### Cutting a release
 
@@ -802,8 +784,8 @@ git tag v1.0.0 && git push origin v1.0.0
 ```
 
 That is the whole local ceremony. The tag never moves: `bump.sh` checksums the GitHub tarball, which only
-exists once the tag is pushed — so the release workflow runs the bump itself, against the tarball the tag
-just created, instead of requiring a pre-tag bump and a force-retag to reconcile the two.
+exists once the tag is pushed, so the workflow runs the bump itself against that tarball rather than
+requiring a pre-tag bump and a force-retag to reconcile the two.
 
 1. `git tag v1.0.0 && git push origin v1.0.0` — the tarball now exists and the workflow starts.
 2. The `build` job runs the fast suites, then `bump.sh 1.0.0` (fetches the tarball, writes `pkgver`,
@@ -834,9 +816,9 @@ are pushed by CI once their secrets exist — the checks each section describes 
 
 #### AUR
 
-Not done yet — no account, no submission. When you do, run the pre-submit gate below for **each**
-package — `aur/hi.d-git` today, and `aur/hi.d` once v1.0.0 exists. namcap is the hard step, not a
-suggestion: push nothing while either its `PKGBUILD` or its built-package run has complaints.
+Not done yet — no account, no submission. When you do, run the gate below for **each** package:
+`aur/hi.d-git` today, `aur/hi.d` once v1.0.0 exists. namcap is the hard step, not a suggestion — push
+nothing while either its `PKGBUILD` or its built-package run has complaints.
 
 ```bash
 cd packaging/aur/hi.d-git        # then again in packaging/aur/hi.d
@@ -855,8 +837,8 @@ W: Dependency zsh detected but optional (programs ['zsh'] ...)     # same
 W: Dependency included, but may not be needed ('openssh')          # hi runs ssh; no shebang says so
 ```
 
-Anything else is a real finding. (`coreutils` used to appear here too and was dropped from `depends` - it is
-in `base`, which packaging guidelines say to assume.)
+Anything else is a real finding. (`coreutils` appeared here too and was dropped from `depends` — it is in
+`base`, which packaging guidelines say to assume.)
 
 **The end-to-end check**, which is what caught the `hi.d-git` package shipping no version stamp:
 
@@ -866,32 +848,29 @@ docker run --rm -v "$PWD:/pkgs:ro" archlinux:base bash -c '
   bash -lc "echo \$_HI_HOME; command -v hi; hi --version"'
 ```
 
-Both packages have been run through all of this against a local clone (the only substitution being
-`source=`, since the repo is not published yet): built, linted, installed into a clean Arch container,
-exercised, and removed with nothing left behind.
+Both packages have been through all of this against a local clone (the only substitution being `source=`,
+the repo not being published yet): built, linted, installed into a clean Arch container, exercised, and
+removed with nothing left behind.
 
-Then push `PKGBUILD` + `.SRCINFO` (only those two files) to `ssh://aur@aur.archlinux.org/hi.d-git.git`.
-**This first push is the manual one** — it is where namcap actually gates. After it, `release.yml`'s `aur`
-job pushes the versioned `hi.d` package on every release, given the `AUR_SSH_KEY` secret; `hi.d-git` has no
-version to bump and is never touched by CI.
-`hi.d-git` first — it works today with no tag — and the versioned `hi.d` once v1.0.0 exists.
+Then push `PKGBUILD` + `.SRCINFO` — only those two — to `ssh://aur@aur.archlinux.org/hi.d-git.git`,
+`hi.d-git` first since it needs no tag. **That first push is the manual one**, because it is where namcap
+gates. After it, `release.yml`'s `aur` job pushes the versioned `hi.d` on every release, given the
+`AUR_SSH_KEY` secret; `hi.d-git` has no version to bump and CI never touches it.
 
-Never submit with `b2sums=('SKIP')` on the versioned package. `SKIP` is correct and expected on
-`hi.d-git`, whose source is a git ref.
+Never submit the versioned package with `b2sums=('SKIP')` — `SKIP` is correct only on `hi.d-git`, whose
+source is a git ref.
 
 #### Homebrew tap
 
 A tap is just a GitHub repo named `homebrew-tap` with a `Formula/` directory. Copy
 `packaging/homebrew/hi.d.rb` to `Formula/hi.d.rb` there and `brew install ivy/tap/hi.d` works — no review,
-no approval. Before copying, all three must pass — `brew audit --strict` is a hard gate here precisely
-because nothing else reviews a tap:
+no approval, which is exactly why `brew audit --strict` is a hard gate here.
 
-**The copy is automated, the checks are not.** `release.yml`'s `tap` job (behind the same `release`
-approval as `publish`) opens a PR against `<owner>/homebrew-tap` with the freshly regenerated formula and
-the three commands below as its checklist. It needs a `HOMEBREW_TAP_TOKEN` repo secret — a fine-grained PAT
-scoped to that repo with contents + pull-requests write. Without the secret the job says so and does
-nothing, which is the state until the tap repo exists. Merging the PR is still yours, and so is running
-these first:
+**The copy is automated, the checks are not.** `release.yml`'s `tap` job (behind the same approval as
+`publish`) opens a PR against `<owner>/homebrew-tap` with the regenerated formula and the three commands
+below as its checklist. It needs a `HOMEBREW_TAP_TOKEN` repo secret — a fine-grained PAT scoped to that
+repo with contents + pull-requests write — and without it the job says so and does nothing, which is the
+state until the tap repo exists. Merging the PR is yours, as is running these first:
 
 ```bash
 brew install --build-from-source ./packaging/homebrew/hi.d.rb
@@ -899,50 +878,47 @@ brew test hi.d
 brew audit --strict --new hi.d
 ```
 
-`brew audit` needs a *named* formula, so it wants the formula in a tap - `brew tap-new ivy/tap`, copy the
-file into its `Formula/`, then `brew audit --strict --new ivy/tap/hi.d`. Passing a path is refused outright.
+`brew audit` needs a *named* formula, so it wants one in a tap: `brew tap-new ivy/tap`, copy the file into
+its `Formula/`, then `brew audit --strict --new ivy/tap/hi.d`. Passing a path is refused outright.
 
-**What a clean run looks like** (this has been run, in the `homebrew/brew` container, against a local
-tarball - the only substitution being `url`/`sha256`, since the repo is not published): install and test
-both exit 0, and audit reports only these two, which are the unpublished repo and nothing else:
+**What a clean run looks like** — this has been run in the `homebrew/brew` container against a local
+tarball, the only substitution being `url`/`sha256`: install and test exit 0, and audit reports only these
+two, which are the unpublished repo and nothing else:
 
 ```text
 * The homepage URL https://github.com/ivylikethevine/hi.d is not reachable (HTTP status code 404)
 * HEAD: The URL https://github.com/ivylikethevine/hi.d.git is not a valid Git URL
 ```
 
-Two real findings came out of that first run and are fixed: the description had to start with a capital,
-and `uses_from_macos "openssh"` was rejected - that macro is for formulae macOS provides *to Homebrew*, and
+Two real findings came out of that run and are fixed: the description had to start with a capital, and
+`uses_from_macos "openssh"` was rejected — that macro is for formulae macOS provides *to Homebrew*, and
 openssh is not one. The formula now declares no dependencies at all, which is correct: `ssh` and `base64`
 ship with macOS and with any Linux that would install this.
 
-A mac is still worth using before the first publish - the container is Linux, so it exercises Linuxbrew's
-paths rather than a keg under `/opt/homebrew` - but nothing about the formula itself is unverified now.
+A mac is still worth using before the first publish, since the container exercises Linuxbrew's paths
+rather than a keg under `/opt/homebrew` — but nothing about the formula itself is unverified now.
 
 #### basher (shipped) and fisher (assessed, didn't fit)
 
 The two shell-native channels need no manifest here and nothing on release
-day - both install straight from the repo at a ref.
+day — both install straight from the repo at a ref.
 
 **basher** works today: `basher install ivylikethevine/hi.d`. Its contract is
-a `package.sh` at the *repo root* - a name basher dictates, and why the
-packaging directory's build script is `mkpkg.sh` - whose
-`BINS=bin/hi` names what links onto PATH. basher links by filename with no
-rename support, which is why `bin/hi` exists at all: a POSIX shim that
-resolves through basher's cellar symlink, exports `_HI_HOME` (a basher clone
-does not live at `~/hi.d`), and refuses a clone not named `hi.d`. The shim
-and the refusal are unit-tested in `tests/shells/hi_test.sh`.
+a `package.sh` at the *repo root* — a name basher dictates, and why the build
+script is `mkpkg.sh` — whose `BINS=bin/hi` names what links onto PATH. basher
+links by filename with no rename support, which is why `bin/hi` exists: a
+POSIX shim that resolves through basher's cellar symlink, exports `_HI_HOME`
+(a basher clone does not live at `~/hi.d`), and refuses a clone not named
+`hi.d`. Both shim and refusal are unit-tested in `tests/shells/hi_test.sh`.
 
 **fisher** was assessed and deliberately not shipped. fisher installs by
-copying `functions/`, `completions/` and `conf.d/` out of a repo into the
-user's fish config and ignores everything else; hi.d has none of those
-directories, and its `shells/config.fish` is a client of the whole tree - it
-reaches `common/` by `$_HI_HOME` path and shells out to bash for the header,
-palette and git segment. A fisher install would copy the fish half and leave
-every one of those paths dangling: a plugin that installs green and does
-nothing. "It didn't fit" is the recorded outcome; fish users get the same
-full setup as everyone else through `scripts/install.sh` or any package
-channel.
+copying `functions/`, `completions/` and `conf.d/` out of a repo and ignores
+everything else. hi.d has none of those directories, and `shells/config.fish`
+is a client of the whole tree — it reaches `common/` by `$_HI_HOME` and shells
+out to bash for the header, palette and git segment. A fisher install would
+copy the fish half and leave every one of those paths dangling: a plugin that
+installs green and does nothing. Fish users get the same full setup as
+everyone else through `scripts/install.sh` or any package channel.
 
 #### deb / rpm / apk
 
@@ -962,30 +938,28 @@ wget -O /etc/apk/keys/hi.d.rsa.pub \
 apk add ./hi.d_1.0.0_noarch.apk
 ```
 
-A quirk worth knowing: the apk's contents are enumerated per `_HI_PACKAGE_CONTENTS` member in
-`nfpm.yaml` instead of riding the `type: tree` entry deb/rpm use — nfpm 2.47.0's tree walker writes
-directory modes apk-tools rejects outright. The packaging suite keeps the copy honest, and CI's
-packaging-smoke installs the signed apk on Alpine every PR so the channel can't silently regress.
+A quirk worth knowing: the apk enumerates its contents per `_HI_PACKAGE_CONTENTS` member in `nfpm.yaml`
+rather than riding the `type: tree` entry deb/rpm use, because nfpm 2.47.0's tree walker writes directory
+modes apk-tools rejects outright. The packaging suite keeps that copy honest, and CI's packaging-smoke
+installs the signed apk on Alpine every PR so the channel can't silently regress.
 
-No `apt upgrade` — that is the trade for not maintaining a repository. Revisit
-[OBS](https://en.opensuse.org/openSUSE:Build_Service_Debian_builds) only if people start asking for a repo
-to subscribe to.
+No `apt upgrade` — the trade for not maintaining a repository. Revisit
+[OBS](https://en.opensuse.org/openSUSE:Build_Service_Debian_builds) only if people ask for a repo to
+subscribe to.
 
 ### Windows channels
 
-An assessment, not a plan. Nothing in this section is built. It is the Windows counterpart to the
-"Shipping hi.d" distribution review, which covered Arch, macOS and Debian/Ubuntu and never looked at
-Windows at all.
+An assessment, not a plan — nothing here is built. It is the Windows counterpart to the "Shipping hi.d"
+distribution review, which covered Arch, macOS and Debian/Ubuntu and never looked at Windows.
 
 #### The question is which POSIX layer, not whether to port
 
 `hi.sh` is `#!/bin/bash` with `set -euo pipefail`, and it shells out to `tar`, `openssl`, `mktemp`, `awk`,
-`sed`, `find`, `du`, `hostname` and `ssh`. Native Windows has none of that. So there is no version of this
-where a Windows package installs "hi.d" on its own — every channel below really installs *hi.d plus a
-dependency on somebody's POSIX userland*, and the channels differ mainly in which one they lean on and how
-honestly they admit it.
+`sed`, `find`, `du`, `hostname` and `ssh`. Native Windows has none of that, so no Windows package installs
+"hi.d" on its own — every channel below installs *hi.d plus a dependency on somebody's POSIX userland*,
+and they differ mainly in which one they lean on and how honestly they admit it.
 
-Worth being clear about what already works, because it is easy to conflate:
+What already works, since it is easy to conflate:
 
 - **Windows as a target** is done — the [Windows hosts](#windows-hosts) section above covers it: WSL, Git
   Bash, Cygwin or MSYS2 on the target's `PATH` gets the full session, and stock Windows OpenSSH with no
@@ -995,16 +969,14 @@ Worth being clear about what already works, because it is easy to conflate:
 
 #### The prerequisite: the CI that exists tests the other half
 
-There is now one Windows job, `.github/workflows/windows-e2e.yml`, and it is not the one the channels
-below wait on. It exercises Windows **as a target**: a stock OpenSSH server with no bash on its `PATH`,
-driven from the runner's own Git Bash, asserting the cmd `||` ladder lands in the PowerShell fallback. It
-is dispatch-only and has never been run.
+The one Windows job, `windows-e2e.yml`, is not the one the channels below wait on: it exercises Windows
+**as a target** — a stock OpenSSH server with no bash on `PATH`, driven from the runner's Git Bash,
+asserting the cmd `||` ladder lands in the PowerShell fallback. Dispatch-only, never run.
 
-What is still missing is the client-side job: **a `windows-latest` job running the fast suites under Git
-Bash**, which is what would tell us whether hi.d works when Windows is the machine you type `hi` on. It
-should land before any Windows channel does. GitHub's `windows-latest` runners ship Git for Windows, so
-`shell: bash` in a workflow step is Git Bash, and the fast group is pure shell with no daemons. It is a
-cheap job, and what it would tell us is currently unknown:
+Missing is the client-side job: **a `windows-latest` job running the fast suites under Git Bash**, which
+would tell us whether hi.d works when Windows is the machine you type `hi` on. It should land before any
+Windows channel. GitHub's `windows-latest` runners ship Git for Windows, so `shell: bash` is Git Bash and
+the fast group is pure shell with no daemons — a cheap job answering four currently open questions:
 
 - whether `_hi_read_lines`, `_hi_repeat` and the rest behave under MSYS2's bash (they should — it is bash
   4.4+, well past the 3.2 floor)
@@ -1018,27 +990,27 @@ Until that job exists and is green, a Windows package would ship untested by con
 
 #### One thing already fixed
 
-`config_hi`'s `sudo ln -sfn "$_HI_LAUNCHER" /usr/bin/hi` has no meaning under Git Bash: there is no `sudo`,
-and `/usr/bin` is a virtual path inside the Git for Windows installation that a package has no business
-writing to. `scripts/install.sh --no-link` now skips that step. Windows was the third consumer to need it,
-after Homebrew and any distro package.
+`config_hi`'s `sudo ln -sfn "$_HI_LAUNCHER" /usr/bin/hi` means nothing under Git Bash: there is no `sudo`,
+and `/usr/bin` is a virtual path inside the Git for Windows installation no package should write to.
+`scripts/install.sh --no-link` skips it. Windows was the third consumer to need that flag, after Homebrew
+and any distro package.
 
 #### The channels
 
 ##### WSL — the recommendation
 
-Not a channel at all, which is the point. The `.deb` built by `packaging/mkpkg.sh` installs into WSL
-unchanged, `/etc/profile.d/hi.d.sh` works exactly as it does on any Debian, and the user gets the real
-thing rather than an approximation. It is also where a Windows developer who already uses `ssh`, `docker`
-and `kubectl` is most likely to be working.
+Not a channel at all, which is the point. The `.deb` from `mkpkg.sh` installs into WSL unchanged,
+`/etc/profile.d/hi.d.sh` works as on any Debian, and the user gets the real thing rather than an
+approximation. It is also where a Windows developer already using `ssh`, `docker` and `kubectl` most
+likely works.
 
 Cost: one paragraph in this README. Reaches: most of the plausible audience.
 
 ##### Scoop — the only native channel worth building
 
 A bucket is a GitHub repo of JSON manifests with no review queue — structurally the same deal as a
-Homebrew tap, which is why it is the cheapest native option. Scoop installs to
-`~/scoop/apps/hi.d/current`, so the writability problem is as soft as Homebrew's.
+Homebrew tap, and so the cheapest native option. Scoop installs to `~/scoop/apps/hi.d/current`, making
+the writability problem as soft as Homebrew's.
 
 What it needs beyond a manifest:
 
@@ -1052,24 +1024,23 @@ Verdict: **start here if anything gets built, but only after the client-side Win
 
 ##### winget — reaches the most people, costs the most per release
 
-Microsoft-blessed and preinstalled on Windows 11, so it has by far the widest reach. The costs are real: it
-wants an installer artifact (a `zip` with a portable nested installer is the workable shape for a script
+Microsoft-blessed and preinstalled on Windows 11, so by far the widest reach. The costs are real: it wants
+an installer artifact (a `zip` with a portable nested installer is the workable shape for a script
 project), each version is a YAML manifest PR into `microsoft/winget-pkgs`, and there is a moderation queue
-plus automated validation. Reasonable once hi.d has actual Windows users; premature before that.
+plus automated validation. Reasonable once hi.d has Windows users; premature before that.
 
 ##### Chocolatey — no advantage over the two above
 
-A `.nuspec` plus a `chocolateyInstall.ps1`, behind a moderation queue, with a hard dependency on Git for
-Windows to supply the userland. It reaches an audience that overlaps heavily with Scoop's and asks for more
-per release. `misc/packages` already probes for `choco`, which is the only argument in its favour and not a
-strong one.
+A `.nuspec` plus a `chocolateyInstall.ps1`, behind a moderation queue, hard-depending on Git for Windows
+for the userland. It reaches an audience that overlaps heavily with Scoop's and asks more per release.
+`misc/packages` already probes for `choco`, which is the only argument in its favour and a weak one.
 
 ##### MSYS2 — the best technical fit, the narrowest audience
 
 MSYS2 is a real POSIX userland with a real package manager, so hi.d would work there with no shim and no
-dependency hand-waving at all. Two things make it interesting beyond that: its packages are built from
-PKGBUILDs in Arch's format, so `packaging/aur/hi.d/PKGBUILD` is most of the work already done, and its
-`/etc/profile.d` is real, so the `_HI_HOME` export lands the same way it does on Linux.
+dependency hand-waving. Two things make it interesting beyond that: its packages build from PKGBUILDs in
+Arch's format, so `packaging/aur/hi.d/PKGBUILD` is most of the work already, and its `/etc/profile.d` is
+real, so the `_HI_HOME` export lands as on Linux.
 
 Against it: submission goes through `MSYS2/MSYS2-packages` with review, and the audience is small and
 technical enough to be comfortable cloning the repo.
@@ -1080,9 +1051,9 @@ technical enough to be comfortable cloning the repo.
 
 ##### A native PowerShell port — skip, emphatically
 
-Worth naming only to rule out. hi.d is ~2,000 lines of shell whose entire value is that the *same* config
-lands on every host; a second implementation in PowerShell would be a second thing to keep in sync forever,
-and it still could not run `load.sh` on the target.
+Named only to rule out. hi.d's entire value is that the *same* config lands on every host; a second
+implementation in PowerShell would be a second thing to keep in sync forever, and it still could not run
+`load.sh` on the target.
 
 #### Side by side
 
@@ -1102,8 +1073,8 @@ and it still could not run `load.sh` on the target.
 2. **Add the `windows-latest` Git Bash CI job** — the client-side one, running the fast suites. This is
    the actual prerequisite, and it has value even if no Windows package is ever published. (The
    target-side `windows-e2e.yml` is written but is a different job, and has not been dispatched yet.)
-3. **Revisit Scoop once that job is green and someone asks.** The manifest is an afternoon; the shim is the
-   risk, and the CI job is what turns that risk into something observable.
+3. **Revisit Scoop once that job is green and someone asks.** The manifest is an afternoon; the shim is
+   the risk, and the CI job is what makes that risk observable.
 4. **Leave winget, Chocolatey, MSYS2 and Cygwin until there is demand**, and prefer MSYS2 over the other
    three if the demand comes from people who already have a POSIX userland.
 
@@ -1119,11 +1090,12 @@ dpkg-deb -c dist/hi.d_*_all.deb
 
 #### Reproducibility
 
-The same commit builds byte-identical deb/rpm/apk: `mkpkg.sh` exports `SOURCE_DATE_EPOCH` (HEAD's
-commit time, respecting a value you set per the [reproducible-builds.org](https://reproducible-builds.org/docs/source-date-epoch/)
-convention), clamps the staged tree's mtimes to it, and nfpm 2.47.0 stamps everything else it controls
-from the same variable. CI's packaging-smoke job enforces this with a double build on every PR; to check
-it locally (sequentially — nfpm.yaml hardcodes `./dist/staging`, so `--outdir` can't run two side by side):
+The same commit builds byte-identical deb/rpm/apk: `mkpkg.sh` exports `SOURCE_DATE_EPOCH` (HEAD's commit
+time, respecting a value you set per the
+[reproducible-builds.org](https://reproducible-builds.org/docs/source-date-epoch/) convention), clamps the
+staged tree's mtimes to it, and nfpm stamps everything else it controls from the same variable. CI's
+packaging-smoke job enforces it with a double build on every PR. Locally, run them sequentially — nfpm.yaml
+hardcodes `./dist/staging`, so `--outdir` cannot run two side by side:
 
 ```bash
 packaging/mkpkg.sh && mv dist dist.first
@@ -1148,9 +1120,9 @@ The tree is root-owned and holds nobody's settings. Each user runs, once:
 /usr/share/hi.d/scripts/install.sh --no-link
 ```
 
-`--no-link` skips the `/usr/bin/hi` symlink, which the package already owns. Their answers go to
-`~/.config/hi.d/`, never into the tree, which is what lets a root-owned checkout work at all.
-`hi_update` will correctly refuse to `git pull` and tell them to update through their package manager.
+`--no-link` skips the `/usr/bin/hi` symlink the package already owns. Answers go to `~/.config/hi.d/`,
+never into the tree, which is what lets a root-owned checkout work at all. `hi_update` correctly refuses to
+`git pull` and points at the package manager instead.
 
 ## More docs
 
@@ -1175,6 +1147,8 @@ The tree is root-owned and holds nobody's settings. Each user runs, once:
 | `shells/bash.sh`                                | bash config                                                                                                                                                            |
 | `shells/zsh.zsh`                                | zsh config                                                                                                                                                             |
 | `shells/config.fish`                            | fish config                                                                                                                                                            |
+| `shells/config.nu`                              | nushell config - shells out to bash for the header, palette and git segment                                                                                            |
+| `shells/ksh.sh`                                 | the ksh/mksh tier's POSIX git segment, the one prompt piece written without bash                                                                                       |
 | `misc/aliases.sh`                               | personal aliases shared by bash, zsh and fish - freely editable, off wholesale via `_HI_DISABLE_ALIASES=1`                                                             |
 | `misc/vim.rc`, `misc/nano.rc`, `misc/theme.yml` | vim, nano and eza configs                                                                                                                                              |
 | `misc/tmux.conf`                                | tmux config, reached via the `tmux` alias - override in `~/.config/hi.d/tmux.conf`, off via `_HI_DISABLE_TMUX=1`                                                        |
@@ -1184,6 +1158,8 @@ The tree is root-owned and holds nobody's settings. Each user runs, once:
 | `scripts/uninstall.sh`                          | one-line shim onto `install.sh --uninstall` (`hi_uninstall`)                                                                                                           |
 | `scripts/color_preview.sh`                      | preview what every ssh host/user resolves to (`hi_color_preview`)                                                                                                      |
 | `scripts/doctor.sh`                             | pre-flight report: tree, config, timed backend probes, and a target's resolution + ssh reachability (`hi_doctor`, `hi --doctor`)                                       |
+| `packaging/`                                    | build-time only, never installed: `mkpkg.sh`, `stamp.sh`, `bump.sh`, and the AUR/Homebrew/nfpm manifests                                                               |
+| `bin/hi`                                        | the basher shim - resolves through the cellar symlink and exports `_HI_HOME`                                                                                           |
 | `tests/test_runner.sh`                          | unified runner - times and summarizes every test below (or a chosen subset) (`hi_test`)                                                                                |
 | `tests/test_lib.sh`                             | the whole suite skeleton: asserts/counters, scratch dir, skip preamble, probe commands, poll/pty helpers                                                               |
 
@@ -1194,7 +1170,7 @@ way a second copy of it in this table once did.
 
 #### Hostname, username, and group/tag colors
 
-Every username and hostname gets a color automatically, deterministically derived from its name - there's nothing to generate and nothing that can go missing. To pin a specific color instead, add a line to `~/hi.d/misc/colors` (`username,root,red` / `hostname,prod-db,yellow` / `hosttag,desktop,green`); `hosttag` entries match the _leftmost_ tag in a `# Tags: ...` comment placed directly above a `Host` line in `~/.ssh/config`. Run `hi_color_preview` any time to preview what every ssh host and your user currently resolve to, rendered in their actual color.
+Every username and hostname gets a color deterministically derived from its name - nothing to generate, nothing that can go missing. To pin one instead, add a line to `~/hi.d/misc/colors` (`username,root,red` / `hostname,prod-db,yellow` / `hosttag,desktop,green`); `hosttag` entries match the _leftmost_ tag in a `# Tags: ...` comment directly above a `Host` line in `~/.ssh/config`. `hi_color_preview` shows what every ssh host and your user currently resolve to, in their actual colors.
 
 ##### Built from/with/in mind
 
@@ -1207,7 +1183,7 @@ Every username and hostname gets a color automatically, deterministically derive
 
 Heavily inspired by: [Dictionarry/Profilarr's AI Transparency Statement](https://v2.dictionarry.dev/ai-transparency)
 
-This code originally started as entirely code written by [me](https://github.com/ivylikethevine), but I have used generative AI to write large parts of it. Regardless, all of the code in this repository is my _responsibility_. AI is a tool, not an owner of a project. I have personally understood, reviewed, and approved all of the AI generated code in this repository. _Mainline releases_ have the same level of accountability to me as any code I write and publish.
+This started as code written entirely by [me](https://github.com/ivylikethevine), but I have used generative AI to write large parts of it. All of the code here is my _responsibility_ regardless: AI is a tool, not an owner of a project. I have personally understood, reviewed and approved all of the AI-generated code in this repository, and _mainline releases_ carry the same accountability to me as anything I write and publish myself.
 
 ##### Publishing Order
 

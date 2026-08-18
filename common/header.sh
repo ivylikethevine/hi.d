@@ -28,6 +28,7 @@ function system_info() {
   local base_freq_path="/sys/devices/system/cpu/cpu0/cpufreq/base_frequency"
   local max_freq_path="/sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq"
   local scaling_freq_path="/sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq"
+  local amd_floor_path="/sys/devices/system/cpu/cpu0/cpufreq/amd_pstate_lowest_nonlinear_freq"
   if [ -f "$_HI_LINUX_RELEASE" ]; then
     # also covers WSL - it's a real Linux kernel with its own /etc/os-release
     os=$(awk -F= '$1 == "PRETTY_NAME" { gsub(/"/, "", $2); print $2 }' "$_HI_LINUX_RELEASE")
@@ -44,6 +45,14 @@ function system_info() {
     local khz=0
     if [ -z "$base_mhz" ] && [ -f "$base_freq_path" ]; then
       read -r khz <"$base_freq_path" 2>/dev/null || khz=0
+      base_mhz=$((khz / 1000))
+      ((base_mhz)) || base_mhz=""
+    fi
+    # amd-pstate-epp (the "active" AMD driver on recent kernels/CPUs) publishes
+    # neither of the above - lowest_nonlinear_freq isn't the rated base clock,
+    # just the lowest floor the driver will request, but it beats a bare "?"
+    if [ -z "$base_mhz" ] && [ -f "$amd_floor_path" ]; then
+      read -r khz <"$amd_floor_path" 2>/dev/null || khz=0
       base_mhz=$((khz / 1000))
       ((base_mhz)) || base_mhz=""
     fi
@@ -69,8 +78,16 @@ function system_info() {
     base_mhz=$(sysctl -n hw.cpufrequency 2>/dev/null | awk '{ printf "%.0f", $1 / 1000000 }' || true)
   fi
   os=$(_hi_sanitize "$os")
+  # _HI_HEADER_GHZ=1 (settings.sh) swaps the CPU cell to x.xxx GHz; unset/0
+  # keeps the MHz integers every test and script still pins
+  local freq_unit="MHz"
+  if [ "${_HI_HEADER_GHZ:-0}" = 1 ]; then
+    freq_unit="GHz"
+    [ -n "$base_mhz" ] && base_mhz=$(awk -v m="$base_mhz" 'BEGIN { printf "%.3f", m / 1000 }')
+    [ -n "$boost_mhz" ] && boost_mhz=$(awk -v m="$boost_mhz" 'BEGIN { printf "%.3f", m / 1000 }')
+  fi
   header_row "$PURPLE$arch" "$GREEN$os" "${YELLOW}Cores: ${cpus:-?}" \
-    "${CYAN}RAM: ${ram:-?}" "${BRBLUE}CPU: ${base_mhz:-?}/${boost_mhz:-?} MHz"
+    "${CYAN}RAM: ${ram:-?}" "${BRBLUE}CPU: ${base_mhz:-?}/${boost_mhz:-?} $freq_unit"
 }
 
 # identity()'s backend probes are independent and each is capped at

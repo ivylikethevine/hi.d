@@ -5,60 +5,11 @@ archaeology so you don't have to do it.
 
 ## Running the tests
 
-Every script resolves against `$_HI_HOME/hi.d`. The runner defaults
-`_HI_HOME` to this checkout's parent, so a fresh clone works with no setup -
-but never point anything at your real `~/hi.d`:
-
-```sh
-tests/test_runner.sh                    # every suite
-tests/test_runner.sh header shellcheck  # just the named suites
-tests/test_runner.sh --group fast       # what CI runs on every push
-tests/test_runner.sh --group bench      # hot-path timings vs ceilings
-tests/test_runner.sh --group e2e        # ssh/docker/framework; needs docker
-tests/test_runner.sh --group backends   # podman/nomad/kube; its own CI job
-tests/test_runner.sh --host-report      # ...plus what this machine is
-tests/test_runner.sh --verbose          # every transcript, nothing collapsed
-```
-
-A passing suite's transcript is collapsed to one status line; failures
-replay in full and are recapped under the summary table. `--verbose` (or
-`_HI_VERBOSE=1`) streams everything live. A suite whose backend is missing reports
-**SKIPPED**, never a green pass, and `--require-run` (what CI's e2e jobs
-pass) turns those skips into failures.
-
-`--host-report` (or `_HI_HOST_REPORT=1`) prints one block before the first
-suite: bash, OS, whether the userland is GNU/BSD/busybox, the locale's
-glyph verdict, which tree `$_HI_HOME` actually resolves to, which backends
-answer, and the lint tools' versions. CI passes it on every job, so a run
-that behaved differently there says why in its own log. The `_HI_HOME` half
-of it prints on **every** run, flag or not — but only when the tree the
-suites are testing isn't the one you invoked the runner from, which is the
-quietest way to get a wrong result here.
-
-`tests/coverage.sh` runs the fast suites under kcov when you want to know
-which arms of `install.sh`/`bump.sh` the cases never touch.
-
-## The lint gate
-
-`tests/test_runner.sh shellcheck` is one suite with five halves, and CI runs
-all of them:
-
-1. **shellcheck** over every `*.sh` (CI pins the version - see
-   `.github/actions/setup-tool/tools.txt`).
-2. **Native syntax checks**: `zsh -n` / `fish --no-execute` over the files
-   those shells parse for themselves.
-3. **The bash-3.2 grep**: no `mapfile`, no associative arrays, no namerefs,
-   no `${x,,}` - macOS ships bash 3.2 and hi runs there. Every
-   deliberately-odd construct this forces is explained once in
-   [GLOSSARY.md](GLOSSARY.md); code references entries with
-   `# GLOSSARY: <entry>` tags rather than re-explaining.
-4. **shfmt** as a formatting gate. The style comes from `.editorconfig`;
-   fix a red run with `shfmt -w .`.
-5. **checkbashisms** over the `#!/bin/sh` files, which dash and busybox sh
-   really do parse on minimal targets.
-
-Halves 4 and 5 skip yellow when the tool isn't installed locally; CI always
-enforces them.
+[TESTING.md](TESTING.md) is the full runbook - `test_runner.sh` usage, the
+four suite groups, `--host-report`/`--verbose`, and the lint gate's five
+halves. The one habit worth repeating here: never point any script at your
+real `~/hi.d` - the runner defaults `_HI_HOME` to this checkout's parent, so
+a fresh clone works with no setup.
 
 ## PR titles are the release notes
 

@@ -181,8 +181,6 @@ function test_unknown_kind_is_empty_and_succeeds() {
   [ -z "$out" ]
 }
 
-# --- the result cache -------------------------------------------------------
-#
 # 110ms of backend CLIs on every TAB is what this exists to avoid, so what
 # matters is that a hit really does skip the backends. Each case gets its own
 # XDG_RUNTIME_DIR so it starts from a cold cache and can't see another's.

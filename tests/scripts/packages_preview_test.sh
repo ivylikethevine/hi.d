@@ -66,8 +66,6 @@ function _hi_collect_once() {
   PATH="$saved"
 }
 
-# --- the priority meanings, read out of header.sh ---------------------------
-
 # The pin that keeps the legend honest: header.sh's comment block is the only
 # description of the priorities there is, so every priority its color tables
 # define has to come back with a meaning. A renumbered or reworded block fails
@@ -100,8 +98,6 @@ function test_meanings_take_only_the_block_above_the_table() {
   [ "$(_hi_priority_meanings | awk -F'\t' '$1 == 2' | wc -l)" -eq 1 ]
 }
 
-# --- naming the colors the header renders in --------------------------------
-
 function test_color_name_of_names_a_palette_entry() {
   [ "$(_hi_color_name_of "$BRGREEN")" = brgreen ] &&
     [ "$(_hi_color_name_of "$YELLOW")" = yellow ]
@@ -131,8 +127,6 @@ function test_color_label_names_the_hide_sentinel() {
   [ "$(_hi_color_label hide)" = hidden ] &&
     [ "$(_hi_color_label "$BRRED")" = brred ]
 }
-
-# --- the examples, collected through the header's own check_line -------------
 
 function test_collect_counts_every_listed_package() {
   [ "$_HI_PKG_LISTED" -eq 13 ]
@@ -170,8 +164,6 @@ function test_collect_reads_the_mark_not_the_name() {
   [[ "${_HI_EX_OK[0]:-}" == *hifoxtrot* ]] && [ -z "${_HI_EX_NO[0]:-}" ]
 }
 
-# --- the width the example cell reports -------------------------------------
-
 # The cell is nothing but color escapes and text, so its length is not its
 # width; handing the table a measured length is what pushes a column past its
 # own rule. Priority 5 shows both examples: "| hialpha X " and "| highost5 X ".
@@ -187,8 +179,6 @@ function test_example_cell_marks_a_priority_with_nothing_to_show() {
   IFS=$'\t' read -r text width <<<"$(_hi_example_cell 9)"
   [ "$text" = "-" ] && [ "$width" -eq 1 ]
 }
-
-# --- the whole thing actually runs ------------------------------------------
 
 # Running the real script can't reuse the exported fixture above: paths.sh
 # re-exports $_HI_PACKAGES from $_HI_ROOT every time it's sourced, so the only
@@ -249,10 +239,9 @@ function test_preview_reports_a_missing_packages_file() {
   [[ "$out" == *"No packages file"* ]]
 }
 
-# The same invariant color_preview_test.sh asserts, and now literally the same
-# code: test_lib.sh's _hi_table_is_rectangular. The two used to segment tables
-# differently - one on blank lines, one on `^[+|]` - so they were not actually
-# checking the same thing.
+# The same invariant color_preview_test.sh asserts, through literally the same
+# code: test_lib.sh's _hi_table_is_rectangular. Shared so the two cannot
+# segment tables differently and quietly check different things.
 function test_tables_are_rectangular() {
   _hi_table_is_rectangular "$_HI_PREVIEW_OUT"
 }

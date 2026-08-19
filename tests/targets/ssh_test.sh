@@ -154,7 +154,7 @@ function _hi_run_tmux_case() {
     # the session outlived the client that started it, which is the feature
     if _hi_poll_bool 20 0.5 _hi_tmux_session_listed "$name"; then
       ok=1
-      _hi_cecho " | [tmux] -- the session survived the dropped connection: OK" "$GREEN"
+      _hi_align " | [tmux] -- the session survived the dropped connection" "OK" "$GREEN"
     else
       _hi_h3 " | [tmux] -- the tmux session died with the client" "$RED"
     fi
@@ -291,55 +291,43 @@ function run_ssh_tests() {
     _hi_label="${_hi_img%%:*}"
     _hi_ctx="$_HI_WORKDIR/$_hi_label"
     mkdir -p "$_hi_ctx"
-    printf 'FROM alpine:3.20\nRUN apk add --no-cache openssh %s \\\n    && adduser -D -s /bin/ash hitest\nCOPY entrypoint.sh /entrypoint.sh\nRUN chmod +x /entrypoint.sh\nENTRYPOINT ["/entrypoint.sh"]\n' \
-      "$(printf '%s' "${_hi_img#*:}" | tr '+' ' ')" >"$_hi_ctx/Dockerfile"
     _hi_sshd_entrypoint "$_hi_ctx" /bin/sh
 
     _HI_SSH_IMAGES+=("hi-sshtest-$_hi_label-$$")
-    if _hi_build_image "$_hi_label" "hi-sshtest-$_hi_label-$$" "its fallback case" "$_hi_ctx"; then
+    if _hi_build_image "$_hi_label" "hi-sshtest-$_hi_label-$$" "its fallback case" \
+      --build-arg "PKGS=$(printf '%s' "${_hi_img#*:}" | tr '+' ' ')" \
+      -f "$(_hi_dockerfile sshd-alpine)" "$_hi_ctx"; then
       _hi_kv_set _HI_ALPINE_OK "$_hi_label" 1
     else
       _hi_kv_set _HI_ALPINE_OK "$_hi_label" 0
     fi
   done
 
-  # A bash 3.2 target - the version macOS still ships, and the one every bash 4
-  # builtin hi might reach for (mapfile, `declare -A`, namerefs, globstar) is
-  # missing from. Built on the official bash:3.2 image with sshd on top, and
-  # bash 3.2 as hitest's login shell, so both halves of a session run under it:
-  # the payload sshd hands the login shell, and the interactive `bash --rcfile`
-  # load.sh chainloads into.
+  # A bash 3.2 target - see dockerfiles/sshd-bash32.Dockerfile for what that
+  # image is and why the suite wants one.
   _HI_BASH32_OK=0
   _hi_ctx="$_HI_WORKDIR/bash32"
   mkdir -p "$_hi_ctx"
-  printf 'FROM bash:3.2\nRUN apk add --no-cache openssh \\\n    && ln -sf /usr/local/bin/bash /bin/bash \\\n    && adduser -D -s /usr/local/bin/bash hitest\nCOPY entrypoint.sh /entrypoint.sh\nRUN chmod +x /entrypoint.sh\nENTRYPOINT ["/entrypoint.sh"]\n' >"$_hi_ctx/Dockerfile"
   _hi_sshd_entrypoint "$_hi_ctx" /bin/sh
-  _hi_build_image bash32 "hi-sshtest-bash32-$$" "the bash 3.2 case" "$_hi_ctx" && _HI_BASH32_OK=1
+  _hi_build_image bash32 "hi-sshtest-bash32-$$" "the bash 3.2 case" \
+    -f "$(_hi_dockerfile sshd-bash32)" "$_hi_ctx" && _HI_BASH32_OK=1
 
+  # the repo itself is this one's build context - it is the working tree that
+  # lands at ~/hi.d in the image
   _HI_INSTALLED_OK=0
   if [ "$_HI_DEBIAN_OK" -eq 1 ]; then
-    mkdir -p "$_HI_WORKDIR/debian-installed"
-    cat >"$_HI_WORKDIR/debian-installed/Dockerfile" <<EOF
-  FROM $_HI_SSHD_IMAGE
-  COPY --chown=hitest:hitest . /home/hitest/hi.d
-  RUN chmod +x /home/hitest/hi.d/hi.sh \\
-      && touch /home/hitest/hi.d/.installed_sentinel \\
-      && chown hitest:hitest /home/hitest/hi.d/.installed_sentinel
-EOF
     _hi_build_image debian-installed "hi-sshtest-debian-installed-$$" "the pre-installed case" \
-      -f "$_HI_WORKDIR/debian-installed/Dockerfile" "$_HI_ROOT" && _HI_INSTALLED_OK=1
+      --build-arg "BASE=$_HI_SSHD_IMAGE" \
+      -f "$(_hi_dockerfile installed)" "$_HI_ROOT" && _HI_INSTALLED_OK=1
   fi
 
   # the same permanent install, plus tmux, for the --tmux case below
   _HI_TMUX_OK=0
   if [ "$_HI_INSTALLED_OK" -eq 1 ]; then
     mkdir -p "$_HI_WORKDIR/debian-tmux"
-    cat >"$_HI_WORKDIR/debian-tmux/Dockerfile" <<EOF
-  FROM hi-sshtest-debian-installed-$$
-  RUN apt-get update -qq && apt-get install -y -qq tmux >/dev/null
-EOF
     _hi_build_image debian-tmux "hi-sshtest-debian-tmux-$$" "the --tmux case" \
-      -f "$_HI_WORKDIR/debian-tmux/Dockerfile" "$_HI_WORKDIR/debian-tmux" && _HI_TMUX_OK=1
+      --build-arg "BASE=hi-sshtest-debian-installed-$$" \
+      -f "$(_hi_dockerfile installed-tmux)" "$_HI_WORKDIR/debian-tmux" && _HI_TMUX_OK=1
   fi
 
   _HI_TEST_MARKER="HI_SSH_TEST_OK"

@@ -18,7 +18,7 @@
 # escapes stripped, then the characters counted. It lives here rather than in a
 # caller because measuring is half of this file's measure-then-render contract.
 # An out-var, not stdout: show_preview measures every line twice (once to size
-# the box, once to pad it), and through $( ) each of those was a fork plus an
+# the box, once to pad it), and through $( ) each of those is a fork plus an
 # extglob save/restore. extglob is needed for the *(...) pattern and restored
 # to whatever it was, rather than left on for the rest of the caller. The
 # pattern matches test_lib.sh's _hi_strip_ansi: *(...) and not +(...), so a

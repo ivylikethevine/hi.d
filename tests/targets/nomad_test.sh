@@ -83,7 +83,7 @@ job "$job" {
 EOF
 
   if ! nomad job run -detach "$jobfile" >"$_HI_WORKDIR/$label.run.log" 2>&1; then
-    _hi_cecho " | failed to submit job (see $_HI_WORKDIR/$label.run.log)" "$RED"
+    _hi_dump_log "failed to submit job:" "$_HI_WORKDIR/$label.run.log"
     return 1
   fi
   _hi_ledger job "$job"
@@ -133,17 +133,17 @@ EOF
 
   function _hi_nomad_alive() { kill -0 "$_HI_NOMAD_PID" 2>/dev/null; }
   if ! _hi_poll_bool -a _hi_nomad_alive 60 0.5 nomad node status; then
-    _hi_stand_down "nomad dev agent never came up" \
-      "Nomad dev agent never came up (see $_HI_WORKDIR/agent.log), skipping"
+    _hi_dump_log "Nomad dev agent never came up:" "$_HI_WORKDIR/agent.log" "$YELLOW"
+    _hi_stand_down "nomad dev agent never came up"
   fi
   _hi_cecho " | Dev agent up: $NOMAD_ADDR" "$GREEN"
 
   _hi_pty_stdin force "no python3 to give the launcher its own pty - nomad alloc exec's attach may not get a real pty, results may be unreliable"
 
   # Serial on purpose, and said out loud by _hi_par_begin: two cases against a
-  # single-node dev agent were worth ~3s of a 348s run, and the ssh, framework
-  # and container suites are where the wall clock actually is. (Job teardown is
-  # no longer a reason - that moved to the ledger, which is subshell-safe.)
+  # single-node dev agent are worth ~3s of a 348s run, and the ssh, framework
+  # and container suites are where the wall clock actually is. Job teardown is
+  # not a constraint here: it goes through the ledger, which is subshell-safe.
   export _HI_PAR_WIDTH=1
   _hi_backend_pair_cases nomad "driver shape"
 }

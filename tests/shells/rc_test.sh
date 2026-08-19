@@ -63,8 +63,7 @@ function test_bash_defines_key_aliases() {
 
 # zsh/fish presence is handled by _hi_check_requires at the registration, so a
 # machine without one still runs (and honestly reports) the rest.
-# --- starship deference ---------------------------------------------------------
-#
+
 # _HI_PROMPT=starship hands the prompt over when starship exists; a stub on a
 # prepended PATH stands in for it, answering `init <shell>` with a line whose
 # effect the case can see. Three assertions per family: deferred when asked
@@ -83,8 +82,8 @@ function _hi_starship_stub_dir() {
 # One case for all three shells: the per-shell rc, prompt-print incantation
 # and expected shape live in the case's own table. Extra NAME=VALUE arguments
 # ride _hi_rc_shell (env applies the last assignment, so the prepended-PATH
-# override wins over the baseline), keeping the five hand-copied `env -i`
-# blocks that used to live here down to one.
+# override wins over the baseline), so there is one `env -i` block here rather
+# than one per case.
 function test_defers_to_starship_when_asked() {
   local shell="$1" script want out
   case "$shell" in
@@ -139,8 +138,6 @@ function test_fish_registers_hi_completion() {
     grep -qF '$_HI_TARGETS'
 }
 
-# --- the prompt separator -----------------------------------------------------
-#
 # The character each prompt ends with is a setting now (core.sh's
 # _hi_prompt_end, mirrored in config.fish), with three different shipped
 # defaults. Each case renders the real prompt in the real shell rather than

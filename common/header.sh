@@ -265,8 +265,7 @@ function hi_header() {
   [[ "${_HI_HEADER_CHECK:-1}" == 0 ]] || full_check
 }
 
-# --- the packages check -----------------------------------------------------
-# Reads misc/packages and prints which are installed, sorted by priority,
+# package priorities
 # lowest to highest (more can be added)
 # 0 nice-to-haves (netstat, distro tools)
 # 1 second line (git, curl, ping)

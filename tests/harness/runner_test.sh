@@ -118,7 +118,7 @@ function test_a_failure_does_not_stop_later_suites() {
   _hi_run_runner $'a:red.sh\nb:green.sh'
   # the passing suite's body is collapsed, so its status line is the evidence
   [[ "$_HI_RUN_OUT" == *"ran:red"* ]] &&
-    printf '%s\n' "$_HI_RUN_OUT" | grep -qE 'b: PASS \('
+    printf '%s\n' "$_HI_RUN_OUT" | grep -qE 'b +PASS \('
 }
 
 function test_failure_summary_counts_failed_over_total() {
@@ -138,7 +138,7 @@ function test_a_missing_script_counts_as_a_failed_suite() {
 
 function test_a_missing_script_does_not_stop_the_run() {
   _hi_run_runner $'gone:not-a-real-fixture.sh\nok:green.sh'
-  printf '%s\n' "$_HI_RUN_OUT" | grep -qE 'ok: PASS \('
+  printf '%s\n' "$_HI_RUN_OUT" | grep -qE 'ok +PASS \('
 }
 
 function test_summary_lists_every_suite_with_a_duration() {
@@ -166,6 +166,49 @@ function test_summary_pads_names_to_the_widest() {
   short="$(_hi_summary_field a col)"
   long="$(_hi_summary_field longername col)"
   [ -n "$short" ] && [ "$short" != 0 ] && [ "$short" = "$long" ]
+}
+
+# The per-suite status line collapsed mode leaves behind is right-aligned to
+# the same _HI_MAX_WIDTH the summary table spans, so a run's verdicts read as
+# one column. Measured off the status lines only - they carry "PASS (", which
+# the summary row for the same suite does not.
+function _hi_status_line_len() {
+  printf '%s\n' "$(_hi_strip_ansi "$_HI_RUN_OUT")" |
+    awk -v n="$1" '$1 == "|" && $2 == n && /\(/ { print length($0); exit }'
+}
+
+function test_status_lines_span_hi_max_width() {
+  local name
+  export _HI_MAX_WIDTH=72
+  _hi_run_runner $'a:green.sh\nlongername:green.sh'
+  unset _HI_MAX_WIDTH
+  for name in a longername; do
+    [ "$(_hi_status_line_len "$name")" = 72 ] || {
+      _hi_cecho " | '$name' status line is $(_hi_status_line_len "$name") wide, expected 72" "$RED"
+      return 1
+    }
+  done
+}
+
+# the point of the alignment: two names of different lengths put their verdict
+# in the same column, rather than each one ragging along behind its name
+function test_status_lines_align_verdicts_in_one_column() {
+  local short long
+  _hi_run_runner $'a:green.sh\nlongername:green.sh'
+  short="$(printf '%s\n' "$(_hi_strip_ansi "$_HI_RUN_OUT")" |
+    awk '$1 == "|" && $2 == "a" && /PASS \(/ { print index($0, "PASS"); exit }')"
+  long="$(printf '%s\n' "$(_hi_strip_ansi "$_HI_RUN_OUT")" |
+    awk '$1 == "|" && $2 == "longername" && /PASS \(/ { print index($0, "PASS"); exit }')"
+  [ -n "$short" ] && [ "$short" != 0 ] && [ "$short" = "$long" ]
+}
+
+# a name with no room left for the verdict pushes it right instead of losing
+# it, the same rule the summary table's name column follows
+function test_status_line_narrow_width_keeps_the_verdict() {
+  export _HI_MAX_WIDTH=20
+  _hi_run_runner $'averylongsuitename:green.sh'
+  unset _HI_MAX_WIDTH
+  printf '%s\n' "$_HI_RUN_OUT" | grep -qE 'averylongsuitename +PASS \('
 }
 
 # the table is sized like every other banner hi prints - see common/core.sh's
@@ -292,8 +335,6 @@ function test_require_run_is_listed_in_help() {
   "$_HI_TEST_RUN" --help | grep -q -- '--require-run'
 }
 
-# --- the host report ---------------------------------------------------------
-#
 # The block itself is test_lib.sh's, and lib_test.sh pins its contents; these
 # cases are only about the wiring - that it is off by default, that both the
 # flag and the env var reach it, and that a run prints it once rather than
@@ -349,7 +390,7 @@ function test_a_skipping_suite_contributes_no_cases() {
 function test_passing_suite_output_is_collapsed() {
   _hi_run_runner $'a:green.sh'
   [[ "$_HI_RUN_OUT" != *"ran:green"* ]] &&
-    printf '%s\n' "$_HI_RUN_OUT" | grep -qE 'a: PASS \('
+    printf '%s\n' "$_HI_RUN_OUT" | grep -qE 'a +PASS \('
 }
 
 # ...a failing suite's replays in full, so its context is never the thing lost
@@ -407,11 +448,10 @@ function test_a_green_run_has_no_recap() {
   [[ "$_HI_RUN_OUT" != *"Failing cases"* ]]
 }
 
-# The shipped table, straight from --list: "<group> <name>" per suite. This
-# used to be a hardcoded name list here plus a `sed` over the runner's own
-# error message - parsing a UI string as an API. The hardcoded copy had already
-# drifted: paths, color_preview and kube were in the table and not in the list,
-# so the test meant to catch drift was silently ignoring three suites.
+# The shipped table, straight from --list: "<group> <name>" per suite. Read
+# from --list rather than hardcoded here and scraped out of the runner's error
+# message: a copy of the roster in the drift test is a copy that can drift, and
+# a UI string is not an API.
 function _hi_runner_list() {
   "$_HI_TEST_RUN" --list 2>/dev/null
 }
@@ -456,9 +496,9 @@ function test_list_paths_matches_list() {
 }
 
 # Every suite has to be in a group CI actually runs, or it never runs on a push
-# and nothing says so - which is what happened to the `hi` suite. CI invokes
-# groups by name now (see ci.yml's `--group fast`/`e2e`/`backends`), so this
-# checks the workflow runs every group the table uses rather than every suite.
+# and nothing says so. CI invokes groups by name (see ci.yml's `--group fast`/
+# `e2e`/`backends`), so this checks the workflow runs every group the table
+# uses rather than every suite.
 function test_ci_runs_every_group_in_the_table() {
   local workflow="$_HI_ROOT/.github/workflows/ci.yml" group name missing=""
   local -a groups=()
@@ -550,6 +590,11 @@ function run_runner_tests() {
   _hi_check "Reported as MISSING" test_a_missing_script_is_reported_as_missing
   _hi_check "Counts as a failed suite" test_a_missing_script_counts_as_a_failed_suite
   _hi_check "Doesn't stop the run" test_a_missing_script_does_not_stop_the_run
+
+  _hi_h2 "Testing: per-suite status lines"
+  _hi_check "Status lines span _HI_MAX_WIDTH" test_status_lines_span_hi_max_width
+  _hi_check "Verdicts align in one column" test_status_lines_align_verdicts_in_one_column
+  _hi_check "A narrow width keeps the verdict" test_status_line_narrow_width_keeps_the_verdict
 
   _hi_h2 "Testing: summary table"
   _hi_check "Lists every suite with a duration" test_summary_lists_every_suite_with_a_duration

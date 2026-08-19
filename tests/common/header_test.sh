@@ -55,8 +55,8 @@ function test_banner_prefix_shrinks_padding() {
   [ "${#prefixed}" -lt "${#plain}" ]
 }
 
-# ...and the floor itself, which the test above used to reach by accident on a
-# long-hostname machine. Here it is on purpose, with the hostname pinned long.
+# ...and the floor itself, reached on purpose with the hostname pinned long
+# rather than by accident on a machine that happens to have a long one.
 function test_banner_floors_padding_on_a_long_hostname() {
   local out _HI_HOSTNAME_CACHE
   printf -v _HI_HOSTNAME_CACHE 'h%.0s' {1..60}
@@ -284,8 +284,6 @@ function test_hi_header_enabled_prints_banner() {
   out="$(_HI_DISABLE_HEADER=0 hi_header Connected)"
   [[ "$out" == *"Connected"* ]]
 }
-
-# --- the packages check -----------------------------------------------------
 
 # shellcheck disable=SC2209 # the literal command name "sh" is intentional, not a botched `sh` invocation
 _HI_REAL_CMD=sh

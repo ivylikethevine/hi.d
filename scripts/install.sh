@@ -360,8 +360,8 @@ function _hi_tmux_preview() {
 # alias count plus a handful of names, read straight from misc/aliases.sh
 # rather than duplicating its fallthrough logic here
 # One awk, not three pipelines over the same file: it counts and collects the
-# examples in a single pass, and reports 0 for a file with no aliases where
-# `printf '%s\n' "" | wc -l` used to say 1.
+# examples in a single pass, and reports 0 for a file with no aliases - where
+# `printf '%s\n' "" | wc -l` says 1.
 function _hi_aliases_preview() {
   awk '{
          if (match($0, /^alias [A-Za-z0-9_]+=/)) {
@@ -689,8 +689,6 @@ function link_hi_by_hand() {
   _hi_cecho " or re-run with --no-link to silence this." "$YELLOW"
   return 0
 }
-
-# --- uninstalling -----------------------------------------------------------
 
 # The other half of being install's inverse: drop the settings file it wrote.
 # Only settings.sh - the overlay's colors and packages are hand-written config,

@@ -55,20 +55,22 @@ function test_case_keeps_running_after_a_failure() {
 
 function test_assert_passes_through_arguments() {
   local out
-  out="$(_hi_assert "with args" test 1 -eq 1)"
-  [[ "$out" == *"with args: OK"* ]]
+  out="$(_hi_strip_ansi "$(_hi_assert "with args" test 1 -eq 1)")"
+  printf '%s\n' "$out" | grep -qE 'with args +OK$'
 }
 
 function test_assert_reports_ok_and_returns_zero() {
   local out
-  out="$(_hi_assert "some label" _hi_true)"
-  [[ "$out" == *"some label: OK"* ]]
+  out="$(_hi_strip_ansi "$(_hi_assert "some label" _hi_true)")"
+  printf '%s\n' "$out" | grep -qE 'some label +OK$'
 }
 
 function test_assert_reports_failed_and_returns_nonzero() {
   local out rc=0
+  # the capture stays on _hi_assert itself: wrapping it in _hi_strip_ansi would
+  # report the stripper's exit status, which is 0 whatever _hi_assert returned
   out="$(_hi_assert "some label" _hi_false)" || rc=$?
-  [ "$rc" -ne 0 ] && [[ "$out" == *"some label: FAILED"* ]]
+  [ "$rc" -ne 0 ] && printf '%s\n' "$(_hi_strip_ansi "$out")" | grep -qE 'some label +FAILED$'
 }
 
 function test_check_counts_and_labels_in_one_call() {
@@ -335,8 +337,6 @@ function test_cleanup_sweeps_containers_then_networks() {
   _hi_before "$(cat "$log")" '^rm -f gone$' '^network rm alsogone$'
 }
 
-# --- _hi_par_case / _hi_par_wait ----------------------------------------------
-#
 # The counted-case contract, run in a background subshell. Everything here is
 # assertable without docker, which is the point: the suites that use it need a
 # container backend, and a harness bug there looks like a product bug.
@@ -522,8 +522,6 @@ function test_probe_cmd_fish_shapes_run_under_fish() {
     ! _hi_probe_says_ok ssh_fallback_fish "function hi_info; end; " /nonexistent/hi.d fish
 }
 
-# --- _hi_host_report ---------------------------------------------------------
-#
 # $_HI_ROOT is read at call time, so a case can point the tree check anywhere
 # from inside a subshell without disturbing this suite's own environment.
 
@@ -815,6 +813,113 @@ function test_ssh_reachable_fails_against_a_dead_port() {
   # _hi_poll_bool discards it the same way for real callers
   ! _hi_ssh_reachable 1 2>/dev/null
 }
+
+# _hi_dump_log replaced six messages that printed a log's *path*, every one of
+# them under $_HI_WORKDIR and so already deleted by _hi_test_cleanup's rm -rf
+# by the time anyone could follow it. What matters now is that the text itself
+# reaches the transcript, since that is the only surviving copy.
+function _hi_dump_log_out() {
+  _hi_strip_ansi "$(_hi_dump_log "$@")"
+}
+
+function test_dump_log_prints_the_logs_text() {
+  local log="$_HI_WORKDIR/dump.log" out
+  printf 'first line\nsecond line\n' >"$log"
+  out="$(_hi_dump_log_out "it broke:" "$log")"
+  [[ "$out" == *"first line"* ]] && [[ "$out" == *"second line"* ]]
+}
+
+function test_dump_log_indents_the_text_it_dumps() {
+  local log="$_HI_WORKDIR/dump.log" out
+  printf 'a failure\n' >"$log"
+  out="$(_hi_dump_log_out "it broke:" "$log")"
+  # six spaces, the indent _hi_case_result already dumps transcripts at
+  printf '%s\n' "$out" | grep -qx '      a failure'
+}
+
+function test_dump_log_prints_its_message() {
+  local log="$_HI_WORKDIR/dump.log" out
+  printf 'noise\n' >"$log"
+  out="$(_hi_dump_log_out "the pod never started:" "$log")"
+  [[ "$out" == *"the pod never started:"* ]]
+}
+
+function test_dump_log_says_so_when_the_log_is_empty() {
+  local log="$_HI_WORKDIR/empty.log" out
+  : >"$log"
+  out="$(_hi_dump_log_out "it broke:" "$log")"
+  [[ "$out" == *"it broke:"* ]] && [[ "$out" == *"wrote nothing"* ]]
+}
+
+# a command can fail before its redirection ever creates the file
+function test_dump_log_survives_a_missing_log() {
+  local out
+  out="$(_hi_dump_log_out "it broke:" "$_HI_WORKDIR/never-written.log")"
+  [[ "$out" == *"it broke:"* ]] && [[ "$out" == *"wrote nothing"* ]]
+}
+
+# the path is what this replaced: it is unlinked before it can be read, so
+# printing it would be pointing at nothing
+function test_dump_log_does_not_print_the_path() {
+  local log="$_HI_WORKDIR/dump.log" out
+  printf 'boom\n' >"$log"
+  out="$(_hi_dump_log_out "it broke:" "$log")"
+  [[ "$out" != *"$log"* ]]
+}
+# _hi_align is the one rule behind every verdict a run prints - the per-case
+# lines here and, through _hi_status_line, the per-suite ones the runner leaves
+# behind. runner_test.sh covers it from that end; these cover it directly.
+function _hi_align_out() {
+  _hi_strip_ansi "$(_hi_align "$@")"
+}
+
+function test_align_spans_hi_max_width() {
+  local out
+  export _HI_MAX_WIDTH=60
+  out="$(_hi_align_out " | a label" "OK")"
+  unset _HI_MAX_WIDTH
+  [ "${#out}" -eq 60 ]
+}
+
+# the point of it: two labels of different lengths put their verdict in the
+# same column rather than each ragging along behind its own label
+function test_align_puts_verdicts_in_one_column() {
+  local short long
+  export _HI_MAX_WIDTH=60
+  short="$(_hi_align_out " | a" "OK")"
+  long="$(_hi_align_out " | a much longer label" "OK")"
+  unset _HI_MAX_WIDTH
+  # the column each verdict starts in, as the width of everything before it
+  short="${short%%OK*}"
+  long="${long%%OK*}"
+  [ "${#short}" -eq "${#long}" ]
+}
+
+function test_align_defaults_to_eighty_columns() {
+  local out
+  out="$(_hi_align_out " | a label" "OK")"
+  [ "${#out}" -eq 80 ]
+}
+
+# a label with no room left for its verdict overflows rather than truncating,
+# and keeps the two-space gutter so the two never run together
+function test_align_overflows_rather_than_truncating() {
+  local out
+  export _HI_MAX_WIDTH=12
+  out="$(_hi_align_out " | a label far wider than the width" "OK")"
+  unset _HI_MAX_WIDTH
+  [[ "$out" == *"a label far wider than the width"* ]] &&
+    [[ "$out" == *"  OK" ]]
+}
+
+function test_align_keeps_the_whole_verdict_together() {
+  local out
+  export _HI_MAX_WIDTH=60
+  out="$(_hi_align_out " | a case" "SKIPPED (no python3)")"
+  unset _HI_MAX_WIDTH
+  [[ "$out" == *"SKIPPED (no python3)" ]]
+}
+
 function run_test_lib_tests() {
   _hi_workdir testlibtest
 
@@ -931,6 +1036,21 @@ function run_test_lib_tests() {
   _hi_check "Sshd entrypoint unlocks the test account" test_sshd_entrypoint_body_unlocks_the_test_account
   _hi_check "Keypair lands in the workdir" test_ssh_keypair_writes_a_usable_key
   _hi_check "Reachability probe fails on a dead port" test_ssh_reachable_fails_against_a_dead_port
+
+  _hi_h2 "Testing: _hi_align"
+  _hi_check "Spans _HI_MAX_WIDTH" test_align_spans_hi_max_width
+  _hi_check "Verdicts land in one column" test_align_puts_verdicts_in_one_column
+  _hi_check "Defaults to 80 columns" test_align_defaults_to_eighty_columns
+  _hi_check "A too-wide label overflows, keeping its gutter" test_align_overflows_rather_than_truncating
+  _hi_check "A multi-word verdict stays whole" test_align_keeps_the_whole_verdict_together
+
+  _hi_h2 "Testing: _hi_dump_log"
+  _hi_check "Dumps the failing log's text" test_dump_log_prints_the_logs_text
+  _hi_check "Indents the dump six spaces" test_dump_log_indents_the_text_it_dumps
+  _hi_check "Prints the failure message too" test_dump_log_prints_its_message
+  _hi_check "Says so when the log is empty" test_dump_log_says_so_when_the_log_is_empty
+  _hi_check "Survives a log that was never written" test_dump_log_survives_a_missing_log
+  _hi_check "Never prints the (deleted) log path" test_dump_log_does_not_print_the_path
 
   _hi_suite_end "test_lib.sh"
 }

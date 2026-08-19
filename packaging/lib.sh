@@ -1,7 +1,6 @@
 #!/bin/bash
 # Shared plumbing for packaging/'s entry points (bump.sh, mkpkg.sh): locate
-# the tree, source core.sh, and hold the primitives each script used to carry
-# its own copy of. scripts/install.sh keeps its own locator and _hi_write_back
+# the tree, source core.sh, and hold the primitives they share. scripts/install.sh keeps its own locator and _hi_write_back
 # on purpose - it ships in packages *without* packaging/, so it cannot source
 # this file; that boundary-forced copy is documented there.
 

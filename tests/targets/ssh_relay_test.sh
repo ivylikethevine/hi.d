@@ -3,12 +3,10 @@
 # throwaway sshd container (B, which does not), and then *from inside that
 # session* on to a second one (C). What it establishes:
 #
-#   - the relay works from a **disposable** session at all. hi.sh is not in
-#     $_HI_PAYLOAD, which reads like "a shipped session has no launcher to
-#     relay with" - but the payload is only the tar. _say_hi armors hi.sh as
-#     its own stream and writes it to "$_HI_ROOT/hi.sh" on the target (the
-#     container path does the same with `cat > $root/hi.d/hi.sh`), so every
-#     bash-capable session has a launcher and the `hi` alias paths.sh defines
+#   - the relay works from a **disposable** session at all. hi.sh rides the
+#     payload tar (it is in $_HI_PAYLOAD), so it is unpacked to
+#     "$_HI_ROOT/hi.sh" with its executable mode on both transports, and every
+#     bash-capable session has a launcher - the `hi` alias paths.sh defines
 #     points at a real file. The one tier that does not is the container
 #     transport's bash-less fallback, which ships aliases.sh alone and never
 #     sources paths.sh - there `hi` is simply undefined, not broken.
@@ -225,8 +223,6 @@ function _hi_relay_case() {
   [ "$ok" -eq 1 ]
 }
 
-# --- the same relay, killed mid-session ---------------------------------------
-#
 # The clean case proves the traps fire when both shells are asked to leave.
 # This one proves they fire when nobody asks: the client and its mux master
 # are frozen and killed while both hops are live, and *neither* host may keep
@@ -300,7 +296,7 @@ function _hi_relay_disconnect_case() {
     # beat later still - hence one budget covering both
     if _hi_poll_bool 120 0.5 _hi_relay_dirs_gone "$b_dir" "$c_dir"; then
       ok=1
-      _hi_cecho " | [relay-disconnect] -- both hops cleaned up after the kill: OK" "$GREEN"
+      _hi_align " | [relay-disconnect] -- both hops cleaned up after the kill" "OK" "$GREEN"
     else
       _hi_relay_report_leftovers relay-disconnect
       _hi_note_failure "[relay-disconnect] a tree survived the kill"

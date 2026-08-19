@@ -32,11 +32,10 @@ source "$_HI_HOME/hi.d/tests/test_lib.sh"
 # group:name:path (relative to this directory), in the order they run - fast
 # local checks first, the docker/kind/nomad-backed end-to-end tests after.
 #
-# The group is here rather than in .github/workflows/ci.yml because CI used to
-# spell out which suites were fast and which were e2e, and a suite added to
-# this table but missed there silently never ran on a push (which is what
-# happened to the `hi` suite). `--group fast` is now the only list, so the two
-# cannot disagree.
+# The group is here rather than in .github/workflows/ci.yml: with CI spelling
+# out which suites are fast and which are e2e, a suite added to this table but
+# missed there would silently never run on a push. `--group fast` is the only
+# list, so the two cannot disagree.
 if ! declare -p _HI_TESTS >/dev/null 2>&1; then
   _HI_TESTS=(
     "fast:aliases:shells/alias_test.sh"
@@ -275,7 +274,7 @@ trap "_hi_restore_tty; rm -f '$_HI_COUNTS_FILE' '$_HI_FAILS_FILE' '$_HI_SUITE_LO
 # Output modes. Default: a passing suite's transcript collapses to one status
 # line and the full text replays only on failure or skip, so a green run fits
 # on a screen. --verbose (which sets $_HI_VERBOSE during argument parsing
-# above) or _HI_VERBOSE=1 streams everything live - the old behavior. Under
+# above) or _HI_VERBOSE=1 streams everything live. Under
 # GitHub Actions a passing transcript is kept but folded into a ::group::
 # block (complete logs, bench numbers included, failures never the thing
 # folded), and every failing case gets an ::error annotation under the summary.
@@ -294,6 +293,14 @@ _HI_CASES_PASSED=0
 _HI_CASES_FAILED=0
 _HI_CASES_SKIPPED=0
 _HI_RUN_T0="$(_hi_now)"
+
+# _hi_status_line <name> <result> <color> - the one line collapsed mode leaves
+# behind per suite, in the same column as every per-case verdict inside a
+# suite: test_lib.sh's _hi_align is the shared rule, and this is just the
+# runner's prefix in front of it.
+function _hi_status_line() {
+  _hi_align " | $1" "$2" "$3"
+}
 
 for _hi_t in "${_HI_SELECTED[@]}"; do
   # the accessors' own expansions, inlined: this runs once per selected suite
@@ -388,9 +395,9 @@ for _hi_t in "${_HI_SELECTED[@]}"; do
     [ "$_hi_pass" != - ] && _hi_cases_note="$_hi_pass passed, "
     [ "$_hi_skipcnt" != - ] && [ "$_hi_skipcnt" != 0 ] && _hi_cases_note="$_hi_cases_note$_hi_skipcnt skipped, "
     case "$_hi_status" in
-    PASS) _hi_cecho " | $_hi_name: PASS ($_hi_cases_note$_hi_dur)" "$GREEN" ;;
-    SKIPPED) _hi_cecho " | $_hi_name: SKIPPED ($_hi_skip)" "$YELLOW" ;;
-    *) _hi_cecho " | $_hi_name: $_hi_status ($_hi_cases_note$_hi_dur)" "$RED" ;;
+    PASS) _hi_status_line "$_hi_name" "PASS ($_hi_cases_note$_hi_dur)" "$GREEN" ;;
+    SKIPPED) _hi_status_line "$_hi_name" "SKIPPED ($_hi_skip)" "$YELLOW" ;;
+    *) _hi_status_line "$_hi_name" "$_hi_status ($_hi_cases_note$_hi_dur)" "$RED" ;;
     esac
   fi
 done

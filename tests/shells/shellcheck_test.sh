@@ -50,14 +50,14 @@ function lint_native() {
   for entry in "${_HI_NATIVE_LINT[@]}"; do
     IFS=: read -r file shell flag <<<"$entry"
     if ! command -v "$shell" >/dev/null 2>&1; then
-      _hi_skip " | $file" "no $shell to check it with"
+      _hi_skip "$file" "no $shell to check it with"
       continue
     fi
     _HI_LINT_TOTAL=$((_HI_LINT_TOTAL + 1))
     if out="$("$shell" "$flag" "$_HI_ROOT/$file" 2>&1)"; then
-      _hi_cecho " | $file ($shell $flag): OK" "$GREEN"
+      _hi_align " | $file ($shell $flag)" "OK" "$GREEN"
     else
-      _hi_cecho " | $file ($shell $flag): FAILED" "$RED"
+      _hi_align " | $file ($shell $flag)" "FAILED" "$RED"
       printf '%s\n' "$out" | sed 's/^/      /'
       _hi_note_failure "$file ($shell $flag)"
       bad=$((bad + 1))
@@ -122,10 +122,10 @@ function lint_bash32() {
     hits="$(grep -rnHE "$pattern" "$blanks" 2>/dev/null | grep -v ':[[:space:]]*#' |
       sed "s|^$blanks/||" || true)"
     if [ -z "$hits" ]; then
-      _hi_cecho " | no $what: OK" "$GREEN"
+      _hi_align " | no $what" "OK" "$GREEN"
       continue
     fi
-    _hi_cecho " | $what: FOUND" "$RED"
+    _hi_align " | $what" "FOUND" "$RED"
     printf '%s\n' "$hits" | sed 's/^/      /'
     _hi_note_failure "bash-4 construct: $what"
     bad=$((bad + 1))
@@ -146,9 +146,9 @@ function lint_shfmt() {
   fi
   _HI_LINT_TOTAL=$((_HI_LINT_TOTAL + 1))
   if out="$(shfmt -d "${_HI_SH_FILES[@]}" 2>&1)"; then
-    _hi_cecho " | shfmt $(shfmt --version): every file already formatted: OK" "$GREEN"
+    _hi_align " | shfmt $(shfmt --version): every file already formatted" "OK" "$GREEN"
   else
-    _hi_cecho " | shfmt: files need reformatting (fix with: shfmt -w .)" "$RED"
+    _hi_align " | shfmt: files need reformatting (fix with: shfmt -w .)" "FAILED" "$RED"
     printf '%s\n' "$out" | sed 's/^/      /'
     _hi_note_failure "shfmt formatting (fix with: shfmt -w .)"
     return 1
@@ -176,9 +176,9 @@ function lint_checkbashisms() {
     rel="${file#"$_HI_ROOT/"}"
     _HI_LINT_TOTAL=$((_HI_LINT_TOTAL + 1))
     if out="$(checkbashisms "$file" 2>&1)"; then
-      _hi_cecho " | $rel: OK" "$GREEN"
+      _hi_align " | $rel" "OK" "$GREEN"
     else
-      _hi_cecho " | $rel: FAILED" "$RED"
+      _hi_align " | $rel" "FAILED" "$RED"
       printf '%s\n' "$out" | sed 's/^/      /'
       _hi_note_failure "$rel (checkbashisms)"
       bad=$((bad + 1))
@@ -210,13 +210,103 @@ function lint_glossary_tags() {
         case "$part" in "$h"*) ok=1 ;; esac
       done
       if [ -z "$ok" ]; then
-        _hi_cecho " | unknown entry in ${line%%:*}: $part" "$RED"
+        _hi_align " | unknown entry in ${line%%:*}: $part" "FAILED" "$RED"
         _hi_note_failure "GLOSSARY tag: $part"
         bad=$((bad + 1))
       fi
     done <<<"${tag//" + "/$'\n'}"
   done
-  [ "$bad" -eq 0 ] && _hi_cecho " | every tag names a real entry: OK" "$GREEN"
+  [ "$bad" -eq 0 ] && _hi_align " | every tag names a real entry" "OK" "$GREEN"
+  return "$bad"
+}
+
+# The image definitions moved out of the suites into dockerfiles/, which bought
+# readable files and cost the one thing a heredoc could not get wrong: a
+# Dockerfile written inline is referenced by construction. A checked-in one can
+# be orphaned when its caller goes, or named by a caller that misspells it -
+# both of which surface as "the image just didn't build" three suites later, on
+# a machine with a container backend. Both directions are checked here instead,
+# in the fast group, where the answer is a grep rather than a build.
+#
+# Callers name an image two ways: _hi_dockerfile <stem> from anything that
+# sources test_lib.sh, and the full dockerfiles/<stem>.Dockerfile path from
+# docs/tapes/fixtures.sh, which is standalone and does not. The framework
+# suite's call interpolates its label, so that one contributes a *prefix*
+# every file under it answers to.
+#
+# A mention in a comment counts as a reference, deliberately: a file named by
+# prose is one whose deletion would strand that prose, which is the same thing
+# this is here to stop. The cost is that a comment alone keeps a file looking
+# used after its last real caller goes.
+function lint_dockerfiles() {
+  local dir="$_HI_ROOT/dockerfiles" call='_hi_dockerfile'
+  local files file stem first refs prefixes ref pre seen bad=0
+  _hi_h2 "Checking dockerfiles/ against its callers"
+
+  # dockerfiles/ is excluded throughout: one Dockerfile naming another in a
+  # comment is not a caller, and would keep an orphan looking used
+  _hi_read_lines refs < <({
+    grep -rhoE "$call (\"[a-z0-9-]+\"|[a-z0-9-]+)" "$_HI_ROOT" \
+      --exclude-dir=.git --exclude-dir=dist --include='*.sh' 2>/dev/null |
+      sed "s/.*$call \"\{0,1\}//;s/\"\$//"
+    grep -rhoE 'dockerfiles/[a-z0-9-]+\.Dockerfile' "$_HI_ROOT" \
+      --exclude-dir=.git --exclude-dir=dist --exclude-dir=dockerfiles 2>/dev/null |
+      sed 's|.*/||;s|\.Dockerfile$||'
+  } | sort -u)
+
+  # the interpolated form, _hi_dockerfile "<prefix>$..." - the literal half is
+  # all a grep can know, so every file it could name counts as referenced
+  _hi_read_lines prefixes < <(grep -rhoE "$call \"[a-z0-9-]*\\\$" "$_HI_ROOT" \
+    --exclude-dir=.git --exclude-dir=dist --include='*.sh' 2>/dev/null |
+    sed "s/.*$call \"//;s/\\\$\$//" | sort -u)
+
+  # every file has a caller
+  _hi_read_lines files < <(find "$dir" -name '*.Dockerfile' | sort)
+  for file in "${files[@]}"; do
+    [ -n "$file" ] || continue
+    stem="${file##*/}"
+    stem="${stem%.Dockerfile}"
+    _HI_LINT_TOTAL=$((_HI_LINT_TOTAL + 1))
+
+    # a real Dockerfile, not a leftover FROM-less fragment of the kind
+    # framework_test.sh used to assemble at build time
+    first="$(grep -vE '^[[:space:]]*(#|$)' "$file" | head -1 | awk '{print $1}')"
+    if [ "$first" != FROM ] && [ "$first" != ARG ]; then
+      _hi_align " | $stem: starts with ${first:-nothing}, not FROM or ARG" "FAILED" "$RED"
+      _hi_note_failure "dockerfiles/$stem (no FROM)"
+      bad=$((bad + 1))
+      continue
+    fi
+
+    seen=""
+    for ref in ${refs[@]+"${refs[@]}"}; do
+      [ "$ref" = "$stem" ] && seen=1
+    done
+    for pre in ${prefixes[@]+"${prefixes[@]}"}; do
+      [ -n "$pre" ] || continue
+      case "$stem" in "$pre"*) seen=1 ;; esac
+    done
+    if [ -n "$seen" ]; then
+      _hi_align " | $stem" "OK" "$GREEN"
+    else
+      _hi_align " | $stem: no caller references it" "FAILED" "$RED"
+      _hi_note_failure "dockerfiles/$stem (orphaned)"
+      bad=$((bad + 1))
+    fi
+  done
+
+  # and every caller has a file - the half that catches a typo
+  for ref in ${refs[@]+"${refs[@]}"}; do
+    [ -n "$ref" ] || continue
+    _HI_LINT_TOTAL=$((_HI_LINT_TOTAL + 1))
+    if [ -f "$dir/$ref.Dockerfile" ]; then
+      _hi_align " | referenced $ref" "OK" "$GREEN"
+    else
+      _hi_align " | referenced $ref: no such file in dockerfiles/" "FAILED" "$RED"
+      _hi_note_failure "dockerfiles/$ref (referenced, missing)"
+      bad=$((bad + 1))
+    fi
+  done
   return "$bad"
 }
 
@@ -273,7 +363,10 @@ function run_shellcheck() {
   _HI_GLOSSARY_FAILED=0
   lint_glossary_tags || _HI_GLOSSARY_FAILED=$?
 
-  _HI_LINT_FAILED=$((_HI_SC_FAILED + _HI_NATIVE_FAILED + _HI_BASH32_FAILED + _HI_SHFMT_FAILED + _HI_CB_FAILED + _HI_GLOSSARY_FAILED))
+  _HI_DOCKERFILE_FAILED=0
+  lint_dockerfiles || _HI_DOCKERFILE_FAILED=$?
+
+  _HI_LINT_FAILED=$((_HI_SC_FAILED + _HI_NATIVE_FAILED + _HI_BASH32_FAILED + _HI_SHFMT_FAILED + _HI_CB_FAILED + _HI_GLOSSARY_FAILED + _HI_DOCKERFILE_FAILED))
   _hi_report_counts "$_HI_LINT_TOTAL" "$_HI_LINT_FAILED" "$_HI_SKIPPED"
 
   local skipped=""

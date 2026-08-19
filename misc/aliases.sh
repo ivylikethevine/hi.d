@@ -5,7 +5,6 @@
 # shellcheck disable=SC2155
 # shellcheck disable=SC2089 # the *_OPTS quotes are literal alias text; the overlay source below makes the linter guess otherwise
 # GLOSSARY: command -v fallthrough - first-installed wins; reorder to taste.
-# An example of my personal setup: change it freely, but stay in the subset.
 
 # Backstop toggle defaults, in an eval gated on a builtin fish lacks; `-` not
 # `:-`, so intentional empties survive. GLOSSARY: toggle defaulting
@@ -37,8 +36,8 @@ export _HI_EZA_BIN="$(command -v eza || command -v exa || command -v ls)"
 # personal aliases still leaves the theme for a direct eza run
 export EZA_CONFIG_DIR="$_HI_THEME_DIR"
 
-# everything below is personal preference, freely editable and skipped whole
-# when _HI_DISABLE_ALIASES=1
+# # everything below is personal preference, freely editable and skipped whole
+# # when _HI_DISABLE_ALIASES=1
 [ "$_HI_DISABLE_ALIASES" = 1 ] && return || true
 
 alias sudo="command sudo " # works in bash/zsh, fish has a sudo wrapper in config.fish
@@ -66,6 +65,36 @@ alias now='echo "LOCAL: $(date $_HI_HUMAN_SHORT_DATE) => UTC: $(date -u $_HI_HUM
 alias zed="$(command -v zeditor || command -v zed || command -v echo)"
 alias ehi="zed $_HI_ROOT"
 alias essh="zed $_HI_SSH_DIR"
+
+# ls basics
+alias ls="ls -lh --color=auto"
+alias lsa="ls -a"
+alias lsr="lsa -R"
+
+# eza/exa (its predecessor) improved ls; time format per
+# https://docs.rs/chrono/latest/chrono/format/strftime/index.html
+export _HI_EXA_SHARED_OPTS='-F -1 -l -m --group-directories-first'
+export _HI_EXA_OPTS="$_HI_EXA_SHARED_OPTS --group --no-filesize"
+export _HI_EZA_OPTS="$_HI_EXA_SHARED_OPTS"' --smart-group --time-style="+%b %d %Y %H:%M"'
+export _HI_EZA_OPTS_SIZE="$_HI_EZA_OPTS --total-size"
+alias exa="$_HI_EXA_BIN $_HI_EXA_OPTS"
+alias lr="exa"
+alias lsx="lr"
+alias lra="lr -a"
+alias lrt="lr -T -L2"
+alias eza="$_HI_EZA_BIN $_HI_EZA_OPTS"
+alias lsz="eza"
+alias les="eza $_HI_EZA_OPTS_SIZE"
+alias lest="eza $_HI_EZA_OPTS_SIZE -T -L2"
+alias lesg="eza $_HI_EZA_OPTS_SIZE --git --git-repos-no-status"
+alias le="eza --no-filesize"
+alias lea="le -a"
+alias let="le -T -L2"
+alias leg="le --git --git-repos-no-status"
+alias l="$_HI_EZA_BIN -l"
+
+# lsd (another improved ls)
+alias lsd="lsd -lh --color=auto"
 
 # docker compose
 alias dcl="docker container ls && docker compose ls"
@@ -108,36 +137,6 @@ alias dig="$(command -v dog || command -v dig || command -v echo)"
 alias ..="cd ../"
 alias ...="cd ../../"
 alias z="zoxide"
-
-# ls basics
-alias ls="ls -lh --color=auto"
-alias lsa="ls -a"
-alias lsr="lsa -R"
-
-# eza/exa (its predecessor) improved ls; time format per
-# https://docs.rs/chrono/latest/chrono/format/strftime/index.html
-export _HI_EXA_SHARED_OPTS='-F -1 -l -m --group-directories-first'
-export _HI_EXA_OPTS="$_HI_EXA_SHARED_OPTS --group --no-filesize"
-export _HI_EZA_OPTS="$_HI_EXA_SHARED_OPTS"' --smart-group --time-style="+%b %d %Y %H:%M"'
-export _HI_EZA_OPTS_SIZE="$_HI_EZA_OPTS --total-size"
-alias exa="$_HI_EXA_BIN $_HI_EXA_OPTS"
-alias lr="exa"
-alias lsx="lr"
-alias lra="lr -a"
-alias lrt="lr -T -L2"
-alias eza="$_HI_EZA_BIN $_HI_EZA_OPTS"
-alias lsz="eza"
-alias les="eza $_HI_EZA_OPTS_SIZE"
-alias lest="eza $_HI_EZA_OPTS_SIZE -T -L2"
-alias lesg="eza $_HI_EZA_OPTS_SIZE --git --git-repos-no-status"
-alias le="eza --no-filesize"
-alias lea="le -a"
-alias let="le -T -L2"
-alias leg="le --git --git-repos-no-status"
-alias l="$_HI_EZA_BIN -l"
-
-# lsd (another improved ls)
-alias lsd="lsd -lh --color=auto"
 
 # git
 alias gl="git log --abbrev-commit --graph"

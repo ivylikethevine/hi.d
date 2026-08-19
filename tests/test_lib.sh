@@ -24,15 +24,14 @@ source "${_HI_HOME:-$HOME}/hi.d/common/core.sh"
 # has to take away again: containers, docker networks, and processes a case
 # SIGSTOPped. Both are set up by _hi_workdir and consumed by _hi_test_cleanup.
 #
-# The ledger is a *file* rather than the array it used to be, for two reasons
-# that both cost real containers on a real machine. A case may run in a
-# background subshell (see _hi_par_case): an array append inside one dies with
-# the subshell, so the container it started was never registered and leaked the
-# first time anything crashed. And a file can be written *before* the thing
-# exists - the window between `docker run` returning and the name being recorded
-# is exactly where a ^C leaks one, so every writer below registers first and
-# starts second. Removing something twice is a no-op; removing something that
-# never started is a no-op too. Missing one is not.
+# The ledger is a *file* and not an array, for two reasons that both cost real
+# containers on a real machine. A case may run in a background subshell (see
+# _hi_par_case), where an array append dies with the subshell and the container
+# it started is never registered. And a file can be written *before* the thing
+# exists - the window between `docker run` returning and the name being
+# recorded is exactly where a ^C leaks one, so every writer below registers
+# first and starts second. Removing something twice is a no-op; removing
+# something that never started is a no-op too. Missing one is not.
 _HI_WORKDIR=""
 _HI_EXTRA_CLEANUP=""
 _HI_LEDGER=""
@@ -139,9 +138,9 @@ function _hi_assert() {
   local label="$1"
   shift
   if "$@"; then
-    _hi_cecho " | $label: OK" "$GREEN"
+    _hi_align " | $label" "OK" "$GREEN"
   else
-    _hi_cecho " | $label: FAILED" "$RED"
+    _hi_align " | $label" "FAILED" "$RED"
     _hi_note_failure "$label"
     return 1
   fi
@@ -152,8 +151,6 @@ function _hi_check() {
   _hi_case _hi_assert "$@"
 }
 
-# --- running cases in parallel -------------------------------------------------
-#
 # The container suites are nearly the whole cost of a full run, and nearly all
 # of that is spent waiting on one container at a time while the machine idles.
 # Every case already builds its own container under its own name, so the
@@ -286,7 +283,7 @@ function _hi_par_wait() {
     if [ -s "$_HI_PAR_DIR/$i.res" ]; then
       read -r rc skipped <"$_HI_PAR_DIR/$i.res"
     else
-      _hi_cecho " | [$label] -- FAILED: the case left no verdict (killed, or it exited the subshell)" "$RED"
+      _hi_align " | [$label] -- the case left no verdict (killed, or it exited the subshell)" "FAILED" "$RED"
       _hi_note_failure "[$label] left no verdict"
     fi
     _HI_TOTAL=$((_HI_TOTAL + 1))
@@ -348,9 +345,9 @@ function _hi_strip_ansi() {
 }
 
 # _hi_table_is_rectangular <text> - every line of every boxed table in <text>
-# is the same printed width. Both preview suites assert this and had drifted
-# into segmenting tables differently; the rule lives here now. A table is a run
-# of adjacent lines starting with `+` or `|`, so blank lines and prose between
+# is the same printed width. Both preview suites assert it through this one
+# function, so they cannot segment tables differently. A table is a run of
+# adjacent lines starting with `+` or `|`, so blank lines and prose between
 # two tables separate them without being measured.
 function _hi_table_is_rectangular() {
   local line stripped width=0 len seen=0
@@ -580,7 +577,7 @@ function _hi_transcript_is_clean() {
   local label="$1" file="$2" hits
   hits="$(grep -nE "$_HI_SHELL_ERROR_RE" "$file" 2>/dev/null || true)"
   if [ -z "$hits" ]; then
-    _hi_cecho " | [$label] -- transcript is free of shell errors OK" "$GREEN"
+    _hi_align " | [$label] -- transcript is free of shell errors" "OK" "$GREEN"
     return 0
   fi
   _hi_h3 " | [$label] -- FAILED: the session printed shell errors" "$RED"
@@ -599,6 +596,24 @@ function _hi_has_rendered() {
   [[ "$1" == *"$needle"* ]]
 }
 
+# _hi_align <left> <right> [color] - one status line, with <right> pushed out
+# to _HI_MAX_WIDTH: the width the summary table and the _hi_h1 rules already
+# span, so every verdict in a run lands in the same column instead of ragging
+# along behind labels of every length. That is what made scanning a verbose
+# transcript for the one red line hard.
+#
+# <left> is the whole left-hand side, prefix included, because callers do not
+# share one: " | ", " | [label] -- " and "  [shell] -- " all pass through here.
+# A left too long to leave room overflows the line rather than truncating, but
+# never past a two-space gutter, so the label and the verdict cannot run
+# together into one unreadable word.
+function _hi_align() {
+  local left="$1" right="$2" pad floor=$((${#2} + 2))
+  pad=$((${_HI_MAX_WIDTH:-80} - ${#left}))
+  ((pad < floor)) && pad=$floor
+  _hi_cecho "$(printf '%s%*s' "$left" "$pad" "$right")" "${3:-}"
+}
+
 function _hi_suite_begin() {
   _HI_FAILED=0
   _HI_TOTAL=0
@@ -611,7 +626,7 @@ function _hi_suite_begin() {
 # what it just reported was actually exercised.
 function _hi_skip() {
   _HI_SKIPPED=$((${_HI_SKIPPED:-0} + 1))
-  _hi_cecho " | $1: SKIPPED${2:+ ($2)}" "$YELLOW"
+  _hi_align " | $1" "SKIPPED${2:+ ($2)}" "$YELLOW"
 }
 
 # _hi_report_counts <total> <failed> [skipped] - hand this suite's tally up to
@@ -634,6 +649,24 @@ function _hi_report_counts() {
 function _hi_note_failure() {
   [ -n "${_HI_FAILS_FILE:-}" ] || return 0
   printf '%s\n' "$1" >>"$_HI_FAILS_FILE"
+}
+
+# _hi_dump_log <message> <file> [color] - a failure line and the output that
+# explains it, together. These messages used to print the log's *path* instead,
+# which is dead on arrival: _hi_test_cleanup rm -rf's $_HI_WORKDIR from the exit
+# trap, so the file is unlinked before anyone can open it - including on the
+# _hi_stand_down path, which is a plain `exit 0`. Dumped raw at
+# _hi_case_result's six-space indent (raw so a backend's own coloring survives)
+# into the case's stdout, which _hi_par_wait replays in submission order and
+# which the runner replays whole for any suite that isn't green.
+function _hi_dump_log() {
+  local msg="$1" file="$2" color="${3:-$RED}"
+  _hi_cecho " | $msg" "$color"
+  if [ -s "$file" ]; then
+    sed 's/^/      /' "$file" 2>/dev/null
+  else
+    _hi_cecho "      (the command wrote nothing)" "$color"
+  fi
 }
 
 # _hi_report_skip <reason> - the same channel, saying "this suite ran nothing"
@@ -661,8 +694,8 @@ function _hi_suite_end() {
 # _hi_stand_down <reason> [message] - the whole suite stops here, honestly:
 # yellow note, SKIP reported to the runner, exit 0. _hi_require covers
 # requirements known at startup; this is also for *runtime* failures (an image
-# that didn't build, a cluster that never came up) which previously exited 0
-# unreported and painted the suite green.
+# that didn't build, a cluster that never came up), which must report a skip
+# rather than exiting 0 unreported and painting the suite green.
 function _hi_stand_down() {
   _hi_cecho "${2:-$1, skipping}" "$YELLOW"
   _hi_report_skip "$1"
@@ -680,8 +713,6 @@ function _hi_require_backend() {
   _hi_stand_down "$1 unreachable" "$1 not reachable, skipping"
 }
 
-# --- the host report ---------------------------------------------------------
-#
 # When a suite fails on someone's machine and passes in CI (or the reverse),
 # the first three questions are always the same and none of them are in the
 # output: what bash is this, what userland, and is $_HI_HOME even pointing at
@@ -1002,9 +1033,9 @@ function _hi_wait_pid() {
 }
 
 # _hi_timed_out <label> <timeout_s> [hook] - _hi_wait_pid's timeout callback,
-# reached through its "$@". One top-level function, since the two case runners
-# below each used to define a *global* `_hi_on_timeout` and the second silently
-# redefined the first.
+# reached through its "$@". One top-level function: a per-runner
+# `_hi_on_timeout` would be global anyway, and the second definition would
+# silently redefine the first.
 # shellcheck disable=SC2329
 function _hi_timed_out() {
   _hi_h3 " | [$1] -- TIMED OUT after ${2}s, killing" "$RED"
@@ -1022,7 +1053,7 @@ function _hi_case_result() {
     grep -qF "$marker" "$out_file" 2>/dev/null || ok=0
   done
   if [ "$ok" -eq 1 ]; then
-    _hi_cecho " | [$label] -- $what OK ($(_hi_elapsed "$t0" "$t1")s)" "$GREEN"
+    _hi_align " | [$label] -- $what" "OK ($(_hi_elapsed "$t0" "$t1")s)" "$GREEN"
     return 0
   fi
   _hi_h3 " | [$label] -- FAILED (exit $exit_code, $(_hi_elapsed "$t0" "$t1")s)" "$RED"
@@ -1163,12 +1194,21 @@ exec /usr/sbin/sshd -D -e -o PasswordAuthentication=no -o PermitRootLogin=no -o 
 EOF
 )"
 
+# _hi_dockerfile <name> - the checked-in image definition by that name. The
+# Dockerfiles live in dockerfiles/ rather than being written into each build
+# context at runtime, so they are readable, diffable files rather than heredocs;
+# the *context* is still per-case, since it carries the generated entrypoint.sh.
+# Every caller pairs this with `-f`, which _hi_build_image passes through.
+function _hi_dockerfile() {
+  printf '%s' "$_HI_ROOT/dockerfiles/$1.Dockerfile"
+}
+
 function _hi_build_image() {
   local label="$1" tag="$2" what="$3"
   shift 3
   _hi_h3 "Building $tag" "$BLUE"
   "${_HI_BACKEND:-docker}" build -q -t "$tag" "$@" >/dev/null 2>"$_HI_WORKDIR/$label.log" && return 0
-  _hi_cecho " | $tag failed to build, skipping $what (see $_HI_WORKDIR/$label.log)" "$YELLOW"
+  _hi_dump_log "$tag failed to build, skipping $what:" "$_HI_WORKDIR/$label.log" "$YELLOW"
   return 1
 }
 
@@ -1201,22 +1241,11 @@ function _hi_sshd_image() {
   local ctx="$_HI_WORKDIR/sshd"
   mkdir -p "$ctx"
 
-  cat >"$ctx/Dockerfile" <<'EOF'
-FROM debian:bookworm-slim
-RUN apt-get update && apt-get install -y --no-install-recommends \
-      openssh-server bash dash zsh fish \
-    && rm -rf /var/lib/apt/lists/* \
-    && mkdir -p /run/sshd \
-    && useradd -m -s /bin/bash hitest
-COPY entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
-ENTRYPOINT ["/entrypoint.sh"]
-EOF
-
   # shellcheck disable=SC2016 # entrypoint.sh content, resolved on the container
   _hi_sshd_entrypoint "$ctx" /bin/bash 'usermod -s "${LOGIN_SHELL:-/bin/bash}" hitest'
 
-  _hi_build_image sshd "$_HI_SSHD_IMAGE" "$1" "$ctx"
+  _hi_build_image sshd "$_HI_SSHD_IMAGE" "$1" \
+    -f "$(_hi_dockerfile sshd-debian)" "$ctx"
 }
 
 function _hi_ssh_reachable() {
@@ -1242,11 +1271,11 @@ function _hi_sshd_container() {
   shift 2
 
   # registered *before* the run, not after: the container exists the moment
-  # docker returns, and a ^C in that window used to leak it (see the ledger)
+  # docker returns, and a ^C in that window leaks it (see the ledger)
   _hi_track_container "$name"
   if ! docker run -d --rm --name "$name" -p 127.0.0.1::22 -e "PUBKEY=$_HI_PUBKEY" "$@" "$image" \
     >/dev/null 2>"$_HI_WORKDIR/$name.log"; then
-    _hi_cecho " | Failed to start container (see $_HI_WORKDIR/$name.log)" "$RED"
+    _hi_dump_log "Failed to start container:" "$_HI_WORKDIR/$name.log"
     return 1
   fi
 
@@ -1259,8 +1288,6 @@ function _hi_sshd_container() {
   fi
 }
 
-# --- freezing a live session ---------------------------------------------------
-#
 # Proving a cleanup trap fires on a *dropped* link means killing the link from
 # outside, and doing that takes two SIGSTOPs: _say_hi multiplexes, so a
 # backgrounded ControlPersist master holds the socket beside the visible
@@ -1366,8 +1393,6 @@ function _hi_ssh_launch() {
   _HI_SSH_LAUNCH=(${_HI_PTY_WRAP[@]+"${_HI_PTY_WRAP[@]}"} "${_HI_SSH_LAUNCH_BARE[@]}")
 }
 
-# --- the shared container-backend case runners --------------------------------
-#
 # Top-level rather than nested in _hi_container_backend_test, so any suite that
 # boots a throwaway container around one case can use them. They read the
 # conventions the e2e suites already set: $_HI_BACKEND (the CLI to drive) and
@@ -1392,7 +1417,7 @@ function _hi_start_case_container() {
   _hi_track_container "$_HI_CONTAINER"
   if ! "$_HI_BACKEND" run -d --name "$_HI_CONTAINER" "$image" tail -f /dev/null \
     >/dev/null 2>"$_HI_WORKDIR/$label.run.log"; then
-    _hi_cecho " | Failed to start container (image: $image)" "$RED"
+    _hi_dump_log "Failed to start container (image: $image):" "$_HI_WORKDIR/$label.run.log"
     return 1
   fi
   _hi_cecho " | Container: $_HI_CONTAINER (image: $image)"
@@ -1431,7 +1456,7 @@ function _hi_backend_interactive_case() {
     "$timeout_s" "$_HI_LAUNCHER" "$_HI_CONTAINER"; then
     ok=1
     if "$_HI_BACKEND" exec "$_HI_CONTAINER" sh -c 'ls -d /tmp/*.hi.log.* >/dev/null 2>&1'; then
-      _hi_cecho " | [$label] -- FAILED: hi.d's copy was left behind in the container" "$RED"
+      _hi_align " | [$label] -- hi.d's copy was left behind in the container" "FAILED" "$RED"
       ok=0
     fi
   fi
@@ -1463,9 +1488,11 @@ function _hi_container_backend_test() {
   local shell shell_ok=""
   local -a built_images=()
   for shell in zsh fish mksh; do
+    # an empty context: alpine-shell.Dockerfile has no COPY, and the build
+    # still wants a directory to be handed
     mkdir -p "$_HI_WORKDIR/$shell"
-    printf 'FROM alpine:3.20\nRUN apk add --no-cache %s\n' "$shell" >"$_HI_WORKDIR/$shell/Dockerfile"
-    if _hi_build_image "$shell" "hi-${backend}test-$shell-$$" "the $shell fallback" "$_HI_WORKDIR/$shell"; then
+    if _hi_build_image "$shell" "hi-${backend}test-$shell-$$" "the $shell fallback" \
+      --build-arg "PKGS=$shell" -f "$(_hi_dockerfile alpine-shell)" "$_HI_WORKDIR/$shell"; then
       _hi_kv_set shell_ok "$shell" 1
     else
       _hi_kv_set shell_ok "$shell" 0
@@ -1498,8 +1525,8 @@ function _hi_container_backend_test() {
 
   # $$-suffixed like the container names: without it a second run of this
   # suite on the same host removes the images the first is still running from.
-  # The list comes from the build loop rather than being spelled again - the
-  # hand-written copy had already gone stale and was leaking the mksh image.
+  # The list comes from the build loop rather than being spelled again, so a
+  # shell added there cannot be left behind here.
   "$backend" image rm -f "${built_images[@]}" >/dev/null 2>&1 || true
 
   _hi_suite_end "$backend" \

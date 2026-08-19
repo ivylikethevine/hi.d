@@ -30,7 +30,8 @@ source "$_HI_TEST_LIB"
 # "<label>=<0|1>", the same kv shape the other target suites use
 _HI_FRAMEWORK_OK=""
 
-# <label>:<login shell>:<Dockerfile body>. Each installs the framework
+# <label>:<login shell>:<probe family>. The image for each is
+# dockerfiles/framework-<label>.Dockerfile: every one installs its framework
 # unattended and leaves a *real* rc file behind - an empty ~/.zshrc would prove
 # nothing, since the whole question is what happens when hi's block is appended
 # after someone else's.
@@ -73,119 +74,20 @@ function _hi_framework_probe() {
   esac
 }
 
-function _hi_framework_dockerfile() {
-  case "$1" in
-  omz)
-    cat <<'EOF'
-RUN apt-get update -qq && apt-get install -y -qq zsh curl ca-certificates git >/dev/null
-USER hitest
-RUN sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended
-USER root
-EOF
-    ;;
-  # oh-my-zsh plus the prompt everyone pairs it with. powerlevel10k is the
-  # sharpest test of the array base: it is thousands of lines of zsh that all
-  # assume the native one.
-  p10k)
-    cat <<'EOF'
-RUN apt-get update -qq && apt-get install -y -qq zsh curl ca-certificates git >/dev/null
-USER hitest
-RUN sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended \
- && git clone --depth=1 https://github.com/romkatv/powerlevel10k.git ~/.oh-my-zsh/custom/themes/powerlevel10k \
- && sed -i 's|^ZSH_THEME=.*|ZSH_THEME="powerlevel10k/powerlevel10k"|' ~/.zshrc \
- && printf 'POWERLEVEL9K_DISABLE_CONFIGURATION_WIZARD=true\n' >>~/.zshrc
-USER root
-EOF
-    ;;
-  # a prompt that owns PROMPT_COMMAND, which is the bash-side collision:
-  # shells/bash.sh chains onto it rather than replacing it, and this is what
-  # says whether that chaining actually holds
-  starship)
-    cat <<'EOF'
-RUN apt-get update -qq && apt-get install -y -qq curl ca-certificates >/dev/null \
- && curl -fsSL https://starship.rs/install.sh | sh -s -- --yes >/dev/null
-USER hitest
-RUN printf 'eval "$(starship init bash)"\n' >>~/.bashrc
-USER root
-EOF
-    ;;
-  bashit)
-    cat <<'EOF'
-RUN apt-get update -qq && apt-get install -y -qq git ca-certificates >/dev/null
-USER hitest
-RUN git clone --depth=1 https://github.com/Bash-it/bash-it.git ~/.bash_it \
- && ~/.bash_it/install.sh --silent --no-modify-config \
- && printf 'export BASH_IT="$HOME/.bash_it"\nexport BASH_IT_THEME="bobby"\nsource "$BASH_IT"/bash_it.sh\n' >>~/.bashrc
-USER root
-EOF
-    ;;
-  # the three below are one apt package each; debian's fzf predates
-  # `fzf --bash`, so its packaged key-bindings file is what gets sourced -
-  # which lives under /usr/share/doc, a path the slim base image tells dpkg
-  # to drop, hence the exclusion file going first
-  fzf)
-    cat <<'EOF'
-RUN rm -f /etc/dpkg/dpkg.cfg.d/docker \
- && apt-get update -qq && apt-get install -y -qq fzf >/dev/null
-USER hitest
-RUN printf 'source /usr/share/doc/fzf/examples/key-bindings.bash\n' >>~/.bashrc
-USER root
-EOF
-    ;;
-  zoxide)
-    cat <<'EOF'
-RUN apt-get update -qq && apt-get install -y -qq zoxide >/dev/null
-USER hitest
-RUN printf 'eval "$(zoxide init bash)"\n' >>~/.bashrc
-USER root
-EOF
-    ;;
-  direnv)
-    cat <<'EOF'
-RUN apt-get update -qq && apt-get install -y -qq direnv >/dev/null
-USER hitest
-RUN printf 'eval "$(direnv hook bash)"\n' >>~/.bashrc
-USER root
-EOF
-    ;;
-  # atuin is not packaged in debian. Its release installer, straight - the
-  # setup.atuin.sh wrapper around it exits nonzero in a container - plus
-  # bash-preexec, without which `atuin init bash` warns at every shell:
-  # noise this suite would (rightly) read as a failure, but atuin's, not hi's
-  atuin)
-    cat <<'EOF'
-RUN apt-get update -qq && apt-get install -y -qq curl ca-certificates >/dev/null
-USER hitest
-RUN curl --proto '=https' --tlsv1.2 -LsSf https://github.com/atuinsh/atuin/releases/latest/download/atuin-installer.sh | sh >/dev/null 2>&1 \
- && curl -fsSL https://raw.githubusercontent.com/rcaloras/bash-preexec/master/bash-preexec.sh -o ~/.bash-preexec.sh \
- && printf 'source ~/.bash-preexec.sh\n. "$HOME/.atuin/bin/env"\neval "$(atuin init bash --disable-up-arrow)"\n' >>~/.bashrc
-USER root
-EOF
-    ;;
-  mise)
-    cat <<'EOF'
-RUN apt-get update -qq && apt-get install -y -qq curl ca-certificates >/dev/null
-USER hitest
-RUN curl -fsSL https://mise.run | sh >/dev/null 2>&1 \
- && printf 'eval "$(~/.local/bin/mise activate bash)"\n' >>~/.bashrc
-USER root
-EOF
-    ;;
-  esac
-}
-
+# One image per framework, each from dockerfiles/framework-<label>.Dockerfile
+# on top of the shared sshd base. A failed build - these all reach the network -
+# marks its label 0 and the case skips rather than failing the suite.
 function _hi_build_frameworks() {
   local spec label ctx
   for spec in "${_HI_FRAMEWORKS[@]}"; do
     label="${spec%%:*}"
+    # an empty context: none of the framework images COPY anything in, but the
+    # build still wants a directory to be handed
     ctx="$_HI_WORKDIR/$label"
     mkdir -p "$ctx"
-    {
-      printf 'FROM %s\n' "$_HI_SSHD_IMAGE"
-      _hi_framework_dockerfile "$label"
-    } >"$ctx/Dockerfile"
     if _hi_build_image "$label" "hi-fwtest-$label-$$" "the $label case" \
-      -f "$ctx/Dockerfile" "$ctx"; then
+      --build-arg "BASE=$_HI_SSHD_IMAGE" \
+      -f "$(_hi_dockerfile "framework-$label")" "$ctx"; then
       _hi_kv_set _HI_FRAMEWORK_OK "$label" 1
     else
       _hi_kv_set _HI_FRAMEWORK_OK "$label" 0

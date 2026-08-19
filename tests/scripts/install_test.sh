@@ -145,8 +145,6 @@ function test_fish_config_sources_settings_first() {
 # config_shell has written the settings block under it.
 function _hi_shebang_fresh() { ensure_settings_shebang; }
 
-# --- overlay_init / overlay_commit --------------------------------------------
-#
 # The versioning contract: init makes a repo with one (possibly empty) first
 # commit and is idempotent; overlay_commit turns settings writes into history
 # only where a repo already exists, and never creates one. Each case gets a
@@ -463,8 +461,6 @@ function test_config_hi_degrades_when_sudo_cannot_link() {
   [ "$rc" -eq 0 ] && [[ "$out" == *"--no-link"* ]] && [ ! -e "$dir/bin/hi" ]
 }
 
-# --- packaging mode ---------------------------------------------------------
-#
 # install_tree is the whole of what a PKGBUILD's package() (or a deb/rpm recipe)
 # calls. It must lay the tree down under $DESTDIR and touch nothing else - no rc
 # file, no sudo, no prompt - since none of those belong to the packager.
@@ -561,8 +557,6 @@ function test_install_tree_replaces_a_symlinked_dest_without_following() {
     [ -f "$dir/dest/usr/share/hi.d/load.sh" ]
 }
 
-# --- the uninstall half -----------------------------------------------------
-
 function test_strip_marker_removes_tagged_lines_only() {
   local target="$_HI_WORKDIR/tagged"
   printf '%s\n' "# a user comment" "alias ll='ls -la'" >"$target"
@@ -625,8 +619,6 @@ function test_strip_settings_is_quiet_when_there_is_nothing() {
   _hi_settings_fixture nothing strip_settings
 }
 
-# --- config_hi --no-link ------------------------------------------------------
-#
 # The only path through config_hi a test may take: every other one ends in
 # `sudo ln`, which has no business firing from a suite. --no-link returns before
 # that, which is the whole point of it - a Homebrew/distro/Git Bash install has
@@ -671,8 +663,6 @@ function test_uninstall_shim_delegates_to_install() {
   grep -qF -- '--uninstall' "$_HI_UNINSTALL" && grep -qF 'install.sh' "$_HI_UNINSTALL"
 }
 
-# --- config_prompt_ends ------------------------------------------------------
-#
 # Three questions, one per shell, all of which have to survive being written to
 # a file four shells source. Every case runs non-interactive (`</dev/null`, no
 # tty), which is the path that keeps whatever is already configured.

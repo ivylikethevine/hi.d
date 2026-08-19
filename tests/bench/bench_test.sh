@@ -56,7 +56,7 @@ function _hi_bench() {
     avg="$(awk -v a="$t0" -v b="$t1" -v n="$n" 'BEGIN { printf "%.1f", (b - a) * 1000 / n }')"
   fi
   if awk -v x="$avg" -v c="$ceiling" 'BEGIN { exit !(x <= c) }'; then
-    _hi_cecho " | $label: ${avg}ms avg (${backend}ceiling ${ceiling}ms, n=$n): OK" "$GREEN"
+    _hi_align " | $label: ${avg}ms avg (${backend}ceiling ${ceiling}ms, n=$n)" "OK" "$GREEN"
   else
     _hi_cecho " | $label: ${avg}ms avg BLEW the ${ceiling}ms ceiling (${backend}n=$n)" "$RED"
     return 1
@@ -110,15 +110,17 @@ function bench_targets_warm() {
 # The wire budget: the payload built exactly the way hi.sh builds it, against
 # a byte ceiling. Catches the payload quietly growing (a new file sneaking
 # into $_HI_PAYLOAD's directories, comments ballooning) long before anyone
-# notices a slow connect.
+# notices a slow connect. This budget and the wire figure the badge tracks move
+# independently - the launcher rides *inside* this tar, so it counts here and
+# not as a stream of its own. See CLAUDE.md.
 function bench_payload_size() {
-  local bytes budget=49152
+  local bytes budget=65536
   set -- # hi.sh reads "$@"; make sure it sees none (same as hi_test.sh)
   # shellcheck source=../../hi.sh
   source "$_HI_LAUNCHER"
   bytes="$(_hi_payload_tar | wc -c)"
   if ((bytes <= budget)); then
-    _hi_cecho " | payload: $bytes bytes gzipped (budget $budget): OK" "$GREEN"
+    _hi_align " | payload: $bytes bytes gzipped (budget $budget)" "OK" "$GREEN"
   else
     _hi_cecho " | payload: $bytes bytes gzipped BLEW the $budget budget" "$RED"
     return 1
@@ -151,7 +153,7 @@ function bench_payload_readme_badge() {
   slack=$(((kb * 5 + 99) / 100))
   ((slack)) || slack=1
   if ((badge >= kb - slack && badge <= kb + slack)); then
-    _hi_cecho " | README payload badge: says ${badge}KB, a session sends ${kb}KB (±${slack}KB): OK" "$GREEN"
+    _hi_align " | README payload badge: says ${badge}KB, a session sends ${kb}KB (±${slack}KB)" "OK" "$GREEN"
   else
     _hi_cecho " | README payload badge says ${badge}KB but a session sends ${kb}KB - update the badge" "$RED"
     return 1

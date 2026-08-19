@@ -16,8 +16,6 @@ source "${_HI_HOME:-$HOME}/hi.d/common/core.sh"
 # shellcheck source=../test_lib.sh
 source "$_HI_TEST_LIB"
 
-# --- the config --------------------------------------------------------------
-
 # tmux itself is the parser: -f is only read when a *server* starts, so this
 # starts a throwaway one on its own socket and kills it again. A syntax error
 # anywhere in the file makes this exit non-zero.
@@ -45,8 +43,6 @@ function test_conf_allows_the_clipboard_escape() {
     grep -q 'allow-passthrough on' "$_HI_TMUXCONF"
 }
 
-# --- the path and its overlay ------------------------------------------------
-
 function test_path_defaults_to_the_tree_copy() {
   [ "$_HI_TMUXCONF" = "$_HI_ROOT/misc/tmux.conf" ]
 }
@@ -62,8 +58,6 @@ function test_path_prefers_a_user_copy() {
     sh -c '. "$_HI_HOME/hi.d/common/paths.sh"; printf "%s" "$_HI_TMUXCONF"')"
   [ "$out" = "$dir/tmux.conf" ]
 }
-
-# --- the alias ---------------------------------------------------------------
 
 # the tmux alias, asked for through test_lib.sh's _hi_alias_probe (which
 # holds the fish-vs-POSIX dialect split and scrubs _HI_CLEANUP)
@@ -92,8 +86,6 @@ function test_alias_absent_without_paths() {
     ". $_HI_ALIASES; alias tmux >/dev/null 2>&1 && echo yes || echo no" 2>/dev/null)"
   [ "$out" = no ]
 }
-
-# --- the toggle and the overlay list ------------------------------------------
 
 function test_toggle_in_core_list() {
   case " ${_HI_TOGGLES[*]} " in

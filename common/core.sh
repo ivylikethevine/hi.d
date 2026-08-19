@@ -322,7 +322,7 @@ function _hi_choose_glyphs() {
     _HI_GLYPH_DIRTY="✚" _HI_GLYPH_INVALID="✖" _HI_GLYPH_UNTRACKED="…"
     _HI_GLYPH_STASH="⚑" _HI_GLYPH_CLEAN="✔" _HI_GLYPH_ELLIPSIS="…"
     _HI_GLYPH_MASK="●"
-    _HI_MARK_OK="✓"  # installed, and it was the preferred name
+    _HI_MARK_OK="✓"  # installed, and it is the preferred name
     _HI_MARK_ALT="~" # installed, but via a fallback alternative
     _HI_MARK_NO="✗"  # not installed
     _HI_MARK_OK_W=1 _HI_MARK_ALT_W=1 _HI_MARK_NO_W=1

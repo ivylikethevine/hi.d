@@ -113,8 +113,6 @@ function test_paths_sources_cleanly_under_strict_mode() {
   '
 }
 
-# --- toggle defaults --------------------------------------------------------
-#
 # misc/aliases.sh and shells/config.fish read the toggles bare, and neither
 # can use ${X:-0} because fish sources both and has no such expansion. So the
 # entry points guarantee the variables exist instead. Getting this wrong is
@@ -182,8 +180,6 @@ function test_environment_beats_the_defaults() {
     'source "$_HI_HOME/hi.d/common/core.sh"; printf "%s" "$_HI_DISABLE_EDITORS"')" = 1 ]
 }
 
-# --- the config overlay -----------------------------------------------------
-#
 # colors and packages each resolve to $_HI_CONFIG_DIR's copy when the user has
 # made one and to the tree's otherwise, per file rather than all-or-nothing;
 # settings.sh only ever resolves to the overlay, since that is the only place

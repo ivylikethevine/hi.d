@@ -5,8 +5,8 @@
 # The stamp cannot live in git. packaging/bump.sh's manifest pass only runs
 # after the tag exists, so a committed _HI_RELEASE= would always be one release
 # stale in the very tarball the tag produces. Each channel therefore seds it
-# into the copy it installs - and until this file, each channel spelled that
-# sed itself, four times, with nothing but greps holding the four together.
+# into the copy it installs, and they all call this rather than spelling that
+# sed out four times with nothing but greps holding the four together.
 #
 # Standalone on purpose: it sources no packaging/lib.sh. lib.sh derives
 # $_HI_HOME as <script>/../.. and then sources $_HI_HOME/hi.d/common/core.sh,

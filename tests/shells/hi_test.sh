@@ -156,8 +156,6 @@ function test_predicates_are_false_without_their_cli() {
     ! PATH="$empty" _hi_is_k8s_pod yes
 }
 
-# --- _hi_resolve_backend ------------------------------------------------------
-#
 # The predicates run together now, so the guarantee worth pinning is that the
 # *answer* is still the roster's first match rather than whichever CLI
 # happened to reply first. The shims answer for target "yes", so a target
@@ -185,10 +183,10 @@ function test_resolve_backend_follows_the_roster_order() {
 # The header's identity() row counts the same backends this roster dispatches
 # on, but it cannot read $_HI_BACKENDS - hi.sh is never sourced in a session,
 # and a shared roster would cost the ssh payload bytes for a list that changes
-# about once a year. So the drift is caught here instead of prevented there:
-# doctor's own copy of this chain had already gone stale once, and the header
-# is the copy a user sees on every single connect. Add a backend to the roster
-# and this goes red until common/header.sh's _hi_probe_launch counts it too.
+# about once a year. So the drift is caught here instead of prevented there -
+# the header is the copy a user sees on every single connect. Add a backend to
+# the roster and this goes red until common/header.sh's _hi_probe_launch
+# counts it too.
 function test_header_probes_every_backend_in_the_roster() {
   local row name launch
   launch="$(sed -n '/^function _hi_probe_launch()/,/^}/p' "$_HI_HEADER")"
@@ -296,7 +294,7 @@ function test_remote_suffix_fallbacks_are_interactive() {
 # every member (so a rename can't quietly ship an empty payload).
 function test_payload_ships_exactly_the_travelled_paths() {
   local m
-  [ "${_HI_PAYLOAD[*]}" = "common misc shells load.sh" ] || {
+  [ "${_HI_PAYLOAD[*]}" = "common misc shells load.sh hi.sh" ] || {
     _hi_cecho " | payload list changed: ${_HI_PAYLOAD[*]} - update this guard deliberately" "$RED"
     return 1
   }
@@ -308,8 +306,6 @@ function test_payload_ships_exactly_the_travelled_paths() {
   done
 }
 
-# --- the config overlay -----------------------------------------------------
-#
 # The payload only carries the *in-tree* misc/, so once the user's real
 # settings/colors/packages live outside the tree they need their own stream or a
 # target silently falls back to the shipped defaults. These assert the two
@@ -365,8 +361,6 @@ function test_overlay_tar_carries_aliases() {
   [ "$(_HI_CONFIG_DIR="$dir" _hi_overlay_tar | tar tzf -)" = "aliases.sh" ]
 }
 
-# --- the ksh/mksh git segment -------------------------------------------------
-#
 # shells/ksh.sh is the one place hi renders a git segment without bash, so it
 # carries its own copy of core.sh's palette and glyphs. These cases are the
 # drift guard on that copy - the segment rendering itself is proven against a
@@ -430,8 +424,6 @@ function test_ksh_glyphs_match_core() {
   done
 }
 
-# --- the fish git segment ----------------------------------------------------
-#
 # fish renders its git segment with its own __fish_git_prompt, so config.fish
 # carries a third copy of the glyphs and palette - one hi.d never guarded. The
 # cases below read the file rather than running fish: the copy is a set of
@@ -550,8 +542,6 @@ function test_payload_carries_ksh_sh() {
   [ -f "$_HI_ROOT/shells/ksh.sh" ] && [[ " ${_HI_PAYLOAD[*]} " == *" shells "* ]]
 }
 
-# --- hi --help ----------------------------------------------------------------
-#
 # The one arm of the dispatch block that has to be *executed* rather than
 # sourced: sourcing hi.sh stops at the BASH_SOURCE guard, which is above the
 # `case "${1:-}"`. So these run the real launcher as a subprocess, with an ssh
@@ -635,12 +625,10 @@ function test_the_shell_tree_is_the_documented_order() {
   [ "$_HI_SHELL_LADDER" = "fish zsh mksh ksh dash ash sh" ]
 }
 
-# --- the bash-less prompt -----------------------------------------------------
-#
-# sh/ash/dash/ksh sessions used to get aliases and the host's own prompt, which
-# on busybox is a bare "$". The line hi writes has to survive shells with no
-# readline and no command substitution in PS1, so it bakes everything in on the
-# client and leaves exactly one escape for the target to expand.
+# sh/ash/dash/ksh sessions get hi's prompt, not the host's own (on busybox a
+# bare "$"). The line hi writes has to survive shells with no readline and no
+# command substitution in PS1, so it bakes everything in on the client and
+# leaves exactly one escape for the target to expand.
 
 # one line, so one case reads all of it: the username resolved once by the rc
 # rather than per prompt, the host without its user@ part, a color from hi's own
@@ -730,8 +718,6 @@ EOF
     [[ "$out" == *'$(_hi_ksh_git)'* ]]
 }
 
-# --- the size hi reports, and the transport that carries it -------------------
-#
 # This block exists because both halves were wrong at once: the connect line
 # reported `du` over the payload directories (the uncompressed tree, roughly
 # double the truth), and the armored script had grown to within a few kilobytes
@@ -748,7 +734,7 @@ function test_human_bytes_matches_du_shapes() {
 }
 
 # the reported number counts what is sent, not what is on disk: it must be
-# nowhere near `du` over the payload, which is what it used to be
+# nowhere near `du` over the payload
 function test_wire_size_is_not_the_disk_size() {
   local wire disk
   wire="$(_hi_wire_estimate)"
@@ -762,13 +748,11 @@ function test_wire_size_is_not_the_disk_size() {
 function test_payload_stays_clear_of_the_arg_limit() {
   local bytes
   bytes="$(_hi_wire_bytes)"
-  # 128KB (MAX_ARG_STRLEN) is where it used to break outright; 256KB is the
+  # 128KB (MAX_ARG_STRLEN) is where this breaks outright; 256KB is the
   # "this has doubled, come and look" line
   [ "$bytes" -lt 262144 ]
 }
 
-# --- hi --version -----------------------------------------------------------
-#
 # The dispatch is executed, not sourced: --version lives in the trailing case
 # below the source guard, which sourcing (this suite's usual route) never
 # reaches.
@@ -804,8 +788,6 @@ function test_remote_preamble_ships_the_glyph_verdict() {
     [[ "$(DOMAIN=host _HI_ASCII="" LC_ALL=en_US.UTF-8 _hi_remote_preamble)" == *'export _HI_ASCII="0"'* ]]
 }
 
-# --- the preamble's TERM fallback --------------------------------------------
-#
 # The generated preamble is executed under a real sh with a controlled TERM
 # and terminfo fixture, and the TERM it leaves behind is the assertion. Names
 # invented here can't exist in the host's terminfo trees, so the host's own

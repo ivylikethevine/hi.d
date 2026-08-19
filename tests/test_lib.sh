@@ -633,6 +633,24 @@ function _hi_note_failure() {
   printf '%s\n' "$1" >>"$_HI_FAILS_FILE"
 }
 
+# _hi_dump_log <message> <file> [color] - a failure line and the output that
+# explains it, together. These messages used to print the log's *path* instead,
+# which is dead on arrival: _hi_test_cleanup rm -rf's $_HI_WORKDIR from the exit
+# trap, so the file is unlinked before anyone can open it - including on the
+# _hi_stand_down path, which is a plain `exit 0`. Dumped raw at
+# _hi_case_result's six-space indent (raw so a backend's own coloring survives)
+# into the case's stdout, which _hi_par_wait replays in submission order and
+# which the runner replays whole for any suite that isn't green.
+function _hi_dump_log() {
+  local msg="$1" file="$2" color="${3:-$RED}"
+  _hi_cecho " | $msg" "$color"
+  if [ -s "$file" ]; then
+    sed 's/^/      /' "$file" 2>/dev/null
+  else
+    _hi_cecho "      (the command wrote nothing)" "$color"
+  fi
+}
+
 # _hi_report_skip <reason> - the same channel, saying "this suite ran nothing"
 # rather than a tally. A skipped suite exits 0, so without this the runner
 # would render it a green PASS and a run could report every suite passing
@@ -1163,7 +1181,7 @@ function _hi_build_image() {
   shift 3
   _hi_h3 "Building $tag" "$BLUE"
   "${_HI_BACKEND:-docker}" build -q -t "$tag" "$@" >/dev/null 2>"$_HI_WORKDIR/$label.log" && return 0
-  _hi_cecho " | $tag failed to build, skipping $what (see $_HI_WORKDIR/$label.log)" "$YELLOW"
+  _hi_dump_log "$tag failed to build, skipping $what:" "$_HI_WORKDIR/$label.log" "$YELLOW"
   return 1
 }
 
@@ -1241,7 +1259,7 @@ function _hi_sshd_container() {
   _hi_track_container "$name"
   if ! docker run -d --rm --name "$name" -p 127.0.0.1::22 -e "PUBKEY=$_HI_PUBKEY" "$@" "$image" \
     >/dev/null 2>"$_HI_WORKDIR/$name.log"; then
-    _hi_cecho " | Failed to start container (see $_HI_WORKDIR/$name.log)" "$RED"
+    _hi_dump_log "Failed to start container:" "$_HI_WORKDIR/$name.log"
     return 1
   fi
 
@@ -1383,7 +1401,7 @@ function _hi_start_case_container() {
   _hi_track_container "$_HI_CONTAINER"
   if ! "$_HI_BACKEND" run -d --name "$_HI_CONTAINER" "$image" tail -f /dev/null \
     >/dev/null 2>"$_HI_WORKDIR/$label.run.log"; then
-    _hi_cecho " | Failed to start container (image: $image)" "$RED"
+    _hi_dump_log "Failed to start container (image: $image):" "$_HI_WORKDIR/$label.run.log"
     return 1
   fi
   _hi_cecho " | Container: $_HI_CONTAINER (image: $image)"

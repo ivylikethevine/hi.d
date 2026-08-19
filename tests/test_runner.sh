@@ -294,6 +294,22 @@ _HI_CASES_FAILED=0
 _HI_CASES_SKIPPED=0
 _HI_RUN_T0="$(_hi_now)"
 
+# _hi_status_line <name> <result> <color> - the one line collapsed mode leaves
+# behind per suite. The result is right-aligned to _HI_MAX_WIDTH - the width
+# the summary table and the _hi_h1 rules already span - so every suite's
+# verdict lands in the same column instead of ragging along behind names of
+# every length, which is what made scanning a long run for the red one hard.
+# A name too long to leave room overflows the line rather than truncating, the
+# same rule the summary table's name column follows - but never past the
+# two-space gutter the table keeps between its cells, so the name and the
+# verdict can't run together into one unreadable word.
+function _hi_status_line() {
+  local name="$1" result="$2" color="$3" pad floor=$((${#2} + 2))
+  pad=$((${_HI_MAX_WIDTH:-80} - 3 - ${#name}))
+  ((pad < floor)) && pad=$floor
+  _hi_cecho "$(printf ' | %s%*s' "$name" "$pad" "$result")" "$color"
+}
+
 for _hi_t in "${_HI_SELECTED[@]}"; do
   # the accessors' own expansions, inlined: this runs once per selected suite
   # and both fields come off the one row, so two forks a suite bought nothing
@@ -387,9 +403,9 @@ for _hi_t in "${_HI_SELECTED[@]}"; do
     [ "$_hi_pass" != - ] && _hi_cases_note="$_hi_pass passed, "
     [ "$_hi_skipcnt" != - ] && [ "$_hi_skipcnt" != 0 ] && _hi_cases_note="$_hi_cases_note$_hi_skipcnt skipped, "
     case "$_hi_status" in
-    PASS) _hi_cecho " | $_hi_name: PASS ($_hi_cases_note$_hi_dur)" "$GREEN" ;;
-    SKIPPED) _hi_cecho " | $_hi_name: SKIPPED ($_hi_skip)" "$YELLOW" ;;
-    *) _hi_cecho " | $_hi_name: $_hi_status ($_hi_cases_note$_hi_dur)" "$RED" ;;
+    PASS) _hi_status_line "$_hi_name" "PASS ($_hi_cases_note$_hi_dur)" "$GREEN" ;;
+    SKIPPED) _hi_status_line "$_hi_name" "SKIPPED ($_hi_skip)" "$YELLOW" ;;
+    *) _hi_status_line "$_hi_name" "$_hi_status ($_hi_cases_note$_hi_dur)" "$RED" ;;
     esac
   fi
 done

@@ -40,7 +40,7 @@ function _hi_run_case() {
 
   if ! kubectl run "$name" --image="$image" --image-pull-policy=IfNotPresent \
     --restart=Never --command -- sleep infinity >"$_HI_WORKDIR/$label.run.log" 2>&1; then
-    _hi_cecho " | Failed to create pod (see $_HI_WORKDIR/$label.run.log)" "$RED"
+    _hi_dump_log "Failed to create pod:" "$_HI_WORKDIR/$label.run.log"
     return 1
   fi
   _hi_cecho " | Pod: $name (image: $image)"
@@ -68,8 +68,8 @@ function run_kube_test() {
   _hi_h2 "Creating kind cluster $_HI_CLUSTER"
   if ! kind create cluster --name "$_HI_CLUSTER" --kubeconfig "$KUBECONFIG" \
     >"$_HI_WORKDIR/kind.log" 2>&1; then
-    _hi_stand_down "kind cluster never came up" \
-      "Kind cluster never came up (see $_HI_WORKDIR/kind.log), skipping"
+    _hi_dump_log "Kind cluster never came up:" "$_HI_WORKDIR/kind.log" "$YELLOW"
+    _hi_stand_down "kind cluster never came up"
   fi
   _HI_CLUSTER_UP=1
   _hi_cecho " | Cluster up" "$GREEN"

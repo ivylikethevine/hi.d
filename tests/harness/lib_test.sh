@@ -811,6 +811,59 @@ function test_ssh_reachable_fails_against_a_dead_port() {
   # _hi_poll_bool discards it the same way for real callers
   ! _hi_ssh_reachable 1 2>/dev/null
 }
+
+# _hi_dump_log replaced six messages that printed a log's *path*, every one of
+# them under $_HI_WORKDIR and so already deleted by _hi_test_cleanup's rm -rf
+# by the time anyone could follow it. What matters now is that the text itself
+# reaches the transcript, since that is the only surviving copy.
+function _hi_dump_log_out() {
+  _hi_strip_ansi "$(_hi_dump_log "$@")"
+}
+
+function test_dump_log_prints_the_logs_text() {
+  local log="$_HI_WORKDIR/dump.log" out
+  printf 'first line\nsecond line\n' >"$log"
+  out="$(_hi_dump_log_out "it broke:" "$log")"
+  [[ "$out" == *"first line"* ]] && [[ "$out" == *"second line"* ]]
+}
+
+function test_dump_log_indents_the_text_it_dumps() {
+  local log="$_HI_WORKDIR/dump.log" out
+  printf 'a failure\n' >"$log"
+  out="$(_hi_dump_log_out "it broke:" "$log")"
+  # six spaces, the indent _hi_case_result already dumps transcripts at
+  printf '%s\n' "$out" | grep -qx '      a failure'
+}
+
+function test_dump_log_prints_its_message() {
+  local log="$_HI_WORKDIR/dump.log" out
+  printf 'noise\n' >"$log"
+  out="$(_hi_dump_log_out "the pod never started:" "$log")"
+  [[ "$out" == *"the pod never started:"* ]]
+}
+
+function test_dump_log_says_so_when_the_log_is_empty() {
+  local log="$_HI_WORKDIR/empty.log" out
+  : >"$log"
+  out="$(_hi_dump_log_out "it broke:" "$log")"
+  [[ "$out" == *"it broke:"* ]] && [[ "$out" == *"wrote nothing"* ]]
+}
+
+# a command can fail before its redirection ever creates the file
+function test_dump_log_survives_a_missing_log() {
+  local out
+  out="$(_hi_dump_log_out "it broke:" "$_HI_WORKDIR/never-written.log")"
+  [[ "$out" == *"it broke:"* ]] && [[ "$out" == *"wrote nothing"* ]]
+}
+
+# the path is what this replaced: it is unlinked before it can be read, so
+# printing it would be pointing at nothing
+function test_dump_log_does_not_print_the_path() {
+  local log="$_HI_WORKDIR/dump.log" out
+  printf 'boom\n' >"$log"
+  out="$(_hi_dump_log_out "it broke:" "$log")"
+  [[ "$out" != *"$log"* ]]
+}
 function run_test_lib_tests() {
   _hi_workdir testlibtest
 
@@ -927,6 +980,14 @@ function run_test_lib_tests() {
   _hi_check "Sshd entrypoint unlocks the test account" test_sshd_entrypoint_body_unlocks_the_test_account
   _hi_check "Keypair lands in the workdir" test_ssh_keypair_writes_a_usable_key
   _hi_check "Reachability probe fails on a dead port" test_ssh_reachable_fails_against_a_dead_port
+
+  _hi_h2 "Testing: _hi_dump_log"
+  _hi_check "Dumps the failing log's text" test_dump_log_prints_the_logs_text
+  _hi_check "Indents the dump six spaces" test_dump_log_indents_the_text_it_dumps
+  _hi_check "Prints the failure message too" test_dump_log_prints_its_message
+  _hi_check "Says so when the log is empty" test_dump_log_says_so_when_the_log_is_empty
+  _hi_check "Survives a log that was never written" test_dump_log_survives_a_missing_log
+  _hi_check "Never prints the (deleted) log path" test_dump_log_does_not_print_the_path
 
   _hi_suite_end "test_lib.sh"
 }

@@ -74,7 +74,7 @@ figures.
 ### The images are files; the build contexts are not
 
 Every container image an e2e suite builds is a real Dockerfile under
-[`dockerfiles/`](../dockerfiles) - `sshd-debian` and `sshd-alpine` for the ssh targets, `alpine-shell` for
+[`tests/dockerfiles/`](../tests/dockerfiles) - `sshd-debian` and `sshd-alpine` for the ssh targets, `alpine-shell` for
 the bare shell ones, `framework-*` for the nine shell frameworks, and so on. What stays generated per case
 is the *build context*: the throwaway keypair's `entrypoint.sh`, and for the pre-installed case the repo
 itself. Suites reach a file through `_hi_dockerfile <stem>` and pass it with `-f`; the variants that differ
@@ -108,8 +108,8 @@ as "the image just didn't build" in an e2e run on a machine with a container bac
 6. **GLOSSARY tags**: every `# GLOSSARY: <entry>` in the tree has to name a
    real heading in [GLOSSARY.md](GLOSSARY.md), so a renamed entry can't
    strand the tags pointing at it.
-7. **dockerfiles/**: every image definition has a caller and every caller has
-   an image definition - see above.
+7. **tests/dockerfiles/**: every image definition has a caller and every
+   caller has an image definition - see above.
 
 Halves 4 and 5 skip yellow when the tool isn't installed locally; CI always enforces them.
 

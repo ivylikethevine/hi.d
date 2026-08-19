@@ -20,9 +20,9 @@ function demo_keypair() {
 }
 
 function demo_sshd_image() {
-  # the image is dockerfiles/demo-sshd.Dockerfile; what this function assembles
-  # is its build context - the entrypoint below, and the clean checkout further
-  # down
+  # the image is tests/dockerfiles/demo-sshd.Dockerfile; what this function
+  # assembles is its build context - the entrypoint below, and the clean
+  # checkout further down
   cat >"$_HI_DEMO_DIR/entrypoint.sh" <<'EOF'
 #!/bin/bash
 set -eu
@@ -52,7 +52,7 @@ EOF
     (cd "$_HI_ROOT" && git archive HEAD | tar -x -C "$_HI_DEMO_DIR/checkout")
   fi
   docker build -q -t hi-demo-sshd \
-    -f "$_HI_ROOT/dockerfiles/demo-sshd.Dockerfile" "$_HI_DEMO_DIR" >/dev/null
+    -f "$_HI_ROOT/tests/dockerfiles/demo-sshd.Dockerfile" "$_HI_DEMO_DIR" >/dev/null
 }
 
 function up_ssh() {
@@ -98,7 +98,7 @@ function up_container() { # <backend> <name> <flavor: debian|zsh|fish|ash> [host
   ash) image=alpine:3.20 ;;
   zsh | fish)
     "$backend" build -q -t "hi-demo-$flavor-img" --build-arg "PKGS=$flavor git" \
-      -f "$_HI_ROOT/dockerfiles/alpine-shell.Dockerfile" "$_HI_DEMO_DIR" >/dev/null
+      -f "$_HI_ROOT/tests/dockerfiles/alpine-shell.Dockerfile" "$_HI_DEMO_DIR" >/dev/null
     image="hi-demo-$flavor-img"
     ;;
   *)

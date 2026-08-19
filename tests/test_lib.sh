@@ -1195,12 +1195,13 @@ EOF
 )"
 
 # _hi_dockerfile <name> - the checked-in image definition by that name. The
-# Dockerfiles live in dockerfiles/ rather than being written into each build
-# context at runtime, so they are readable, diffable files rather than heredocs;
-# the *context* is still per-case, since it carries the generated entrypoint.sh.
-# Every caller pairs this with `-f`, which _hi_build_image passes through.
+# Dockerfiles live in tests/dockerfiles/ rather than being written into each
+# build context at runtime, so they are readable, diffable files rather than
+# heredocs; the *context* is still per-case, since it carries the generated
+# entrypoint.sh. Every caller pairs this with `-f`, which _hi_build_image
+# passes through.
 function _hi_dockerfile() {
-  printf '%s' "$_HI_ROOT/dockerfiles/$1.Dockerfile"
+  printf '%s' "$_HI_ROOT/tests/dockerfiles/$1.Dockerfile"
 }
 
 function _hi_build_image() {

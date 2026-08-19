@@ -31,10 +31,10 @@ source "$_HI_TEST_LIB"
 _HI_FRAMEWORK_OK=""
 
 # <label>:<login shell>:<probe family>. The image for each is
-# dockerfiles/framework-<label>.Dockerfile: every one installs its framework
-# unattended and leaves a *real* rc file behind - an empty ~/.zshrc would prove
-# nothing, since the whole question is what happens when hi's block is appended
-# after someone else's.
+# tests/dockerfiles/framework-<label>.Dockerfile: every one installs its
+# framework unattended and leaves a *real* rc file behind - an empty ~/.zshrc
+# would prove nothing, since the whole question is what happens when hi's block
+# is appended after someone else's.
 _HI_FRAMEWORKS=(
   "omz:/usr/bin/zsh:zsh"
   "p10k:/usr/bin/zsh:zsh"
@@ -74,9 +74,10 @@ function _hi_framework_probe() {
   esac
 }
 
-# One image per framework, each from dockerfiles/framework-<label>.Dockerfile
-# on top of the shared sshd base. A failed build - these all reach the network -
-# marks its label 0 and the case skips rather than failing the suite.
+# One image per framework, each from
+# tests/dockerfiles/framework-<label>.Dockerfile on top of the shared sshd
+# base. A failed build - these all reach the network - marks its label 0 and
+# the case skips rather than failing the suite.
 function _hi_build_frameworks() {
   local spec label ctx
   for spec in "${_HI_FRAMEWORKS[@]}"; do

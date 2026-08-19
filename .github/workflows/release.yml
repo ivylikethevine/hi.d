@@ -28,10 +28,29 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # Everything that can fail, and nothing that can publish. Runs unattended so
-  # that a bad tag is caught before anyone is asked to approve anything.
+  # Only exists on a dispatch, where `build` is a rehearsal somebody asked for
+  # by hand: a v* tag push skips this and goes straight to build, which is what
+  # keeps the real release unattended. What it buys is that a rehearsal cannot
+  # reach APK_SIGNING_KEY without a named reviewer saying so.
+  gate:
+    name: approve the rehearsal
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: manual-dispatch
+    steps:
+      - run: echo "rehearsal approved for ${{ github.triggering_actor }}"
+
+  # Everything that can fail, and nothing that can publish. On a tag push it
+  # runs unattended, so that a bad tag is caught before anyone is asked to
+  # approve anything; a dispatch waits on `gate` above first.
   build:
     name: build packages
+    needs: gate
+    # gate is *skipped* on a tag push, which is not a failure - hence the
+    # explicit result check rather than a bare `needs`. `!cancelled()` rather
+    # than `always()` so that cancelling the run still stops the build.
+    if: ${{ !cancelled() && needs.gate.result != 'failure' }}
     runs-on: ${{ vars.RUNNER_LABEL || 'ubuntu-latest' }}
     timeout-minutes: 30
     # the provenance attestation below needs these two; contents stays read

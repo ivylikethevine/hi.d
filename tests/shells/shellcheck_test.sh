@@ -220,8 +220,8 @@ function lint_glossary_tags() {
   return "$bad"
 }
 
-# The image definitions moved out of the suites into dockerfiles/, which bought
-# readable files and cost the one thing a heredoc could not get wrong: a
+# The image definitions moved out of the suites into tests/dockerfiles/, which
+# bought readable files and cost the one thing a heredoc could not get wrong: a
 # Dockerfile written inline is referenced by construction. A checked-in one can
 # be orphaned when its caller goes, or named by a caller that misspells it -
 # both of which surface as "the image just didn't build" three suites later, on
@@ -229,8 +229,8 @@ function lint_glossary_tags() {
 # in the fast group, where the answer is a grep rather than a build.
 #
 # Callers name an image two ways: _hi_dockerfile <stem> from anything that
-# sources test_lib.sh, and the full dockerfiles/<stem>.Dockerfile path from
-# docs/tapes/fixtures.sh, which is standalone and does not. The framework
+# sources test_lib.sh, and the full tests/dockerfiles/<stem>.Dockerfile path
+# from docs/tapes/fixtures.sh, which is standalone and does not. The framework
 # suite's call interpolates its label, so that one contributes a *prefix*
 # every file under it answers to.
 #
@@ -239,12 +239,16 @@ function lint_glossary_tags() {
 # this is here to stop. The cost is that a comment alone keeps a file looking
 # used after its last real caller goes.
 function lint_dockerfiles() {
-  local dir="$_HI_ROOT/dockerfiles" call='_hi_dockerfile'
+  local dir="$_HI_ROOT/tests/dockerfiles" call='_hi_dockerfile'
   local files file stem first refs prefixes ref pre seen bad=0
-  _hi_h2 "Checking dockerfiles/ against its callers"
+  _hi_h2 "Checking tests/dockerfiles/ against its callers"
 
-  # dockerfiles/ is excluded throughout: one Dockerfile naming another in a
-  # comment is not a caller, and would keep an orphan looking used
+  # Both greps below still say `dockerfiles` on purpose, and neither wants
+  # "fixing": the path one is unanchored, so it matches inside the longer
+  # tests/dockerfiles/ just as well, and --exclude-dir matches on basename, so
+  # it still names the moved directory. Excluded throughout because one
+  # Dockerfile naming another in a comment is not a caller, and would keep an
+  # orphan looking used
   _hi_read_lines refs < <({
     grep -rhoE "$call (\"[a-z0-9-]+\"|[a-z0-9-]+)" "$_HI_ROOT" \
       --exclude-dir=.git --exclude-dir=dist --include='*.sh' 2>/dev/null |
@@ -273,7 +277,7 @@ function lint_dockerfiles() {
     first="$(grep -vE '^[[:space:]]*(#|$)' "$file" | head -1 | awk '{print $1}')"
     if [ "$first" != FROM ] && [ "$first" != ARG ]; then
       _hi_align " | $stem: starts with ${first:-nothing}, not FROM or ARG" "FAILED" "$RED"
-      _hi_note_failure "dockerfiles/$stem (no FROM)"
+      _hi_note_failure "tests/dockerfiles/$stem (no FROM)"
       bad=$((bad + 1))
       continue
     fi
@@ -290,7 +294,7 @@ function lint_dockerfiles() {
       _hi_align " | $stem" "OK" "$GREEN"
     else
       _hi_align " | $stem: no caller references it" "FAILED" "$RED"
-      _hi_note_failure "dockerfiles/$stem (orphaned)"
+      _hi_note_failure "tests/dockerfiles/$stem (orphaned)"
       bad=$((bad + 1))
     fi
   done
@@ -302,8 +306,8 @@ function lint_dockerfiles() {
     if [ -f "$dir/$ref.Dockerfile" ]; then
       _hi_align " | referenced $ref" "OK" "$GREEN"
     else
-      _hi_align " | referenced $ref: no such file in dockerfiles/" "FAILED" "$RED"
-      _hi_note_failure "dockerfiles/$ref (referenced, missing)"
+      _hi_align " | referenced $ref: no such file in tests/dockerfiles/" "FAILED" "$RED"
+      _hi_note_failure "tests/dockerfiles/$ref (referenced, missing)"
       bad=$((bad + 1))
     fi
   done

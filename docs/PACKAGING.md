@@ -12,10 +12,21 @@ unattended and the release ships unsigned sums.
 Every workflow's `runs-on:` reads a repo/org Actions variable first —
 `vars.RUNNER_LABEL`, or `vars.MACOS_RUNNER_LABEL` / `vars.WINDOWS_RUNNER_LABEL`
 for the two OS-locked e2e jobs — falling back to the GitHub-hosted label when
-unset, so nothing changes until you set one. Jobs that install apt packages or
-touch the Docker socket (`ci.yml`'s `test`, `bench`, `packaging-smoke`, `e2e`,
-`e2e-backends`, and `coverage.yml`) need a self-hosted runner providing those;
-`macos-e2e.yml` and `windows-e2e.yml` need a same-OS one if substituted.
+unset, so nothing changes until you set one. `ci.yml` reads them one job
+earlier: its `runner` job resolves the pair once and the other nine take
+`needs.runner.outputs.*` from it. That job is also where the one exception
+lives — a pull request from a *fork* gets the GitHub-hosted label whatever the
+variable says, so a stranger's branch never runs on your machine. Jobs that
+install apt packages or touch the Docker socket (`ci.yml`'s `test`, `bench`,
+`packaging-smoke`, `e2e`, `e2e-backends`, and `coverage.yml`) need a
+self-hosted runner providing those; `macos-e2e.yml` and `windows-e2e.yml` need
+a same-OS one if substituted.
+
+Do the two repo settings under [ROADMAP.md](ROADMAP.md)'s "GitHub repo
+settings" — the fork-PR approval and the `manual-dispatch` environment —
+*before* pointing any of these variables at a self-hosted runner. Neither can
+be done from a workflow file, and the `environment:` declarations already in
+the dispatch-only workflows are inert until the second one exists.
 
 ## The one idea
 

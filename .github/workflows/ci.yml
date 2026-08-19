@@ -15,9 +15,42 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+
+  # One place decides which runner the rest of CI gets, instead of the same
+  # expression copy-pasted into every job. A pull request from a fork is code
+  # nobody has read yet and vars.RUNNER_LABEL is somebody's actual machine, so
+  # that case gets the hosted runner whatever the variable says - a structural
+  # stop, not a reviewer remembering. See docs/PACKAGING.md for the variable.
+  runner:
+    name: pick the runner
+    runs-on: ubuntu-latest # never vars.RUNNER_LABEL: this job is the guard
+    timeout-minutes: 2
+    outputs:
+      ubuntu: ${{ steps.pick.outputs.ubuntu }}
+      macos: ${{ steps.pick.outputs.macos }}
+    steps:
+      # through env: rather than ${{ }} inline in run: - zizmor gates this repo
+      # and a template expanded straight into a shell line is what it catches
+      - id: pick
+        env:
+          FORK: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
+          UBUNTU: ${{ vars.RUNNER_LABEL }}
+          MACOS: ${{ vars.MACOS_RUNNER_LABEL }}
+        run: |
+          set -euo pipefail
+          if [ "$FORK" = true ]; then
+            echo "ubuntu=ubuntu-latest" >>"$GITHUB_OUTPUT"
+            echo "macos=macos-latest" >>"$GITHUB_OUTPUT"
+            echo "::notice title=runner::fork PR - GitHub-hosted only, ignoring RUNNER_LABEL"
+          else
+            echo "ubuntu=${UBUNTU:-ubuntu-latest}" >>"$GITHUB_OUTPUT"
+            echo "macos=${MACOS:-macos-latest}" >>"$GITHUB_OUTPUT"
+          fi
+
   test:
     name: fast suites (ubuntu-latest)
-    runs-on: ${{ vars.RUNNER_LABEL || 'ubuntu-latest' }}
+    runs-on: ${{ needs.runner.outputs.ubuntu }}
+    needs: runner
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -51,7 +84,8 @@ jobs:
   # shfmt could disagree with the pinned one about formatting.)
   test-macos:
     name: fast suites (macos-latest)
-    runs-on: ${{ vars.MACOS_RUNNER_LABEL || 'macos-latest' }}
+    runs-on: ${{ needs.runner.outputs.macos }}
+    needs: runner
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -74,7 +108,8 @@ jobs:
   # workflows and composite actions are code too, so they get a linter
   actionlint:
     name: actionlint
-    runs-on: ${{ vars.RUNNER_LABEL || 'ubuntu-latest' }}
+    runs-on: ${{ needs.runner.outputs.ubuntu }}
+    needs: runner
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -99,7 +134,8 @@ jobs:
   # credentialed release checkout) is suppressed inline where it happens.
   zizmor:
     name: zizmor
-    runs-on: ${{ vars.RUNNER_LABEL || 'ubuntu-latest' }}
+    runs-on: ${{ needs.runner.outputs.ubuntu }}
+    needs: runner
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -126,7 +162,8 @@ jobs:
   # do not add this job to the required checks - it is designed to be ignorable.
   markdownlint:
     name: markdownlint (advisory)
-    runs-on: ${{ vars.RUNNER_LABEL || 'ubuntu-latest' }}
+    runs-on: ${{ needs.runner.outputs.ubuntu }}
+    needs: runner
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -156,7 +193,8 @@ jobs:
   # numbers into every run's log for eyeballing trends.
   bench:
     name: hot-path benchmarks
-    runs-on: ${{ vars.RUNNER_LABEL || 'ubuntu-latest' }}
+    runs-on: ${{ needs.runner.outputs.ubuntu }}
+    needs: runner
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -173,7 +211,8 @@ jobs:
   # the next release tag
   packaging-smoke:
     name: package build (deb, rpm, apk)
-    runs-on: ${{ vars.RUNNER_LABEL || 'ubuntu-latest' }}
+    runs-on: ${{ needs.runner.outputs.ubuntu }}
+    needs: runner
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -221,8 +260,8 @@ jobs:
 
   e2e:
     name: e2e (ssh, docker)
-    runs-on: ${{ vars.RUNNER_LABEL || 'ubuntu-latest' }}
-    needs: test
+    runs-on: ${{ needs.runner.outputs.ubuntu }}
+    needs: [runner, test]
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -235,8 +274,8 @@ jobs:
 
   e2e-backends:
     name: e2e (podman, nomad, kube)
-    runs-on: ${{ vars.RUNNER_LABEL || 'ubuntu-latest' }}
-    needs: test
+    runs-on: ${{ needs.runner.outputs.ubuntu }}
+    needs: [runner, test]
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

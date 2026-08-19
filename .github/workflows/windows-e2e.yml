@@ -19,6 +19,12 @@ jobs:
     name: hi at stock Windows OpenSSH (PowerShell fallback)
     runs-on: ${{ vars.WINDOWS_RUNNER_LABEL || 'windows-latest' }}
     timeout-minutes: 20
+    # workflow_dispatch is this workflow's only trigger, and dispatch already
+    # needs write access - this is the second lock: an environment with a
+    # required reviewer on it. Note that an environment with *no* reviewer
+    # configured is no gate at all - the same caveat release.yml's `release`
+    # environment carries. docs/ROADMAP.md holds the one-time setup step.
+    environment: manual-dispatch
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

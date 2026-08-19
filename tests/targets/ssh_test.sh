@@ -303,8 +303,8 @@ function run_ssh_tests() {
     fi
   done
 
-  # A bash 3.2 target - see dockerfiles/sshd-bash32.Dockerfile for what that
-  # image is and why the suite wants one.
+  # A bash 3.2 target - see tests/dockerfiles/sshd-bash32.Dockerfile for what
+  # that image is and why the suite wants one.
   _HI_BASH32_OK=0
   _hi_ctx="$_HI_WORKDIR/bash32"
   mkdir -p "$_hi_ctx"

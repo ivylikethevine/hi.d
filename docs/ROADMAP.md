@@ -61,9 +61,11 @@ here: git history is the ledger, and this file is only what is left to do.
 
 ### GitHub repo settings
 
-Both are one-time, pre-first-release, and neither can be done from a workflow
+All four are one-time, pre-first-release, and none can be done from a workflow
 file. The exact commands live in the entries below — this file is the single
-copy, and the README's "Packaging & releases" points at it.
+copy, and the README's "Packaging & releases" points at it. The last two are
+what `vars.RUNNER_LABEL` waits on: until both are set, pointing that variable
+at a self-hosted runner is the thing that exposes it.
 
 - [ ] **The `release` approval gate** — `release.yml`'s `publish` job declares
       `environment: release`, but an environment with no required reviewer is
@@ -109,6 +111,28 @@ copy, and the README's "Packaging & releases" points at it.
     }
     JSON
     ```
+
+- [ ] **Fork PRs need approval to run at all** — a public repo plus a
+      self-hosted runner is the combination GitHub warns about: a fork PR is a
+      stranger's branch, and `ci.yml` runs `tests/test_runner.sh` from it.
+      `ci.yml`'s `runner` job already denies fork PRs the self-hosted label
+      whatever `RUNNER_LABEL` says; this is the other half, and it stops the
+      run before it starts rather than redirecting it.
+
+  - **Where:** Settings → Actions → General → *Fork pull request workflows from outside collaborators*
+  - **Do:** select **Require approval for all outside collaborators** — the default is only first-time contributors, which is not the same promise.
+  - **Ticks when:** the strictest of the three options is the one selected.
+
+- [ ] **The `manual-dispatch` approval gate** — `macos-e2e.yml`,
+      `windows-e2e.yml`, `scorecard.yml` and `release.yml`'s rehearsal `gate`
+      job all declare `environment: manual-dispatch`. As with `release` above,
+      an environment with no required reviewer is **no gate at all** — the
+      declarations are inert until this exists. `workflow_dispatch` already
+      demands write access, so this is the second lock, not the first.
+
+  - **Where:** Settings → Environments
+  - **Do:** New environment → name it `manual-dispatch` → tick **Required reviewers** and add yourself → Save.
+  - **Ticks when:** the environment exists with a reviewer on it, and a dispatch of `scorecard.yml` lands in *Waiting* instead of running.
 
 ### Secrets & keys
 

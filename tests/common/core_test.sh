@@ -331,8 +331,8 @@ function test_shell_table_rows_are_wellformed() {
 # it just quietly does nothing, which is how the two lists drifted before.
 function test_shell_table_covers_every_rc_path_var() {
   local var value missing=""
-  for var in _HI_BASHRC _HI_ZSHRC _HI_FISH_CONFIG _HI_NU_CONFIG \
-    _HI_HOME_BASHRC _HI_HOME_ZSHRC _HI_HOME_FISH_CONFIG _HI_HOME_NU_CONFIG; do
+  for var in _HI_BASHRC _HI_ZSHRC _HI_FISH_CONFIG \
+    _HI_HOME_BASHRC _HI_HOME_ZSHRC _HI_HOME_FISH_CONFIG; do
     eval "value=\"\${$var:-}\""
     [ -n "$value" ] || {
       _hi_cecho " | paths.sh exports no $var" "$RED"

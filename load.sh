@@ -34,7 +34,7 @@ source "$_HI_HEADER"
 _HI_CONFIG_START="# hi-config-start"
 _HI_CONFIG_END="# hi-config-end"
 
-# rc file <- hi config; fish/nu only when installed (no config dir otherwise).
+# rc file <- hi config; fish only when installed (no config dir otherwise).
 # The pairs come from core.sh's _HI_SHELL_TABLE, filtered to the rows flagged
 # `graft` - the same roster scripts/install.sh reads for its local half
 _HI_CONFIGS=()
@@ -45,8 +45,6 @@ unset _hi_shell _hi_label _hi_tree_rc _hi_home_rc _hi_check _hi_flags
 
 function configure_files() {
   local pair target src open body
-  # nu makes its config dir on first run, not install - so a fresh nu would dodge the loop's dir gate
-  command -v nu >/dev/null 2>&1 && [ ! -d "$_HI_HOME_NU_DIR" ] && mkdir -p "$_HI_HOME_NU_DIR"
   for pair in "${_HI_CONFIGS[@]}"; do
     target="${pair#*:}"
     src="${pair%:*}"
@@ -57,14 +55,13 @@ function configure_files() {
     # $(<f) slurps where grep short-circuits - fine for an rc file.
     : >>"$target"
     case "$(<"$target")" in *"$_HI_CONFIG_START"*) continue ;; esac
-    # GLOSSARY: graft crash guard - why every graft wraps, and nu's exception
+    # GLOSSARY: graft crash guard - why every graft wraps
     # shellcheck disable=SC2016 # single quotes are the point: the guard expands at shell start, not graft time
     case "$src" in
     *.fish)
       open='set -l _hi_tree $HOME'$'\n''test -n "$_HI_HOME"; and set _hi_tree $_HI_HOME'$'\n''if test -f $_hi_tree/hi.d/common/core.sh'
       body="$open"$'\n'"$(<"$src")"$'\n'"end"
       ;;
-    *.nu) body="$(<"$src")" ;;
     *)
       open='if [ -f "${_HI_HOME:-$HOME}/hi.d/common/core.sh" ]; then'
       body="$open"$'\n'"$(<"$src")"$'\n'"fi"
@@ -109,13 +106,13 @@ function _hi_login_shell() {
 # ash, sh) fall through it unmatched - they are reachable only where bash is
 # absent, and this file is bash. What survives is fish > zsh > bash, which is
 # what $_HI_SHELL_PREFERENCE's documented default has always meant.
-# GLOSSARY: session-shell ranking - login-first, and nu's allow-list-only seat
+# GLOSSARY: session-shell ranking - why login leads the default
 function _hi_session_shell() {
   local want
   for want in ${_HI_SHELL_PREFERENCE:-login} $_HI_SHELL_TREE; do
     [ "$want" = login ] && want="$(_hi_login_shell)"
     case "$want" in
-    bash | zsh | fish | nu) command -v "$want" >/dev/null 2>&1 && {
+    bash | zsh | fish) command -v "$want" >/dev/null 2>&1 && {
       printf '%s' "$want"
       return 0
     } ;;
@@ -160,7 +157,6 @@ function load() {
   case "$shell" in
   fish) greeting="fish shell! :^)" color="$GREEN" ;;
   zsh) greeting="zsh shell! :)" color="$PURPLE" ;;
-  nu) greeting="nushell! :o)" color="$BRCYAN" ;;
   *) greeting="only bash today :(" color="$RED" ;;
   esac
   _hi_cecho "$greeting" "$color" 1

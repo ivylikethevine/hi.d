@@ -41,12 +41,6 @@ jobs:
         with:
           tool: checkbashisms
 
-      # same story for the rc suite's real-nu cases: config.nu is the one
-      # shipped shell file nothing else in CI can parse
-      - uses: ./.github/actions/setup-tool
-        with:
-          tool: nu
-
       - name: Run fast test suites
         run: "${{ github.workspace }}/tests/test_runner.sh --verbose --host-report --group fast"
 

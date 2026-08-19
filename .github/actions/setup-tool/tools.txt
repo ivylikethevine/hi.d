@@ -38,5 +38,4 @@ actionlint|1.7.12|tar.gz|https://github.com/rhysd/actionlint/releases/download/v
 zizmor|1.29.0|tar.gz|https://github.com/zizmorcore/zizmor/releases/download/v%v/zizmor-x86_64-unknown-linux-gnu.tar.gz|--version|github:zizmorcore/zizmor
 nfpm|2.47.0|tar.gz|https://github.com/goreleaser/nfpm/releases/download/v%v/nfpm_%v_Linux_x86_64.tar.gz|--version|github:goreleaser/nfpm
 minisign|0.12|tar.gz|https://github.com/jedisct1/minisign/releases/download/%v/minisign-%v-linux.tar.gz|-v|github:jedisct1/minisign
-nu|0.115.0|tar.gz|https://github.com/nushell/nushell/releases/download/%v/nu-%v-x86_64-unknown-linux-gnu.tar.gz|--version|github:nushell/nushell
 kcov|43|cmake|https://github.com/SimonKagstrom/kcov/archive/refs/tags/v%v.tar.gz|--version|github:SimonKagstrom/kcov

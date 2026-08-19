@@ -3,9 +3,9 @@
 ![CI (main)](https://github.com/ivylikethevine/hi.d/actions/workflows/ci.yml/badge.svg)
 ![CI (develop)](https://github.com/ivylikethevine/hi.d/actions/workflows/ci.yml/badge.svg?branch=develop)
 [![Coverage](https://github.com/ivylikethevine/hi.d/actions/workflows/coverage.yml/badge.svg)](https://github.com/ivylikethevine/hi.d/actions/workflows/coverage.yml)
-![ssh payload](https://img.shields.io/badge/ssh_payload-104KB_per_session-4c1)
+![ssh payload](https://img.shields.io/badge/ssh_payload-102KB_per_session-4c1)
 ![bash](https://img.shields.io/badge/bash-3.2%2B-4EAA25?logo=gnubash&logoColor=white)
-![shells](https://img.shields.io/badge/shells-bash%20%7C%20zsh%20%7C%20fish%20%7C%20nu%20%7C%20sh-blue)
+![shells](https://img.shields.io/badge/shells-bash%20%7C%20zsh%20%7C%20fish%20%7C%20ksh%20%7C%20sh-blue)
 ![targets](https://img.shields.io/badge/targets-ssh%20%7C%20docker%20%7C%20podman%20%7C%20nomad%20%7C%20k8s-8A2BE2)
 ![license](https://img.shields.io/badge/license-MIT-blue)
 
@@ -155,8 +155,7 @@ every run · 🟡 expected to work, nobody has proven it · ⚠️ works, reduce
 | `fish`                                    | ✅ full                                                               | `shells/config.fish`                                                                                                                                                                                                                                                                                                                                                                                                     |
 | `sh`/`dash`/`ash` (no bash on the target) | ⚠️ aliases and a colored `user@host` prompt, with a warning saying so | no header and no git segment - those need bash                                                                                                                                                                                                                                                                                                                                                                           |
 | `ksh`/`mksh` (no bash on the target)      | ⚠️ aliases, the colored prompt **and a live git segment** - no header | it reads `$ENV` as the `sh` tier does, plus `shells/ksh.sh`: ksh93 and mksh expand `$( )` when the prompt is _printed_, which is what lets the segment be live where busybox `ash` cannot have one. The header needs bash. `tests/targets/ssh_test.sh` renders the segment against a real mksh                                                                                                                           |
-| `nushell`                                 | ⚠️ header, prompt, git segment and a **subset** of the aliases        | `shells/config.nu`. Needs `bash` on the target: nu can source none of `common/`, so the header, palette and git segment are rendered by shelling out to it, exactly as `config.fish` does. Chosen when nu is your _login_ shell or you name it in `_HI_SHELL_PREFERENCE` - never handed to someone whose login shell is bash. The alias subset, and what was left out and why, is the GLOSSARY's "nu alias subset" entry |
-| `elvish`, `xonsh`, `ion`, `oil`/`osh`     | ❌ **decided against**, not pending                                   | see the table below. You still get a session — hi lands you in the best of `$_HI_SHELL_TREE` the target has                                                                                                                                                                                                                                                                                                              |
+| `nushell`, `elvish`, `xonsh`, `ion`, `oil`/`osh` | ❌ **decided against**, not pending                                   | see the table below. You still get a session — hi lands you in the best of `$_HI_SHELL_TREE` the target has                                                                                                                                                                                                                                                                                                              |
 | PowerShell                                | ❌                                                                    | bash-only by design                                                                                                                                                                                                                                                                                                                                                                                                      |
 
 **Shells hi does not style, and why that is settled.** Each would need its own rc in `shells/` (prompt,
@@ -168,6 +167,7 @@ aliases, completion) plus a tier in the fallback ladder in `hi.sh`'s `_hi_remote
 | `elvish`     | **decided against** (2026-08-18)  | its own language, so the prompt and aliases would be a second implementation to keep in sync forever, for an audience hi has no evidence of. A `shells/rc.elv` is what it would take, and nobody has asked                                              |
 | `xonsh`      | **decided against** (2026-08-18)  | Python — a third implementation, on the same terms as elvish and with the same answer                                                                                                                                                                   |
 | `tcsh`/`csh` | **decided against** (2026-08-18)  | different rc syntax _and_ no `$ENV` equivalent, so there is no hook to land on at all: it would need its own rc and its own delivery mechanism                                                                                                          |
+| `nushell`    | **removed** (2026-08-18)          | it shipped, as `shells/config.nu`, and came back out. Nu is not POSIX, so it can source none of `common/`: the header, palette and git segment were rendered by shelling out to bash - which means the tier needed bash on the target anyway, and where bash exists, bash/zsh/fish already answer. A whole rc in a fourth language, plus a CI toolchain, for a shell nobody asked for                     |
 | `ksh`/`mksh` | shipped, **all but the header**   | a tier in the no-bash ladder, the POSIX prompt, the aliases, and `shells/ksh.sh`'s git segment. The header, and only the header, is missing: `common/header.sh` is bash, and this tier is defined by bash being absent, so it would have to be written a second time in POSIX and then kept in sync forever - the git segment was worth that, a second header is not |
 | PowerShell   | not a POSIX shell                 | the greeting hi prints there is the whole extent of it; anything more is a separate project, really                                                                                                                                                     |
 
@@ -196,7 +196,7 @@ no `ll`.
 There are two families of answer.
 
 **Install your config there.** Dotfile managers — [chezmoi], [yadm], [GNU Stow],
-[dotbot], [rcm] — or config management like Ansible. These are excellent, and
+[dotbot], [rcm], [homeshick] — or config management like Ansible. These are excellent, and
 hi.d does not compete with them: they assume the machine is yours, that you'll
 be back, and that leaving files behind is fine. That fails for a shared
 production host, a box you touch once, or a container. The line blurs at the
@@ -231,7 +231,7 @@ terminal.
 | Target OS                           | Linux (glibc + musl), macOS/BSD, Windows via WSL/Git Bash | broad                                                                                           | Linux x86_64                                             | Linux, macOS                    | broad                    |
 | Installs on target                  | nothing                                                   | nothing                                                                                         | a portable shell + plugins under `~/.xxh`                | nothing                         | nothing                  |
 | Cleans up on exit                   | yes, automatically                                        | leaves `/tmp` dir                                                                               | no — delete `~/.xxh` yourself                            | yes, automatically              | leaves files             |
-| Size ceiling                        | ~39KB gzipped, enforced by CI                             | **~64KB and the server may block you**                                                          | large — it uploads whole shells                          | small                           | none (that is its point) |
+| Size ceiling                        | ~40KB gzipped, enforced by CI                             | **~64KB and the server may block you**                                                          | large — it uploads whole shells                          | small                           | none (that is its point) |
 | Non-ssh targets                     | **docker, podman, nomad, k8s**                            | no                                                                                              | no                                                       | no                              | no                       |
 | Can give you a shell the host lacks | no                                                        | no                                                                                              | **yes**                                                  | no                              | no                       |
 | Maturity                            | pre-1.0, not yet published to any channel                 | **original deleted from GitHub**; [cdown's] fork is the maintained line, argv ceiling inherited | mature, active                                           | quiet                           | quiet                    |
@@ -284,7 +284,7 @@ plugin model is also more principled than copying dotfiles blind.
 - **Reach.** xxh targets "Linux on x86_64" — no ARM, no macOS, no BSD. hi.d's
   floor is bash 3.2 (what macOS still ships) and `base64`, and its suite runs
   real Debian, Alpine/musl and bash-3.2 targets every time.
-- **Weight.** xxh uploads shells; hi.d uploads ~39KB and a CI job fails if that
+- **Weight.** xxh uploads shells; hi.d uploads ~40KB and a CI job fails if that
   number drifts more than a kilobyte from the badge.
 - **Footprint.** xxh is hermetic but persistent — `~/.xxh` stays until you
   delete it. hi.d removes itself when the session ends.
@@ -301,7 +301,7 @@ The differences are narrow and concrete. kyrat requires **bash ≥ 4.0**, ruling
 out macOS's system bash — the exact constraint hi.d contorts itself to respect
 (no `mapfile`, no associative arrays, no namerefs, enforced by a lint grep and
 a real bash-3.2 container in CI). kyrat spawns bash, zsh or sh; hi.d styles
-bash, zsh, fish and nushell, and gives the POSIX tiers a colored prompt and —
+bash, zsh and fish, and gives the POSIX tiers a colored prompt and —
 for ksh/mksh — a live git segment. And kyrat is ssh-only.
 
 #### sshdot
@@ -309,6 +309,36 @@ for ksh/mksh — a live git segment. And kyrat is ssh-only.
 [sshdot] is sshrc without the size limit, achieved by not squeezing through the
 command line. Narrower in scope than hi.d; the honest summary is that it solves
 the one problem it names.
+
+#### homeshick — the same constraints, the opposite answer
+
+[homeshick] is a git dotfiles synchronizer written in bash, and it is the tool
+whose _constraints_ look most like hi.d's: "provided that at least Bash 3 and
+Git 1.5 are available you can use homeshick" — no Ruby, no Python, no root, no
+package manager. hi.d holds the same bash 3.2 floor for the same reason. That
+is where the resemblance stops, because it answers the other half of the
+problem. You `homeshick clone` a repo — a _castle_ — into
+`~/.homesick/repos/`, and `homeshick link` symlinks that castle's `home/`
+directory into `$HOME`; a line in your rc file sources `homeshick.sh` (or
+`.csh`/`.fish`), and `track`/`pull`/`refresh` keep the castle and the machine in
+step. Several castles compose, which is how people run oh-my-zsh beside their
+own config.
+
+So it is not a competitor, and it is not in the table above. It is the tool for
+a machine you own and will come back to: the checkout **stays**, the symlinks
+stay, and the next login is already configured with no client involved. hi.d is
+for the machine you will not come back to — it pushes from the client, needs no
+git and no network on the target, and takes the tree away when the session
+ends. The failure modes are mirror images: homeshick on a production box you
+touch once leaves a `~/.homesick` and an edited rc file behind for the next
+person; hi.d on your own laptop re-sends a payload every session to give you
+what a symlink would have given you for free.
+
+**Where homeshick wins outright:** the machine is yours; you want your config
+there when you arrive rather than when hi says so; you want your dotfiles under
+plain git with plain symlinks and nothing clever in between. The two compose,
+too — install hi.d permanently on that box (`scripts/install.sh`) and let
+homeshick manage everything else.
 
 ### Adjacent tools, and how they compose
 
@@ -373,16 +403,17 @@ work, and detecting a permanent `~/hi.d` on the target to use in place.
 ### Where hi.d is the wrong choice
 
 - **You want your shell on a host that does not have it.** Use [xxh].
-- **The machine is yours and you will be back.** Use [chezmoi] or [yadm] —
-  per-session copying is the wrong shape for a machine you own.
+- **The machine is yours and you will be back.** Use [chezmoi], [yadm] or
+  [homeshick] (bash and git, nothing else) — per-session copying is the wrong
+  shape for a machine you own.
 - **You want the smallest thing that works.** [sshrc] or [kyrat] are less code,
   and less code on every host you touch is a legitimate preference.
 - **Your problem is terminfo or shell integration, not config.** Use your
   terminal's own helper — [kitty's ssh kitten] is excellent at exactly that.
-- **You need nushell, elvish or xonsh on a target with no bash.** hi.d's
-  nushell support needs bash there (it shells out for the header, palette and
-  git segment); elvish, xonsh and tcsh are not styled at all, and that is now a
-  decision rather than a gap — see the compatibility tables above.
+- **You want a styled nushell, elvish, xonsh or tcsh session.** None of them
+  is styled, and none of them is going to be — see the compatibility tables
+  above for the reason in each case. They all still work as _login_ shells:
+  hi lands you in the best of `$_HI_SHELL_TREE` the target has.
 - **You need something published and stable today.** hi.d is pre-1.0 and on no
   channel yet — you install from a checkout or a release artifact. The
   alternatives have been installable for years.
@@ -396,6 +427,7 @@ work, and detecting a permanent `~/hi.d` on the target to use in place.
 - [kyrat] — bash ssh wrapper with cleanup
 - [sshdot] — sshrc without the size limit
 - [kitty's ssh kitten] — terminfo and shell integration
+- [homeshick] — git dotfiles in bash; the install-it-there tool with hi.d's constraints
 - [chezmoi], [yadm], [GNU Stow], [dotbot], [rcm] — the install-it-there family
 
 [sshrc]: https://github.com/cdown/sshrc
@@ -407,6 +439,7 @@ work, and detecting a permanent `~/hi.d` on the target to use in place.
 [kyrat]: https://github.com/fsquillace/kyrat
 [sshdot]: https://github.com/PFacheris/sshdot
 [kitty's ssh kitten]: https://sw.kovidgoyal.net/kitty/kittens/ssh/
+[homeshick]: https://github.com/andsens/homeshick
 [chezmoi]: https://www.chezmoi.io/
 [yadm]: https://yadm.io/
 [GNU Stow]: https://www.gnu.org/software/stow/
@@ -491,10 +524,8 @@ tests/test_runner.sh --group fast
 ## More docs
 
 - [docs/FEATURES.md](docs/FEATURES.md) - the config overlay, every feature toggle and environment variable hi reads
-- [docs/FILES.md](docs/FILES.md) - what every shipped file does, one line each
 - [docs/TESTING.md](docs/TESTING.md) - the test runner, suite groups, parallel cases, the lint gate, relaying
 - [docs/GLOSSARY.md](docs/GLOSSARY.md) - the named idioms the code's `GLOSSARY:` comment tags point at; load-bearing for reading `common/`, and drift-checked by the lint suite
-- [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) - the dev loop and how a change should arrive (PR titles become release notes)
 - [docs/SECURITY.md](docs/SECURITY.md) - reporting, and what hi touches on a target
 - [docs/PACKAGING.md](docs/PACKAGING.md) - the publishing runbook: cutting a release, the per-channel steps, and the Windows channel assessment
 - [docs/ROADMAP.md](docs/ROADMAP.md) - what is planned, what each item is blocked on, and the one-time setup the release channels wait on
@@ -502,10 +533,9 @@ tests/test_runner.sh --group fast
 
 ### File list
 
-What every shipped file does, one line each, is [docs/FILES.md](docs/FILES.md). The test suites aren't
-repeated there: each suite's opening comment block says exactly what it covers, and
-`tests/test_runner.sh --list-paths` prints the live list — group, name, and path — so the truth can't drift
-the way a second copy of it once did.
+Every shipped file carries its own opening comment block saying what it does and why, which is the copy
+that cannot go stale; `tests/test_runner.sh --list-paths` prints the live suite list — group, name, and
+path — so the truth can't drift the way a second copy of it once did.
 
 #### Hostname, username, and group/tag colors
 

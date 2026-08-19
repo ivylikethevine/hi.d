@@ -99,8 +99,8 @@ function test_configure_files_grafts_fish_when_dir_exists() {
 # --- the crash guard ----------------------------------------------------------
 #
 # clean_all cannot run after a hard kill, so configure_files wraps each graft
-# in a tree-exists guard (fish syntax for fish; nu carries its own guard
-# inside config.nu). The fixture content is not a command, so a guard failing
+# in a tree-exists guard (fish syntax for fish, sh's for the rest). The fixture
+# content is not a command, so a guard failing
 # open shows up as "command not found" on the next shell's stderr - which is
 # exactly the user-visible symptom the guard exists to prevent.
 function test_dead_graft_is_silent_in_bash() {
@@ -239,7 +239,7 @@ function test_session_shell_prefers_the_login_shell() {
 
 # a login shell hi doesn't style is not a reason to refuse the session
 function test_session_shell_falls_back_for_an_unstyled_login_shell() {
-  [ "$(_hi_shell_answer "bash zsh fish" SHELL=/usr/bin/nu)" = fish ]
+  [ "$(_hi_shell_answer "bash zsh fish" SHELL=/bin/mksh)" = fish ]
 }
 
 # ...nor is one that isn't installed here

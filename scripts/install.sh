@@ -328,7 +328,7 @@ function _hi_banner_preview() { (unset _HI_HEADER_BANNER && banner Connected); }
 
 # sample "user@host cwd" line, colored like shells/bash.sh's real HI_PS1, with
 # the literal current user/host/cwd instead of \u/\h/\w - the fragment itself
-# is core.sh's _hi_userhost, the same one nu's prompt renders
+# is core.sh's _hi_userhost
 function _hi_prompt_preview() {
   local cwd="${PWD/#$HOME/\~}"
   printf '%b\n' "$(_hi_userhost) $BRBLUE$cwd$NC"
@@ -597,10 +597,11 @@ function check_one_config() {
 # three disjoint edits.
 #
 # The rows themselves come from core.sh's _HI_SHELL_TABLE, filtered to the
-# ones flagged `local` - so nu (grafted on targets, not wired up here) drops
-# out without being spelled as an absence, and a shell added to the roster
-# cannot reach load.sh's graft and miss this. Only the columns this file uses
-# are kept, so the three loops below read the same four fields they always did.
+# ones flagged `local`: a shell that is grafted on targets but not wired up
+# here drops out without being spelled as an absence, and a shell added to the
+# roster cannot reach load.sh's graft and miss this. Only the columns this file
+# uses are kept, so the three loops below read the same four fields they always
+# did.
 _HI_RC_TABLE=()
 while IFS='|' read -r _hi_shell _hi_label _hi_tree_rc _hi_home_rc _hi_check _hi_flags; do
   _HI_RC_TABLE+=("$_hi_shell|$_hi_label|$_hi_home_rc|$_hi_check")

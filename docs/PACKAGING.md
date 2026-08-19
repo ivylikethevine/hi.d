@@ -177,19 +177,6 @@ ship with macOS and with any Linux that would install this.
 A mac is still worth using before the first publish, since the container exercises Linuxbrew's paths
 rather than a keg under `/opt/homebrew` — but nothing about the formula itself is unverified now.
 
-### fisher (assessed, didn't fit)
-
-fisher needs no manifest here and nothing on release day — it installs straight
-from the repo at a ref — but it was assessed and deliberately not shipped.
-fisher installs by copying `functions/`, `completions/` and `conf.d/` out of a
-repo and ignores everything else. hi.d has none of those directories, and
-`shells/config.fish` is a client of the whole tree — it reaches `common/` by
-`$_HI_HOME` and shells out to bash for the header, palette and git segment. A
-fisher install would copy the fish half and leave every one of those paths
-dangling: a plugin that installs green and does nothing. Fish users get the
-same full setup as everyone else through `scripts/install.sh` or any package
-channel.
-
 ### deb / rpm / apk
 
 Built by `mkpkg.sh` and attached to the GitHub Release. Users install the file:
@@ -295,12 +282,6 @@ an installer artifact (a `zip` with a portable nested installer is the workable 
 project), each version is a YAML manifest PR into `microsoft/winget-pkgs`, and there is a moderation queue
 plus automated validation. Reasonable once hi.d has Windows users; premature before that.
 
-#### Chocolatey — no advantage over the two above
-
-A `.nuspec` plus a `chocolateyInstall.ps1`, behind a moderation queue, hard-depending on Git for Windows
-for the userland. It reaches an audience that overlaps heavily with Scoop's and asks more per release.
-`misc/packages` already probes for `choco`, which is the only argument in its favour and a weak one.
-
 #### MSYS2 — the best technical fit, the narrowest audience
 
 MSYS2 is a real POSIX userland with a real package manager, so hi.d would work there with no shim and no
@@ -311,16 +292,6 @@ real, so the `_HI_HOME` export lands as on Linux.
 Against it: submission goes through `MSYS2/MSYS2-packages` with review, and the audience is small and
 technical enough to be comfortable cloning the repo.
 
-#### Cygwin — skip
-
-`cygport` and a maintainer slot, for an audience that has largely moved to WSL or MSYS2.
-
-#### A native PowerShell port — skip, emphatically
-
-Named only to rule out. hi.d's entire value is that the _same_ config lands on every host; a second
-implementation in PowerShell would be a second thing to keep in sync forever, and it still could not run
-`load.sh` on the target.
-
 ### Side by side
 
 | channel    | reaches            | needs                               | auto-updates          | setup                    | per release         |
@@ -328,9 +299,7 @@ implementation in PowerShell would be a second thing to keep in sync forever, an
 | WSL        | anyone running WSL | nothing new — the `.deb`            | no (same as any deb)  | a README paragraph       | nothing             |
 | Scoop      | Scoop users        | Git for Windows + a `.cmd` shim     | yes, `scoop update`   | a bucket repo + the shim | bump version + hash |
 | winget     | all of Windows 11  | a zip/portable artifact             | yes, `winget upgrade` | manifest PR + moderation | a PR per release    |
-| Chocolatey | choco users        | Git for Windows + PowerShell script | yes, `choco upgrade`  | nuspec + moderation      | a push per release  |
 | MSYS2      | MSYS2 users        | nothing — real POSIX                | yes, `pacman -Syu`    | PKGBUILD + review        | bump in their repo  |
-| Cygwin     | few                | cygport                             | yes                   | maintainer slot          | per release         |
 
 ### What I would do
 
@@ -341,8 +310,8 @@ implementation in PowerShell would be a second thing to keep in sync forever, an
    target-side `windows-e2e.yml` is written but is a different job, and has not been dispatched yet.)
 3. **Revisit Scoop once that job is green and someone asks.** The manifest is an afternoon; the shim is
    the risk, and the CI job is what makes that risk observable.
-4. **Leave winget, Chocolatey, MSYS2 and Cygwin until there is demand**, and prefer MSYS2 over the other
-   three if the demand comes from people who already have a POSIX userland.
+4. **Leave winget and MSYS2 until there is demand**, and prefer MSYS2 of the two if the demand comes from
+   people who already have a POSIX userland.
 
 ## Verifying a packaged build locally
 

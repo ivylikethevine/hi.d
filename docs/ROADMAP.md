@@ -57,61 +57,6 @@ here: git history is the ledger, and this file is only what is left to do.
     least the header and git-prompt paths, and its header says what the numbers
     do and do not mean as bluntly as `coverage.sh`'s does.
 
-### Product
-
-- [ ] **Remove the nushell session tier** — nu is the one styled shell that
-      cannot source `common/` at all: `shells/config.nu` shells out to bash for
-      the header, the palette and the git segment, so it needs bash on the
-      target to render anything — and where bash exists, bash/zsh/fish already
-      answer. It buys a shell nobody has asked for at the price of a whole rc
-      in a fourth language, two GLOSSARY entries, a CI tool install and five
-      real-nu cases in the rc suite. Take it out, in one commit per surface:
-
-  - **Code:** `shells/config.nu`; `common/paths.sh`'s `_HI_NU_CONFIG`,
-    `_HI_HOME_NU_DIR`, `_HI_HOME_NU_CONFIG`; `common/core.sh`'s
-    `_HI_SHELL_TABLE` nu row (and the comment above it saying nu is
-    graft-only); `load.sh`'s nu `mkdir` gate in `configure_files`, its `*.nu)`
-    graft arm, the `nu)` greeting, and `nu` in `_hi_session_shell`'s allow-list
-    `case`.
-  - **Docs:** the README's shells badge, its compatibility-table row, and the
-    two mentions in _hi.d and the alternatives_; `docs/hi.1`'s nushell clause;
-    `docs/FEATURES.md`'s `_HI_SHELL_PREFERENCE` note; the GLOSSARY's
-    _nu session tier_ and _nu alias subset_ entries. Say it is **decided
-    against** in the compatibility table, the way elvish/xonsh/tcsh now are —
-    a removed feature that reads as an oversight invites the PR that puts it
-    back.
-  - **Tests and CI:** `tests/shells/rc_test.sh`'s nushell section (five cases);
-    `tests/test_lib.sh`'s host-report shells row; `tests/shells/hi_test.sh`'s
-    man-page ladder list. `tests/shells/load_test.sh`'s
-    `SHELL=/usr/bin/nu` case is testing _an unstyled login shell_, not nu —
-    re-point it at one that stays unstyled (`mksh`), don't delete it. Drop the
-    `nu` tool step from `.github/workflows/ci.yml`.
-  - **Ticks when:** nothing outside git history mentions nu, the fast group is
-    green, and **both** size numbers have been re-checked and the README badge
-    updated — `config.nu` leaves `$_HI_PAYLOAD`, so the gzipped tar and
-    `_hi_wire_bytes` both move.
-
-### Docs
-
-- [ ] **homeshick in the alternatives comparison** — [homeshick] is the
-      git+bash dotfile manager people reach for when they refuse to install
-      anything (no runtime, no binary: it is a bash function and a `git clone`
-      of "castles"), which puts it squarely in the same conversation as
-      sshrc, kyrat and chezmoi in the README's _hi.d and the
-      alternatives_ section — and it is missing from it. Read the tool first,
-      then write the entry to that section's standard: what it solves, where
-      it wins **outright**, and where hi.d is the wrong answer. The obvious
-      axis is that homeshick syncs a machine you own and come back to (its
-      castles are checkouts that stay), while hi.d copies to a machine it
-      expects to never see again — so the honest verdict is probably "not a
-      competitor, a complement", which is worth saying plainly rather than
-      leaving the reader to guess.
-
-  - **Ticks when:** the entry is in the README and the "if hi.d is not for
-    you" list at the end of that section points at it where it should.
-
-[homeshick]: https://github.com/andsens/homeshick
-
 ## Outside this repo
 
 ### GitHub repo settings

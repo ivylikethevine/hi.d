@@ -240,9 +240,7 @@ points at is gone - otherwise every shell the user opens from then on errors
 at its first source line, and in a container sharing `$HOME` (distrobox) that
 is the *host's* rc file. The guard re-resolves at shell start, exactly as the
 graft's own paths do, so it also silences a bystander shell opened
-mid-session with none of the session's env. Nu is the exception: aliases are
-block-scoped in nu, so `config.nu` carries its guard inside itself instead of
-being wrapped.
+mid-session with none of the session's env.
 
 ## session-shell ranking
 
@@ -254,13 +252,12 @@ exists. Its default tail is not a literal: `_hi_session_shell` walks
 its allow-list `case` drops the tiers that need bash to be *missing* to be
 reachable, leaving `fish > zsh > bash`. `hi.sh`'s `$_HI_SHELL_LADDER` is that
 same tree with bash removed. One list, two consumers - they used to be two
-literals that disagreed about fish-vs-zsh and ksh-vs-mksh. The default puts `login` first for a reason found by the framework
-matrix: the old ranking handed fish to anyone whose box had it, so a user
-whose login shell is zsh-with-oh-my-zsh never saw their own setup - hi's
-configs are grafted onto every rc file either way; the user's are not. nu is
-in the allow-list but not the default ranking, deliberately: it is picked
-when it is your *login* shell or you name it, and never handed to someone
-whose login shell is bash.
+literals that disagreed about fish-vs-zsh and ksh-vs-mksh.
+
+The default puts `login` first for a reason found by the framework matrix: the
+old ranking handed fish to anyone whose box had it, so a user whose login shell
+is zsh-with-oh-my-zsh never saw their own setup - hi's configs are grafted onto
+every rc file either way; the user's are not.
 
 ## completion probe knobs
 
@@ -292,39 +289,6 @@ split-quoted prompt segment): they expand `$( )` when the prompt is printed,
 busybox ash does not do substitution in PS1 at all. What it deliberately does
 NOT do is the header - that needs bash, and the README's compatibility table
 says so in the ksh row.
-
-## nu session tier
-
-Nu is the first shell hi styles that is not POSIX at all: nothing in
-`misc/aliases.sh` or `common/` can be sourced there - no `source` of a .sh
-file, no `$( )`, no `[ -f x ]`. `shells/config.nu` therefore does what
-`config.fish` already does for the same reason: shell out to `bash -c` for
-the parts `common/` owns, so the header, palette and git segment stay one
-implementation. That is also why nu lives in `load.sh`'s session-shell ladder
-and NOT in `hi.sh`'s no-bash `$_HI_SHELL_LADDER` - `load.sh` only runs where
-bash exists, which is exactly the condition the shell-outs need; a nu target
-without bash gets the POSIX fallback tier. Cost, stated rather than hidden:
-one `bash -c` fork per prompt for the git segment - a third git
-implementation that drifts would be worse than a fork. One writing rule: the
-bash bodies are plain strings, never `$"..."` interpolated ones - nu reads
-`(...)` inside an interpolation as its own subexpression, so a bash
-`$(_hi_user_escape)` written there is run by *nu* as an external command of
-that name, which is not one.
-
-## nu alias subset
-
-`config.nu` ports the aliases whose meaning survives translation -
-fixed-argument external commands - and deliberately not the rest: `ls`,
-`cat`, `grep`, `rm`, `cp`, `ps`, `df` are nu's own structured builtins, and
-shadowing `ls` with an external `ls -lh` would hand back a string where every
-downstream nu pipeline expects a table, which breaks the one thing people use
-nu for (this is the big one). `sudo`'s trailing-space trick is meaningless in
-nu; the aliases built at rc time from `$( )` and `$_HI_*` variables (`now`,
-`ehi`, `essh`, `batcat`, `eza`, ...) would be a second definition to keep in
-sync, deferred until someone wants them; `..`/`...` are native to nu's `cd`.
-The full set is always available in a nu session via `bash -lc '<cmd>'`. A
-silently smaller alias set would be worse than a stated one - hence this
-entry, and the list in the file itself.
 
 ## apostrophes in substitution comments
 

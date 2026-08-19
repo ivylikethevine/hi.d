@@ -2,8 +2,9 @@ name: Pages
 
 # The repo's markdown as a site: README.md as the index (it carries the demos,
 # the comparison, the architecture, packaging and Windows material inline),
-# plus what is left in docs/ - GLOSSARY, CONTRIBUTING, SECURITY, ROADMAP and
-# tldr - which interlink with relative links link-check.yml keeps honest.
+# plus what is left in docs/ - FEATURES, TESTING, GLOSSARY, SECURITY, PACKAGING,
+# ROADMAP and tldr - which interlink with relative links link-check.yml keeps
+# honest.
 #
 # The build half is entirely in this file. The *publishing* half is one click
 # that only exists once the repo is public: Settings -> Pages -> Source:

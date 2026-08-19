@@ -39,13 +39,11 @@ fi
 # Flags name the mechanism: `local` is install.sh appending to the user's own
 # rc, `graft` is load.sh copying hi's rc into a target's. The mechanisms stay
 # separate (see install.sh's config_shell); only the roster is single-homed,
-# since three copies is what let a shell go missing from one. nu is graft-only
-# - config.nu needs env a hi session exports and a local nu never has.
+# since three copies is what let a shell go missing from one.
 _HI_SHELL_TABLE=(
   "bash|bashrc|$_HI_BASHRC|$_HI_HOME_BASHRC|bash -n|local,graft"
   "zsh|zshrc|$_HI_ZSHRC|$_HI_HOME_ZSHRC|zsh -n|local,graft"
   "fish|config.fish|$_HI_FISH_CONFIG|$_HI_HOME_FISH_CONFIG|fish --no-execute|local,graft"
-  "nu|config.nu|$_HI_NU_CONFIG|$_HI_HOME_NU_CONFIG|nu --commands true|graft"
 )
 
 # _hi_shell_rows [flag] - the roster, or only rows carrying <flag>. One per
@@ -266,11 +264,11 @@ function _hi_on_exit() {
   fi
 }
 
-# What each shell's prompt ends with unless overridden, <SHELL>:<char>. Five
+# What each shell's prompt ends with unless overridden, <SHELL>:<char>. Four
 # different characters, so they are data rather than something each call site
 # repeats. SH is the ksh/mksh/sh fallback prompt hi.sh bakes on the client.
 # config.fish keeps its own copy (fish parses no bash); hi_test pins it here.
-_HI_PROMPT_END_DEFAULTS=('BASH:\$' 'ZSH:>' 'FISH:|' 'NU:>' 'SH:\$')
+_HI_PROMPT_END_DEFAULTS=('BASH:\$' 'ZSH:>' 'FISH:|' 'SH:\$')
 
 # _hi_prompt_end_default <SHELL> - the shipped default for one shell, empty if
 # the roster does not name it.
@@ -304,8 +302,7 @@ function _hi_at_color() {
 # target has it, keeping hi's header and aliases; anything else - unset
 # included - keeps hi's own prompt, and a missing starship falls back to it
 # silently. Never auto-detected: a target that happens to carry starship
-# must not surprise a user who chose hi's prompt. (bash/zsh/fish only: nu
-# would need `starship init nu` sourced at parse time, which nu cannot do)
+# must not surprise a user who chose hi's prompt.
 function _hi_wants_starship() {
   [ "${_HI_PROMPT:-}" = starship ] && command -v starship >/dev/null 2>&1
 }
@@ -544,9 +541,9 @@ function _hi_user_escape_var() {
   printf -v "$1" '%s' "$_HI_USER_ESC"
 }
 
-# The literal colored " user@host" fragment (@ yellow over ssh) that nu's
-# prompt and install.sh's preview both render; bash.sh/zsh.zsh keep their
-# escape-based (\u/%n) forms, which are a different substrate on purpose.
+# The literal colored " user@host" fragment (@ yellow over ssh) that
+# install.sh's preview renders; bash.sh/zsh.zsh keep their escape-based
+# (\u/%n) forms, which are a different substrate on purpose.
 function _hi_userhost() {
   printf '%b' " $(_hi_user_escape)$(_hi_whoami)$(_hi_at_color)@$(_hi_host_escape)$(_hi_hostname)$NC"
 }

@@ -619,9 +619,9 @@ function test_help_flags_are_all_in_the_man_page() {
 function test_shell_ladders_are_in_the_man_page() {
   local man="$_HI_HOME/hi.d/docs/hi.1" shell
   [ -f "$man" ] || return 1
-  for shell in $_HI_SHELL_LADDER fish zsh bash nu; do
-    # nu appears in prose as "nushell"; -w keeps "sh" from riding on "ssh"
-    grep -Eqw -- "$shell(shell)?" "$man" || return 1
+  for shell in $_HI_SHELL_LADDER fish zsh bash; do
+    # -w keeps "sh" from riding on "ssh"
+    grep -Eqw -- "$shell" "$man" || return 1
   done
 }
 

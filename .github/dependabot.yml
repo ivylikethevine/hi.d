@@ -1,7 +1,7 @@
 # Keeps the SHA-pinned `uses:` in the workflows AND the setup-tool action
 # moving via PRs instead of memory. What this does not cover: the curl-installed
 # tool versions in .github/actions/setup-tool/tools.txt (shellcheck, shfmt,
-# checkbashisms, actionlint, zizmor, nfpm, minisign, nu) - those move by editing
+# checkbashisms, actionlint, zizmor, nfpm, minisign, kcov) - those move by editing
 # that file's version column, and dependabot has no ecosystem for them; the
 # tool-versions workflow watches that drift instead.
 version: 2

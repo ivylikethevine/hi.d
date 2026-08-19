@@ -1,18 +1,19 @@
 # Tooling & practices roadmap
 
-Candidate additions for developing hi.d, in two halves:
+What is left to do on hi.d, in two halves:
 
-- **[Code work](#code-work)** — written in this repo, each marked
-  **Unblocked** or **Blocked on:**.
-- **[Human actions](#human-actions)** — no code; each names where you go, what
-  you do, and what ticks it. Almost all is gated on publishing, so it sits at
-  the bottom and blocks nothing day to day — the exceptions say so.
+- **[In-repo code work](#in-repo-code-work)** — everything that can be written
+  and finished in this checkout, with nothing outside it involved.
+- **[Outside this repo](#outside-this-repo)** — everything gated on a machine,
+  an account, a key or a click that no file here can perform. Each names where
+  you go, what you do, and what ticks it. Almost all of it is gated on
+  publishing, so it sits at the bottom and blocks nothing day to day.
 
-Nothing is wired up until its checkbox is ticked, and finished entries are
-**deleted** rather than left ticked: git history is the ledger, this file is
-only what's left.
+Nothing is wired up until its checkbox is ticked. Entries that are finished,
+and questions that have been decided against, are **deleted** rather than kept
+here: git history is the ledger, and this file is only what is left to do.
 
-## Code work
+## In-repo code work
 
 ### Release & packaging
 
@@ -28,65 +29,25 @@ only what's left.
 - [ ] **Shells hi doesn't style yet** — the README's
       [compatibility tables](../README.md#compatibility) say where each shell
       stands. The ksh/mksh tier (live git segment included) and the nushell
-      session tier are shipped and suite-proven; only the open halves are here:
+      session tier are shipped and suite-proven; the one open question is here:
 
-  - **the bash-less tier's header** — recommendation: leave it unwritten.
-    `common/header.sh` is bash, the tier exists because bash is absent, and a
-    second POSIX implementation would need keeping in sync forever — the git
-    segment earned that cost, a header would not.
   - **elvish and xonsh** — each needs its own language for any of it; **tcsh**
     has no `$ENV` to hook. Worth deciding per shell — as a _login_ shell they
     all work today.
 
-### Cleanup & structure
+### Features
 
-What is left here are three **recommendations against** doing the work, kept
-because each is a question that will be asked again. The rosters, the version
-stamp and the CI tooling shipped; git history is the ledger.
+Sketches rather than specifications — each still needs its shape decided
+before it needs code.
 
-- **Unify the two fallback-launch recipes** — recommendation: leave both.
-  The launch idiom is already shared (`_hi_fallback_rc`,
-  `_hi_ladder_probe`, `_hi_fallback_prompt`, `_hi_armored_line`); what
-  remains diverges by mechanism, not by accident. ssh writes the rc and
-  has the _target_ append per arm, because the payload has to be armored;
-  the container composes client-side and writes once, because `exec -i`
-  takes raw bytes. A shared renderer would have to emit into both, which
-  is more machinery than the three duplicated arms it would remove.
-- **One git-segment implementation** — recommendation: keep both, for the
-  same reason the bash-less tier has no header. Retiring
-  `common/git_prompt.sh` in favor of `shells/ksh.sh`'s POSIX segment costs
-  bash and zsh a `$( )` fork per prompt (their out-var call exists to
-  avoid exactly that, and POSIX has no `printf -v`), adds ksh.sh's
-  heredoc subshell and temp file per prompt, leaks `_hi_kg_*` into the
-  user's shell for want of `local`, and loses `REBASE-i 3/7` and the
-  rebase `head-name` branch recovery. The payload win is ~119 lines
-  against 39KB used of a 48KB budget — the one thing not in short supply.
-- **Runner parallelism** — `test_runner.sh --jobs N`, still waiting until
-  the serial wall clock actually hurts. Two things to know before
-  starting: `_HI_SSHD_IMAGE` is a _fixed_ tag four e2e suites share on
-  purpose so a full run builds it once, so parallelising that group means
-  either serialising it anyway or losing the sharing; and bash 3.2 has no
-  `wait -n`, so the pool has to poll `kill -0` the way `_hi_wait_pid`
-  does. `fast`'s 20 suites are the subset that would parallelise cleanly.
+- built in configuration UI for host/tags/colors configuration as well as users
+- built in package color/priority modification
+  - show all users & their colors, let users change existing, remove, add new
+- package groups/conditional loading
+  - let user change colors for each priority
+  - let user toggle certain priorities on/off entirely
 
-### Docs
-
-- [ ] **Jekyll GitHub Pages site** — _Written; the one click is the remaining
-      half._ `pages.yml` builds the repo's markdown with the stock
-      `jekyll-build-pages` → `upload-pages-artifact` → `deploy-pages` chain,
-      SHA-pinned and minimal-permission like every workflow here (write scopes
-      on the `deploy` job alone; Pages deploys never cancel in flight).
-      `_config.yml` picks the primer theme, excludes everything that is code
-      rather than prose, and turns on the four plugins the markdown needs:
-      `readme-index` (so `README.md` is the index, as on github.com),
-      `relative-links` (so `docs/GLOSSARY.md`-style cross-links resolve on the
-      site too), `optional-front-matter` and `titles-from-headings`.
-
-  - **Where:** Settings → Pages
-  - **Do:** set _Source_ to **GitHub Actions**. Only exists once the repo is public.
-  - **Ticks when:** that is set and a dispatch of `pages.yml` has deployed once, with the README rendering as the index and the docs cross-links resolving.
-
-## Human actions
+## Outside this repo
 
 ### GitHub repo settings
 
@@ -231,7 +192,22 @@ All three are written, committed, and dispatch-only. They need nothing but the r
 
   - **Ticks when:** it has been run once and the report read. Only then decide about a README badge.
 
-### External accounts & submissions
+### Docs & submissions
+
+- [ ] **Jekyll GitHub Pages site** — _Written; the one click is the remaining
+      half._ `pages.yml` builds the repo's markdown with the stock
+      `jekyll-build-pages` → `upload-pages-artifact` → `deploy-pages` chain,
+      SHA-pinned and minimal-permission like every workflow here (write scopes
+      on the `deploy` job alone; Pages deploys never cancel in flight).
+      `_config.yml` picks the primer theme, excludes everything that is code
+      rather than prose, and turns on the four plugins the markdown needs:
+      `readme-index` (so `README.md` is the index, as on github.com),
+      `relative-links` (so `docs/GLOSSARY.md`-style cross-links resolve on the
+      site too), `optional-front-matter` and `titles-from-headings`.
+
+  - **Where:** Settings → Pages
+  - **Do:** set _Source_ to **GitHub Actions**. Only exists once the repo is public.
+  - **Ticks when:** that is set and a dispatch of `pages.yml` has deployed once, with the README rendering as the index and the docs cross-links resolving.
 
 - [ ] **tldr page** — five example lines reach everyone who types `tldr hi`
       before anyone reads a man page. Upstream has its own style guide and
@@ -240,14 +216,3 @@ All three are written, committed, and dispatch-only. They need nothing but the r
 
   - **Do:** open the PR against tldr-pages **after v1**, once the CLI surface is frozen — examples that churn are worse than no page.
   - **Ticks when:** it is merged upstream.
-
-Nice to have -
-
-- built in configuration UI for host/tags/colors configuration as well as users
-- built in package color/priority modification
-  - show all users & their colors, let users change existing, remove, add new
-- package groups/conditional loading
-  - let user change colors for each priority
-  - let user toggle certain priorities on/off entirely
-- evaluate moving hi.sh and load.sh to common or bin (revise directory structure)
-- evaluate if there are existing packages that we can integrate instead of rolling our own

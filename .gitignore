@@ -39,6 +39,10 @@
 *.jpeg
 *.log
 *.txt
+# ...except setup-tool's roster, which the blanket *.txt above swallowed: the
+# action and the drift checker both read it, so an unignored copy is the only
+# way CI has ever seen it. Same trap as dist/ below, from the other side.
+!.github/actions/setup-tool/tools.txt
 *.tsv
 *.csv
 *.sql

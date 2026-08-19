@@ -1,0 +1,40 @@
+# The pinned CI tools, one row per tool - read by ./install.sh (which installs
+# one) and by ../../scripts/check_tool_versions.sh (which reports drift against
+# each upstream's latest release). Both reach it through ./lib.sh, so this file
+# is the single roster: a tool pinned here cannot go undrift-checked.
+#
+#   name|pin|kind|url|verify|check
+#
+# name    the first column an `uses: ./.github/actions/setup-tool` names, and
+#         the executable's name - install.sh saves a `raw` download under it,
+#         and finds it inside an archive with `find -name <name>`.
+# pin     the version, WITHOUT a leading "v" even where upstream's tag has one:
+#         some projects tag v1.2.3 but name the asset 1.2.3, and only one
+#         placeholder is substituted. The url column carries the literal "v"
+#         where the tag needs it. check_tool_versions.sh strips a leading "v"
+#         from both sides before comparing, so either convention compares fine.
+# kind    raw (a bare executable), tar.gz or tar.xz.
+# url     %v is the pin. %a is the asset slug for this runner
+#         (linux.x86_64 / darwin.aarch64 / darwin.x86_64) and is resolved
+#         first, so a version can never be mistaken for one; only shellcheck
+#         needs it, being the only tool also installed on macOS.
+# verify  the flag install.sh runs the installed tool with as a smoke test.
+# check   where to look for the latest release: github:<owner>/<repo>,
+#         gitlab:<url-encoded project path> (salsa.debian.org, where
+#         checkbashisms lives inside devscripts), or "-" to opt out of the
+#         drift report entirely.
+#
+# Bumping a pin is a hand edit here, and nothing else - the caching action.yml
+# reads the version back out of install.sh's `resolve`.
+#
+# NOTE: .gitignore blankets *.txt and un-ignores this one file by name. A new
+# roster file beside it would be swallowed the same way - see dist/'s comment
+# at the bottom of .gitignore for the same trap.
+shellcheck|0.11.0|tar.xz|https://github.com/koalaman/shellcheck/releases/download/v%v/shellcheck-v%v.%a.tar.xz|--version|github:koalaman/shellcheck
+shfmt|3.13.1|raw|https://github.com/mvdan/sh/releases/download/v%v/shfmt_v%v_linux_amd64|--version|github:mvdan/sh
+checkbashisms|2.26.11|raw|https://salsa.debian.org/debian/devscripts/-/raw/v%v/scripts/checkbashisms.pl|--version|gitlab:debian%2Fdevscripts
+actionlint|1.7.12|tar.gz|https://github.com/rhysd/actionlint/releases/download/v%v/actionlint_%v_linux_amd64.tar.gz|--version|github:rhysd/actionlint
+zizmor|1.29.0|tar.gz|https://github.com/zizmorcore/zizmor/releases/download/v%v/zizmor-x86_64-unknown-linux-gnu.tar.gz|--version|github:zizmorcore/zizmor
+nfpm|2.47.0|tar.gz|https://github.com/goreleaser/nfpm/releases/download/v%v/nfpm_%v_Linux_x86_64.tar.gz|--version|github:goreleaser/nfpm
+minisign|0.12|tar.gz|https://github.com/jedisct1/minisign/releases/download/%v/minisign-%v-linux.tar.gz|-v|github:jedisct1/minisign
+nu|0.115.0|tar.gz|https://github.com/nushell/nushell/releases/download/%v/nu-%v-x86_64-unknown-linux-gnu.tar.gz|--version|github:nushell/nushell

@@ -15,8 +15,7 @@
 # one exists, so any chain reachable from an aliased name silently broke - see
 # the resolve-before-aliasing block at the top of misc/aliases.sh.
 #
-# Nearly every function below is invoked indirectly - by name, through
-# _hi_case's "$@" - which SC2329 can't see.
+# GLOSSARY: HI.30
 # shellcheck disable=SC2329
 set -euo pipefail
 

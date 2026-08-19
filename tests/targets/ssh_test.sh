@@ -9,8 +9,7 @@
 # image never reaches; and that same install plus tmux, for --tmux. The debian base comes
 # from test_lib.sh's _hi_sshd_image, shared with ssh_disconnect_test.sh.
 #
-# Nearly every function below is invoked indirectly - by name, through
-# _hi_case's/_hi_poll_bool's "$@", or as a trap hook - which SC2329 can't see.
+# GLOSSARY: HI.30
 # shellcheck disable=SC2329
 set -euo pipefail
 

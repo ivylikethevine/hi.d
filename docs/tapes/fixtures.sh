@@ -6,7 +6,7 @@
 # every resource is named hi-demo-* so a crashed render can't leak anonymous
 # containers. Not sourced by anything; invoked from the tapes' Hide blocks:
 #
-#   docs/tapes/fixtures.sh up ssh|docker|podman|nomad|kube
+#   docs/tapes/fixtures.sh up demo|ssh|docker|podman|nomad|kube|colors
 #   docs/tapes/fixtures.sh down
 set -euo pipefail
 
@@ -133,9 +133,10 @@ job "hi-demo" {
     task "box" {
       driver = "docker"
       config {
-        image   = "debian:bookworm-slim"
-        command = "tail"
-        args    = ["-f", "/dev/null"]
+        image    = "debian:bookworm-slim"
+        hostname = "batch-7"
+        command  = "tail"
+        args     = ["-f", "/dev/null"]
       }
     }
   }
@@ -165,6 +166,111 @@ function up_kube() {
   kubectl --context kind-hi-demo wait --for=condition=Ready pod/hi-demo-pod --timeout=120s >/dev/null
 }
 
+# The *client* side of every tape: an rc the tape sources so the outside shell
+# has hi's own prompt (vhs starts a bare shell, which otherwise renders the
+# blank default) under a chosen identity rather than the renderer's.
+#
+# The identity needs both halves. $_HI_WHOAMI_CACHE/$_HI_HOSTNAME_CACHE are what
+# hi resolves *colors* from, so priming them makes the prompt's colors the ones
+# that user@host really would get. The rendered text needs a different lever per
+# shell: bash expands \u and \h itself, zsh's %n reads $USERNAME (which zsh will
+# not let a script reassign), and fish reads $USER and prompt_hostname. So bash
+# and zsh get the two escapes substituted back out of the finished prompt, and
+# fish gets the variable and the function. Everything else on the line stays
+# hi's real prompt - its colors, its separator, its git segment.
+#
+# Written through sed rather than an unquoted heredoc so the rc's own ${...}
+# survives being generated.
+function client_rc() { # <shell> <user> <hostname>
+  local shell="$1" user="$2" host="$3" home
+  home="$(dirname "$_HI_ROOT")"
+  # $_HI_HOME/$_HI_ROOT are baked in rather than inherited: vhs starts a bare
+  # shell, and on a machine where /usr/bin/hi points at some other install (or
+  # a login profile exports its own $_HI_HOME) an inherited one renders the
+  # wrong tree - silently, and the GIF is the only place it would show.
+  case "$shell" in
+  bash)
+    sed -e "s/@USER@/$user/g" -e "s/@HOST@/$host/g" \
+      -e "s#@HOME@#$home#g" -e "s#@ROOT@#$_HI_ROOT#g" >"$_HI_DEMO_DIR/clientrc.bash" <<'EOF'
+export _HI_HOME='@HOME@' _HI_ROOT='@ROOT@'
+export _HI_WHOAMI_CACHE='@USER@' _HI_HOSTNAME_CACHE='@HOST@'
+source "$_HI_ROOT/shells/bash.sh"
+_hi_demo_ps1() {
+  ps1
+  PS1="${PS1//\\u/@USER@}"
+  PS1="${PS1//\\h/@HOST@}"
+}
+PROMPT_COMMAND=_hi_demo_ps1
+EOF
+    ;;
+  zsh)
+    sed -e "s/@USER@/$user/g" -e "s/@HOST@/$host/g" \
+      -e "s#@HOME@#$home#g" -e "s#@ROOT@#$_HI_ROOT#g" >"$_HI_DEMO_DIR/clientrc.zsh" <<'EOF'
+export _HI_HOME='@HOME@' _HI_ROOT='@ROOT@'
+export _HI_WHOAMI_CACHE='@USER@' _HI_HOSTNAME_CACHE='@HOST@'
+source "$_HI_ROOT/shells/zsh.zsh"
+# %n reads $USERNAME, which zsh will not let a script reassign, so both escapes
+# are substituted out of the finished prompt instead. zsh builds PS1 once and
+# updates the git segment through a variable, so once is enough.
+PS1="${PS1//\%n/@USER@}"
+PS1="${PS1//\%m/@HOST@}"
+EOF
+    ;;
+  fish)
+    sed -e "s/@USER@/$user/g" -e "s/@HOST@/$host/g" \
+      -e "s#@HOME@#$home#g" -e "s#@ROOT@#$_HI_ROOT#g" >"$_HI_DEMO_DIR/clientrc.fish" <<'EOF'
+set -gx _HI_HOME '@HOME@'
+set -gx _HI_ROOT '@ROOT@'
+set -gx _HI_WHOAMI_CACHE '@USER@'
+set -gx _HI_HOSTNAME_CACHE '@HOST@'
+set -gx USER '@USER@'
+function prompt_hostname
+  echo '@HOST@'
+end
+source "$_HI_ROOT/shells/config.fish"
+EOF
+    ;;
+  esac
+}
+
+# The color-preview demo needs no backend at all - just an ssh config with
+# enough shape to be worth previewing, and a colors overlay pinning a few of
+# them. Both live in a throwaway $HOME the tape points at, because that is the
+# lever that works: common/paths.sh assigns $_HI_SSH_CONFIG from $HOME every
+# time it is sourced, so exporting that one is undone before the preview reads
+# it. Getting this right is not neatness: reading the renderer's real
+# ~/.ssh/config would put their hostnames into a committed GIF.
+function up_colors() {
+  mkdir -p "$_HI_DEMO_DIR/home/.ssh" "$_HI_DEMO_DIR/home/.config/hi.d"
+  cat >"$_HI_DEMO_DIR/home/.ssh/config" <<'EOF'
+# Tags: prod
+Host db-prod web-prod
+  User deploy
+
+# Tags: staging
+Host db-staging
+  User deploy
+
+# Tags: desktop
+Host workshop
+  User hitest
+
+Host build-box
+  User ci
+
+Host bastion
+  User root
+EOF
+  cat >"$_HI_DEMO_DIR/home/.config/hi.d/colors" <<'EOF'
+# pins beat the name hash; everything unpinned still resolves on its own
+username,root,red
+hostname,bastion,yellow
+hosttag,prod,red
+hosttag,staging,yellow
+hosttag,desktop,green
+EOF
+}
+
 function demo_down() {
   docker rm -f hi-demo-ssh hi-demo hi-demo-zsh >/dev/null 2>&1 || true
   podman rm -f hi-demo-fish >/dev/null 2>&1 || true
@@ -180,17 +286,42 @@ function demo_down() {
 
 mkdir -p "$_HI_DEMO_DIR"
 case "${1:-}:${2:-}" in
-up:ssh) up_ssh ;;
+# Client identities, chosen per tape rather than taken from the renderer. The
+# spread is the point: docker's client is cache-1 and one of its targets is
+# cache-1 too (the same box, reached two ways), while the rest say hi somewhere
+# they are not.
+up:ssh)
+  client_rc bash ivy workshop
+  up_ssh
+  ;;
 up:docker)
+  client_rc zsh dev cache-1
   up_container docker hi-demo debian db-prod
   up_container docker hi-demo-zsh zsh cache-1
   ;;
-up:podman) up_container podman hi-demo-fish fish ;;
-up:nomad) up_nomad ;;
-up:kube) up_kube ;;
+up:podman)
+  client_rc fish ops bastion
+  up_container podman hi-demo-fish fish edge-1
+  ;;
+up:nomad)
+  client_rc bash ivy workshop
+  up_nomad
+  ;;
+up:kube)
+  client_rc zsh dev cache-1
+  up_kube
+  ;;
+up:colors)
+  client_rc bash ivy workshop
+  up_colors
+  ;;
+up:demo)
+  client_rc bash ivy workshop
+  up_container docker hi-demo debian db-prod
+  ;;
 down:) demo_down ;;
 *)
-  echo "usage: fixtures.sh up <ssh|docker|podman|nomad|kube> | down" >&2
+  echo "usage: fixtures.sh up <demo|ssh|docker|podman|nomad|kube|colors> | down" >&2
   exit 1
   ;;
 esac

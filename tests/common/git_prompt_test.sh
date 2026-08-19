@@ -1,8 +1,7 @@
 #!/bin/bash
 # Unit tests for common/git_prompt.sh's _hi_git_prompt.
 #
-# Nearly every function below is invoked indirectly - by name, through
-# _hi_case's "$@" - which SC2329 can't see.
+# GLOSSARY: HI.30
 # shellcheck disable=SC2329
 # Every _hi_git_prompt call here deliberately omits the optional out-var (the
 # stdout form is what's under test), which SC2119 can't tell from a mistake.

@@ -8,8 +8,7 @@
 # fixture misc/colors and ~/.ssh/config in the scratch dir, so the output is
 # fixed rather than "whatever this machine is configured with".
 #
-# Nearly every function below is invoked indirectly - by name, through
-# _hi_case's "$@" - which SC2329 can't see.
+# GLOSSARY: HI.30
 # shellcheck disable=SC2329
 set -euo pipefail
 

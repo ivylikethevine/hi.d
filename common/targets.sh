@@ -3,7 +3,7 @@
 # The bash, zsh and fish completions (and `hi_colors`) all read this for
 # connection, autocomplete, and autosuggest.
 # Usage: sh targets.sh [ssh|docker|podman|nomad|kube] (no argument = all of them)
-# GLOSSARY: completion probe knobs - _HI_PROBE_TIMEOUT and _HI_TARGETS_TTL
+# GLOSSARY: HI.26 - _HI_PROBE_TIMEOUT and _HI_TARGETS_TTL
 kind="${1:-all}"
 ttl="${_HI_TARGETS_TTL:-5}"
 

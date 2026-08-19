@@ -6,8 +6,7 @@
 # would outlive, and the config must forward the _HI_* variables, or a new
 # window gets a shell that cannot find hi.
 #
-# Nearly every function below is invoked indirectly, through _hi_check's "$@",
-# which SC2329 can't see.
+# GLOSSARY: HI.30
 # shellcheck disable=SC2329
 set -euo pipefail
 

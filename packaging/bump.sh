@@ -152,7 +152,7 @@ function rewrite_srcinfo_lines() {
     "s/^\\([[:space:]]*\\)b2sums = .*/\\1b2sums = $b2/"
 }
 
-# sourcing stops here (tests reach the functions above) - install.sh's pattern
+# GLOSSARY: HI.06
 [[ "${BASH_SOURCE[0]}" == "$0" ]] || return 0
 
 _HI_CHECK_ONLY=""

@@ -8,8 +8,7 @@
 # running". A third PATH - a toolbox holding only the commands targets.sh
 # itself needs - covers the "no backend installed at all" shape.
 #
-# Nearly every function below is invoked indirectly - by name, through
-# _hi_case's "$@" - which SC2329 can't see.
+# GLOSSARY: HI.30
 # shellcheck disable=SC2329
 set -euo pipefail
 

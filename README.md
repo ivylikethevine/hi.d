@@ -11,13 +11,12 @@ This is a hobby project.
 ---
 
 [![tests](https://img.shields.io/badge/tests-842_passed-4c1)](https://github.com/ivylikethevine/hi.d/actions/workflows/ci.yml)
+[![Linux](https://img.shields.io/github/actions/workflow/status/ivylikethevine/hi.d/ci.yml?branch=main&label=Linux)](https://github.com/ivylikethevine/hi.d/actions/workflows/ci.yml)
 [![macOS](https://img.shields.io/github/actions/workflow/status/ivylikethevine/hi.d/macos-e2e.yml?branch=main&label=macOS)](https://github.com/ivylikethevine/hi.d/actions/workflows/macos-e2e.yml)
 [![Windows](https://img.shields.io/github/actions/workflow/status/ivylikethevine/hi.d/windows-e2e.yml?branch=main&label=Windows)](https://github.com/ivylikethevine/hi.d/actions/workflows/windows-e2e.yml)
 [![Coverage](https://github.com/ivylikethevine/hi.d/actions/workflows/coverage.yml/badge.svg)](https://github.com/ivylikethevine/hi.d/actions/workflows/coverage.yml)
 ![ssh payload](https://img.shields.io/badge/ssh_payload-70KB_per_session-4c1)
 ![bash](https://img.shields.io/badge/bash-3.2%2B-4EAA25?logo=gnubash&logoColor=white)
-![shells](https://img.shields.io/badge/shells-bash%20%7C%20zsh%20%7C%20fish%20%7C%20ksh%20%7C%20sh-blue)
-![targets](https://img.shields.io/badge/targets-ssh%20%7C%20docker%20%7C%20podman%20%7C%20nomad%20%7C%20k8s-8A2BE2)
 ![license](https://img.shields.io/badge/license-MIT-blue)
 
 **One config directory to rule them all, uniting all shells from all hosts!**
@@ -285,13 +284,21 @@ This started as code written entirely by [me](https://github.com/ivylikethevine)
 
 Each GIF above is rendered from the tape beside it (`vhs docs/tapes/<name>.tape` from the repo root, with the
 backend running and `hi` on PATH; `docs/tapes/fixtures.sh` builds every target
-the tapes connect to, `fixtures.sh down` removes them). Manual artifacts,
-reviewed by eye — regenerate whenever the header or prompt changes.
+the tapes connect to, `fixtures.sh down` removes them). There is one more in
+[CONFIGURATION.md](docs/CONFIGURATION.md#colors) — `color_preview.tape`, the only one needing no backend at
+all. Manual artifacts, reviewed by eye — regenerate whenever the header or prompt changes.
 
 Two things to get right when you do: `hi` on `$PATH` must be _this_ checkout
 (`/usr/bin/hi` may point elsewhere), and the target image builds from `HEAD`,
 so uncommitted work shows on the client side of the GIF but not the target's.
 Render from a commit, or set `HI_DEMO_SOURCE=worktree`.
+
+Both sides of every GIF are staged, not inherited. Each tape sources a small rc
+`fixtures.sh` writes, giving the outside shell hi's own prompt under a chosen
+`user@host` instead of the renderer's — and every target gets an explicit
+hostname rather than a backend's random hex ID. The pairs vary on purpose:
+docker's client is `cache-1` and one of its targets is `cache-1` too, while the
+rest say `hi` somewhere they are not.
 
 ### Verifying a release download
 

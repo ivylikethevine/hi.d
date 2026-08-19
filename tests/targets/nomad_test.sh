@@ -12,8 +12,7 @@
 # 127.0.0.1 only. Skips cleanly if nomad or docker isn't installed/reachable
 # (the dev agent's docker task driver needs a real docker daemon).
 #
-# Nearly every function below is invoked indirectly - by name, through
-# _hi_case's/_hi_poll_bool's "$@", or as a trap hook - which SC2329 can't see.
+# GLOSSARY: HI.30
 # shellcheck disable=SC2329
 set -euo pipefail
 

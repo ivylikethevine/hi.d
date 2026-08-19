@@ -7,44 +7,51 @@ floor CI enforces), **POSIX sh** (dash/ash/busybox source parts of it), and
 userlands**. Each entry below is a construct that looks odd until you know
 which master it serves.
 
-Shipped files reference these entries with a short `# GLOSSARY: <entry>` tag
-instead of re-explaining - every byte in `common/`, `shells/`, `misc/` and
-`load.sh` rides over the wire on each `hi`. This file never ships (the
-payload is `$_HI_PAYLOAD` in `hi.sh`; `docs/` isn't in it).
+Every entry carries a stable `HI.NN` code, and shipped files reference it with a
+short `# GLOSSARY: HI.NN` tag instead of re-explaining - every byte in
+`common/`, `shells/`, `misc/` and `load.sh` rides over the wire on each `hi`.
+The code is what the tags point at, so an entry can be retitled without touching
+a single shipped file; codes are never reused once retired.
+`tests/shells/shellcheck_test.sh` fails the build if a tag names a code this
+file doesn't define. This file never ships (the payload is `$_HI_PAYLOAD` in
+`hi.sh`; `docs/` isn't in it).
 
 ## Contents
 
-- [empty-array guard](#empty-array-guard)
-- [_hi_read_lines](#_hi_read_lines)
-- [parallel arrays](#parallel-arrays)
-- [dynamic-name assignment](#dynamic-name-assignment)
-- [printf -v out-var](#printf--v-out-var)
-- [source guard](#source-guard)
-- [toggle defaulting](#toggle-defaulting)
-- [sed tempfile rewrite](#sed-tempfile-rewrite)
-- [cat-over-mv](#cat-over-mv)
-- [strftime %e over %-e](#strftime-e-over--e)
-- [LC_ALL=C sort](#lc_allc-sort)
-- [bytes vs columns](#bytes-vs-columns)
-- [command -v fallthrough](#command--v-fallthrough)
-- [_hi_on_exit](#_hi_on_exit)
-- [strict-mode bracketing](#strict-mode-bracketing)
-- [no-fork reads](#no-fork-reads)
-- [base64 armor](#base64-armor)
-- [sh -c wrapping](#sh--c-wrapping)
-- [stdin transport](#stdin-transport)
-- [fallback rc](#fallback-rc)
-- [split-quoted prompt segment](#split-quoted-prompt-segment)
-- [TERM fallback probe](#term-fallback-probe)
-- [bash --rcfile -i](#bash---rcfile--i)
-- [graft crash guard](#graft-crash-guard)
-- [session-shell ranking](#session-shell-ranking)
-- [completion probe knobs](#completion-probe-knobs)
-- [tmux server-start rules](#tmux-server-start-rules)
-- [ksh git segment](#ksh-git-segment)
-- [apostrophes in substitution comments](#apostrophes-in-substitution-comments)
+- [HI.01 empty-array guard](#hi01-empty-array-guard)
+- [HI.02 _hi_read_lines](#hi02-_hi_read_lines)
+- [HI.03 parallel arrays](#hi03-parallel-arrays)
+- [HI.04 dynamic-name assignment](#hi04-dynamic-name-assignment)
+- [HI.05 printf -v out-var](#hi05-printf--v-out-var)
+- [HI.06 source guard](#hi06-source-guard)
+- [HI.07 toggle defaulting](#hi07-toggle-defaulting)
+- [HI.08 sed tempfile rewrite](#hi08-sed-tempfile-rewrite)
+- [HI.09 cat-over-mv](#hi09-cat-over-mv)
+- [HI.10 strftime %e over %-e](#hi10-strftime-e-over--e)
+- [HI.11 LC_ALL=C sort](#hi11-lc_allc-sort)
+- [HI.12 bytes vs columns](#hi12-bytes-vs-columns)
+- [HI.13 command -v fallthrough](#hi13-command--v-fallthrough)
+- [HI.14 _hi_on_exit](#hi14-_hi_on_exit)
+- [HI.15 strict-mode bracketing](#hi15-strict-mode-bracketing)
+- [HI.16 no-fork reads](#hi16-no-fork-reads)
+- [HI.17 base64 armor](#hi17-base64-armor)
+- [HI.18 sh -c wrapping](#hi18-sh--c-wrapping)
+- [HI.19 stdin transport](#hi19-stdin-transport)
+- [HI.20 fallback rc](#hi20-fallback-rc)
+- [HI.21 split-quoted prompt segment](#hi21-split-quoted-prompt-segment)
+- [HI.22 TERM fallback probe](#hi22-term-fallback-probe)
+- [HI.23 bash --rcfile -i](#hi23-bash---rcfile--i)
+- [HI.24 graft crash guard](#hi24-graft-crash-guard)
+- [HI.25 session-shell ranking](#hi25-session-shell-ranking)
+- [HI.26 completion probe knobs](#hi26-completion-probe-knobs)
+- [HI.27 tmux server-start rules](#hi27-tmux-server-start-rules)
+- [HI.28 ksh git segment](#hi28-ksh-git-segment)
+- [HI.29 apostrophes in substitution comments](#hi29-apostrophes-in-substitution-comments)
+- [HI.30 indirect invocation](#hi30-indirect-invocation)
+- [HI.31 porcelain branch.oid](#hi31-porcelain-branchoid)
+- [HI.32 starship deference](#hi32-starship-deference)
 
-## empty-array guard
+## HI.01 empty-array guard
 
 `${a[@]+"${a[@]}"}` wherever an array may be empty under `set -u`: bash 3.2
 treats expanding an _empty_ array as a fatal "unbound variable". Plain
@@ -56,7 +63,7 @@ whatever the array holds, and bash 5 reads it as an indirect reference and
 errors outright. The lint table in `tests/shells/shellcheck_test.sh` rejects
 the guarded index form.
 
-## _hi_read_lines
+## HI.02 _hi_read_lines
 
 `mapfile`/`readarray` are bash 4; on 3.2 the builtin simply doesn't exist.
 `_hi_read_lines <array-name>` (`common/core.sh`) is the stand-in: a `while
@@ -64,7 +71,7 @@ read` loop assigning through `eval`, keeping a last line without a trailing
 newline the way `mapfile -t` does. Use it exactly like
 `_hi_read_lines lines < <(cmd)`.
 
-## parallel arrays
+## HI.03 parallel arrays
 
 Associative arrays (`declare -A`/`local -A`) are bash 4 - on 3.2 the
 _declaration alone_ is a fatal "invalid option". Where a map is needed,
@@ -72,7 +79,7 @@ either parallel indexed arrays sharing one index with a keys array as the
 lookup table (`_hi_group_index` in `scripts/color_preview.sh`), or
 `"<key>=<value>"` strings via `_hi_kv_get`/`_hi_kv_set` (`tests/test_lib.sh`).
 
-## dynamic-name assignment
+## HI.04 dynamic-name assignment
 
 bash 3.2 has no namerefs (`declare -n`, bash 4.3), so writing into a
 caller-named variable goes through `eval` (see `_hi_read_lines`,
@@ -81,7 +88,7 @@ Reading a caller's `local` works through bash's dynamic scoping, which is why
 some helpers deliberately live beside their one caller instead of taking the
 array as an argument.
 
-## printf -v out-var
+## HI.05 printf -v out-var
 
 `out="$(fn)"` forks a subshell per call; `fn outvar` with `printf -v "$outvar"`
 doesn't. Used on hot paths (`_hi_git_prompt`'s optional out-var, `_hi_repeat`)
@@ -89,7 +96,7 @@ doesn't. Used on hot paths (`_hi_git_prompt`'s optional out-var, `_hi_repeat`)
 - but only in bash: zsh's `printf` has no `-v`, so zsh callers keep the
   stdout form.
 
-## source guard
+## HI.06 source guard
 
 `[[ "${BASH_SOURCE[0]}" == "$0" ]] || return 0` above a script's imperative
 tail: sourcing the file defines its functions and stops there, which is how
@@ -97,7 +104,7 @@ the test suites reach the functions without running an install/bump/render.
 `scripts/install.sh`, `packaging/bump.sh`, `packaging/mkpkg.sh`,
 `scripts/color_preview.sh` and `scripts/packages_preview.sh` all carry it.
 
-## toggle defaulting
+## HI.07 toggle defaulting
 
 fish has no `${X:-0}`, and it sources `aliases.sh`/`paths.sh`/`settings.sh`
 natively - so every `_HI_DISABLE_*` toggle is read _bare_, and a bare read of
@@ -108,13 +115,13 @@ never assigned, so settings.sh and paths.sh's gate still win),
 read a bash array), and `hi.sh`'s `_hi_fallback_rc` emits `export X=0` lines
 from the same list for bash-less targets.
 
-## sed tempfile rewrite
+## HI.08 sed tempfile rewrite
 
 Never `sed -i`: its in-place flag takes an argument on BSD and not on GNU.
 Rewrites go `sed > tmpfile` then write back. See also cat-over-mv below for
 why the write-back is `cat`, not `mv`.
 
-## cat-over-mv
+## HI.09 cat-over-mv
 
 Writing a tempfile back over an existing file goes through the existing
 inode: `cat "$tmp" > "$target"; rm -f "$tmp"` (`_hi_write_back` in
@@ -124,25 +131,25 @@ dotfile manager's hardlinked `~/.bashrc` must see the new content.
 Non-atomicity is acceptable for single-user rc files; `common/targets.sh`'s
 cache swap keeps `mv` deliberately, for atomicity over a file it owns.
 
-## strftime %e over %-e
+## HI.10 strftime %e over %-e
 
 `date +%-e` (no-padding) is a GNU extension; BSD strftime prints the literal
 characters. `%e` is the portable day-of-month.
 
-## LC_ALL=C sort
+## HI.11 LC_ALL=C sort
 
 Under a UTF-8 locale, BSD `sort` exits "Illegal byte sequence" on non-UTF-8
 input - and does so having printed nothing while the pipeline carries on.
 Any sort whose input isn't guaranteed clean UTF-8 is pinned to `LC_ALL=C`.
 
-## bytes vs columns
+## HI.12 bytes vs columns
 
 `${#var}` counts bytes, not display columns, and in the C locale multibyte
 characters inflate it - a banner padded by `${#...}` comes out narrow. Width
 math around user-visible strings computes column counts explicitly (see
 `changes_w` in `common/header.sh`, `_hi_visible_len` in `scripts/install.sh`).
 
-## command -v fallthrough
+## HI.13 command -v fallthrough
 
 `alias x="$(command -v tool-a || command -v tool-b || command -v fallback)"`
 in `misc/aliases.sh`: resolved at source time, valid in sh, bash, zsh _and_
@@ -150,13 +157,13 @@ fish (modern fish parses `$(...)`), and never leaves the alias pointing at a
 missing binary. The `|| command -v echo` tail keeps `set -u`/`set -e` shells
 alive when nothing matches.
 
-## _hi_on_exit
+## HI.14 _hi_on_exit
 
 zsh doesn't run bash-style `trap ... EXIT` the same way; it has `TRAPEXIT`.
 `_hi_on_exit` (`common/core.sh`) picks per shell, and is the only way cleanup
 traps are registered in shared code.
 
-## strict-mode bracketing
+## HI.15 strict-mode bracketing
 
 Files that run inside an interactive shell (`common/core.sh`, `hi.sh`,
 `shells/bash.sh`, `common/git_prompt.sh`, ...) set `set -euo pipefail` at the
@@ -165,14 +172,14 @@ non-zero status or unset variable kills the user's session. The bootloader
 and fallback rc do the same on targets - forgetting it there is what once
 broke `hi <target> <command>` outright.
 
-## no-fork reads
+## HI.16 no-fork reads
 
 On per-prompt/per-startup paths, builtins over binaries: `read -r x < file`
 instead of `$(cat file)` (a miss costs no fork and no error),
 `${target%/*}` instead of `$(dirname ...)`, `${row%%$'\t'*}` instead of
 `| cut -f1`. A few forks per prompt is the whole latency budget.
 
-## base64 armor
+## HI.17 base64 armor
 
 The payload is armored with `base64`, not `openssl`: it is pure ASCII
 transport encoding (no crypto), and base64 ships on strictly more targets -
@@ -184,7 +191,7 @@ newlines into spaces would otherwise break it. `$_HI_UNARMOR` only ever runs
 inside the sh bootloader - the login shell never parses its braces (fish
 couldn't).
 
-## sh -c wrapping
+## HI.18 sh -c wrapping
 
 Every command hi sends meets the target's *login* shell first, and that shell
 may be fish, which parses neither `x=1` nor `{ ...; }` nor `||` as sh does.
@@ -196,7 +203,7 @@ was wrapped). The quoting is single-quote-and-escape rather than `printf %q`:
 unescape - readable in neither the code nor an `ssh -v` log, and one more
 thing for fish to differ about. Callers write plain sh and never count quotes.
 
-## stdin transport
+## HI.19 stdin transport
 
 The bootloader travels over **stdin of the first of two ssh calls multiplexed
 on one connection** (so still one authentication), never as a command-line
@@ -214,7 +221,7 @@ OpenSSH), and one without `base64` cannot unpack what the script carries;
 either way the session falls through to the PowerShell branch rather than
 half-landing.
 
-## fallback rc
+## HI.20 fallback rc
 
 The no-bash target's rc is consumed by sh, zsh *and* fish (`_say_hi`'s
 `fish -C` branch), so every line in it must be valid in all three - `export
@@ -230,7 +237,7 @@ the shipped overlay was unpacked - not a `~/.config/hi.d` belonging to
 whoever we logged in as, and not `misc/`, which holds the *shipped* copies of
 the same names.
 
-## split-quoted prompt segment
+## HI.21 split-quoted prompt segment
 
 The bash-less tiers' PS1 is baked on the client - colors resolved once, the
 username read once at source time - because busybox ash does not run command
@@ -243,7 +250,7 @@ it would be expanded once at rc time and frozen. That split-quoting is the
 whole trick, and why the segment stays an opt-in argument: handed to busybox
 ash, the substitution's *text* would print instead of running.
 
-## TERM fallback probe
+## HI.22 TERM fallback probe
 
 ssh forwards the client `TERM` verbatim, and a TERM the target has no
 terminfo entry for (ghostty's `xterm-ghostty` is the canonical case, kitty's
@@ -254,7 +261,7 @@ layout both checked - or is swapped for `xterm-256color`, which every tree
 that exists at all carries. `_HI_TERM_FALLBACK=0` keeps the original TERM no
 matter what.
 
-## bash --rcfile -i
+## HI.23 bash --rcfile -i
 
 `bash --rcfile X -i` needs both flags, in that order: without `-i` bash
 decides it isn't interactive (from stdin, not the flag) and ignores the
@@ -264,7 +271,7 @@ ends at the first short option. fish is different again: `exit` inside a
 sourced file only unwinds the source, so the fish arm feeds the rc's content
 to `-C` instead.
 
-## graft crash guard
+## HI.24 graft crash guard
 
 `clean_all` cannot run after a hard kill, so every rc graft is wrapped in a
 tree-exists guard that makes the block vanish on its own when the tree it
@@ -274,7 +281,7 @@ is the *host's* rc file. The guard re-resolves at shell start, exactly as the
 graft's own paths do, so it also silences a bystander shell opened
 mid-session with none of the session's env.
 
-## session-shell ranking
+## HI.25 session-shell ranking
 
 `$_HI_SHELL_PREFERENCE` is an ordered list of names hi styles, plus the token
 `login` for "whatever the user's login shell is"; the first entry that is
@@ -291,7 +298,7 @@ ranking that leads with fish hands it to anyone whose box has it, so a user
 whose login shell is zsh-with-oh-my-zsh never sees their own setup - hi's
 configs are grafted onto every rc file either way; the user's are not.
 
-## completion probe knobs
+## HI.26 completion probe knobs
 
 `targets.sh` runs on every TAB after `hi ` - the most latency-sensitive path
 in hi.d and the slowest (four of five backends are a subprocess each). Two
@@ -302,7 +309,7 @@ gets (default 2, needs GNU `timeout`; shared with `common/core.sh`'s
 a just-started container may not appear until it expires, the trade for not
 paying ~110ms per TAB.
 
-## tmux server-start rules
+## HI.27 tmux server-start rules
 
 Two rules for `misc/tmux.conf`: `-f` is read when the *server* starts, not
 when a client attaches, so attaching to someone else's server applies none of
@@ -310,7 +317,7 @@ it; and the `tmux` alias exists only where hi.d is permanent (no
 `$_HI_CLEANUP`) - a detached tmux outlives the ssh session, and on a
 disposable target the tree it reads is deleted on exit.
 
-## ksh git segment
+## HI.28 ksh git segment
 
 Where bash is present, `common/git_prompt.sh` renders the git segment and
 fish reaches it by shelling out to `bash -c`. The ksh/mksh tier is defined by
@@ -322,7 +329,7 @@ busybox ash does not do substitution in PS1 at all. What it deliberately does
 NOT do is the header - that needs bash, and the README's compatibility table
 says so in the ksh row.
 
-## apostrophes in substitution comments
+## HI.29 apostrophes in substitution comments
 
 bash 3.2 scans a `$( ... )` command substitution with a simple quote
 matcher, not the real parser: a comment line _inside_ one containing a lone
@@ -333,3 +340,29 @@ this only ever surfaces on macOS. Keep comments inside `$( )`
 apostrophe-free, or hoist them above the assignment. The lint greps cannot
 see this one; `tests/targets/ssh_test.sh` runs `bash -n` over every file in
 a real 3.2 container to catch the class.
+
+## HI.30 indirect invocation
+
+Test suites hand their case functions to `_hi_check`/`_hi_case`/`_hi_par_case`
+as `"$@"`, or register them as trap hooks, so nothing in the file ever calls
+them by name. shellcheck reads that as dead code and raises SC2329 on each one,
+which is why every suite carries a file-level `# shellcheck disable=SC2329`.
+The disable is the fix; this entry is the reason it is there.
+
+## HI.31 porcelain branch.oid
+
+`git status --porcelain=v2 --branch` already carries HEAD's sha on its
+`# branch.oid` line, so the detached-HEAD label reads it out of the stream the
+prompt is already parsing instead of forking `git rev-parse`. The `rev-parse`
+beneath it is a fallback for a porcelain stream too old to carry that header,
+not a third fork in the common path. Implemented twice, in
+`common/git_prompt.sh` and `shells/ksh.sh` - see HI.28.
+
+## HI.32 starship deference
+
+`_HI_PROMPT=starship` hands the prompt to [starship](https://starship.rs) when
+the target has it, keeping hi's header and aliases. `common/core.sh`'s
+`_hi_wants_starship` is the single predicate (the setting *and* the binary);
+`shells/bash.sh` and `shells/zsh.zsh` each `eval` their own `starship init`
+behind it and skip building hi's PS1. Absent starship, the setting is ignored
+silently.

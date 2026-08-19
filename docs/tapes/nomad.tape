@@ -23,12 +23,14 @@ Hide
 Type "docs/tapes/fixtures.sh up nomad >/tmp/hi-demo.log 2>&1 && echo fixture-o''k"
 Enter
 Wait+Screen@240s /fixture-ok/
+Type "source /tmp/hi-demo/clientrc.bash"
+Enter
 Type "clear"
 Enter
 Show
 
 Sleep 1s
-Type "# a nomad allocation, addressed by ID prefix like any other target"
+Type "# a nomad allocation, by ID prefix"
 Enter
 Type "nomad job status hi-demo | tail -2"
 Enter
@@ -42,8 +44,12 @@ Enter
 Sleep 2s
 Type "exit"
 Enter
-Wait+Screen@30s /hi closing!/
-Sleep 2s
+# on /Disconnected/ rather than the /hi closing!/ the other tapes wait for:
+# both render, but under vhs the nomad teardown reliably beats the scrape to
+# that last line and the wait times out. The banner above it is just as good a
+# "the session is over" marker, and the sleep keeps the closing line in frame.
+Wait+Screen@60s /Disconnected/
+Sleep 4s
 
 # No in-tape cleanup: run `docs/tapes/fixtures.sh down` after rendering.
 # (Typing into the pty right after a session teardown proved flaky under

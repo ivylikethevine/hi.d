@@ -9,8 +9,7 @@
 # That needs the toolchains and belongs in the verification runbook
 # (docs/PACKAGING.md), not in the fast group.
 #
-# Nearly every function below is invoked indirectly - by name, through
-# _hi_case's "$@" - which SC2329 can't see.
+# GLOSSARY: HI.30
 # shellcheck disable=SC2329
 set -euo pipefail
 

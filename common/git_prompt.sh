@@ -49,8 +49,7 @@ _hi_git_prompt() {
     else
       ref=$(LC_ALL=C git describe --tags --contains HEAD 2>/dev/null)
       [[ -z "$ref" ]] && ref=$(LC_ALL=C git describe --tags HEAD 2>/dev/null)
-      # branch.oid rode the porcelain stream - not a third fork; the rev-parse
-      # answers only for a stream too old to carry the header
+      # GLOSSARY: HI.31
       [[ -z "$ref" && -n "$oid" && "$oid" != "(initial)" ]] && ref="(${oid:0:8})"
       [[ -z "$ref" ]] && ref="($(LC_ALL=C git rev-parse --short=8 HEAD 2>/dev/null))"
       _HI_DESC_OID="$oid" _HI_DESC_REF="$ref"

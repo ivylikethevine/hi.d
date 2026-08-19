@@ -187,18 +187,19 @@ function lint_checkbashisms() {
   return "$bad"
 }
 
-# Every GLOSSARY tag in the tree has to name a real `## ` heading in
+# Every GLOSSARY tag in the tree has to name a real `## HI.NN` heading in
 # docs/GLOSSARY.md: the tags are how shipped files point at an explanation
-# without carrying it, and a renamed entry would otherwise strand its tags
-# silently. A tag is one entry name with optional prose after it, or two
-# names joined with ` + `; each name must prefix-match some heading. Markdown
-# files are excluded from the sweep - the docs *talk about* the convention.
+# without carrying it, and a deleted entry would otherwise strand its tags
+# silently. A tag is one code with optional prose after it, or two codes
+# joined with ` + `; the code is matched, not the title, so retitling an entry
+# touches no shipped file. Markdown files are excluded from the sweep - the
+# docs *talk about* the convention.
 function lint_glossary_tags() {
   local pat='# GLOSSARY' glossary="$_HI_ROOT/docs/GLOSSARY.md"
   local headings tags line tag part h ok bad=0
   _hi_h2 "Checking GLOSSARY tags against docs/GLOSSARY.md"
   _HI_LINT_TOTAL=$((_HI_LINT_TOTAL + 1))
-  _hi_read_lines headings < <(sed -n 's/^## //p' "$glossary")
+  _hi_read_lines headings < <(sed -n 's/^## \(HI\.[0-9][0-9]\).*/\1/p' "$glossary")
   _hi_read_lines tags < <(grep -rn "${pat}: " "$_HI_ROOT" \
     --exclude-dir=.git --exclude-dir=dist --exclude='*.md' 2>/dev/null || true)
   for line in "${tags[@]}"; do
@@ -210,7 +211,7 @@ function lint_glossary_tags() {
         case "$part" in "$h"*) ok=1 ;; esac
       done
       if [ -z "$ok" ]; then
-        _hi_align " | unknown entry in ${line%%:*}: $part" "FAILED" "$RED"
+        _hi_align " | unknown code in ${line%%:*}: $part" "FAILED" "$RED"
         _hi_note_failure "GLOSSARY tag: $part"
         bad=$((bad + 1))
       fi

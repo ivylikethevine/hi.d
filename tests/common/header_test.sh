@@ -2,8 +2,7 @@
 # Unit tests for common/header.sh - the banner and its detail lines, plus the
 # packages check (check_line/full_check) that lives at the bottom of that file.
 #
-# Nearly every function below is invoked indirectly - by name, through
-# _hi_case's "$@" - which SC2329 can't see.
+# GLOSSARY: HI.30
 # shellcheck disable=SC2329
 set -euo pipefail
 
@@ -48,22 +47,34 @@ function test_banner_includes_label_and_host() {
 # past ~54 characters *both* calls floor, the two lines come out the same length
 # and this reads as a failure of the padding logic when it is really a failure
 # to control the fixture. That is what it did on the macOS CI runner.
-# A bare `local _HI_BANNER_HOST` shadows banner's memo with an unset copy, so
-# the pin below is what banner actually reads no matter what ran before, and the
-# real value is restored on return.
+# The pin only reaches banner if $_HI_BANNER_HOST is unset, because banner
+# memoizes the hostname into it and an earlier case can leave it filled. Unset
+# inside the command substitution, never a bare `local` in the function: under
+# bash 3.2 `local V` creates V *set and null*, so `${V+x}` is non-empty there and
+# banner would skip resolving the hostname and render an empty one. bash 4+ makes
+# a bare `local` unset, so that mistake passes everywhere except the macOS job.
 function test_banner_prefix_shrinks_padding() {
-  local plain prefixed _HI_BANNER_HOST _HI_HOSTNAME_CACHE="pinned-host"
-  plain="$(banner TestBanner "$BRGREEN" "")"
-  prefixed="$(banner TestBanner "$BRGREEN" "$(printf 'x%.0s' {1..50})")"
+  local plain prefixed _HI_HOSTNAME_CACHE="pinned-host"
+  plain="$(
+    unset _HI_BANNER_HOST
+    banner TestBanner "$BRGREEN" ""
+  )"
+  prefixed="$(
+    unset _HI_BANNER_HOST
+    banner TestBanner "$BRGREEN" "$(printf 'x%.0s' {1..50})"
+  )"
   [ "${#prefixed}" -lt "${#plain}" ]
 }
 
 # ...and the floor itself, reached on purpose with the hostname pinned long
 # rather than by accident on a machine that happens to have a long one.
 function test_banner_floors_padding_on_a_long_hostname() {
-  local out _HI_BANNER_HOST _HI_HOSTNAME_CACHE
+  local out _HI_HOSTNAME_CACHE
   printf -v _HI_HOSTNAME_CACHE 'h%.0s' {1..60}
-  out="$(banner TestBanner)"
+  out="$(
+    unset _HI_BANNER_HOST
+    banner TestBanner
+  )"
   [[ "$out" == *"$_HI_HOSTNAME_CACHE"* && "$out" == *"~"* ]]
 }
 

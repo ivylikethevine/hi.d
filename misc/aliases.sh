@@ -4,7 +4,7 @@
 # shellcheck disable=SC2139 # aliases are meant to expand $_HI_* now, not later
 # shellcheck disable=SC2155
 # shellcheck disable=SC2089 # the *_OPTS quotes are literal alias text; the overlay source below makes the linter guess otherwise
-# GLOSSARY: command -v fallthrough - first-installed wins; reorder to taste.
+# GLOSSARY: HI.13 - first-installed wins; reorder to taste.
 
 # Backstop toggle defaults, in an eval fish can't parse. fish's `command -v`
 # reports no builtins at all, so the gate is really "no file of this name on
@@ -13,7 +13,7 @@
 # printed a parse error. `shift` has no such file anywhere; `2>/dev/null` is the
 # belt for the host that proves that wrong too, since the cases that assert
 # silence compare stderr. `-` not `:-`, so intentional empties survive.
-# GLOSSARY: toggle defaulting
+# GLOSSARY: HI.07
 command -v shift >/dev/null 2>&1 &&
   eval 'export _HI_DISABLE_EDITORS="${_HI_DISABLE_EDITORS-0}" _HI_DISABLE_ALIASES="${_HI_DISABLE_ALIASES-0}" _HI_DISABLE_OSC52="${_HI_DISABLE_OSC52-0}" _HI_OSC52="${_HI_OSC52-}" _HI_DISABLE_TMUX="${_HI_DISABLE_TMUX-0}" _HI_TMUXCONF="${_HI_TMUXCONF-}" _HI_CLEANUP="${_HI_CLEANUP-}" _HI_CONFIG_DIR="${_HI_CONFIG_DIR-}" _HI_ROOT="${_HI_ROOT-}"' 2>/dev/null || true
 
@@ -21,6 +21,11 @@ command -v shift >/dev/null 2>&1 &&
 # returns its definition and poisons later fallthrough chains.
 export _HI_EDITOR_BIN="$(command -v nano || command -v micro || command -v pico || command -v vim || command -v vi)"
 export _HI_BATCAT_BIN="$(command -v bat || command -v batcat || command -v ccat || command -v cat)"
+# the same chain without the plain-cat floor, so it is empty exactly when the
+# fallthrough had to settle for cat. $_HI_BAT_OPTS is bat syntax and coreutils
+# cat exits on the first of them ("unrecognized option '--tabs'"), so attaching
+# them unconditionally breaks `cat` in every session on a box without bat.
+export _HI_BAT_REAL="$(command -v bat || command -v batcat || command -v ccat)"
 # exa and eza differ in preference order on purpose, so each needs its own var
 export _HI_EXA_BIN="$(command -v exa || command -v eza || command -v ls)"
 export _HI_EZA_BIN="$(command -v eza || command -v exa || command -v ls)"
@@ -59,8 +64,10 @@ export _HI_BAT_OPTS='--tabs 2 --theme Monokai\ Extended\ Bright --style changes,
 # batcat is batcat on some Linux distros (fallback to ccat)
 # ccat is cat with syntax highlighting (fallback to cat)
 alias batcat="$_HI_BATCAT_BIN"
-alias bat="batcat $_HI_BAT_OPTS"
-alias batn="batcat $_HI_BAT_OPTS,numbers"
+alias bat="batcat"
+alias batn="batcat"
+[ -n "$_HI_BAT_REAL" ] && alias bat="batcat $_HI_BAT_OPTS" || true
+[ -n "$_HI_BAT_REAL" ] && alias batn="batcat $_HI_BAT_OPTS,numbers" || true
 alias cat="bat"
 # NOTE: -P (--no-pager) causes a break if bat not installed :/
 alias catn="batn"

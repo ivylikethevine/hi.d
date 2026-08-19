@@ -8,8 +8,7 @@
 # those seams, plus the table geometry, against a fixture packages file and a
 # PATH holding exactly the packages the fixture calls installed.
 #
-# Nearly every function below is invoked indirectly - by name, through
-# _hi_case's "$@" - which SC2329 can't see.
+# GLOSSARY: HI.30
 # shellcheck disable=SC2329
 set -euo pipefail
 

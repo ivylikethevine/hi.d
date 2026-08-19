@@ -2,7 +2,7 @@
 
 # === start required configuration ===
 set -q _HI_HOME; or set -gx _HI_HOME ~
-# GLOSSARY: toggle defaulting - defaulted, never assigned, so bare reads are
+# GLOSSARY: HI.07 - defaulted, never assigned, so bare reads are
 # safe and settings.sh still overrides. Mirrors core.sh's _HI_TOGGLES.
 for _hi_toggle in _HI_DISABLE_LOCAL _HI_REMOTE_SESSION _HI_DISABLE_HEADER \
     _HI_DISABLE_PROMPT _HI_DISABLE_PERSONAL _HI_DISABLE_GIT_STATUS \

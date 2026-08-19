@@ -25,11 +25,13 @@ see [ALTERNATIVES.md](ALTERNATIVES.md).)
 Everything below is an environment variable, checked where it's used. `hi --configure` writes your answers to
 `~/.config/hi.d/settings.sh`, which every shell sources ahead of `common/paths.sh` - a plain `#!/bin/sh` script
 of `export NAME=value` lines, valid in sh, bash, zsh and fish alike. You never have to use `hi --configure`:
-exporting any of these by hand works just as well, and takes precedence for that shell.
+exporting any of these by hand works just as well, and takes precedence for that shell. The one exception is
+marked read-only in its row: `common/paths.sh` derives it on every source, so an exported value never lasts.
 
 ## Contents
 
 - [Features](#features)
+- [Colors](#colors)
 - [tmux](#tmux)
 - [Header details](#header-details)
 - [Everything else](#everything-else)
@@ -61,6 +63,19 @@ forwarding, no clipboard daemon, nothing installed on the target. Only the unnam
 local. Terminal support varies (tmux needs `set -g allow-passthrough on`; zellij handles OSC 52 itself, so under
 `$ZELLIJ` the escape goes through raw and unwrapped), which is why it's a toggle like
 everything else; `shells/osc52.sh` is the whole implementation if you want to read what gets emitted.
+
+## Colors
+
+Every username and hostname resolves to a color derived from its own name, so an unpinned host looks the
+same from every machine you say `hi` from - nothing to generate, nothing that can go missing. Pin the ones
+that matter in `~/.config/hi.d/colors`: `username,root,red`, `hostname,bastion,yellow`, or
+`hosttag,prod,red` to color every host carrying a `# Tags: prod` comment above its `Host` line in
+`~/.ssh/config`. A pin always beats the hash.
+
+`hi --color-preview` answers what that adds up to - every host in your ssh config and every user it knows
+of, drawn in the colors themselves, each row naming the rule it matched:
+
+![hi --color-preview: every ssh host and user, in the colors they resolve to](demos/color_preview.gif)
 
 ## tmux
 
@@ -100,7 +115,7 @@ Each is **on by default**; set it to `0` to hide that line. All are ignored when
 | `_HI_HOME`             | `$HOME`               | the **parent** of your `hi.d` directory - everything resolves `$_HI_HOME/hi.d`                                                                                                                                                                                                                                 |
 | `_HI_TARGETS_TTL`      | `5`                   | seconds `hi <TAB>` reuses its target list for; `0` disables the cache                                                                                                                                                                                                                                          |
 | `_HI_PROBE_TIMEOUT`    | `2`                   | seconds any one backend CLI gets, during completion and in the header                                                                                                                                                                                                                                          |
-| `_HI_SSH_CONFIG`       | `~/.ssh/config`       | where ssh hosts and their `# Tags:` comments are read from                                                                                                                                                                                                                                                     |
+| `_HI_SSH_CONFIG`       | `~/.ssh/config`       | read-only: where ssh hosts and their `# Tags:` comments are read from. Derived from `$HOME` by `common/paths.sh` every time it is sourced, so exporting your own value does not survive - point `$HOME` at another tree if you need a different config                                                          |
 | `_HI_ASCII`            | by locale             | `1` forces ASCII stand-ins for the banner/prompt/packages glyphs (`^ ok x` for `↑ ✓ ✗`), `0` forces the glyphs; unset asks the locale, so a `LANG=C` target degrades cleanly instead of printing mojibake                                                                                                      |
 | `NO_COLOR`             | unset                 | not hi's variable but [the convention](https://no-color.org): any non-empty value renders everything - header, prompts, git segment - without color, and hi ships your client-side choice to the target next to `_HI_ASCII`                                                                                    |
 | `_HI_PROMPT`           | unset                 | `starship` hands the prompt to [starship](https://starship.rs) when the target has it, keeping hi's header and aliases. Never auto-detected, and a target without starship silently keeps hi's own. hi does not ship starship - a multi-MB binary against a 40KB payload |

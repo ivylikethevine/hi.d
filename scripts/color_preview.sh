@@ -22,7 +22,6 @@ ssh-config tag, or the hash of the name).
 Takes no arguments. Reads:
   misc/colors        the type,name,color pins (its own comments explain them)
   ~/.ssh/config      hosts, and the "# Tags: ..." comments above them
-                     (override with $_HI_SSH_CONFIG)
 
 Hosts with no override and no usable tag are left out: they'd render exactly
 as a bare `hi` does, so there is nothing to preview.

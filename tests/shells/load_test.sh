@@ -10,8 +10,7 @@
 # with the real _HI_ROOT would delete this checkout; the canary case at the end
 # proves none did.
 #
-# Nearly every function below is invoked indirectly - by name, through
-# _hi_case's "$@" - which SC2329 can't see.
+# GLOSSARY: HI.30
 # The single-quoted probe scripts expand in the child shell, which is the
 # point (SC2016).
 # shellcheck disable=SC2329,SC2016

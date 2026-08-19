@@ -6,9 +6,8 @@
 # fork slipping into a loop, a probe losing its timeout), not to flake on a
 # busy CI runner. Its own `bench` group, so `--group fast` stays fast.
 #
-# Nearly every function below is invoked indirectly - by name, through
-# _hi_case's "$@" - which SC2329 can't see. The single-quoted child scripts
-# are expanded by the child shell (SC2016).
+# GLOSSARY: HI.30. The single-quoted child scripts are expanded by the child
+# shell (SC2016).
 # shellcheck disable=SC2329,SC2016
 set -euo pipefail
 

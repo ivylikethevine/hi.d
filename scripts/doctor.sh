@@ -260,8 +260,7 @@ function doctor_ssh_target() {
   _hi_ctl_close
 }
 
-# sourcing stops here (the test suite reaches the functions above); executed,
-# it runs the report
+# GLOSSARY: HI.06 - executed, it runs the report
 [[ "${BASH_SOURCE[0]}" == "$0" ]] || return 0
 
 _hi_h1 "hi doctor"

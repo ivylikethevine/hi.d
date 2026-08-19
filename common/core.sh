@@ -10,7 +10,7 @@ if [ -z "${_hi_core_loaded:-}" ]; then
   # `:=` only when unset, so an outer layer's export (hi.sh, load.sh) survives
   : "${_HI_HOME:=$HOME}"
   export _HI_HOME
-  # GLOSSARY: toggle defaulting + dynamic-name assignment. List shared with
+  # GLOSSARY: HI.07 + HI.04. List shared with
   # _hi_fallback_rc; config.fish keeps its own copy.
   _HI_TOGGLES=(_HI_DISABLE_LOCAL _HI_REMOTE_SESSION _HI_DISABLE_HEADER
     _HI_DISABLE_PROMPT _HI_DISABLE_PERSONAL _HI_DISABLE_GIT_STATUS
@@ -202,7 +202,7 @@ function _hi_interactive_extras() {
 
 # _hi_sanitize_var <var> <text> - control chars and backslashes out, into
 # <var>; the header reaches it seven times a banner, each a fork through $( ).
-# GLOSSARY: printf -v out-var
+# GLOSSARY: HI.05
 function _hi_sanitize_var() {
   local _hi_s="${2//[[:cntrl:]]/}"
   printf -v "$1" '%s' "${_hi_s//\\/}"

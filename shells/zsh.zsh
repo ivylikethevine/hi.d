@@ -13,7 +13,7 @@ _hi_interactive_extras
 
 if [[ "${_HI_DISABLE_PROMPT:-0}" != 1 ]]; then
   if _hi_wants_starship; then
-    # deference, chosen in settings.sh - see _hi_wants_starship in core.sh
+    # GLOSSARY: HI.32
     eval "$(starship init zsh)"
   else
     _hi_prime_identity
@@ -55,7 +55,7 @@ fi
 promptinit
 # The in-shell TTL cache bash.sh's _hi_complete explains, in zsh's dialect.
 # (( )) rather than [ ]: zsh's SECONDS is a float once anything typeset -F's it.
-# GLOSSARY: completion probe knobs
+# GLOSSARY: HI.26
 _HI_TARGET_ROWS=()
 _HI_TARGET_DESCS=()
 _HI_TARGET_ROWS_AT=-1

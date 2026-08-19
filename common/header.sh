@@ -329,7 +329,7 @@ function full_check() {
   done <"$_HI_PACKAGES"
   ((${#visible[@]})) || return 0
 
-  # GLOSSARY: LC_ALL=C sort - numeric key over opaque bytes; unpinned, BSD
+  # GLOSSARY: HI.11 - numeric key over opaque bytes; unpinned, BSD
   # sort under UTF-8 printed nothing and the check rendered empty.
   while IFS=$'\x1f' read -r priority width_item rendered; do
     if ((count == 0)) || ((width + width_item > ${_HI_MAX_WIDTH:-80})); then # start of a row

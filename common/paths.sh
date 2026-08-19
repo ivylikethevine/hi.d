@@ -56,7 +56,7 @@ export _HI_HOME_BASHRC="$HOME/.bashrc"
 export _HI_HOME_ZSHRC="$HOME/.zshrc"
 export _HI_HOME_FISH_CONFIG="$HOME/.config/fish/config.fish"
 
-# GLOSSARY: strftime %e over %-e. Self-contained strings - fish sources this
+# GLOSSARY: HI.10. Self-contained strings - fish sources this
 # and can't call a bash helper.
 export _HI_HUMAN_CENTRIC_DATE="+%a %b %e %Y %H:%M:%S %Z"
 export _HI_HUMAN_SHORT_DATE="+%b %e %y %H:%M %Z"

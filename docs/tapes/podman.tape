@@ -22,12 +22,14 @@ Hide
 Type "docs/tapes/fixtures.sh up podman >/tmp/hi-demo.log 2>&1 && echo fixture-o''k"
 Enter
 Wait+Screen@240s /fixture-ok/
+Type "source /tmp/hi-demo/clientrc.fish"
+Enter
 Type "clear"
 Enter
 Show
 
 Sleep 1s
-Type "# a fish-only alpine container, via podman - same session, same code path"
+Type "# a fish-only alpine container, via podman"
 Enter
 Type "hi hi-demo-fish"
 Enter

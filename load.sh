@@ -59,7 +59,7 @@ function configure_files() {
     # every connect. $(<f) slurps where grep short-circuits: fine for an rc.
     : >>"$target"
     case "$(<"$target")" in *"$_HI_CONFIG_START"*) continue ;; esac
-    # GLOSSARY: graft crash guard - why every graft wraps
+    # GLOSSARY: HI.24 - why every graft wraps
     # shellcheck disable=SC2016 # single quotes are the point: the guard expands at shell start, not graft time
     case "$shell" in
     fish)

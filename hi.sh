@@ -34,7 +34,7 @@ export _HI_SHELL_LADDER="${_HI_SHELL_TREE//bash /}"
 # assembled and measured (see _say_hi); wider than any answer it can produce.
 _HI_SIZE_TOKEN="@@SIZE@@"
 
-# GLOSSARY: base64 armor - why base64 over openssl, the -d/-D ladder, and the
+# GLOSSARY: HI.17 - why base64 over openssl, the -d/-D ladder, and the
 # `tr` fold $_HI_UNARMOR puts in front of the decode (armor that arrived as an
 # argv word could be space-folded; the stdin transport needs no fold)
 _HI_ARMOR="base64"
@@ -137,7 +137,7 @@ _HI_BACKENDS=(
 )
 
 # Run <script> on $DOMAIN through `sh -c`, with ssh's own flags in "$@"
-# GLOSSARY: sh -c wrapping - fish-shaped login shells, and quoting over %q
+# GLOSSARY: HI.18 - fish-shaped login shells, and quoting over %q
 function _hi_ssh_sh() {
   local script="$1"
   shift
@@ -173,7 +173,7 @@ function _hi_copy_time() {
   awk -v now="$(_hi_now)" -v a="$1" -v b="$2" -v c="$3" 'BEGIN { printf "%.3f", (now - a) - (c - b) }'
 }
 
-# GLOSSARY: strict-mode bracketing
+# GLOSSARY: HI.15
 function _hi_bootloader() {
   cat <<EOF
 source \$_HI_ROOT/load.sh
@@ -183,7 +183,7 @@ EOF
 }
 
 # The no-bash target's rc: every line valid in sh, zsh *and* fish at once.
-# GLOSSARY: fallback rc - the three-shell subset, and why each line is there.
+# GLOSSARY: HI.20 - the three-shell subset, and why each line is there.
 # With --aliases-only <dir>, the container fallback's shape: that path ships
 # aliases.sh alone into <dir>, with no tree and no $_HI_ROOT to source from.
 function _hi_fallback_rc() {
@@ -225,7 +225,7 @@ function _hi_ladder_probe() {
 # A prompt for the bash-less tiers (sh, ash, dash, ksh, mksh - fish and zsh get
 # their own rc), baked on the client; $1 = "git" adds the live segment only
 # _hi_remote_suffix's ksh/mksh arm asks for.
-# GLOSSARY: split-quoted prompt segment - why baked, and the quoting trick
+# GLOSSARY: HI.21 - why baked, and the quoting trick
 # shellcheck disable=SC2016 # $_hi_u, the segment and the separator are the target's to expand
 function _hi_fallback_prompt() {
   local host="${DOMAIN##*@}" nc git=""
@@ -322,7 +322,7 @@ function _hi_remote_preamble() {
       _hi_now() { d=\$(date +%s.%N 2>/dev/null); case "\$d" in *N*|'') date +%s ;; *) printf '%s' "\$d" ;; esac; }
       _hi_t0=\$(_hi_now)
 $(_hi_env_exports)
-      # GLOSSARY: TERM fallback probe - unknown TERM swapped for xterm-256color
+      # GLOSSARY: HI.22 - unknown TERM swapped for xterm-256color
       case "\${_HI_TERM_FALLBACK:-1}:\$TERM" in
       0:* | 1:xterm | 1:xterm-256color | 1:xterm-color | 1:screen | 1:screen-256color | 1:tmux | 1:tmux-256color | 1:linux | 1:vt100 | 1:vt220 | 1:dumb | 1:) ;;
       *)
@@ -345,7 +345,7 @@ REMOTE
 # What both _say_hi branches need once their setup is done: report copy time,
 # then hand off to bash or to the best fallback shell. Expects \$_hi_rc_dir to
 # point at wherever hi.bashrc/.hi_fallback_rc lives.
-# GLOSSARY: bash --rcfile -i - the flag order, and fish's -C arm
+# GLOSSARY: HI.23 - the flag order, and fish's -C arm
 function _hi_remote_suffix() {
   # shellcheck disable=SC2016 # _hi_armored_line's destinations are the target's to expand
   cat <<REMOTE
@@ -478,7 +478,7 @@ $(_hi_remote_suffix)"
   # on that same fallback rather than half-landing. It travels as the plain
   # script: stdin is a pipe, so only the streams *inside* it need armor -
   # armoring the whole thing again cost a third of every session for nothing.
-  # GLOSSARY: stdin transport - the argv cap, and why it must be two calls
+  # GLOSSARY: HI.19 - the argv cap, and why it must be two calls
   # shellcheck disable=SC2029 # $boot_tmp is ours to expand, into the target's shell
   if printf '%s\n' "$script" | ssh "${ctl_opts[@]}" "${SSHARGS[@]}" "$DOMAIN" \
     "sh -c 'command -v base64 >/dev/null 2>&1 && mkdir -m 700 $boot_tmp && cat > $boot_tmp/bootloader'" 2>/dev/null; then
@@ -498,7 +498,7 @@ $(_hi_remote_suffix)"
 # _say_hi_container <label> <errlog> <copy_start> - docker, podman, nomad, kube
 function _say_hi_container() {
   local label="$1" tmp="$2" copy_start="$3"
-  local shell_end root fallback exit_code shell_secs size prefix tarball env_kv
+  local shell_end root fallback exit_code size prefix tarball env_kv
   local ksh_git=""
   local -a probe cp attach
   case "$label" in
@@ -581,9 +581,6 @@ function _say_hi_container() {
     return $exit_code
   fi
 
-  shell_secs="$(_hi_elapsed "$_HI_SHELL_START" "$shell_end")"
-  _hi_cecho " shell: ${shell_secs}s " "$BLUE" 1
-
   # staged to a file so the announced size is the one actually sent
   tarball="$tmp.tar.gz"
   if ! _hi_payload_tar >"$tarball"; then
@@ -591,8 +588,11 @@ function _say_hi_container() {
     return 1
   fi
   size="$(_hi_human_bytes "$(_hi_file_bytes "$tarball")")"
-  prefix=" shell: ${shell_secs}s -> bash ($label) $size"
-  echo -ne "$YELLOW-> bash ($label)$NC $size"
+  # just the size, the way the ssh path's prefix already reads: the shell-probe
+  # timing and the "-> bash ($label)" it prefixed are gone, the backend having
+  # stopped being news. The size stays - it is what the README badge tracks.
+  prefix=" $size"
+  echo -ne " $size"
 
   # this is a failure state, so we exit early
   if ! "${cp[@]}" sh -c "mkdir -p '$root' && tar mxzf - -C '$root'" <"$tarball"; then

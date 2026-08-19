@@ -4,10 +4,9 @@
 # this machine happens to be running" - the same isolation targets_test.sh
 # uses for completion.
 #
-# Nearly every function below is invoked indirectly - by name, through
-# _hi_case's "$@" - which SC2329 can't see. SC2317 rides along because
-# sourcing doctor.sh reaches hi.sh's trailing dispatch, which shellcheck
-# thinks never returns (see hi_test.sh for the long form of this story).
+# GLOSSARY: HI.30. SC2317 rides along because sourcing doctor.sh reaches
+# hi.sh's trailing dispatch, which shellcheck thinks never returns (see
+# hi_test.sh for the long form of this story).
 # shellcheck disable=SC2329,SC2317
 set -euo pipefail
 

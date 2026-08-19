@@ -94,7 +94,7 @@ complete -F _hi_load_exa_completion exa
 # modified from: https://github.com/riobard/bash-powerline/blob/master/bash-powerline.sh
 if [[ "${_HI_DISABLE_PROMPT:-0}" != 1 ]]; then
   if _hi_wants_starship; then
-    # deference, chosen in settings.sh - see _hi_wants_starship in core.sh
+    # GLOSSARY: HI.32
     eval "$(starship init bash)"
   else
     function ps1() {

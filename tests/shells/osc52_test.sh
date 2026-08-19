@@ -9,8 +9,7 @@
 # it), so an interactive run must detach it from the terminal or the bytes
 # land on the tester's screen - and in their clipboard - instead of the pipe.
 #
-# Nearly every function below is invoked indirectly, through _hi_check's "$@",
-# which SC2329 can't see.
+# GLOSSARY: HI.30
 # shellcheck disable=SC2329
 set -euo pipefail
 

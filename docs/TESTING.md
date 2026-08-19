@@ -108,15 +108,16 @@ as "the image just didn't build" in an e2e run on a machine with a container bac
 3. **The bash-3.2 grep**: no `mapfile`, no associative arrays, no namerefs,
    no `${x,,}` - macOS ships bash 3.2 and hi runs there. Every
    deliberately-odd construct this forces is explained once in
-   [GLOSSARY.md](GLOSSARY.md); code references entries with
-   `# GLOSSARY: <entry>` tags rather than re-explaining.
+   [GLOSSARY.md](GLOSSARY.md); code references entries by their stable
+   `HI.NN` code with `# GLOSSARY: HI.NN` tags rather than re-explaining.
 4. **shfmt** as a formatting gate. The style comes from `.editorconfig`;
    fix a red run with `shfmt -w .`.
 5. **checkbashisms** over the `#!/bin/sh` files, which dash and busybox sh
    really do parse on minimal targets.
-6. **GLOSSARY tags**: every `# GLOSSARY: <entry>` in the tree has to name a
-   real heading in [GLOSSARY.md](GLOSSARY.md), so a renamed entry can't
-   strand the tags pointing at it.
+6. **GLOSSARY tags**: every `# GLOSSARY: HI.NN` in the tree has to name a code
+   [GLOSSARY.md](GLOSSARY.md) defines, so a deleted entry can't strand the tags
+   pointing at it. Codes are matched, not titles - retitling an entry touches
+   no shipped file.
 7. **tests/dockerfiles/**: every image definition has a caller and every
    caller has an image definition - see above.
 

@@ -10,8 +10,7 @@
 # reads the variables back out - which also proves settings.sh is picked up
 # ahead of the gate rather than after it.
 #
-# Nearly every function below is invoked indirectly - by name, through
-# _hi_case's "$@" - which SC2329 can't see.
+# GLOSSARY: HI.30
 # shellcheck disable=SC2329
 set -euo pipefail
 

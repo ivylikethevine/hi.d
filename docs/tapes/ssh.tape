@@ -23,12 +23,14 @@ Hide
 Type "docs/tapes/fixtures.sh up ssh >/tmp/hi-demo.log 2>&1 && echo fixture-o''k"
 Enter
 Wait+Screen@240s /fixture-ok/
+Type "source /tmp/hi-demo/clientrc.bash"
+Enter
 Type "clear"
 Enter
 Show
 
 Sleep 1s
-Type "# an ssh host with a permanent ~/hi.d - nothing ships, it loads in place"
+Type "# an ssh host with a permanent ~/hi.d - nothing ships"
 Enter
 Type "hi -F /tmp/hi-demo/ssh_config hi-demo-box"
 Enter

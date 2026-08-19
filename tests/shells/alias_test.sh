@@ -3,8 +3,7 @@
 # that every alias/var it unconditionally defines actually landed - not just
 # that the file was found. Skips any shell that isn't installed.
 #
-# Nearly every function below is invoked indirectly - by name, through
-# _hi_case's "$@" - which SC2329 can't see.
+# GLOSSARY: HI.30
 # shellcheck disable=SC2329
 set -euo pipefail
 

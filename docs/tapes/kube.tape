@@ -28,12 +28,14 @@ Enter
 Wait+Screen@300s /fixture-ok/
 Type "kubectl config use-context kind-hi-demo >/dev/null 2>&1"
 Enter
+Type "source /tmp/hi-demo/clientrc.zsh"
+Enter
 Type "clear"
 Enter
 Show
 
 Sleep 1s
-Type "# a k8s pod - resolved last, after ssh/docker/podman/nomad"
+Type "# a k8s pod - resolved after the rest"
 Enter
 Type "hi hi-demo-pod"
 Enter

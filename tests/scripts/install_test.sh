@@ -4,8 +4,7 @@
 # settings/toggle handling, then the stripping that reverses them (incl. an
 # install+uninstall round trip).
 #
-# Nearly every function below is invoked indirectly - by name, through
-# _hi_case's "$@" - which SC2329 can't see.
+# GLOSSARY: HI.30
 # shellcheck disable=SC2329
 set -euo pipefail
 

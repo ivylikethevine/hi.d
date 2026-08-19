@@ -17,8 +17,7 @@
 # in - which is also what makes these cases a test of that. Builds need the
 # network; a failed one skips its case rather than failing the suite.
 #
-# Nearly every function below is invoked indirectly, through _hi_case's "$@",
-# which SC2329 can't see.
+# GLOSSARY: HI.30
 # shellcheck disable=SC2329
 set -euo pipefail
 

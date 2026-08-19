@@ -1,8 +1,7 @@
 #!/bin/bash
 # Shared scaffolding for every suite under tests
 #
-# Several functions here are only ever invoked indirectly - by name, through
-# _hi_case's/_hi_poll_bool's "$@", or as a trap hook - which SC2329 can't see.
+# GLOSSARY: HI.30
 # shellcheck disable=SC2329
 set -euo pipefail
 

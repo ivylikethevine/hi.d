@@ -9,8 +9,7 @@
 # this suite down, and the cases that overwrite $_HI_WORKDIR/$_HI_LEDGER shadow
 # them with locals or a subshell - this suite uses the globals it is testing.
 #
-# Functions here are invoked indirectly (through "$@", or as a trap hook), which
-# SC2329 can't see; the subshell containment above is the mechanism SC2030/2031
+# GLOSSARY: HI.30. The subshell containment above is the mechanism SC2030/2031
 # would warn about.
 # shellcheck disable=SC2329,SC2030,SC2031
 set -euo pipefail

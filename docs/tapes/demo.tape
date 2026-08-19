@@ -1,20 +1,29 @@
 # The README demo, as a script instead of a stale recording: render with
-# `vhs docs/demo.tape` (https://github.com/charmbracelet/vhs) from the repo
-# root, with docker running and hi installed on PATH. Regenerate whenever the
-# header or prompt changes. Not rendered in CI - docs/demo.gif is a manual
-# artifact, reviewed by eye before committing.
+# `vhs docs/tapes/demo.tape` (https://github.com/charmbracelet/vhs) from the
+# repo root, with docker running and hi installed on PATH. Regenerate whenever
+# the header or prompt changes. Not rendered in CI - docs/demos/demo.gif is a
+# manual artifact, reviewed by eye before committing.
+#
+# The target is the same debian box docker.tape's first case uses, through
+# docs/tapes/fixtures.sh rather than a docker run of its own, so the demo at the
+# top of the README cannot drift from the one further down.
 
-Output docs/demo.gif
+Output docs/demos/demo.gif
 
 Set FontSize 15
 Set Width 1100
 Set Height 620
 Set TypingSpeed 60ms
 
+Require hi
+Require docker
+
 Hide
-Type "docker run -d --rm --name hi-demo debian:bookworm-slim tail -f /dev/null >/dev/null"
+Type "docs/tapes/fixtures.sh up demo >/tmp/hi-demo.log 2>&1 && echo fixture-o''k"
 Enter
-Sleep 4s
+Wait+Screen@240s /fixture-ok/
+Type "source /tmp/hi-demo/clientrc.bash"
+Enter
 Type "clear"
 Enter
 Show
@@ -22,7 +31,8 @@ Show
 Sleep 1s
 Type "hi hi-demo"
 Enter
-Sleep 8s
+Wait+Screen@60s /hi loaded with/
+Sleep 3s
 
 Type "cd /tmp && ls"
 Enter
@@ -30,10 +40,7 @@ Sleep 2s
 
 Type "exit"
 Enter
-Sleep 3s
-
-Hide
-Type "docker rm -f hi-demo >/dev/null 2>&1"
-Enter
-Show
+Wait+Screen@30s /hi closing!/
 Sleep 2s
+
+# No in-tape cleanup: run `docs/tapes/fixtures.sh down` after rendering.

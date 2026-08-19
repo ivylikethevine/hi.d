@@ -24,6 +24,8 @@ Enter
 Type "docs/tapes/fixtures.sh up docker >/tmp/hi-demo.log 2>&1 && echo fixture-o''k"
 Enter
 Wait+Screen@240s /fixture-ok/
+Type "source /tmp/hi-demo/clientrc.zsh"
+Enter
 Type "clear"
 Enter
 Show
@@ -43,7 +45,7 @@ Enter
 Wait+Screen@30s /hi closing!/
 Sleep 2s
 
-Type "# an alpine box with no bash at all - one-off command, like ssh's"
+Type "# an alpine box with no bash - one-off command"
 Enter
 Type "hi hi-demo-zsh 'zsh --version'"
 Enter

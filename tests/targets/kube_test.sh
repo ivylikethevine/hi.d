@@ -11,8 +11,7 @@
 # is already proven there, so this only needs to prove kubectl exec's own
 # argument shapes work - once with bash present, once without.
 #
-# Nearly every function below is invoked indirectly - by name, through
-# _hi_case's/_hi_poll_bool's "$@", or as a trap hook - which SC2329 can't see.
+# GLOSSARY: HI.30
 # shellcheck disable=SC2329
 set -euo pipefail
 

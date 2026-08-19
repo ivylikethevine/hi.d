@@ -2,7 +2,7 @@
 # shellcheck shell=ksh
 # The git segment for the bash-less ksh/mksh tier, and the only part of hi's
 # prompt recomputed on every line.
-# GLOSSARY: ksh git segment - why a second implementation, and only this tier
+# GLOSSARY: HI.28 - why a second implementation, and only this tier
 
 # Colors and glyphs copied, not shared (core.sh is bash); hi_test.sh asserts they
 # agree, so a palette change fails there rather than drifting here.
@@ -92,8 +92,7 @@ EOF
     else
       _hi_kg_ref=$(LC_ALL=C git describe --tags --contains HEAD 2>/dev/null) ||
         _hi_kg_ref=$(LC_ALL=C git describe --tags HEAD 2>/dev/null) || _hi_kg_ref=""
-      # branch.oid rode the porcelain stream - not a third fork; the rev-parse
-      # answers only for a stream too old to carry the header
+      # GLOSSARY: HI.31
       [ -z "$_hi_kg_ref" ] && [ -n "$_hi_kg_oid" ] && [ "$_hi_kg_oid" != "(initial)" ] &&
         _hi_kg_ref="($(printf '%.8s' "$_hi_kg_oid"))"
       [ -z "$_hi_kg_ref" ] &&

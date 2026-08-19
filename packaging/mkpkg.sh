@@ -122,7 +122,7 @@ function write_checksums() {
   _hi_cecho " $_HI_DIST/ARTIFACTS :)" "$GREEN"
 }
 
-# sourcing stops here (tests reach the functions above) - install.sh's pattern
+# GLOSSARY: HI.06
 [[ "${BASH_SOURCE[0]}" == "$0" ]] || return 0
 
 while [ $# -gt 0 ]; do

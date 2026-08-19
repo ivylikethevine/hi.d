@@ -9,8 +9,7 @@
 # a hung terminal, not a dead link. Hence _hi_ssh_mux_pids, and hence a missing
 # master being a hard failure below.
 #
-# Nearly every function below is invoked indirectly - by name, through
-# _hi_case's/_hi_poll_bool's "$@", or as a trap hook - which SC2329 can't see.
+# GLOSSARY: HI.30
 # shellcheck disable=SC2329
 set -euo pipefail
 

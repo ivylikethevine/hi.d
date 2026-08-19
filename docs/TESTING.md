@@ -44,6 +44,28 @@ kind) beyond docker; a separate, slower CI job. Every e2e/backends suite skips c
 than failing when its backend isn't installed. Every test script also runs directly, e.g.
 `tests/shells/shellcheck_test.sh`.
 
+### The container suites run their cases in parallel
+
+`ssh`, `ssh_relay`, `docker`, `podman`, `framework` and `kube` spend nearly all their wall clock waiting on
+one container at a time, so their cases run in a batch: `_hi_par_case` in `tests/test_lib.sh` submits a case
+to a background subshell, `_hi_par_wait` collects the batch. Each case writes its verdict to a file that the
+parent tallies (a subshell's counter increments would die with it), registers what it started on a teardown
+ledger the exit trap sweeps, and buffers its output to be replayed **in submission order** - so a parallel
+run's transcript reads exactly like a serial one, only the timings overlap. Cases that read another case's
+files stay serial: `ssh_test.sh`'s two `_hi_transcript_is_clean` checks run after the batch, not in it.
+
+The batch is capped, and every run says how wide it went (`| login-shell cases: 4 at a time, …`). The
+default is four, or the CPU count if that is smaller; unbounded fan-out thrashes the docker daemon on a
+laptop and is both slower and flakier. `_HI_PAR_WIDTH` overrides it:
+
+```sh
+_HI_PAR_WIDTH=1 tests/test_runner.sh ssh   # serial, down the same code path - what to use when bisecting a flake
+_HI_PAR_WIDTH=8 tests/test_runner.sh ssh   # a big machine, if the daemon can take it
+```
+
+`nomad` pins itself to `_HI_PAR_WIDTH=1`: its jobs are tracked in a shell array its cleanup hook purges,
+which is the one fixture in the tree that is not case-scoped.
+
 `tests/coverage.sh` runs the fast suites under kcov when you want to know which arms of
 `install.sh`/`bump.sh` the cases never touch. It's deliberately not in CI and its numbers are currently
 untrustworthy (kcov loses the DEBUG trap once `test_lib.sh` is sourced) - don't write tests to move those

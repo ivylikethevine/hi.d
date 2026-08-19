@@ -21,10 +21,11 @@ opens an interactive session on the target: your login shell when hi
 styles it (bash, zsh, fish \- or nushell, when it is your login shell or
 named in
 .BR _HI_SHELL_PREFERENCE ),
-otherwise the best of fish > zsh > bash. A target with no bash at all
-falls back to the best of zsh > fish > ksh > mksh > sh, with hi's aliases
-and colored prompt \- ksh and mksh keep a live git segment \- but no
-header. With a trailing
+otherwise the best of fish > zsh > bash. Both halves come off one
+ordering \- fish > zsh > bash > mksh > ksh > dash > ash > sh \- so a
+target with no bash at all falls back to the best of the rest of it:
+fish > zsh > mksh > ksh > dash > ash > sh, with hi's aliases and colored
+prompt \- ksh and mksh keep a live git segment \- but no header. With a trailing
 .IR command ,
 it runs that command on the target and exits, like
 .BR ssh (1)
@@ -155,7 +156,9 @@ for packaged installs.
 ordered list of session shells to try
 .RB ( login
 means your login shell); default
-.BR "login fish zsh bash" .
+.BR login ,
+then the shells hi styles in preference order:
+.BR "fish zsh bash" .
 .TP
 .B _HI_DISABLE_HEADER, _HI_DISABLE_PROMPT, ...
 per\-feature opt\-outs; see the README's Configuration section for the

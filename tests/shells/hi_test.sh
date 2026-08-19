@@ -625,6 +625,16 @@ function test_shell_ladders_are_in_the_man_page() {
   done
 }
 
+# The tree itself, spelled out here on purpose: hi.sh derives $_HI_SHELL_LADDER
+# from core.sh's $_HI_SHELL_TREE, so a test written as that same expression
+# would assert nothing. This is the intended order in one place, and both the
+# tree and the cut have to match it. The ladder is the tree minus bash because
+# a missing bash is the only thing that makes the ladder reachable at all.
+function test_the_shell_tree_is_the_documented_order() {
+  [ "$_HI_SHELL_TREE" = "fish zsh bash mksh ksh dash ash sh" ] || return 1
+  [ "$_HI_SHELL_LADDER" = "fish zsh mksh ksh dash ash sh" ]
+}
+
 # --- the bash-less prompt -----------------------------------------------------
 #
 # sh/ash/dash/ksh sessions used to get aliases and the host's own prompt, which
@@ -968,6 +978,7 @@ function run_hi_tests() {
   _hi_check "Lists hi's flags and the target ladder" test_help_lists_hi_s_own_flags
   _hi_check "Every flag is in the man page" test_help_flags_are_all_in_the_man_page
   _hi_check "Both shell ladders are in the man page" test_shell_ladders_are_in_the_man_page
+  _hi_check "The ladder is the shell tree without bash" test_the_shell_tree_is_the_documented_order
 
   _hi_suite_end "hi.sh"
 }

@@ -63,6 +63,16 @@ function _hi_shell_rows() {
   done
 }
 
+# The one ordering hi resolves shells by, best first. Two consumers read it and
+# each takes the part it can serve: load.sh's _hi_session_shell walks it for a
+# shell hi styles (fish, zsh, bash - it only ever runs where bash exists), and
+# hi.sh's $_HI_SHELL_LADDER is this same list with bash taken out, since a
+# missing bash is that ladder's whole precondition. One list because it used to
+# be two literals that disagreed: the ladder led with zsh and mksh-before-ksh,
+# the session picker with fish. dash/ash/sh are one tier in practice - naming
+# them separately is what says which `sh` a target gets when it has more.
+export _HI_SHELL_TREE="fish zsh bash mksh ksh dash ash sh"
+
 # color names match fish's set_color vocabulary; greys are skipped, since fish has none.
 _HI_COLOR_NAMES=(red green yellow blue magenta cyan brred brgreen bryellow brblue brmagenta brcyan)
 

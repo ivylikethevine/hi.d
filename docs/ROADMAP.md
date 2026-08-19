@@ -28,8 +28,8 @@ here: git history is the ledger, and this file is only what is left to do.
 
 - [ ] **timep profiling for the paths the bench suite guards** — `_hi_bench`
       (`../tests/bench/bench_test.sh`) gives one average per hot path against a
-      generous ceiling, which answers *whether* something got slower and never
-      *which command inside it did* — so every regression starts by
+      generous ceiling, which answers _whether_ something got slower and never
+      _which command inside it did_ — so every regression starts by
       hand-bisecting an rc file. [timep](https://github.com/jkool702/timep) is
       the missing half: a trap-based bash profiler that maps the call-stack tree
       and emits per-command SELF and TOTAL wall time, TOTAL CPU time, and an
@@ -57,61 +57,60 @@ here: git history is the ledger, and this file is only what is left to do.
     least the header and git-prompt paths, and its header says what the numbers
     do and do not mean as bluntly as `coverage.sh`'s does.
 
-- [ ] **Run each container suite's cases in parallel** — the container suites are
-      the whole cost of a full run: ssh 38s, ssh_relay 44s, docker 7s, framework
-      26s, podman 75s, nomad 6s, kube 42s — **239s of a 348s run**, nearly all of
-      it spent waiting on one container at a time while the machine idles. Every
-      case already builds its own container with a unique name, so the containers
-      themselves do not collide; the harness around them does. What has to change
-      first, in `tests/test_lib.sh`:
-
-  - **`$_HI_SSH_PORT` is a single global** (`:1029`), set by `_hi_sshd_container`
-    and read by `_hi_ssh_launch` and `_hi_ssh_clients` (`:1051` greps the process
-    table *by port*). Two concurrent cases clobber it. It has to become a value
-    the case carries, not a global the last starter wins.
-  - **The counters are incremented in the current shell.** `_hi_case` (`:80`) does
-    `_HI_TOTAL=$((_HI_TOTAL + 1))`; run the case in a background subshell and both
-    counts are lost with it. Needs per-case result files collected after the
-    `wait`, the shape `_hi_probe_start`/`_hi_probe_wait` already uses for the
-    header's backend probes.
-  - **`_hi_track_container` appends to a global array** the exit trap consumes, so
-    a container started in a subshell is never registered and leaks on a crash.
-    Same fix: a file per case, swept by the trap.
-  - **Interleaved output.** Concurrent `_hi_cecho` lines make a transcript nobody
-    can read. `test_runner.sh` already collapses per-suite output and has
-    `--verbose` to stream it; per-case buffering should reuse that idea rather
-    than invent a second one.
-  - **Pick a width deliberately.** Unbounded fan-out on a laptop will thrash the
-    docker daemon and swap the box; the bench suite's honesty rule applies here
-    too - if a cap is imposed, say so in the output rather than let it look like
-    everything ran at once.
-  - **Ticks when:** a full `--group e2e` and `--group backends` run produces the
-    same pass/fail verdict as today, no leaked `hi-*test-*` containers after a
-    forced interrupt, and the wall clock is meaningfully below the 239s serial
-    figure above.
-
 ### Product
 
-- [ ] **Shells hi doesn't style yet** — the README's
-      [compatibility tables](../README.md#compatibility) say where each shell
-      stands. The ksh/mksh tier (live git segment included) and the nushell
-      session tier are shipped and suite-proven; the one open question is here:
+- [ ] **Remove the nushell session tier** — nu is the one styled shell that
+      cannot source `common/` at all: `shells/config.nu` shells out to bash for
+      the header, the palette and the git segment, so it needs bash on the
+      target to render anything — and where bash exists, bash/zsh/fish already
+      answer. It buys a shell nobody has asked for at the price of a whole rc
+      in a fourth language, two GLOSSARY entries, a CI tool install and five
+      real-nu cases in the rc suite. Take it out, in one commit per surface:
 
-  - **elvish and xonsh** — each needs its own language for any of it; **tcsh**
-    has no `$ENV` to hook. Worth deciding per shell — as a _login_ shell they
-    all work today.
+  - **Code:** `shells/config.nu`; `common/paths.sh`'s `_HI_NU_CONFIG`,
+    `_HI_HOME_NU_DIR`, `_HI_HOME_NU_CONFIG`; `common/core.sh`'s
+    `_HI_SHELL_TABLE` nu row (and the comment above it saying nu is
+    graft-only); `load.sh`'s nu `mkdir` gate in `configure_files`, its `*.nu)`
+    graft arm, the `nu)` greeting, and `nu` in `_hi_session_shell`'s allow-list
+    `case`.
+  - **Docs:** the README's shells badge, its compatibility-table row, and the
+    two mentions in _hi.d and the alternatives_; `docs/hi.1`'s nushell clause;
+    `docs/FEATURES.md`'s `_HI_SHELL_PREFERENCE` note; the GLOSSARY's
+    _nu session tier_ and _nu alias subset_ entries. Say it is **decided
+    against** in the compatibility table, the way elvish/xonsh/tcsh now are —
+    a removed feature that reads as an oversight invites the PR that puts it
+    back.
+  - **Tests and CI:** `tests/shells/rc_test.sh`'s nushell section (five cases);
+    `tests/test_lib.sh`'s host-report shells row; `tests/shells/hi_test.sh`'s
+    man-page ladder list. `tests/shells/load_test.sh`'s
+    `SHELL=/usr/bin/nu` case is testing _an unstyled login shell_, not nu —
+    re-point it at one that stays unstyled (`mksh`), don't delete it. Drop the
+    `nu` tool step from `.github/workflows/ci.yml`.
+  - **Ticks when:** nothing outside git history mentions nu, the fast group is
+    green, and **both** size numbers have been re-checked and the README badge
+    updated — `config.nu` leaves `$_HI_PAYLOAD`, so the gzipped tar and
+    `_hi_wire_bytes` both move.
 
-### Features
+### Docs
 
-Sketches rather than specifications — each still needs its shape decided
-before it needs code.
+- [ ] **homeshick in the alternatives comparison** — [homeshick] is the
+      git+bash dotfile manager people reach for when they refuse to install
+      anything (no runtime, no binary: it is a bash function and a `git clone`
+      of "castles"), which puts it squarely in the same conversation as
+      sshrc, kyrat and chezmoi in the README's _hi.d and the
+      alternatives_ section — and it is missing from it. Read the tool first,
+      then write the entry to that section's standard: what it solves, where
+      it wins **outright**, and where hi.d is the wrong answer. The obvious
+      axis is that homeshick syncs a machine you own and come back to (its
+      castles are checkouts that stay), while hi.d copies to a machine it
+      expects to never see again — so the honest verdict is probably "not a
+      competitor, a complement", which is worth saying plainly rather than
+      leaving the reader to guess.
 
-- built in configuration UI for host/tags/colors configuration as well as users
-- built in package color/priority modification
-  - show all users & their colors, let users change existing, remove, add new
-- package groups/conditional loading
-  - let user change colors for each priority
-  - let user toggle certain priorities on/off entirely
+  - **Ticks when:** the entry is in the README and the "if hi.d is not for
+    you" list at the end of that section points at it where it should.
+
+[homeshick]: https://github.com/andsens/homeshick
 
 ## Outside this repo
 

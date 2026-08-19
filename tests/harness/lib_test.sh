@@ -6,8 +6,8 @@
 # target-side probe strings, and the polling/process helpers.
 #
 # Anything that exits or installs a trap runs in a subshell so it can't take
-# this suite down, and $_HI_WORKDIR/$_HI_STARTED are saved around the cases that
-# overwrite them - this suite uses the globals it is testing.
+# this suite down, and the cases that overwrite $_HI_WORKDIR/$_HI_LEDGER shadow
+# them with locals or a subshell - this suite uses the globals it is testing.
 #
 # Functions here are invoked indirectly (through "$@", or as a trap hook), which
 # SC2329 can't see; the subshell containment above is the mechanism SC2030/2031
@@ -275,7 +275,7 @@ function test_test_cleanup_runs_the_extra_hook_first() {
   local marker="$_HI_WORKDIR/hook-ran"
   (
     _HI_WORKDIR="$(mktemp -d "$_HI_WORKDIR/inner.XXXXXX")"
-    _HI_STARTED=()
+    _HI_LEDGER=""
     # shellcheck disable=SC2317 # invoked by _hi_test_cleanup through $_HI_EXTRA_CLEANUP
     function _hi_probe_hook() { : >"$marker"; }
     _HI_EXTRA_CLEANUP=_hi_probe_hook
@@ -289,20 +289,161 @@ function test_test_cleanup_removes_the_workdir_even_if_the_hook_fails() {
   inner="$(mktemp -d "$_HI_WORKDIR/inner.XXXXXX")"
   (
     _HI_WORKDIR="$inner"
-    _HI_STARTED=()
+    _HI_LEDGER=""
     _HI_EXTRA_CLEANUP=_hi_false
     _hi_test_cleanup
   )
   [ ! -d "$inner" ]
 }
 
-function test_track_container_appends_to_the_teardown_list() {
+# The ledger's whole reason for being a file: the background subshell's entry
+# has to be there for the *parent's* exit trap to find. As an array it was not -
+# the append died with the subshell, and the container leaked.
+function test_track_container_records_from_a_subshell_too() {
+  local _HI_LEDGER="$_HI_WORKDIR/ledger-track" rows
+  : >"$_HI_LEDGER"
+  _hi_track_container one
+  (_hi_track_container two) &
+  wait
+  _hi_track_network relaynet
+  rows="$(_hi_ledger_rows container | tr '\n' ' ')"
+  [ "$rows" = "one two " ] || return 1
+  [ "$(_hi_ledger_rows network)" = relaynet ]
+}
+
+# ...and the sweep that consumes it, through a fake backend that records what it
+# was asked to remove. Networks after containers, since docker refuses to remove
+# one that still has a container on it.
+function test_cleanup_sweeps_containers_then_networks() {
+  local dir="$_HI_WORKDIR/sweep" log
+  mkdir -p "$dir/bin"
+  log="$dir/calls"
+  printf '#!/bin/sh\nprintf "%%s\\n" "$*" >>"%s"\n' "$log" >"$dir/bin/hi-fake-backend"
+  chmod +x "$dir/bin/hi-fake-backend"
   (
-    _HI_STARTED=()
-    _hi_track_container one
-    _hi_track_container two
-    [ "${#_HI_STARTED[@]}" -eq 2 ] && [ "${_HI_STARTED[0]}" = one ] && [ "${_HI_STARTED[1]}" = two ]
+    _HI_WORKDIR="$(mktemp -d "$dir/inner.XXXXXX")"
+    _HI_LEDGER="$_HI_WORKDIR/.ledger"
+    : >"$_HI_LEDGER"
+    _HI_EXTRA_CLEANUP=""
+    _HI_BACKEND=hi-fake-backend
+    PATH="$dir/bin:$PATH"
+    _hi_track_container gone
+    _hi_track_network alsogone
+    _hi_test_cleanup
   )
+  [ -f "$log" ] || return 1
+  _hi_before "$(cat "$log")" '^rm -f gone$' '^network rm alsogone$'
+}
+
+# --- _hi_par_case / _hi_par_wait ----------------------------------------------
+#
+# The counted-case contract, run in a background subshell. Everything here is
+# assertable without docker, which is the point: the suites that use it need a
+# container backend, and a harness bug there looks like a product bug.
+
+function _hi_par_ok() { return 0; }
+function _hi_par_bad() { return 1; }
+function _hi_par_skipper() { _hi_skip "[a skipped case]" "on purpose"; }
+function _hi_par_exits() { exit 0; }
+function _hi_par_says() { printf '%s\n' "$1"; }
+
+# Two cases that each wait on a file the other creates: run together both
+# return at once, run in turn the first spends its whole budget and fails.
+# A rendezvous rather than a stopwatch, so "did they overlap" has a yes/no
+# answer that a loaded runner cannot smear.
+function _hi_par_rendezvous() {
+  : >"$_HI_PAR_RV_DIR/$1"
+  _hi_poll_bool "$3" 0.25 test -f "$_HI_PAR_RV_DIR/$2"
+}
+
+function test_par_case_tallies_pass_fail_and_skip() {
+  (
+    _hi_suite_begin
+    _hi_par_begin "harness probe"
+    _hi_par_case ok _hi_par_ok
+    _hi_par_case bad _hi_par_bad
+    _hi_par_case skipped _hi_par_skipper
+    _hi_par_wait
+    [ "$_HI_TOTAL" -eq 3 ] && [ "$_HI_FAILED" -eq 1 ] && [ "$_HI_SKIPPED" -eq 1 ]
+  ) >/dev/null
+}
+
+# a case that never reaches its verdict is a failure, not a case that vanishes
+# from the totals - the counting bug that would make a red run look green
+function test_par_case_without_a_verdict_counts_as_a_failure() {
+  local fails="$_HI_WORKDIR/par-fails"
+  : >"$fails"
+  (
+    _HI_FAILS_FILE="$fails"
+    _hi_suite_begin
+    _hi_par_begin "verdict probe"
+    _hi_par_case vanished _hi_par_exits
+    _hi_par_wait
+    [ "$_HI_TOTAL" -eq 1 ] && [ "$_HI_FAILED" -eq 1 ]
+  ) >/dev/null || return 1
+  grep -q 'vanished' "$fails"
+}
+
+function test_par_wait_replays_in_submission_order() {
+  local out
+  out="$(
+    _HI_PAR_WIDTH=4
+    _hi_suite_begin
+    _hi_par_begin "order probe"
+    _hi_par_case slow bash -c 'sleep 0.75; printf "FIRST-CASE\n"'
+    _hi_par_case quick _hi_par_says SECOND-CASE
+    _hi_par_wait
+  )"
+  _hi_before "$out" 'FIRST-CASE' 'SECOND-CASE'
+}
+
+function test_par_cases_really_run_at_once() {
+  (
+    _HI_PAR_WIDTH=2
+    _HI_PAR_RV_DIR="$_HI_WORKDIR/rv-parallel"
+    mkdir -p "$_HI_PAR_RV_DIR"
+    _hi_suite_begin
+    _hi_par_begin "overlap probe"
+    _hi_par_case a _hi_par_rendezvous a b 20
+    _hi_par_case b _hi_par_rendezvous b a 20
+    _hi_par_wait
+    [ "$_HI_FAILED" -eq 0 ]
+  ) >/dev/null
+}
+
+# the other half of the same proof, and the escape hatch's test: at width 1 the
+# cases cannot see each other, so the first one spends its (short) budget and
+# fails. _HI_PAR_WIDTH=1 is a real serial run down the parallel code path.
+function test_par_width_one_really_serializes() {
+  (
+    _HI_PAR_WIDTH=1
+    _HI_PAR_RV_DIR="$_HI_WORKDIR/rv-serial"
+    mkdir -p "$_HI_PAR_RV_DIR"
+    _hi_suite_begin
+    _hi_par_begin "serial probe"
+    _hi_par_case a _hi_par_rendezvous a b 4
+    _hi_par_case b _hi_par_rendezvous b a 4
+    _hi_par_wait
+    [ "$_HI_FAILED" -eq 1 ]
+  ) >/dev/null
+}
+
+# a capped run must say it is capped rather than read as "everything at once"
+function test_par_begin_announces_the_width() {
+  local wide narrow
+  wide="$( (_HI_PAR_WIDTH=3 _hi_par_begin "probe cases"))"
+  narrow="$( (_HI_PAR_WIDTH=1 _hi_par_begin "probe cases"))"
+  [[ "$wide" == *"3 at a time"* ]] || return 1
+  [[ "$narrow" == *"one at a time"* ]]
+}
+
+function test_par_width_defaults_within_bounds() {
+  local w
+  w="$( (
+    unset _HI_PAR_WIDTH
+    _hi_par_width
+  ))"
+  [ "$w" -ge 1 ] && [ "$w" -le 4 ]
 }
 
 function test_require_returns_for_an_installed_command() {
@@ -718,7 +859,17 @@ function run_test_lib_tests() {
   _hi_check "Workdir creates a scratch dir" test_workdir_creates_a_scratch_dir
   _hi_check "Cleanup runs the suite-specific hook" test_test_cleanup_runs_the_extra_hook_first
   _hi_check "Cleanup removes the workdir even if the hook fails" test_test_cleanup_removes_the_workdir_even_if_the_hook_fails
-  _hi_check "Track_container appends to the teardown list" test_track_container_appends_to_the_teardown_list
+  _hi_check "Track_container records from a subshell too" test_track_container_records_from_a_subshell_too
+  _hi_check "Cleanup sweeps containers, then networks" test_cleanup_sweeps_containers_then_networks
+
+  _hi_h2 "Testing: _hi_par_case / _hi_par_wait"
+  _hi_check "Tallies pass, fail and skip" test_par_case_tallies_pass_fail_and_skip
+  _hi_check "A case with no verdict is a failure" test_par_case_without_a_verdict_counts_as_a_failure
+  _hi_check "Transcripts replay in submission order" test_par_wait_replays_in_submission_order
+  _hi_check "The cases really do overlap" test_par_cases_really_run_at_once
+  _hi_check "_HI_PAR_WIDTH=1 really serializes" test_par_width_one_really_serializes
+  _hi_check "The width is announced, capped or not" test_par_begin_announces_the_width
+  _hi_check "The default width stays within bounds" test_par_width_defaults_within_bounds
 
   _hi_h2 "Testing: _hi_require / _hi_require_backend"
   _hi_check "Returns for an installed command" test_require_returns_for_an_installed_command

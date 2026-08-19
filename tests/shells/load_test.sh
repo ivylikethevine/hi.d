@@ -258,6 +258,15 @@ function test_session_shell_floors_at_bash() {
   [ "$(_hi_shell_answer "bash" SHELL=/usr/bin/fish _HI_SHELL_PREFERENCE="fish zsh")" = bash ]
 }
 
+# The default tail is now $_HI_SHELL_TREE, which carries the bash-less tiers
+# (mksh, ksh, dash, ash, sh) after bash - they are hi.sh's ladder's business,
+# not this file's, and _hi_session_shell's allow-list `case` is what keeps them
+# out. A tree walked without that filter would answer "mksh" here.
+function test_session_shell_never_picks_a_bash_less_tier() {
+  [ "$(_hi_shell_answer "bash mksh" SHELL=/bin/mksh)" = bash ] || return 1
+  [ "$(_hi_shell_answer "bash dash zsh" SHELL=/bin/dash)" = zsh ]
+}
+
 # --- _hi_tmux_wanted ----------------------------------------------------------
 #
 # The gate in front of `hi --tmux`. Every "no" here has to be a *loud* no that
@@ -332,6 +341,7 @@ function run_load_tests() {
   _hi_check "Falls back for a shell hi doesn't style" test_session_shell_falls_back_for_an_unstyled_login_shell
   _hi_check "Falls back when it isn't installed" test_session_shell_falls_back_when_the_login_shell_is_absent
   _hi_check "_HI_SHELL_PREFERENCE decides" test_session_shell_honors_the_preference_list
+  _hi_check "A bash-less tier is never the session shell" test_session_shell_never_picks_a_bash_less_tier
   _hi_check "Floors at bash" test_session_shell_floors_at_bash
 
   _hi_h2 "Testing: _hi_tmux_wanted"

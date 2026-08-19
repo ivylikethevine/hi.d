@@ -47,9 +47,12 @@ _HI_RELAY_HOST=relayc
 # them, hence a suite hook rather than a trap of its own. The thaw rides along
 # because _hi_workdir takes one hook and this suite freezes processes too -
 # an abort mid-kill must not leave a stopped ssh client behind.
+# Also registered on the teardown ledger by _hi_relay_pair, which is what covers
+# an abort; this is the eager path, so a finished case frees its network rather
+# than leaving it for the trap.
 function _hi_relay_cleanup() {
   _hi_thaw_frozen
-  [ -n "$_HI_RELAY_NET" ] || return 0
+  [ -n "${_HI_RELAY_NET:-}" ] || return 0
   docker network rm "$_HI_RELAY_NET" >/dev/null 2>&1 || true
   return 0
 }
@@ -85,15 +88,24 @@ CFG
   " || return 1
 }
 
-# Boots C then B on one network, and arms B. Leaves B's mapped port in
-# $_HI_SSH_PORT (the launcher below connects to it), which is why B is second.
+# _hi_relay_pair <label> - boots C then B on one network, and arms B. Leaves B's
+# mapped port in $_HI_SSH_PORT (the launcher below connects to it), which is why
+# B is second.
+#
+# Every name carries the case label, not just $$: the two cases here run
+# concurrently, and a network both of them called "hi-relaytest-net-$$" is one
+# network - torn down by whichever case finished first, out from under the other.
+# The network goes on the teardown ledger before it is created, like the
+# containers, so an abort between the two does not leave it behind.
 function _hi_relay_pair() {
-  _HI_RELAY_NET="hi-relaytest-net-$$"
+  local label="$1"
+  _HI_RELAY_NET="hi-relaytest-net-$label-$$"
+  _hi_track_network "$_HI_RELAY_NET"
   docker network create "$_HI_RELAY_NET" >/dev/null 2>&1 ||
     _hi_stand_down "no docker network" "could not create a docker network, skipping"
 
-  _HI_RELAY_C="hi-relaytest-c-$$"
-  _HI_RELAY_B="hi-relaytest-b-$$"
+  _HI_RELAY_C="hi-relaytest-c-$label-$$"
+  _HI_RELAY_B="hi-relaytest-b-$label-$$"
   # ClientAlive on both, as ssh_disconnect_test.sh sets it: it is what reaps a
   # frozen client in seconds rather than hours, and the kill case needs it on
   # each hop - B to notice this machine, C to notice B
@@ -177,7 +189,9 @@ function _hi_relay_report_leftovers() {
 # present) and then on both containers (nothing left behind).
 function _hi_relay_case() {
   local ok=0 c_host
-  _hi_relay_pair || return 1
+  # the fixtures this case owns - locals, so the case beside it owns its own
+  local _HI_SSH_PORT="" _HI_RELAY_NET="" _HI_RELAY_B="" _HI_RELAY_C="" _HI_RELAY_OUT=""
+  _hi_relay_pair relay || return 1
   _hi_ssh_launch "$_HI_SSH_PORT"
   _HI_RELAY_OUT="$_HI_WORKDIR/relay.interactive.out"
   # what $(hostname) will print on C - docker gives an unnamed container its
@@ -239,7 +253,8 @@ function _hi_relay_dirs_gone() {
 
 function _hi_relay_disconnect_case() {
   local out_file b_dir c_dir launcher_pid ok=0
-  _hi_relay_pair || return 1
+  local _HI_SSH_PORT="" _HI_RELAY_NET="" _HI_RELAY_B="" _HI_RELAY_C=""
+  _hi_relay_pair relay-disconnect || return 1
   out_file="$_HI_WORKDIR/relay-disconnect.out"
   : >"$out_file"
 
@@ -311,11 +326,16 @@ function run_relay_tests() {
 
   _hi_pty_stdin auto "no tty and no python3 to fake one - results may be unreliable"
 
+  # Two cases, two three-container fixtures, ~44s of a full run spent almost
+  # entirely waiting on them - so they run together, each with its own network
+  # and its own pair. The kill case finds the client it freezes by *port*
+  # (_hi_ssh_client_pids), which is why the port had to become the case's.
   _hi_suite_begin
-  _hi_h2 "A relay that ends the way it should"
-  _hi_case _hi_relay_case
-  _hi_h2 "A relay that is killed mid-session"
-  _hi_case _hi_relay_disconnect_case
+  _hi_par_begin "relay cases"
+  _hi_h2 "A relay that ends the way it should, and one that is killed mid-session"
+  _hi_par_case relay _hi_relay_case
+  _hi_par_case relay-disconnect _hi_relay_disconnect_case
+  _hi_par_wait
   _hi_suite_end "relay" \
     "hi relayed and left nothing on either hop ($_HI_TOTAL cases)" \
     "the relay FAILED: $_HI_FAILED/$_HI_TOTAL cases"

@@ -18,6 +18,11 @@ Symptom of forgetting: suites report fewer/MISSING cases, or a script runs
 - `tests/test_runner.sh` runs everything; `--group fast` is the CI gate. Lint
   (shellcheck, shfmt, checkbashisms, the bash-4 construct grep) is enforced by
   the fast group itself — there is no separate lint step.
+- The container suites run their cases in parallel (`_hi_par_case` /
+  `_hi_par_wait` in `test_lib.sh`), capped at four at a time. Set
+  `_HI_PAR_WIDTH=1` to put a suite back on one case at a time — it is the same
+  code path, and it is what to reach for when a case is flaky or a transcript
+  needs reading live rather than replayed.
 - The e2e suites (ssh, docker, podman, nomad, kube) need real backends, and
   they do run in this environment (the sandbox allows the docker socket as of
   Aug 2026). A suite that stands down reports yellow **SKIPPED**, never green;

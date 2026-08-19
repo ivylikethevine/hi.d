@@ -139,6 +139,13 @@ EOF
 
   _hi_pty_stdin force "no python3 to give the launcher its own pty - nomad alloc exec's attach may not get a real pty, results may be unreliable"
 
+  # Serial on purpose, and said out loud by _hi_par_begin: this suite's jobs are
+  # tracked in the $_HI_JOBS shell array that _hi_nomad_cleanup purges, and an
+  # append inside a background case would die with it - the one fixture here
+  # that is not case-scoped. Two cases against a single-node dev agent were
+  # worth ~3s of a 348s run anyway; the ssh, framework and container suites are
+  # where the wall clock actually is.
+  export _HI_PAR_WIDTH=1
   _hi_backend_pair_cases nomad "driver shape"
 }
 

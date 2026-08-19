@@ -204,7 +204,11 @@ function _hi_type_framework_probe() {
 # probe (a second typed line) rides _hi_interactive_case's feeder hook.
 function _hi_run_framework_case() {
   local label="$1" login_shell="$2" name ok=0
-  _HI_FW_FAMILY="$3"
+  # both case-scoped, and both for the same reason: cases run concurrently, and
+  # bash's dynamic scoping is what carries the family down to the feeder hook
+  # _hi_interactive_case calls on this case's behalf
+  local _HI_SSH_PORT=""
+  local _HI_FW_FAMILY="$3"
 
   # checked before the container boots, not after: with no pty to drive there
   # is nothing a booted container could add to the skip
@@ -245,15 +249,19 @@ function run_framework_tests() {
 
   _hi_suite_begin
 
+  # Nine frameworks, nine containers, nothing shared between them - the widest
+  # fan-out in the tree and the one this suite is almost entirely made of.
   local spec label shell family
+  _hi_par_begin "framework cases"
   for spec in "${_HI_FRAMEWORKS[@]}"; do
     IFS=: read -r label shell family <<<"$spec"
     if [ "$(_hi_kv_get _HI_FRAMEWORK_OK "$label")" = 1 ]; then
-      _hi_case _hi_run_framework_case "$label" "$shell" "$family"
+      _hi_par_case "$label" _hi_run_framework_case "$label" "$shell" "$family"
     else
       _hi_skip "[$label]" "image did not build"
     fi
   done
+  _hi_par_wait
 
   for spec in "${_HI_FRAMEWORKS[@]}"; do
     docker image rm -f "hi-fwtest-${spec%%:*}-$$" >/dev/null 2>&1 || true

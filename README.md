@@ -87,7 +87,7 @@ hi's aliases-only fallback. Client: zsh.
    Your `settings.sh`, `colors`, `packages`, `tmux.conf` and `aliases.sh` live outside the tree (see [Configuration](#configuration)) and follow in a second, much smaller archive — `$_HI_OVERLAY_FILES` in `hi.sh`, `$_HI_CONFIG_DIR` on the target. It lands in a `config/` of its own beside `misc/` rather than over it, so your `aliases.sh` stays additive. Nothing is sent if you have overridden nothing.
    The tar, `hi.sh` and the bootloader are each base64-armored, assembled into one script, and written over the **stdin** of the first of two calls multiplexed on one ssh connection; the second runs it. Not as an argv entry, which it used to be: Linux caps a single one at 128KB regardless of `ARG_MAX`, and the payload had grown within a few kilobytes of that. The script itself travels unarmored — stdin is a pipe, so only the three streams *inside* it need armor, and a second pass over the whole thing cost a third of every session's bytes for nothing. The size hi prints on connect is that script, and it is what the badge above measures: `hi.sh` (~30KB) rides the wire beside the payload and armor is 4/3, so a session costs roughly `(payload + hi.sh + bootloader) × 4/3` — about 2.4× the gzipped tar on its own. The size on **disconnect** is a different measurement again: `du --apparent-size` of the unpacked tree on the target, which is why it is bigger still — those files land decompressed. `hi --doctor` prints both, labeled.
 2. On the target, `$_HI_ROOT/hi.bashrc` sources `$_HI_ROOT/load.sh` and calls `load`.
-3. `load.sh` prints the header, appends hi's shell configs to the host's own rc files, and starts a session in **your login shell** when hi styles it (bash, zsh or fish), else the first of `fish > zsh > bash` the target has. `_HI_SHELL_PREFERENCE` is that rule as a setting. The `zsh > fish > ksh > sh` order quoted elsewhere is the **no-bash fallback**: what's left when bash turned out to be missing.
+3. `load.sh` prints the header, appends hi's shell configs to the host's own rc files, and starts a session in **your login shell** when hi styles it (bash, zsh or fish), else the first of `fish > zsh > bash` the target has. `_HI_SHELL_PREFERENCE` is that rule as a setting. Both halves are one list — `$_HI_SHELL_TREE` in `common/core.sh`, `fish > zsh > bash > mksh > ksh > dash > ash > sh` — read by two consumers: `load.sh` takes the shells it styles out of it, and `hi.sh`'s `$_HI_SHELL_LADDER` is the same list minus bash, which is the **no-bash fallback**: what's left when bash turned out to be missing.
 4. When the session ends, `load.sh`'s `trap` strips those additions back out, and the `/tmp` directory is removed by the cleanup trap `hi.sh` set up on connect.
 5. `hi <target> 'some command'` skips the interactive session and just runs the command there, like `ssh` does.
 
@@ -96,12 +96,6 @@ Steps 1-2 are plain POSIX under `sh`, so they work even where the target has no 
 For ssh targets, hi first checks — over the same connection, so it costs no extra authentication — whether the target already has a permanent `~/hi.d` from `scripts/install.sh`. If so it skips the copy entirely, points `_HI_ROOT` at that copy, and leaves it in place at the end.
 
 **_IMPORTANT: Local-only changes MUST stay in `~/.bashrc`, `~/.zshrc`, `~/.config/fish/config.fish`, etc. - anything in this directory is copied to every host you say `hi` to._**
-
-#### How the files relate
-
-The steps above are the prose; [docs/DIAGRAM.md](docs/DIAGRAM.md) is the mechanism - a mermaid flowchart of
-every file here and the four ways one reaches another (sources, shells out, runs, generates/writes), plus
-the three edges that carry most of the design.
 
 ### Docker / Podman containers
 
@@ -149,7 +143,7 @@ every run · 🟡 expected to work, nobody has proven it · ⚠️ works, reduce
 | `zsh`                                            | ✅     |                                                                                                                   |
 | `fish`                                           | ✅     | the reason hi's remote command is wrapped in `sh -c '…'`: fish parses neither `{ …; }` nor `\|\|` the way sh does |
 | `ksh` (ksh93/mksh/pdksh), `tcsh`/`csh`           | 🟡     | they only have to run one `sh -c` command; nothing tests them                                                     |
-| `nushell`, `elvish`, `xonsh`, `ion`, `oil`/`osh` | 🟡     | same — one command, no shell-specific syntax in it                                                                |
+| `nushell`, `elvish`, `xonsh`, `ion`, `oil`/`osh` | 🟡     | same — one command, no shell-specific syntax in it. Being a fine _login_ shell here is unrelated to being a styled _session_ shell, which the third table answers |
 | PowerShell, `cmd.exe`                            | ⚠️     | no POSIX shell to write the bootloader with, so hi falls back to a plain PowerShell session                       |
 
 **3. The shell you end up _in_** — what hi hands you once it is on the target.
@@ -162,25 +156,27 @@ every run · 🟡 expected to work, nobody has proven it · ⚠️ works, reduce
 | `sh`/`dash`/`ash` (no bash on the target) | ⚠️ aliases and a colored `user@host` prompt, with a warning saying so | no header and no git segment - those need bash                                                                                                                                                                                                                                                                                                                                                                           |
 | `ksh`/`mksh` (no bash on the target)      | ⚠️ aliases, the colored prompt **and a live git segment** - no header | it reads `$ENV` as the `sh` tier does, plus `shells/ksh.sh`: ksh93 and mksh expand `$( )` when the prompt is _printed_, which is what lets the segment be live where busybox `ash` cannot have one. The header needs bash. `tests/targets/ssh_test.sh` renders the segment against a real mksh                                                                                                                           |
 | `nushell`                                 | ⚠️ header, prompt, git segment and a **subset** of the aliases        | `shells/config.nu`. Needs `bash` on the target: nu can source none of `common/`, so the header, palette and git segment are rendered by shelling out to it, exactly as `config.fish` does. Chosen when nu is your _login_ shell or you name it in `_HI_SHELL_PREFERENCE` - never handed to someone whose login shell is bash. The alias subset, and what was left out and why, is the GLOSSARY's "nu alias subset" entry |
-| `elvish`, `xonsh`, `ion`, `oil`/`osh`     | ❌                                                                    | see below                                                                                                                                                                                                                                                                                                                                                                                                                |
+| `elvish`, `xonsh`, `ion`, `oil`/`osh`     | ❌ **decided against**, not pending                                   | see the table below. You still get a session — hi lands you in the best of `$_HI_SHELL_TREE` the target has                                                                                                                                                                                                                                                                                                              |
 | PowerShell                                | ❌                                                                    | bash-only by design                                                                                                                                                                                                                                                                                                                                                                                                      |
 
-**Shells hi does not style yet.** Each would need its own rc in `shells/` (prompt, aliases, completion) plus a
-tier in the fallback ladder in `hi.sh`'s `_hi_remote_suffix` and `load.sh`'s `load()`.
+**Shells hi does not style, and why that is settled.** Each would need its own rc in `shells/` (prompt,
+aliases, completion) plus a tier in the fallback ladder in `hi.sh`'s `_hi_remote_suffix` and `load.sh`'s
+`load()`. Three of them were open questions; they are answered now, and the answer is no.
 
-| shell        | why it is not here                                                                                                      | what it would take                                                                                                                                                                                                                                       |
-| ------------ | ----------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `elvish`     | same shape, smaller audience                                                                                            | a `shells/rc.elv`                                                                                                                                                                                                                                        |
-| `xonsh`      | Python, so the prompt and aliases would be a third implementation                                                       | a `shells/rc.xsh`                                                                                                                                                                                                                                        |
-| `ksh`/`mksh` | **all but the header** — a tier in the no-bash ladder, the POSIX prompt, the aliases, and `shells/ksh.sh`'s git segment | the header, and only the header. `common/header.sh` is bash, and this tier is defined by bash being absent, so it would have to be written a second time in POSIX and then kept in sync forever - the git segment was worth that, a second header is not |
-| `tcsh`/`csh` | different rc syntax and no `$ENV` equivalent                                                                            | its own rc, and honestly: ask whether anyone wants it                                                                                                                                                                                                    |
-| PowerShell   | not a POSIX shell; the greeting hi prints there is the whole extent of it                                               | a separate project, really                                                                                                                                                                                                                               |
+| shell        | status                            | why                                                                                                                                                                                                                                                     |
+| ------------ | --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `elvish`     | **decided against** (2026-08-18)  | its own language, so the prompt and aliases would be a second implementation to keep in sync forever, for an audience hi has no evidence of. A `shells/rc.elv` is what it would take, and nobody has asked                                              |
+| `xonsh`      | **decided against** (2026-08-18)  | Python — a third implementation, on the same terms as elvish and with the same answer                                                                                                                                                                   |
+| `tcsh`/`csh` | **decided against** (2026-08-18)  | different rc syntax _and_ no `$ENV` equivalent, so there is no hook to land on at all: it would need its own rc and its own delivery mechanism                                                                                                          |
+| `ksh`/`mksh` | shipped, **all but the header**   | a tier in the no-bash ladder, the POSIX prompt, the aliases, and `shells/ksh.sh`'s git segment. The header, and only the header, is missing: `common/header.sh` is bash, and this tier is defined by bash being absent, so it would have to be written a second time in POSIX and then kept in sync forever - the git segment was worth that, a second header is not |
+| PowerShell   | not a POSIX shell                 | the greeting hi prints there is the whole extent of it; anything more is a separate project, really                                                                                                                                                     |
 
-Using one of these as a _login_ shell still works — hi lands you in bash (or the best of zsh/fish/sh) for the
-session. Only the session shell is limited.
+Using one of these as a _login_ shell still works, and always did — hi lands you in the best of
+`$_HI_SHELL_TREE` (`fish > zsh > bash > mksh > ksh > dash > ash > sh`) the target actually has. Only the
+_session_ shell is limited, and only for the three above.
 
 **If you use a shell framework**, hi lands you in your own login shell, so it loads normally — that is what
-`_HI_SHELL_PREFERENCE`'s default (`login fish zsh bash`) means. `tests/targets/framework_test.sh` tests
+`_HI_SHELL_PREFERENCE`'s default (`login`, then the styled head of `$_HI_SHELL_TREE`: `fish zsh bash`) means. `tests/targets/framework_test.sh` tests
 oh-my-zsh, powerlevel10k, starship and bash-it against hi, each asserting the session comes up with no shell
 errors and that hi neither changed zsh's array base under them nor dropped their `PROMPT_COMMAND`.
 
@@ -278,7 +274,7 @@ you can read all of it in one sitting.
 the shell itself**, so you can use fish or zsh on a host that has neither.
 
 **Where xxh wins outright:** that capability. hi.d cannot give you a shell the
-target lacks — its no-bash ladder (`zsh > fish > ksh > mksh > sh`) picks the
+target lacks — its no-bash ladder (`fish > zsh > mksh > ksh > dash > ash > sh`) picks the
 best of what is installed and says so. If you need _your_ shell on a
 locked-down box that ships only `sh`, xxh is the answer and hi.d is not; its
 plugin model is also more principled than copying dotfiles blind.
@@ -385,7 +381,8 @@ work, and detecting a permanent `~/hi.d` on the target to use in place.
   terminal's own helper — [kitty's ssh kitten] is excellent at exactly that.
 - **You need nushell, elvish or xonsh on a target with no bash.** hi.d's
   nushell support needs bash there (it shells out for the header, palette and
-  git segment); elvish and xonsh are not styled at all.
+  git segment); elvish, xonsh and tcsh are not styled at all, and that is now a
+  decision rather than a gap — see the compatibility tables above.
 - **You need something published and stable today.** hi.d is pre-1.0 and on no
   channel yet — you install from a checkout or a release artifact. The
   alternatives have been installable for years.
@@ -480,9 +477,11 @@ header-line toggles, tmux's `update-environment` behavior, and every other envir
 ## Testing
 
 `tests/test_runner.sh` (aliased to `hi_test` once installed) runs the suite, times each one and prints a
-colored pass/fail summary - `--group fast` is what CI runs on every push/PR. The full runbook (all four
-suite groups, `--host-report`, `--verbose`, the lint gate, relaying, why the tests are local-only) is in
-[docs/TESTING.md](docs/TESTING.md).
+colored pass/fail summary - `--group fast` is what CI runs on every push/PR. The container suites run their
+cases in parallel (each one boots its own container), capped at four at a time and saying so in the output;
+`_HI_PAR_WIDTH=1` puts a suite back on one case at a time when you are bisecting a flake. The full runbook
+(all four suite groups, `--host-report`, `--verbose`, the lint gate, relaying, why the tests are local-only)
+is in [docs/TESTING.md](docs/TESTING.md).
 
 ```sh
 export _HI_HOME=/path/to/parent-of-hi.d  # never your real ~/hi.d
@@ -491,10 +490,9 @@ tests/test_runner.sh --group fast
 
 ## More docs
 
-- [docs/DIAGRAM.md](docs/DIAGRAM.md) - how the shipped files relate, as a mermaid flowchart
 - [docs/FEATURES.md](docs/FEATURES.md) - the config overlay, every feature toggle and environment variable hi reads
 - [docs/FILES.md](docs/FILES.md) - what every shipped file does, one line each
-- [docs/TESTING.md](docs/TESTING.md) - the test runner, suite groups, the lint gate, relaying
+- [docs/TESTING.md](docs/TESTING.md) - the test runner, suite groups, parallel cases, the lint gate, relaying
 - [docs/GLOSSARY.md](docs/GLOSSARY.md) - the named idioms the code's `GLOSSARY:` comment tags point at; load-bearing for reading `common/`, and drift-checked by the lint suite
 - [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) - the dev loop and how a change should arrive (PR titles become release notes)
 - [docs/SECURITY.md](docs/SECURITY.md) - reporting, and what hi touches on a target

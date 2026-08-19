@@ -20,12 +20,22 @@ export _HI_CONFIG_DIR="$XDG_CONFIG_HOME/hi.d"
 # shellcheck source=../common/core.sh
 source "${_HI_HOME:-$HOME}/hi.d/common/core.sh"
 
-# Scratch dir every suite works in, plus the containers a suite has started
-# that its exit trap has to tear down. Both are set up by _hi_workdir and
-# consumed by _hi_test_cleanup below.
+# Scratch dir every suite works in, plus the ledger of everything its exit trap
+# has to take away again: containers, docker networks, and processes a case
+# SIGSTOPped. Both are set up by _hi_workdir and consumed by _hi_test_cleanup.
+#
+# The ledger is a *file* rather than the array it used to be, for two reasons
+# that both cost real containers on a real machine. A case may run in a
+# background subshell (see _hi_par_case): an array append inside one dies with
+# the subshell, so the container it started was never registered and leaked the
+# first time anything crashed. And a file can be written *before* the thing
+# exists - the window between `docker run` returning and the name being recorded
+# is exactly where a ^C leaks one, so every writer below registers first and
+# starts second. Removing something twice is a no-op; removing something that
+# never started is a no-op too. Missing one is not.
 _HI_WORKDIR=""
 _HI_EXTRA_CLEANUP=""
-declare -a _HI_STARTED=()
+_HI_LEDGER=""
 
 # Creates the suite's scratch dir as $_HI_WORKDIR and registers the one exit
 # trap it needs. $1 is a slug for the mktemp template ("checktest", "sshtest",
@@ -36,19 +46,65 @@ declare -a _HI_STARTED=()
 function _hi_workdir() {
   _HI_WORKDIR="$(mktemp -d -t "hi.$1.XXXXXX")"
   _HI_EXTRA_CLEANUP="${2:-}"
+  _HI_LEDGER="$_HI_WORKDIR/.ledger"
+  : >"$_HI_LEDGER"
   _hi_on_exit _hi_test_cleanup
 }
+
+# _hi_ledger <kind> <value> - one line on the teardown ledger. A single short
+# printf to a file opened O_APPEND, which is what makes concurrent cases writing
+# it safe: one write, far under PIPE_BUF, so lines never interleave.
+function _hi_ledger() {
+  [ -n "$_HI_LEDGER" ] || return 0
+  printf '%s %s\n' "$1" "$2" >>"$_HI_LEDGER"
+  return 0
+}
+
+# _hi_ledger_rows <kind> - the values registered under <kind>, one per line.
+function _hi_ledger_rows() {
+  local kind value
+  [ -n "$_HI_LEDGER" ] && [ -f "$_HI_LEDGER" ] || return 0
+  while read -r kind value; do
+    [ "$kind" = "$1" ] && printf '%s\n' "$value"
+  done <"$_HI_LEDGER"
+  return 0
+}
+
+# Registers a container for teardown by _hi_test_cleanup. Suites driving a
+# non-docker CLI set _HI_BACKEND (podman) first - every backend that
+# reaches here takes docker's `rm -f <name>` shape.
+function _hi_track_container() { _hi_ledger container "$1"; }
+
+# The same, for a docker network: the relay suite builds one per case, and it
+# can only go after the containers on it (hence the sweep order below).
+function _hi_track_network() { _hi_ledger network "$1"; }
 
 # Every step is guarded and the whole thing ends in `return 0`: this runs as
 # an exit trap under `set -e`, where one failing step would otherwise skip
 # every step after it - leaving containers or the scratch dir behind.
+#
+# The order is not arbitrary. Background cases are killed first - before the
+# suite's own hook, even: a case still running would put a container, a job or a
+# pod back behind whatever the hook and the sweep have just taken away. Frozen pids come next, and
+# before their containers: a SIGSTOPped process cannot act on SIGKILL until it
+# is scheduled again (see _hi_thaw_frozen), and taking its sshd away first
+# leaves it stopped forever, holding a socket to nothing. Networks come last,
+# because docker refuses to remove one that still has a container on it.
 function _hi_test_cleanup() {
   local c
+  _hi_par_kill
   if [ -n "$_HI_EXTRA_CLEANUP" ]; then
     "$_HI_EXTRA_CLEANUP" || true
   fi
-  for c in "${_HI_STARTED[@]:-}"; do
-    [ -n "$c" ] && _hi_rm_container "$c"
+  for c in $(_hi_ledger_rows frozen); do
+    kill -CONT "$c" 2>/dev/null || true
+    kill -9 "$c" 2>/dev/null || true
+  done
+  for c in $(_hi_ledger_rows container); do
+    _hi_rm_container "$c"
+  done
+  for c in $(_hi_ledger_rows network); do
+    "${_HI_BACKEND:-docker}" network rm "$c" >/dev/null 2>&1 || true
   done
   if [ -n "$_HI_WORKDIR" ]; then
     rm -rf "$_HI_WORKDIR" || true
@@ -56,13 +112,6 @@ function _hi_test_cleanup() {
   # the isolated config overlay from the top of this file, if a test made one
   rm -rf "$XDG_CONFIG_HOME" || true
   return 0
-}
-
-# Registers a container for teardown by _hi_test_cleanup. Suites driving a
-# non-docker CLI set _HI_BACKEND (podman) first - every backend that
-# reaches here takes docker's `rm -f <name>` shape.
-function _hi_track_container() {
-  _HI_STARTED+=("$1")
 }
 
 # _hi_rm_container <name> - the eager between-cases teardown, as one idiom:
@@ -101,6 +150,172 @@ function _hi_assert() {
 # _hi_check <label> <predicate...> - one counted, labelled assertion.
 function _hi_check() {
   _hi_case _hi_assert "$@"
+}
+
+# --- running cases in parallel -------------------------------------------------
+#
+# The container suites are nearly the whole cost of a full run, and nearly all
+# of that is spent waiting on one container at a time while the machine idles.
+# Every case already builds its own container under its own name, so the
+# containers never collided - the harness around them did, in three places:
+#
+#   - **the counters.** _hi_case increments $_HI_TOTAL/$_HI_FAILED in the
+#     current shell, and a background subshell's increments die with it. A case
+#     writes its verdict to a file instead and _hi_par_wait tallies them in the
+#     parent, which is the shape common/header.sh's _hi_probe_start /
+#     _hi_probe_wait already uses for the header's backend probes.
+#   - **teardown registration.** See the ledger above.
+#   - **the transcript.** Concurrent _hi_cecho lines are unreadable, so each
+#     case's output is buffered to its own file and replayed *in submission
+#     order* once the batch is done. That is test_runner.sh's
+#     collapse-and-replay idea one level down rather than a second mechanism:
+#     a parallel run reads exactly like a serial one, only the timings overlap.
+#
+# Cases that share state stay serial through _hi_case - ssh_test.sh's two
+# _hi_transcript_is_clean checks read files the bash32 cases write, so they run
+# after the batch, not in it.
+_HI_PAR_DIR=""
+_HI_PAR_N=0
+_HI_PAR_SLOTS=1
+declare -a _HI_PAR_PIDS=()
+declare -a _HI_PAR_LABELS=()
+declare -a _HI_PAR_RUNNING=()
+
+# How wide to fan out. Unbounded is the wrong answer on a laptop: twenty sshd
+# containers, twenty ssh clients and twenty pty feeders thrash the docker daemon
+# and swap the box, which is both slower and flakier than four. So the default
+# is four, or the CPU count when that is smaller. $_HI_PAR_WIDTH overrides it,
+# and _HI_PAR_WIDTH=1 is a genuine serial run down this same code path - what a
+# suite whose fixtures are not case-scoped asks for (nomad's job list), and what
+# bisecting a flake wants.
+function _hi_par_width() {
+  local cpus
+  if [ -n "${_HI_PAR_WIDTH:-}" ]; then
+    printf '%s' "$_HI_PAR_WIDTH"
+    return 0
+  fi
+  cpus="$(getconf _NPROCESSORS_ONLN 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || true)"
+  case "$cpus" in '' | *[!0-9]*) cpus=2 ;; esac
+  [ "$cpus" -lt 1 ] && cpus=1
+  [ "$cpus" -gt 4 ] && cpus=4
+  printf '%s' "$cpus"
+}
+
+# _hi_par_begin [what] - open a batch, and say out loud how wide it will run.
+# A capped run must never read as "everything at once": same honesty rule the
+# bench suite states about hyperfine, one directory over.
+function _hi_par_begin() {
+  _HI_PAR_DIR="$_HI_WORKDIR/par"
+  rm -rf "$_HI_PAR_DIR"
+  mkdir -p "$_HI_PAR_DIR"
+  _HI_PAR_N=0
+  _HI_PAR_PIDS=()
+  _HI_PAR_LABELS=()
+  _HI_PAR_RUNNING=()
+  _HI_PAR_SLOTS="$(_hi_par_width)"
+  if [ "$_HI_PAR_SLOTS" -le 1 ]; then
+    _hi_cecho " | ${1:-cases}: one at a time (_HI_PAR_WIDTH=$_HI_PAR_SLOTS)" "$YELLOW"
+  else
+    _hi_cecho " | ${1:-cases}: $_HI_PAR_SLOTS at a time, transcripts replayed in submission order below" "$BLUE"
+  fi
+  return 0
+}
+
+# Blocks until a slot frees up. `wait <pid>` on each in turn and never `wait -n`
+# (macOS ships bash 3.2, as header.sh's probes note), so a finished case is
+# spotted by polling kill -0 and then reaped - the reap is what keeps the
+# process table clean, and it returns immediately for a pid that has already
+# exited.
+function _hi_par_slot() {
+  local pid
+  local -a keep
+  while [ "${#_HI_PAR_RUNNING[@]}" -ge "$_HI_PAR_SLOTS" ]; do
+    keep=()
+    for pid in ${_HI_PAR_RUNNING[@]+"${_HI_PAR_RUNNING[@]}"}; do
+      if kill -0 "$pid" 2>/dev/null; then
+        keep+=("$pid")
+      else
+        wait "$pid" 2>/dev/null || true
+      fi
+    done
+    _HI_PAR_RUNNING=(${keep[@]+"${keep[@]}"})
+    [ "${#_HI_PAR_RUNNING[@]}" -ge "$_HI_PAR_SLOTS" ] && sleep 0.25
+  done
+  return 0
+}
+
+# _hi_par_case <label> <fn> [args...] - _hi_case's parallel twin: same contract
+# (one counted case, non-zero means failed), run in a background subshell once a
+# slot is free. The verdict file carries the exit status *and* the case's own
+# skip tally, since _hi_skip increments a variable that would otherwise die with
+# the subshell too. A case that leaves no verdict at all - killed, or `exit`ed
+# out from under us - is counted as a failure by _hi_par_wait rather than
+# quietly vanishing from the totals.
+function _hi_par_case() {
+  local label="$1"
+  shift
+  _hi_par_slot
+  _HI_PAR_N=$((_HI_PAR_N + 1))
+  _HI_PAR_LABELS+=("$label")
+  local out="$_HI_PAR_DIR/$_HI_PAR_N.out" res="$_HI_PAR_DIR/$_HI_PAR_N.res"
+  _hi_cecho " | [$label] started" "$BLUE"
+  (
+    # the subshell-local counters SC2030/SC2031 warn about are the mechanism,
+    # not the bug: they are reset here, written to the verdict file below, and
+    # summed back into the caller's by _hi_par_wait
+    # shellcheck disable=SC2030
+    _HI_SKIPPED=0
+    _hi_par_rc=0
+    "$@" || _hi_par_rc=$?
+    printf '%s %s\n' "$_hi_par_rc" "${_HI_SKIPPED:-0}" >"$res"
+  ) >"$out" 2>&1 &
+  _HI_PAR_RUNNING+=("$!")
+  _HI_PAR_PIDS+=("$!")
+  return 0
+}
+
+# Waits out the batch, then replays and tallies it in submission order.
+function _hi_par_wait() {
+  local pid i=0 label rc skipped
+  for pid in ${_HI_PAR_PIDS[@]+"${_HI_PAR_PIDS[@]}"}; do wait "$pid" 2>/dev/null || true; done
+  for label in ${_HI_PAR_LABELS[@]+"${_HI_PAR_LABELS[@]}"}; do
+    i=$((i + 1))
+    [ -f "$_HI_PAR_DIR/$i.out" ] && cat "$_HI_PAR_DIR/$i.out"
+    rc=1
+    skipped=0
+    if [ -s "$_HI_PAR_DIR/$i.res" ]; then
+      read -r rc skipped <"$_HI_PAR_DIR/$i.res"
+    else
+      _hi_cecho " | [$label] -- FAILED: the case left no verdict (killed, or it exited the subshell)" "$RED"
+      _hi_note_failure "[$label] left no verdict"
+    fi
+    _HI_TOTAL=$((_HI_TOTAL + 1))
+    [ "$rc" -eq 0 ] || _HI_FAILED=$((_HI_FAILED + 1))
+    # shellcheck disable=SC2031 # this is the parent's copy, which is the point
+    _HI_SKIPPED=$((${_HI_SKIPPED:-0} + skipped))
+  done
+  _HI_PAR_PIDS=()
+  _HI_PAR_LABELS=()
+  _HI_PAR_RUNNING=()
+  _HI_PAR_N=0
+  return 0
+}
+
+# The teardown half, reached from _hi_test_cleanup: stop anything still running
+# before the ledger is swept, or a case mid-`docker run` puts a container back
+# behind it. TERM first so a case's own traps get their chance, KILL after.
+function _hi_par_kill() {
+  local pid
+  for pid in ${_HI_PAR_PIDS[@]+"${_HI_PAR_PIDS[@]}"}; do
+    kill -TERM "$pid" 2>/dev/null || true
+  done
+  for pid in ${_HI_PAR_PIDS[@]+"${_HI_PAR_PIDS[@]}"}; do
+    kill -9 "$pid" 2>/dev/null || true
+    wait "$pid" 2>/dev/null || true
+  done
+  _HI_PAR_PIDS=()
+  _HI_PAR_RUNNING=()
+  return 0
 }
 
 # _hi_before <text> <first-pattern> <second-pattern> - both patterns present
@@ -1015,16 +1230,25 @@ function _hi_ssh_reachable() {
 # `-e` vars ride in (LOGIN_SHELL, SSHD_OPTS), instead of each wanting an image
 # of its own. Registers the container for teardown, and returns non-zero,
 # having said why, if it never came up.
+#
+# $_HI_SSH_PORT is the *caller's* to own: every case that boots a container
+# declares `local _HI_SSH_PORT` first, so the port a case connects to - and
+# greps the process table by, in _hi_ssh_client_pids - is the port that case
+# started, not whichever case started one last. It was a single global, which
+# is fine until two cases run at once and then is a race that reads as a bug in
+# the code under test.
 function _hi_sshd_container() {
   local name="$1" image="$2"
   shift 2
 
+  # registered *before* the run, not after: the container exists the moment
+  # docker returns, and a ^C in that window used to leak it (see the ledger)
+  _hi_track_container "$name"
   if ! docker run -d --rm --name "$name" -p 127.0.0.1::22 -e "PUBKEY=$_HI_PUBKEY" "$@" "$image" \
     >/dev/null 2>"$_HI_WORKDIR/$name.log"; then
     _hi_cecho " | Failed to start container (see $_HI_WORKDIR/$name.log)" "$RED"
     return 1
   fi
-  _hi_track_container "$name"
 
   _HI_SSH_PORT="$(docker port "$name" 22/tcp | head -1 | sed 's/.*://')"
   _hi_cecho " | Container: $name (port: $_HI_SSH_PORT)"
@@ -1084,6 +1308,11 @@ function _hi_freeze() {
   local pid
   for pid in "$@"; do
     _HI_FROZEN_PIDS+=("$pid")
+    # ...and on the ledger as well, which is the copy that survives: a case
+    # running in a background subshell keeps its own $_HI_FROZEN_PIDS, so an
+    # abort between the STOP and the KILL would leave nothing for the suite's
+    # exit trap to thaw
+    _hi_ledger frozen "$pid"
     kill -STOP "$pid" 2>/dev/null || true
   done
 }
@@ -1159,12 +1388,13 @@ function _hi_start_case_container() {
   _HI_CONTAINER="hi-${_HI_BACKEND}test-$label-$$"
   _hi_h3 "Testing shell: $label"
 
+  # tracked before the run, for the reason _hi_sshd_container states
+  _hi_track_container "$_HI_CONTAINER"
   if ! "$_HI_BACKEND" run -d --name "$_HI_CONTAINER" "$image" tail -f /dev/null \
     >/dev/null 2>"$_HI_WORKDIR/$label.run.log"; then
     _hi_cecho " | Failed to start container (image: $image)" "$RED"
     return 1
   fi
-  _hi_track_container "$_HI_CONTAINER"
   _hi_cecho " | Container: $_HI_CONTAINER (image: $image)"
 
   if ! _hi_poll_bool 40 0.25 _hi_container_running "$_HI_CONTAINER"; then
@@ -1178,6 +1408,9 @@ function _hi_start_case_container() {
 function _hi_backend_case() {
   local label="$1" image="$2" cmd="$3" timeout_s="${4:-30}"
   local ok=0
+  # the case's own, not the suite's: _hi_start_case_container assigns into this
+  # frame, so two cases running at once cannot read each other's container
+  local _HI_CONTAINER=""
 
   _hi_start_case_container "$label" "$image" || return 1
   _hi_exec_case "$label" "$_HI_BACKEND path" "$_HI_TEST_MARKER" "$timeout_s" "$_HI_CONTAINER" "$cmd" && ok=1
@@ -1191,6 +1424,7 @@ function _hi_backend_case() {
 function _hi_backend_interactive_case() {
   local label="$1" image="$2" timeout_s="${3:-60}"
   local ok=0
+  local _HI_CONTAINER=""
 
   _hi_start_case_container "$label" "$image" || return 1
   if _hi_interactive_case "$label" "$_HI_BACKEND path (interactive)" "$_HI_TEST_MARKER" \
@@ -1243,16 +1477,20 @@ function _hi_container_backend_test() {
 
   _hi_suite_begin
 
-  _hi_case _hi_backend_case bash debian:bookworm-slim "$(_hi_probe_cmd "$_HI_TEST_MARKER" bash)"
-  _hi_case _hi_backend_interactive_case bash-interactive debian:bookworm-slim
+  # Every case here boots its own container and reads nothing another case
+  # writes, so the whole battery is one parallel batch.
+  _hi_par_begin "$backend shell environments"
+  _hi_par_case bash _hi_backend_case bash debian:bookworm-slim "$(_hi_probe_cmd "$_HI_TEST_MARKER" bash)"
+  _hi_par_case bash-interactive _hi_backend_interactive_case bash-interactive debian:bookworm-slim
   local spec
   for spec in zsh:fallback fish:fallback_fish mksh:fallback; do
     shell="${spec%%:*}"
     if [ "$(_hi_kv_get shell_ok "$shell")" = 1 ]; then
-      _hi_case _hi_backend_case "$shell" "hi-${backend}test-$shell-$$" "$(_hi_probe_cmd "$_HI_TEST_MARKER" "${spec#*:}")"
+      _hi_par_case "$shell" _hi_backend_case "$shell" "hi-${backend}test-$shell-$$" "$(_hi_probe_cmd "$_HI_TEST_MARKER" "${spec#*:}")"
     fi
   done
-  _hi_case _hi_backend_case sh alpine:3.20 "$(_hi_probe_cmd "$_HI_TEST_MARKER" fallback)"
+  _hi_par_case sh _hi_backend_case sh alpine:3.20 "$(_hi_probe_cmd "$_HI_TEST_MARKER" fallback)"
+  _hi_par_wait
 
   # $$-suffixed like the container names: without it a second run of this
   # suite on the same host removes the images the first is still running from
@@ -1271,13 +1509,19 @@ function _hi_container_backend_test() {
 # proven by _hi_container_backend_test above, so these suites only need to
 # prove their own backend's probe/attach argument shapes - once with bash
 # present, once without.
+# The pair runs as a batch, which is a real saving on kube (two pods scheduled
+# together on a cluster that took 40s to exist) and none at all on nomad - whose
+# suite tracks its jobs in a shell array and therefore asks for _HI_PAR_WIDTH=1,
+# so this path stays one code path either way.
 function _hi_backend_pair_cases() {
   local label="$1" thing="$2"
 
   _hi_suite_begin
 
-  _hi_case _hi_run_case bash debian:bookworm-slim "$(_hi_probe_cmd "$_HI_TEST_MARKER" bash)"
-  _hi_case _hi_run_case sh alpine:3.20 "$(_hi_probe_cmd "$_HI_TEST_MARKER" fallback)"
+  _hi_par_begin "$label cases"
+  _hi_par_case bash _hi_run_case bash debian:bookworm-slim "$(_hi_probe_cmd "$_HI_TEST_MARKER" bash)"
+  _hi_par_case sh _hi_run_case sh alpine:3.20 "$(_hi_probe_cmd "$_HI_TEST_MARKER" fallback)"
+  _hi_par_wait
 
   _hi_suite_end "" \
     "hi's $label path survived every $thing tested ($_HI_TOTAL cases)" \

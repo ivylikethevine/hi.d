@@ -23,9 +23,13 @@ _HI_PAYLOAD=(common misc shells load.sh)
 # shipped aliases overwritten, and then sourcing itself forever.
 _HI_OVERLAY_FILES=(settings.sh colors packages tmux.conf aliases.sh)
 
-# What a bash-less target falls back to, best first.
-# ksh and mksh need no arm of their own: they read $ENV exactly as sh does.
-export _HI_SHELL_LADDER="zsh fish ksh mksh sh"
+# What a bash-less target falls back to, best first: core.sh's $_HI_SHELL_TREE
+# with bash removed, because bash being missing is this ladder's precondition -
+# derived rather than spelled out, so the two orderings cannot drift apart
+# again. ksh and mksh need no arm of their own in _hi_remote_suffix: they read
+# $ENV exactly as sh does. dash and ash land in that same arm; they are here to
+# be *preferred* over a `sh` that may be either.
+export _HI_SHELL_LADDER="${_HI_SHELL_TREE//bash /}"
 
 # Stands in for the connect line's size until the script carrying it has been
 # assembled and measured (see _say_hi); wider than any answer it can produce.

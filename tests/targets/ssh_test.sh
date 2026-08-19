@@ -28,6 +28,10 @@ _HI_ALPINE_OK=""
 # (the same variadic contract _hi_run_ksh_git_case uses for the branch name)
 function _hi_run_case() {
   local label="$1" image="$2" login_shell="$3" cmd="$4" post="${5:-}" name exit_code=0 t0 t1 ok=0
+  # the container's mapped port, owned by this case: _hi_sshd_container assigns
+  # into this frame, so a case running beside it connects to its own sshd and
+  # greps the process table by its own port
+  local _HI_SSH_PORT=""
 
   name="hi-sshtest-$label-$$"
   _hi_h3 "Testing login shell: $label ($login_shell)"
@@ -72,6 +76,7 @@ function _hi_run_case() {
 
 function _hi_run_interactive_case() {
   local label="$1" image="$2" login_shell="$3" post="${4:-}" name ok=0
+  local _HI_SSH_PORT=""
 
   name="hi-sshtest-$label-$$"
   _hi_h3 "Testing interactive session: $label ($login_shell)"
@@ -106,6 +111,7 @@ function _hi_tmux_session_listed() {
 
 function _hi_run_tmux_case() {
   local name="hi-sshtest-tmux-$$" ok=0 session_pid out cut
+  local _HI_SSH_PORT=""
   local -a launch
 
   _hi_h3 "Testing interactive session: tmux (--tmux, permanent install)"
@@ -176,6 +182,7 @@ function _hi_run_tmux_case() {
 # $(_hi_ksh_git) while drawing the prompt.
 function _hi_run_ksh_git_case() {
   local image="$1" name="hi-sshtest-kshgit-$$" branch="hi-ksh-probe" ok=0
+  local _HI_SSH_PORT=""
 
   _hi_h3 "Testing the mksh tier's git segment"
   _hi_sshd_container "$name" "$image" -e "LOGIN_SHELL=/bin/ash" || return 1
@@ -220,6 +227,7 @@ function _hi_run_ksh_git_case() {
 # test is the rc read, not the transport.
 function _hi_run_bystander_case() {
   local name="hi-sshtest-bystander-$$" ok=0
+  local _HI_SSH_PORT=""
   local out_file="$_HI_WORKDIR/bystander.interactive.out"
   local by_file="$_HI_WORKDIR/bystander.by.out"
   local graft_flag="$_HI_WORKDIR/bystander.grafted"
@@ -353,9 +361,15 @@ EOF
 
   _hi_suite_begin
 
+  # Every case below boots a container of its own and asserts on files named
+  # after its own label, so the lot of them go into one batch; the two checks
+  # that read *another* case's transcript run serially after the wait, which is
+  # the only ordering this suite actually has.
+  _hi_par_begin "login-shell cases"
+
   if [ "$_HI_DEBIAN_OK" -eq 1 ]; then
     for _hi_pair in bash:/bin/bash dash:/bin/dash zsh:/usr/bin/zsh fish:/usr/bin/fish; do
-      _hi_case _hi_run_case "${_hi_pair%%:*}" "$_HI_SSHD_IMAGE" "${_hi_pair#*:}" "$(_hi_probe_cmd "$_HI_TEST_MARKER" bash)"
+      _hi_par_case "${_hi_pair%%:*}" _hi_run_case "${_hi_pair%%:*}" "$_HI_SSHD_IMAGE" "${_hi_pair#*:}" "$(_hi_probe_cmd "$_HI_TEST_MARKER" bash)"
     done
 
     # The preamble's TERM fallback, all three arms: an unknown name (kitty's
@@ -369,54 +383,49 @@ EOF
     for _hi_term_spec in swap:xterm-kitty:xterm-256color known:xterm-256color:xterm-256color \
       terminfo:xterm-mono:xterm-mono; do
       IFS=: read -r _hi_label _hi_client _hi_want <<<"$_hi_term_spec"
-      TERM="$_hi_client" _hi_case _hi_run_case "term-$_hi_label" "$_HI_SSHD_IMAGE" /bin/bash \
+      TERM="$_hi_client" _hi_par_case "term-$_hi_label" _hi_run_case "term-$_hi_label" "$_HI_SSHD_IMAGE" /bin/bash \
         "echo TERMPROBE=\$TERM; echo $_HI_TEST_MARKER" "" "TERMPROBE=$_hi_want"
     done
 
-    _hi_case _hi_run_bystander_case
+    _hi_par_case bystander _hi_run_bystander_case
   fi
 
   for _hi_case_spec in nobash:alpine:ssh_fallback nobash-zsh:alpine-zsh:ssh_fallback \
     nobash-fish:alpine-fish:ssh_fallback_fish nobash-ksh:alpine-ksh:ssh_fallback; do
     IFS=: read -r _hi_label _hi_image _hi_shape <<<"$_hi_case_spec"
     if [ "$(_hi_kv_get _HI_ALPINE_OK "$_hi_image")" = 1 ]; then
-      _hi_case _hi_run_case "$_hi_label" "hi-sshtest-$_hi_image-$$" /bin/ash "$(_hi_probe_cmd "$_HI_TEST_MARKER" "$_hi_shape")"
+      _hi_par_case "$_hi_label" _hi_run_case "$_hi_label" "hi-sshtest-$_hi_image-$$" /bin/ash "$(_hi_probe_cmd "$_HI_TEST_MARKER" "$_hi_shape")"
     fi
   done
 
   [ "$(_hi_kv_get _HI_ALPINE_OK alpine-ksh)" = 1 ] &&
-    _hi_case _hi_run_ksh_git_case "hi-sshtest-alpine-ksh-$$"
+    _hi_par_case kshgit _hi_run_ksh_git_case "hi-sshtest-alpine-ksh-$$"
 
   if [ "$_HI_BASH32_OK" -eq 1 ]; then
-    _hi_case _hi_run_case bash32 "hi-sshtest-bash32-$$" /usr/local/bin/bash "$(_hi_probe_cmd "$_HI_TEST_MARKER" bash)"
+    _hi_par_case bash32 _hi_run_case bash32 "hi-sshtest-bash32-$$" /usr/local/bin/bash "$(_hi_probe_cmd "$_HI_TEST_MARKER" bash)"
     # The shape that matters for bash 3.2: $CMDARG replaces load() outright in
     # the bootloader, so a command-shaped case never reaches the header, the rc
     # graft, the shell handoff or clean_all - which is where every bash-4-only
     # builtin hi could reach for actually gets used.
-    _hi_case _hi_run_interactive_case bash32-interactive "hi-sshtest-bash32-$$" /usr/local/bin/bash \
+    _hi_par_case bash32-interactive _hi_run_interactive_case bash32-interactive "hi-sshtest-bash32-$$" /usr/local/bin/bash \
       '! ls -d /tmp/*.hi.* >/dev/null 2>&1'
-    # ...and the assertion that gives those two teeth. A bash-4-ism on bash 3.2
-    # mostly *doesn't* break the session - it prints "mapfile: command not
-    # found" and carries on with a wrong count - so a marker-and-cleanup check
-    # passes right through it. Both transcripts have to be clean instead.
-    _hi_case _hi_transcript_is_clean bash32 "$_HI_WORKDIR/bash32.ssh.out"
-    _hi_case _hi_transcript_is_clean bash32-interactive "$_HI_WORKDIR/bash32-interactive.interactive.out"
     # every *.sh through a real 3.2 parser (`bash -n`): the lint suite's grep
     # table only knows the constructs it lists, while the parser catches the
     # unlisted ones - an apostrophe in a comment inside $( ), say, which 3.2
     # reads as an unterminated string (GLOSSARY: apostrophes in substitution
     # comments). The macOS CI job found that one at runtime; this catches the
-    # whole class before a release does.
-    _hi_check "every *.sh parses under bash 3.2" test_bash32_parses_every_file
+    # whole class before a release does. Its own container, no fixture shared
+    # with anything, so it rides the batch like the rest.
+    _hi_par_case bash32-parse _hi_assert "every *.sh parses under bash 3.2" test_bash32_parses_every_file
   fi
 
   if [ "$_HI_INSTALLED_OK" -eq 1 ]; then
-    _hi_case _hi_run_case installed "hi-sshtest-debian-installed-$$" /bin/bash "$(_hi_probe_cmd "$_HI_TEST_MARKER" installed)" \
+    _hi_par_case installed _hi_run_case installed "hi-sshtest-debian-installed-$$" /bin/bash "$(_hi_probe_cmd "$_HI_TEST_MARKER" installed)" \
       'test -f /home/hitest/hi.d/.installed_sentinel'
     # the one case that catches load.sh's clean_all deleting the target's own
     # permanent install: a command-shaped case can't, since $CMDARG means
     # clean_all never runs at all. Also asserts the rc graft came back out.
-    _hi_case _hi_run_interactive_case installed-interactive "hi-sshtest-debian-installed-$$" /bin/bash \
+    _hi_par_case installed-interactive _hi_run_interactive_case installed-interactive "hi-sshtest-debian-installed-$$" /bin/bash \
       'test -f /home/hitest/hi.d/.installed_sentinel && test -x /home/hitest/hi.d/hi.sh && ! grep -q hi-config-start /home/hitest/.bashrc'
     # The same permanent install behind a *fish* login shell. _hi_remote_root's
     # probe reaches that shell before any sh does, and `_r="$HOME/hi.d"` is not
@@ -424,7 +433,7 @@ EOF
     # hi shipped a tree the target already had. The marker asserts $_HI_ROOT is
     # the permanent one, so a regression here fails rather than merely wasting
     # a copy.
-    _hi_case _hi_run_case installed-fish "hi-sshtest-debian-installed-$$" /usr/bin/fish \
+    _hi_par_case installed-fish _hi_run_case installed-fish "hi-sshtest-debian-installed-$$" /usr/bin/fish \
       "$(_hi_probe_cmd "$_HI_TEST_MARKER" installed)"
   fi
 
@@ -432,15 +441,28 @@ EOF
     if [ "${#_HI_PTY_FORCED[@]}" -eq 0 ]; then
       _hi_skip "[tmux]" "no python3 to drive an interactive pty"
     else
-      _hi_case _hi_run_tmux_case
+      _hi_par_case tmux _hi_run_tmux_case
     fi
   fi
 
   if [ "$_HI_DEBIAN_OK" -eq 1 ]; then
     # the mirror image: a tree hi *did* ship over has to be gone afterwards,
     # so the guard above can't be satisfied by never cleaning up at all
-    _hi_case _hi_run_interactive_case copied-interactive "$_HI_SSHD_IMAGE" /bin/bash \
+    _hi_par_case copied-interactive _hi_run_interactive_case copied-interactive "$_HI_SSHD_IMAGE" /bin/bash \
       '! ls -d /tmp/*.hi.* >/dev/null 2>&1'
+  fi
+
+  _hi_par_wait
+
+  # The one ordering this suite has. A bash-4-ism on bash 3.2 mostly *doesn't*
+  # break the session - it prints "mapfile: command not found" and carries on
+  # with a wrong count - so the marker-and-cleanup checks above pass right
+  # through it, and both transcripts have to be clean as well. They are files
+  # the two bash32 cases wrote, so this reads them after the batch rather than
+  # racing them inside it.
+  if [ "$_HI_BASH32_OK" -eq 1 ]; then
+    _hi_case _hi_transcript_is_clean bash32 "$_HI_WORKDIR/bash32.ssh.out"
+    _hi_case _hi_transcript_is_clean bash32-interactive "$_HI_WORKDIR/bash32-interactive.interactive.out"
   fi
 
   # $$-suffixed like the container names above: these are this run's images,

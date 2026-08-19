@@ -104,10 +104,15 @@ function _hi_login_shell() {
   printf '%s' "${shell##*/}"
 }
 
+# The default tail is core.sh's $_HI_SHELL_TREE, not a literal of its own: the
+# case below is the allow list, so the tree's bash-less tiers (mksh, ksh, dash,
+# ash, sh) fall through it unmatched - they are reachable only where bash is
+# absent, and this file is bash. What survives is fish > zsh > bash, which is
+# what $_HI_SHELL_PREFERENCE's documented default has always meant.
 # GLOSSARY: session-shell ranking - login-first, and nu's allow-list-only seat
 function _hi_session_shell() {
   local want
-  for want in ${_HI_SHELL_PREFERENCE:-login} fish zsh bash; do
+  for want in ${_HI_SHELL_PREFERENCE:-login} $_HI_SHELL_TREE; do
     [ "$want" = login ] && want="$(_hi_login_shell)"
     case "$want" in
     bash | zsh | fish | nu) command -v "$want" >/dev/null 2>&1 && {

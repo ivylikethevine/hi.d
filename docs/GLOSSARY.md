@@ -63,7 +63,7 @@ doesn't. Used on hot paths (`_hi_git_prompt`'s optional out-var, `_hi_repeat`)
 tail: sourcing the file defines its functions and stops there, which is how
 the test suites reach the functions without running an install/bump/render.
 `scripts/install.sh`, `packaging/bump.sh`, `packaging/mkpkg.sh`,
-`scripts/color_preview.sh` all carry it.
+`scripts/color_preview.sh` and `scripts/packages_preview.sh` all carry it.
 
 ## toggle defaulting
 

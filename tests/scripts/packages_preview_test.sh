@@ -1,0 +1,314 @@
+#!/bin/bash
+# Unit tests for scripts/packages_preview.sh - the `hi_packages_preview` legend.
+#
+# The preview's whole claim is that it shows what the *header* will do, so what
+# matters is that it reads its facts from header.sh rather than from a copy:
+# the priority meanings out of the comment block, the colors out of _HI_YES and
+# _HI_NO, and every example row out of check_line itself. The cases below pin
+# those seams, plus the table geometry, against a fixture packages file and a
+# PATH holding exactly the packages the fixture calls installed.
+#
+# Nearly every function below is invoked indirectly - by name, through
+# _hi_case's "$@" - which SC2329 can't see.
+# shellcheck disable=SC2329
+set -euo pipefail
+
+# shellcheck source=../../common/core.sh
+source "${_HI_HOME:-$HOME}/hi.d/common/core.sh"
+# shellcheck source=../test_lib.sh
+source "$_HI_TEST_LIB"
+# its own hatch stops it before it renders anything; sourcing hands over the
+# helpers, and (through it) header.sh's check_line
+# shellcheck source=../../scripts/packages_preview.sh
+source "$_HI_PACKAGES_PREVIEW"
+
+# Six packages that exist and six that do not, one pair per priority, plus one
+# line whose *second* name is the installed one (the ~ mark). Names nothing
+# else answers to: a shell builtin or a real tool of the same name would make
+# "installed" an accident of the machine rather than something set up here.
+function _hi_write_fixtures() {
+  local tool
+  mkdir -p "$_HI_WORKDIR/pkgbin"
+  for tool in hialpha hibravo hicharlie hidelta hiecho hifoxtrot; do
+    printf '#!/bin/sh\nexit 0\n' >"$_HI_WORKDIR/pkgbin/$tool"
+    chmod +x "$_HI_WORKDIR/pkgbin/$tool"
+  done
+
+  cat >"$_HI_WORKDIR/packages" <<'EOF'
+# a comment, and a blank line, both of which the header skips
+hialpha:5
+highost5:5
+hibravo:4
+highost4:4
+hicharlie:3
+highost3:3
+hidelta:2
+highost2:2
+hiecho:1
+highost1:1
+hifoxtrot:0
+highost0:0
+highostalt:4,hibravo:4
+EOF
+  export _HI_PACKAGES="$_HI_WORKDIR/packages"
+}
+
+# the fixture's packages, and the coreutils the script itself shells out to
+function _hi_pkg_path() {
+  printf '%s:%s' "$_HI_WORKDIR/pkgbin" "$(_hi_real_path pkgtools awk sort sed cat)"
+}
+
+# collect once - it is the same work for every case that reads the results
+function _hi_collect_once() {
+  local saved="$PATH"
+  PATH="$(_hi_pkg_path)"
+  _hi_collect_examples
+  PATH="$saved"
+}
+
+# --- the priority meanings, read out of header.sh ---------------------------
+
+# The pin that keeps the legend honest: header.sh's comment block is the only
+# description of the priorities there is, so every priority its color tables
+# define has to come back with a meaning. A renumbered or reworded block fails
+# here rather than rendering a table with a blank column.
+function test_every_priority_has_a_meaning() {
+  local p meaning i=0
+  for i in "${!_HI_YES[@]}"; do
+    meaning="$(_hi_priority_meanings | awk -v p="$i" -F'\t' '$1 == p { print $2 }')"
+    [ -n "$meaning" ] || return 1
+  done
+  [ "${#_HI_YES[@]}" -eq "${#_HI_NO[@]}" ]
+}
+
+function test_meanings_are_one_per_priority() {
+  [ "$(_hi_priority_meanings | wc -l)" -eq "${#_HI_YES[@]}" ]
+}
+
+# the parenthetical examples in header.sh's comment are dropped - the EXAMPLE
+# column shows real ones, from the file the header will actually read
+function test_meanings_drop_the_parenthetical() {
+  ! _hi_priority_meanings | grep -q '('
+}
+
+function test_meanings_name_the_top_priority() {
+  _hi_priority_meanings | grep -q "^5$(printf '\t')workflow-defining$"
+}
+
+# an unrelated "# 2 ..." comment earlier in header.sh must not join the block
+function test_meanings_take_only_the_block_above_the_table() {
+  [ "$(_hi_priority_meanings | awk -F'\t' '$1 == 2' | wc -l)" -eq 1 ]
+}
+
+# --- naming the colors the header renders in --------------------------------
+
+function test_color_name_of_names_a_palette_entry() {
+  [ "$(_hi_color_name_of "$BRGREEN")" = brgreen ] &&
+    [ "$(_hi_color_name_of "$YELLOW")" = yellow ]
+}
+
+# every escape in the header's two tables has to name something, or the legend
+# prints a color the user cannot look up in misc/colors
+function test_color_name_of_names_every_header_color() {
+  local escape
+  for escape in "${_HI_YES[@]}" "${_HI_NO[@]}"; do
+    [ "$escape" = hide ] && continue
+    [ "$(_hi_color_name_of "$escape")" = plain ] && return 1
+  done
+  return 0
+}
+
+# $NC is not a palette color, and neither is anything under $NO_COLOR
+function test_color_name_of_calls_a_reset_plain() {
+  [ "$(_hi_color_name_of "$NC")" = plain ]
+}
+
+# The "hide" sentinel is not a color to be named but an instruction to print
+# nothing, and the label is what the column is *measured* by as well as painted
+# with - naming it through a second path is how a column ends up sized to one
+# string and rendered with another.
+function test_color_label_names_the_hide_sentinel() {
+  [ "$(_hi_color_label hide)" = hidden ] &&
+    [ "$(_hi_color_label "$BRRED")" = brred ]
+}
+
+# --- the examples, collected through the header's own check_line -------------
+
+function test_collect_counts_every_listed_package() {
+  [ "$_HI_PKG_LISTED" -eq 13 ]
+}
+
+# priority 2 installed and priorities 4/3/0 missing are hidden, so of the 13
+# lines the header prints 9: both of 5 and 1, the installed 4/3/0, the missing
+# 2, and the alternatives line
+function test_collect_counts_only_what_the_header_shows() {
+  [ "$_HI_PKG_SHOWN" -eq 9 ]
+}
+
+function test_collect_finds_an_installed_example() {
+  [[ "${_HI_EX_OK[5]:-}" == *hialpha* ]]
+}
+
+function test_collect_finds_a_missing_example() {
+  [[ "${_HI_EX_NO[5]:-}" == *highost5* ]]
+}
+
+# priority 2 paints installed packages "hide" - there is no example to show,
+# because at that priority an installed package shows nothing
+function test_collect_skips_a_hidden_installed_example() {
+  [ -z "${_HI_EX_OK[2]:-}" ] && [[ "${_HI_EX_NO[2]:-}" == *highost2* ]]
+}
+
+function test_collect_skips_a_hidden_missing_example() {
+  [ -z "${_HI_EX_NO[4]:-}" ] && [[ "${_HI_EX_OK[4]:-}" == *hibravo* ]]
+}
+
+# the installed/missing split reads the mark, so it has to survive a package
+# whose *name* contains the ASCII glyph ("x" in highost0) and the alternatives
+# mark, which is neither of the two
+function test_collect_reads_the_mark_not_the_name() {
+  [[ "${_HI_EX_OK[0]:-}" == *hifoxtrot* ]] && [ -z "${_HI_EX_NO[0]:-}" ]
+}
+
+# --- the width the example cell reports -------------------------------------
+
+# The cell is nothing but color escapes and text, so its length is not its
+# width; handing the table a measured length is what pushes a column past its
+# own rule. Priority 5 shows both examples: "| hialpha X " and "| highost5 X ".
+function test_example_cell_reports_its_printed_width() {
+  local text width
+  IFS=$'\t' read -r text width <<<"$(_hi_example_cell 5)"
+  [ "$width" -eq $((7 + 4 + _HI_MARK_OK_W + 8 + 4 + _HI_MARK_NO_W)) ] &&
+    [ "$width" -lt "${#text}" ]
+}
+
+function test_example_cell_marks_a_priority_with_nothing_to_show() {
+  local text width
+  IFS=$'\t' read -r text width <<<"$(_hi_example_cell 9)"
+  [ "$text" = "-" ] && [ "$width" -eq 1 ]
+}
+
+# --- the whole thing actually runs ------------------------------------------
+
+# Running the real script can't reuse the exported fixture above: paths.sh
+# re-exports $_HI_PACKAGES from $_HI_ROOT every time it's sourced, so the only
+# way to point the script at one is to give it a scratch tree to derive it from.
+function _hi_render_preview() {
+  PATH="$(_hi_pkg_path)" HOME="$_HI_WORKDIR/tree" _HI_HOME="$_HI_WORKDIR/tree" \
+    "$_HI_WORKDIR/tree/hi.d/scripts/packages_preview.sh" 2>&1
+}
+
+function _hi_write_preview_tree() {
+  local home
+  home="$(_hi_scratch_tree tree common misc scripts)"
+  cp "$_HI_WORKDIR/packages" "$home/hi.d/misc/packages"
+}
+
+# One render (the slowest thing this suite does) shared by the cases below;
+# each reads it from a variable rather than piping into grep, because under
+# `set -o pipefail` an early-exiting `grep -q` SIGPIPEs the script and a
+# negated case then passes no matter what the table said.
+_HI_PREVIEW_OUT=""
+
+function test_preview_renders_without_error() {
+  _HI_PREVIEW_OUT="$(_hi_render_preview)" || return 1
+  [[ "$_HI_PREVIEW_OUT" == *PRIORITY* && "$_HI_PREVIEW_OUT" == *MARK* ]]
+}
+
+function test_preview_names_every_priority() {
+  local i stripped
+  stripped="$(printf '%s\n' "$_HI_PREVIEW_OUT" | sed 's/\x1b\[[0-9;]*m//g')"
+  for i in "${!_HI_YES[@]}"; do
+    printf '%s\n' "$stripped" | grep -q "^| $i  *| " || return 1
+  done
+}
+
+function test_preview_says_hidden_where_the_header_prints_nothing() {
+  printf '%s\n' "$_HI_PREVIEW_OUT" | grep -q hidden
+}
+
+function test_preview_counts_what_it_read() {
+  printf '%s\n' "$_HI_PREVIEW_OUT" | grep -q '13 listed, 9 shown, 4 hidden'
+}
+
+# the check itself is the last thing the preview prints, so a package the
+# header would show has to appear below the tables as well as inside them
+function test_preview_ends_with_the_real_check() {
+  [[ "$(printf '%s\n' "$_HI_PREVIEW_OUT" | tail -3)" == *hialpha* ]]
+}
+
+# Every section of the preview reads the packages file, so a missing one is
+# said out loud and stops the run - the bare redirect it replaces fails with a
+# path and no hint of which file the tool wanted.
+function test_preview_reports_a_missing_packages_file() {
+  local home out
+  home="$(_hi_scratch_tree nopackages common misc scripts)"
+  rm -f "$home/hi.d/misc/packages"
+  out="$(PATH="$(_hi_pkg_path)" HOME="$home" _HI_HOME="$home" \
+    "$home/hi.d/scripts/packages_preview.sh" 2>&1)" && return 1
+  [[ "$out" == *"No packages file"* ]]
+}
+
+# Every cell is padded to its column's width, so each table has exactly one
+# printed width once the color escapes are stripped - the geometry check
+# color_preview_test.sh runs on its own tables, for the same reason: a column
+# measured in something other than printed characters overflows its rule.
+function test_tables_are_rectangular() {
+  printf '%s\n' "$_HI_PREVIEW_OUT" | sed 's/\x1b\[[0-9;]*m//g' |
+    awk '
+      /^[+|]/ { if (!(t in w)) w[t] = length($0)
+                else if (length($0) != w[t]) bad = 1
+                next }
+      { t++ }
+      END { exit (bad || t == 0) }'
+}
+
+function run_packages_preview_tests() {
+  _hi_workdir packagespreviewtest
+  _hi_write_fixtures
+  _hi_write_preview_tree
+  _hi_collect_once
+
+  _hi_h1 "Testing scripts/packages_preview.sh"
+
+  _hi_suite_begin
+
+  _hi_h2 "Testing: the priority meanings"
+  _hi_check "Every priority has a meaning" test_every_priority_has_a_meaning
+  _hi_check "One meaning per priority" test_meanings_are_one_per_priority
+  _hi_check "Parenthetical examples dropped" test_meanings_drop_the_parenthetical
+  _hi_check "Names the top priority" test_meanings_name_the_top_priority
+  _hi_check "Reads only the block above the tables" test_meanings_take_only_the_block_above_the_table
+
+  _hi_h2 "Testing: naming the header's colors"
+  _hi_check "Names a palette entry" test_color_name_of_names_a_palette_entry
+  _hi_check "Names every color the header uses" test_color_name_of_names_every_header_color
+  _hi_check "Calls a reset plain" test_color_name_of_calls_a_reset_plain
+  _hi_check "Names the hide sentinel hidden" test_color_label_names_the_hide_sentinel
+
+  _hi_h2 "Testing: examples, via the header's check_line"
+  _hi_check "Counts every listed package" test_collect_counts_every_listed_package
+  _hi_check "Counts only what the header shows" test_collect_counts_only_what_the_header_shows
+  _hi_check "Finds an installed example" test_collect_finds_an_installed_example
+  _hi_check "Finds a missing example" test_collect_finds_a_missing_example
+  _hi_check "Skips a hidden installed example" test_collect_skips_a_hidden_installed_example
+  _hi_check "Skips a hidden missing example" test_collect_skips_a_hidden_missing_example
+  _hi_check "Reads the mark, not the name" test_collect_reads_the_mark_not_the_name
+
+  _hi_h2 "Testing: the example cell"
+  _hi_check "Reports its printed width" test_example_cell_reports_its_printed_width
+  _hi_check "Marks a priority with nothing to show" test_example_cell_marks_a_priority_with_nothing_to_show
+
+  _hi_h2 "Testing: the rendered preview"
+  _hi_check "Renders without error" test_preview_renders_without_error
+  _hi_check "Names every priority" test_preview_names_every_priority
+  _hi_check "Says hidden where the header prints nothing" test_preview_says_hidden_where_the_header_prints_nothing
+  _hi_check "Counts what it read" test_preview_counts_what_it_read
+  _hi_check "Ends with the real check" test_preview_ends_with_the_real_check
+  _hi_check "Every line of a table is the same width" test_tables_are_rectangular
+  _hi_check "Reports a missing packages file" test_preview_reports_a_missing_packages_file
+
+  _hi_suite_end "packages_preview.sh"
+}
+
+run_packages_preview_tests

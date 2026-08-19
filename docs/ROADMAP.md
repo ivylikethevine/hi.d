@@ -67,7 +67,7 @@ stamp and the CI tooling shipped; git history is the ledger.
   purpose so a full run builds it once, so parallelising that group means
   either serialising it anyway or losing the sharing; and bash 3.2 has no
   `wait -n`, so the pool has to poll `kill -0` the way `_hi_wait_pid`
-  does. `fast`'s 19 suites are the subset that would parallelise cleanly.
+  does. `fast`'s 20 suites are the subset that would parallelise cleanly.
 
 ### Docs
 
@@ -245,5 +245,9 @@ Nice to have -
 
 - built in configuration UI for host/tags/colors configuration as well as users
 - built in package color/priority modification
+  - show all users & their colors, let users change existing, remove, add new
 - package groups/conditional loading
+  - let user change colors for each priority
+  - let user toggle certain priorities on/off entirely
 - evaluate moving hi.sh and load.sh to common or bin (revise directory structure)
+- evaluate if there are existing packages that we can integrate instead of rolling our own

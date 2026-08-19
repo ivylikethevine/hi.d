@@ -53,6 +53,7 @@ if ! declare -p _HI_TESTS >/dev/null 2>&1; then
     "fast:targets:common/targets_test.sh"
     "fast:paths:common/paths_test.sh"
     "fast:color_preview:scripts/color_preview_test.sh"
+    "fast:packages_preview:scripts/packages_preview_test.sh"
     "fast:doctor:scripts/doctor_test.sh"
     "fast:load:shells/load_test.sh"
     "fast:rc:shells/rc_test.sh"

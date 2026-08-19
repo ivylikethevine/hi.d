@@ -6,6 +6,8 @@ set -euo pipefail
 
 # shellcheck source=../common/core.sh
 source "${_HI_HOME:-$HOME}/hi.d/common/core.sh"
+# shellcheck source=./table.sh
+source "$_HI_ROOT/scripts/table.sh"
 
 case "${1:-}" in
 -h | --help)
@@ -64,31 +66,10 @@ function _hi_preview_users() {
   } | awk '!seen[$0]++'
 }
 
-# _hi_widen <var> <string...> - grow the width variable named <var> to the
-# longest of the strings. The measurement half of every column in both tables.
-function _hi_widen() {
-  local var="$1" s cur
-  shift
-  eval "cur=\$$var"
-  for s in "$@"; do
-    ((${#s} > cur)) && cur=${#s}
-  done
-  eval "$var=\$cur"
-}
-
 function _hi_group_preview_width() {
   local h n=$# pw=0
   for h in "$@"; do pw=$((pw + user_width + 1 + ${#h})); done
   printf '%s' $((pw + 2 * (n - 1)))
-}
-
-function _hi_hbar() {
-  local seg="+" w dashes
-  for w in "$@"; do
-    _hi_repeat dashes $((w + 2)) '-'
-    seg+="$dashes+"
-  done
-  printf '%s\n' "$seg"
 }
 
 # _hi_group_index <key> - where $key sits in $group_order, or 1 if it isn't
@@ -106,14 +87,6 @@ function _hi_group_index() {
     i=$((i + 1))
   done
   return 1
-}
-
-# _hi_cell <width> <escape> <text> - one padded, colored table cell; an empty
-# escape and text render the blank cell continuation rows use.
-function _hi_cell() {
-  local padded
-  printf -v padded '%-*s' "$1" "$3"
-  printf '| %b ' "$2$padded$NC"
 }
 
 # users table: every known real user with a non-default color, plus LOCALUSER
@@ -185,7 +158,7 @@ function _hi_print_users_table() {
 # table (LOCALUSER, each usertag) against that host's name(s)
 function _hi_print_hosts_table() {
   local name color_name source user user_color user_escape name_escape key
-  local cur_line sep candidate idx idx2 li total_lines itemtext previewtext
+  local cur_line sep sep_w candidate idx idx2 li total_lines itemtext previewtext
   local tag has_usertag
   local user_width=0 pw pad_preview local_hostname
   local preview_users=() group_order=() group_names=() item_lines=()
@@ -244,7 +217,15 @@ function _hi_print_hosts_table() {
   for gidx in "${!group_order[@]}"; do
     _hi_widen w_source "${group_source[gidx]}"
     read -ra group_names <<<"${group_hosts[gidx]}"
-    _hi_widen w_preview "$(_hi_group_preview_width "${group_names[@]}")"
+    _hi_widen_to w_preview "$(_hi_group_preview_width "${group_names[@]}")"
+    # the wrap below can only break *between* names, so a name wider than the
+    # column has nowhere to go - widen to it instead of overflowing the border.
+    # A wrapped line keeps its trailing ", ", which counts toward the width.
+    sep_w=0
+    ((${#group_names[@]} > 1)) && sep_w=2
+    for name in "${group_names[@]}"; do
+      _hi_widen_to w_item $((${#name} + sep_w))
+    done
   done
 
   _hi_hbar "$w_item" "$w_color" "$w_source" "$w_preview"

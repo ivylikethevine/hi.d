@@ -35,7 +35,7 @@ quietest way to get a wrong result here.
 
 Four groups (`--group <name>`), matching CI's four jobs. `fast`: `aliases`, `alias_fallthrough`, `osc52`,
 `tmux`, `shellcheck`, `install`, `packaging`, `hi`, `header`, `core`, `git_prompt`, `targets`, `paths`,
-`color_preview`, `doctor`, `load`, `rc`, `test_lib`, `test_runner` — dependency-free, the first thing CI runs
+`color_preview`, `packages_preview`, `doctor`, `load`, `rc`, `test_lib`, `test_runner` — dependency-free, the first thing CI runs
 on every push/PR (the last two are the harness testing itself). `bench`: hot-path timings checked against
 ceilings. `e2e`: `ssh`, `ssh_disconnect`, `ssh_relay`, `docker`, `framework` — real throwaway containers
 driving `hi.sh`'s actual connection paths, covering both halves of it (`_say_hi` and `_say_hi_container`).
@@ -83,4 +83,6 @@ ships `aliases.sh` alone and never loads `paths.sh` — there `hi` is simply not
 The tests are local-only: `tests/` is stripped from the payload, so `hi_test` on a target says so rather
 than running (likewise `hi_install`, `hi_configure`, `hi_check_configs`, `hi_color_preview`). `hi_update` is
 the odd one out — it needs a `.git`, absent both in a hi session and in a package-manager install, so it
-says where to update instead of running `git pull` in a non-repo.
+says where to update instead of running `git pull` in a non-repo. `hi_packages_preview` is the other: its
+legend lives in `scripts/`, but the check it previews lives in the shipped `common/header.sh`, so on a
+target it runs that half rather than saying no.

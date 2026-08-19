@@ -38,6 +38,7 @@ function hi_abbr_aliases --description 'add a fish abbr for every alias hi defin
     eval "abbr -a -- "(string replace -r '^alias \S+ ' "$hi_abbr_name " -- $hi_abbr_line)
   end
 end
+# TODO: Default to off, investigate using autosuggest text, not rewriting buffer
 # on by default - fish-only, so it isn't in core.sh's shared _HI_TOGGLES list;
 # turning every alias into an abbr changes what your command line and
 # history literally look like, which is what the toggle is for

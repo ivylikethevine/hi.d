@@ -437,6 +437,7 @@ work, and detecting a permanent `~/hi.d` on the target to use in place.
 - [optional] pin specific colors in `~/.config/hi.d/colors` - everything else gets a color automatically. Copy `hi.d/misc/colors` there to start from the shipped defaults
   - run `hi_color_preview` to preview what every ssh host/your user resolves to
 - [optional] copy `hi.d/misc/packages` to `~/.config/hi.d/packages` and edit it to your preferences
+  - run `hi_packages_preview` to see what each priority means, the colors it renders installed and missing packages in, one real example of each from your own file, and the check itself as a connect will print it
 - say `hi`!
 - [optional] modify `~/hi.d/misc/*` and `~/hi.d/shells/*` to your liking - though anything with an overlay (`settings.sh`, `colors`, `packages`, `tmux.conf`, `aliases.sh`) is better edited in `~/.config/hi.d/`, which keeps the checkout clean for `hi_update`
   - tip: `~/hi.d` is a git checkout, so if you do edit it, push to your own fork and clone that on your next device - same setup everywhere, kept in sync by `hi_update`

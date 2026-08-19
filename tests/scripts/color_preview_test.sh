@@ -44,6 +44,13 @@ Host tagged
 # Tags: unlisted
 Host othertag
   User nobody
+
+# longer than the HOST column's own floor, and grouped with `tagged`, so the
+# rendered table has to widen for it and wrap the pair - see
+# test_tables_are_rectangular
+# Tags: work
+Host a-considerably-longer-hostname
+  User nobody
 EOF
 
   export _HI_COLORS="$_HI_WORKDIR/colors"
@@ -206,6 +213,21 @@ function test_tables_name_the_matching_tag() {
   printf '%s\n' "$_HI_PREVIEW_OUT" | grep -q 'tag:work'
 }
 
+# Not the exact shape the comment above declines to assert - just that each
+# table *is* one: every cell is padded to its column's width, so every line of
+# a table has to come out the same printed width once the color escapes are
+# stripped. Catches a column measured in something other than printed
+# characters, which PREVIEW (escape-laden, sized by _hi_group_preview_width)
+# and HOST (unwrappably long names) both got wrong.
+function test_tables_are_rectangular() {
+  printf '%s\n' "$_HI_PREVIEW_OUT" | sed 's/\x1b\[[0-9;]*m//g' |
+    awk '
+      /^$/ { table++; next }
+      { if (!(table in w)) w[table] = length($0)
+        if (length($0) != w[table]) { bad = 1 } }
+      END { exit (bad || table == 0) }'
+}
+
 function run_color_preview_tests() {
   _hi_workdir colorpreviewtest
   _hi_write_fixtures
@@ -246,6 +268,7 @@ function run_color_preview_tests() {
   _hi_check "Render without error" test_tables_render_without_error
   _hi_check "Skip hosts that render by default" test_tables_skip_hosts_that_render_by_default
   _hi_check "Name the matching tag" test_tables_name_the_matching_tag
+  _hi_check "Every line of a table is the same width" test_tables_are_rectangular
 
   _hi_suite_end "color_preview.sh"
 }

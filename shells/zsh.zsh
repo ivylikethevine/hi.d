@@ -75,7 +75,11 @@ _hi() {
   compadd -d _HI_TARGET_DESCS -a _HI_TARGET_ROWS
 }
 compdef _hi hi
-compdef exa=eza
+# only when something actually completes `eza` - compdef's service form errors
+# out ("unknown command or service: eza") when the right-hand side has no
+# binding, which is every shell where eza isn't installed. _comps is compinit's
+# own command -> completion map, so this asks the question without a fork.
+(( ${+_comps[eza]} )) && compdef exa=eza
 # === end required configuration ===
 
 if [[ "${_HI_DISABLE_PERSONAL:-0}" != 1 ]]; then

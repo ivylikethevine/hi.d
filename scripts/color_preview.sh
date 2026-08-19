@@ -1,7 +1,7 @@
 #!/bin/bash
 # preview what every ssh host & every known user resolve to, rendered in that
 # actual color, plus why (override/hosttag/default) - handy when tuning
-# misc/colors. Run via `hi_color_preview`.
+# misc/colors. Run via `hi --color-preview`.
 set -euo pipefail
 
 # shellcheck source=../common/core.sh

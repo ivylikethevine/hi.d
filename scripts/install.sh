@@ -61,16 +61,16 @@ its current setting when there is no tty to answer on.
 
   --features-only  Skip the shell rc wiring and the hi.sh symlink - just
                    re-run the feature toggle prompts. This is what
-                   \`hi_configure\` calls once hi.d is installed.
+                   \`hi --configure\` calls once hi.d is installed.
   --check-configs  Only run the pre-install validation of your existing
                    ~/.bashrc, ~/.zshrc and ~/.config/fish/config.fish -
-                   skip everything else. This is what \`hi_check_configs\`
+                   skip everything else. This is what \`hi --check-configs\`
                    calls.
   --overlay-init   Version the config overlay: \`git init\` plus a first
                    commit in \${XDG_CONFIG_HOME:-\$HOME/.config}/hi.d, in
-                   place. From then on \`hi_configure\` commits its own
+                   place. From then on \`hi --configure\` commits its own
                    settings writes; an overlay you never init never hears
-                   about git. This is what \`hi_overlay_init\` calls.
+                   about git. This is what \`hi --overlay-init\` calls.
   --uninstall      The inverse: strip hi's lines back out of those three rc
                    files, remove the settings.sh this wrote, and unlink
                    /usr/bin/hi if it points at this hi.d. Safe to re-run.
@@ -78,7 +78,7 @@ its current setting when there is no tty to answer on.
                    you're done with it - and so is the one-time
                    <rc-file>.hi-orig backup the install took before its
                    first write to each rc file. This is what
-                   \`hi_uninstall\` (and scripts/uninstall.sh) calls.
+                   \`hi --uninstall\` (and scripts/uninstall.sh) calls.
   -y, --yes        Install even if that validation finds problems. Without
                    it, a non-interactive run stops rather than rewriting
                    shell configs that don't parse.
@@ -94,7 +94,7 @@ its current setting when there is no tty to answer on.
                    Touches no shell rc file, asks nothing, runs no sudo.
                    Defaults to /usr/share. This is what a PKGBUILD's
                    package() or a deb/rpm recipe calls; each user then runs
-                   \`hi_install\` once for their own shells.
+                   \`hi --install\` once for their own shells.
 EOF
     exit 0
     ;;
@@ -256,7 +256,7 @@ function setting_off() {
   fi
   # `$(<f)` is the builtin read where `cat` was a process, and the guard covers
   # the missing file the redirect would otherwise complain about. ~15 questions
-  # run per hi_configure, each asking this.
+  # run per hi --configure, each asking this.
   [ -f "$target" ] || return 1
   case $'\n'"$(<"$target")" in
   *$'\n'"export $var=$off"*) return 0 ;;
@@ -512,9 +512,9 @@ function config_prompt_ends() {
 # rather than an anonymous fragment. Any other shebang is replaced rather than
 # left alongside: dash and fish both source this, so sh is the only correct one.
 # config_shell rewrites only its own marker-tagged block, so this line stays.
-# `hi_overlay_init` - version the overlay where it lives. A repo *in*
+# `hi --overlay-init` - version the overlay where it lives. A repo *in*
 # $_HI_CONFIG_DIR versions exactly the files that are the user's, and dodges
-# the checkout's own .git (hi_update reads $_HI_ROOT/.git as "this is a
+# the checkout's own .git (hi --update reads $_HI_ROOT/.git as "this is a
 # checkout"). Owns init-and-commit and no more: sync, merge and secrets are a
 # dotfile manager's job, and the README's alternatives section says so. The initial commit is
 # --allow-empty on purpose - an unconfigured overlay still starts tracking.
@@ -549,7 +549,7 @@ function overlay_commit() {
   command -v git >/dev/null 2>&1 || return 0
   git -C "$_HI_CONFIG_DIR" add -A >/dev/null 2>&1 || return 0
   git -C "$_HI_CONFIG_DIR" diff --cached --quiet 2>/dev/null && return 0
-  git -C "$_HI_CONFIG_DIR" commit -q -m "hi_configure: settings update" >/dev/null 2>&1 || true
+  git -C "$_HI_CONFIG_DIR" commit -q -m "hi --configure: settings update" >/dev/null 2>&1 || true
   return 0
 }
 
@@ -740,8 +740,8 @@ function run_uninstall() {
 # hi.sh's $_HI_PAYLOAD: that list answers "what does a target need for one
 # session", this one answers "what does an installed copy need forever", and the
 # two differ on scripts/ - not in the payload, required here so a user of a
-# packaged install can still run `hi_install`/`hi_uninstall`/`hi_color_preview`
-# against it. tests/ is in neither; `hi_test` reports itself unavailable.
+# packaged install can still run `hi --install`/`hi --uninstall`/`hi --color-preview`
+# against it. tests/ is in neither; `hi --test` reports itself unavailable.
 # docs/LICENSE.md is the one nested entry: the license lives under docs/
 # (which is otherwise not packaged), and cp lands the file flat by basename,
 # so the installed tree still carries a top-level LICENSE.md.
@@ -751,7 +751,7 @@ _HI_PACKAGE_CONTENTS=(common misc scripts shells hi.sh load.sh docs/LICENSE.md R
 # somewhere you own; here the tree is copied to a staging root for a package
 # manager to own instead, and every part of the normal install that reaches
 # outside that root - rc files, sudo, the settings the user hasn't chosen yet -
-# is skipped. Each user runs `hi_install` themselves afterwards; their answers
+# is skipped. Each user runs `hi --install` themselves afterwards; their answers
 # go to $_HI_CONFIG_DIR, so that works against a root-owned tree.
 function install_tree() {
   local dest="${DESTDIR:-}$_HI_PREFIX/hi.d" bindir="${DESTDIR:-}/usr/bin"
@@ -834,7 +834,7 @@ if [ -n "$_HI_PACKAGING" ]; then
   _hi_cecho " | destdir: ${DESTDIR:-<none>} | prefix: $_HI_PREFIX" "$BLUE"
   install_tree
   _hi_h1 "Packaged!"
-  _hi_cecho " | each user runs hi_install once for their own shells; their settings go to \$XDG_CONFIG_HOME/hi.d" "$BLUE"
+  _hi_cecho " | each user runs hi --install once for their own shells; their settings go to \$XDG_CONFIG_HOME/hi.d" "$BLUE"
   exit 0
 fi
 

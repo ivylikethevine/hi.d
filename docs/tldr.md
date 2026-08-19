@@ -30,8 +30,8 @@
 
 - Preview the color every known host and user resolves to:
 
-`hi_color_preview`
+`hi --color-preview`
 
 - Re-run the feature toggle prompts (header, prompt, git status, aliases, ...):
 
-`hi_configure`
+`hi --configure`

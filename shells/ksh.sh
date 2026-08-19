@@ -4,7 +4,7 @@
 # prompt recomputed on every line.
 # GLOSSARY: ksh git segment - why a second implementation, and only this tier
 
-# Colors and glyphs copied, not shared (core.sh is bash); hi_test asserts they
+# Colors and glyphs copied, not shared (core.sh is bash); hi_test.sh asserts they
 # agree, so a palette change fails there rather than drifting here.
 _HI_KSH_NC='\033[0m'
 _HI_KSH_RED='\033[0;31m'

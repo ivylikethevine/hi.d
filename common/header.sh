@@ -143,7 +143,7 @@ _HI_PROBE_DIR=""
 function _hi_probe_launch() {
   local container_bin nomad=0 kube=0
   # idempotent: hi_header starts these early, and identity() calls it too so a
-  # direct `identity` (the suites, hi_doctor) still probes
+  # direct `identity` (the suites, hi --doctor) still probes
   [ -z "$_HI_PROBE_DIR" ] || return 0
   container_bin="$(command -v docker || command -v podman || true)"
   command -v nomad &>/dev/null && nomad=1

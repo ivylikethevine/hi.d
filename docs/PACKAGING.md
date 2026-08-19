@@ -385,5 +385,5 @@ The tree is root-owned and holds nobody's settings. Each user runs, once:
 ```
 
 `--no-link` skips the `/usr/bin/hi` symlink the package already owns. Answers go to `~/.config/hi.d/`,
-never into the tree, which is what lets a root-owned checkout work at all. `hi_update` correctly refuses to
+never into the tree, which is what lets a root-owned checkout work at all. `hi --update` correctly refuses to
 `git pull` and points at the package manager instead.

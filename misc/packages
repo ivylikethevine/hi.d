@@ -1,7 +1,7 @@
 # The packages hi's header checks for. Copy this file to
 # ~/.config/hi.d/packages and edit it there - the copy in the tree is the
-# default hi.d ships, and editing it dirties the checkout `hi_update` pulls into.
-# `hi_packages_preview` renders what the priorities below do: each one's
+# default hi.d ships, and editing it dirties the checkout `hi --update` pulls into.
+# `hi --packages-preview` renders what the priorities below do: each one's
 # colors, a real example of each from this file, then the check itself.
 #group,package:priority,package2:priority2...
 # 5: bright green if installed and bright red if not

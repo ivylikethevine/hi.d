@@ -10,7 +10,7 @@ tests/test_runner.sh
 
 ## Running the tests
 
-Run everything with `tests/test_runner.sh` (aliased to `hi_test` once installed) - it times each suite and
+Run everything with `tests/test_runner.sh` (reachable as `hi --test` once installed) - it times each suite and
 prints a colored pass/fail summary at the end:
 
 ```sh
@@ -124,9 +124,9 @@ ships `aliases.sh` alone and never loads `paths.sh` — there `hi` is simply not
 
 ## Local-only
 
-The tests are local-only: `tests/` is stripped from the payload, so `hi_test` on a target says so rather
-than running (likewise `hi_install`, `hi_configure`, `hi_check_configs`, `hi_color_preview`). `hi_update` is
+The tests are local-only: `tests/` is stripped from the payload, so `hi --test` on a target says so rather
+than running (likewise `hi --install`, `hi --configure`, `hi --check-configs`, `hi --color-preview`). `hi --update` is
 the odd one out — it needs a `.git`, absent both in a hi session and in a package-manager install, so it
-says where to update instead of running `git pull` in a non-repo. `hi_packages_preview` is the other: its
+says where to update instead of running `git pull` in a non-repo. `hi --packages-preview` is the other: its
 legend lives in `scripts/`, but the check it previews lives in the shipped `common/header.sh`, so on a
 target it runs that half rather than saying no.

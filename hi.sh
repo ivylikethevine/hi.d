@@ -713,6 +713,20 @@ function _hi() {
   exit "$exit_code"
 }
 
+# The scripts/ entry points, reached as `hi --flag` rather than through the
+# hi_* aliases these replaced. Each needs the full checkout: the payload ships
+# neither scripts/ nor tests/, so on a target - or in a packaged install - the
+# file is simply absent, and the flag has to name which command wanted it
+# rather than failing as a missing path. $_HI_NO_CHECKOUT is that sentence,
+# exported by paths.sh so this file and the docs share one wording.
+function _hi_run_script() {
+  local flag="$1" script="$2"
+  shift 2
+  [ -f "$script" ] && exec "$script" "$@"
+  _hi_cecho "hi $flag $_HI_NO_CHECKOUT" "$RED" >&2
+  exit 1
+}
+
 set +euo pipefail # the connection paths below run against unknown hosts, where a probe that fails is normal, not fatal
 
 # sourcing this file defines its functions without connecting, for testing
@@ -753,6 +767,18 @@ hi's own options:
                         before the target.
       --no-tmux         turn that back off when settings.sh made it the default
 
+hi's local sub-commands, which act on this machine instead of connecting. They
+need the full hi.d checkout, so inside a hi session each says so and stops:
+      --install          install or repair hi.d's lines in your shell rc files
+      --uninstall        take those lines back out again
+      --configure        revisit the feature toggles, leaving the rc wiring be
+      --check-configs    re-run just the shell rc syntax validation
+      --overlay-init     make the config overlay a git repo, in place
+      --update           git pull in the hi.d checkout
+      --color-preview    what every ssh host and your user resolve to, in color
+      --packages-preview the package-priority legend, as the header prints it
+      --test             run the test suite
+
 Everything else is passed to ssh unchanged - -p, -i, -J, -o and the rest behave
 exactly as they do there. Only the first non-option word is the target;
 everything after it is the remote command.
@@ -762,11 +788,54 @@ so it survives an upgrade. See \`man hi\` and the README for all of it.
 EOF
   exit 0
   ;;
+--install)
+  shift
+  _hi_run_script --install "$_HI_INSTALL" "$@"
+  ;;
+--uninstall)
+  shift
+  _hi_run_script --uninstall "$_HI_UNINSTALL" "$@"
+  ;;
+--configure)
+  shift
+  _hi_run_script --configure "$_HI_INSTALL" --features-only "$@"
+  ;;
+--check-configs)
+  shift
+  _hi_run_script --check-configs "$_HI_INSTALL" --check-configs "$@"
+  ;;
+--overlay-init)
+  shift
+  _hi_run_script --overlay-init "$_HI_INSTALL" --overlay-init "$@"
+  ;;
+--color-preview)
+  shift
+  _hi_run_script --color-preview "$_HI_COLOR_PREVIEW" "$@"
+  ;;
 --doctor)
   shift
-  [ -f "$_HI_DOCTOR" ] && exec "$_HI_DOCTOR" "$@"
-  _hi_cecho "hi --doctor needs the full hi.d checkout - not available in a hi session" "$RED" >&2
-  exit 1
+  _hi_run_script --doctor "$_HI_DOCTOR" "$@"
+  ;;
+--test)
+  shift
+  _hi_run_script --test "$_HI_TEST_RUN" "$@"
+  ;;
+# .git as the test: absent from payloads and packaged installs alike, so this
+# is the one local command that cannot borrow $_HI_NO_CHECKOUT's wording
+--update)
+  shift
+  [ -d "$_HI_ROOT/.git" ] || {
+    _hi_cecho "hi --update: $_HI_NO_GIT" "$RED" >&2
+    exit 1
+  }
+  exec git -C "$_HI_ROOT" pull "$@"
+  ;;
+# The full preview lives in scripts/, which targets do not get; there this
+# falls back to the check itself, out of the shipped common/header.sh.
+--packages-preview)
+  shift
+  [ -f "$_HI_PACKAGES_PREVIEW" ] && exec "$_HI_PACKAGES_PREVIEW" "$@"
+  exec bash -c 'source "$1" && full_check' hi "$_HI_HEADER"
   ;;
 --version)
   _hi_version

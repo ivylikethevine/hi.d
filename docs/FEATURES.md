@@ -2,29 +2,29 @@
 
 Your config lives **outside the checkout**, in `${XDG_CONFIG_HOME:-$HOME/.config}/hi.d/` (`$_HI_CONFIG_DIR`).
 `colors` and `packages` there override the tree's copies, one file at a time - anything you haven't
-overridden keeps tracking the default the tree ships, so `hi_update` still delivers changes to the rest.
-`settings.sh` has no in-tree counterpart at all: `hi_configure` only ever writes it here.
+overridden keeps tracking the default the tree ships, so `hi --update` still delivers changes to the rest.
+`settings.sh` has no in-tree counterpart at all: `hi --configure` only ever writes it here.
 
 | overlay file                 | overrides        | what it is                                                                                                                            |
 | ----------------------------- | ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `~/.config/hi.d/settings.sh` | -                | what `hi_configure` writes                                                                                                            |
+| `~/.config/hi.d/settings.sh` | -                | what `hi --configure` writes                                                                                                            |
 | `~/.config/hi.d/colors`      | `misc/colors`    | your color pins                                                                                                                       |
 | `~/.config/hi.d/packages`    | `misc/packages`  | what the package check looks for                                                                                                      |
 | `~/.config/hi.d/tmux.conf`   | `misc/tmux.conf` | your tmux config                                                                                                                      |
 | `~/.config/hi.d/aliases.sh`  | -                | your own aliases, sourced **after** `misc/aliases.sh` so yours win - additive, never a replacement, and in the same POSIX+fish subset |
 
-This is what keeps configuring hi.d from dirtying the checkout (so `hi_update`'s `git pull` keeps applying
+This is what keeps configuring hi.d from dirtying the checkout (so `hi --update`'s `git pull` keeps applying
 cleanly), and why the tree never has to be writable at all - it can be root-owned, installed by a package
 manager. All of it rides along to every host you say `hi` to, in its own small archive.
 
-Want history on it? `hi_overlay_init` makes `~/.config/hi.d` a git repo _in place_: from then on
-`hi_configure` commits its own settings writes, `hi_doctor` reports the commit count, and a push remote is one
+Want history on it? `hi --overlay-init` makes `~/.config/hi.d` a git repo _in place_: from then on
+`hi --configure` commits its own settings writes, `hi --doctor` reports the commit count, and a push remote is one
 `git remote add` away. Entirely optional. (Keeping the same directory in chezmoi or yadm works just as well -
 see [ALTERNATIVES.md](ALTERNATIVES.md).)
 
-Everything below is an environment variable, checked where it's used. `hi_configure` writes your answers to
+Everything below is an environment variable, checked where it's used. `hi --configure` writes your answers to
 `~/.config/hi.d/settings.sh`, which every shell sources ahead of `common/paths.sh` - a plain `#!/bin/sh` script
-of `export NAME=value` lines, valid in sh, bash, zsh and fish alike. You never have to use `hi_configure`:
+of `export NAME=value` lines, valid in sh, bash, zsh and fish alike. You never have to use `hi --configure`:
 exporting any of these by hand works just as well, and takes precedence for that shell.
 
 ## Features

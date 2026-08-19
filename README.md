@@ -200,21 +200,21 @@ different, and where another tool is the better choice:
 
 - `hi.d/scripts/install.sh` (re-run it any time; it repairs its own lines, even if hi.d moved) - before touching your shell rc files it validates whichever of `~/.bashrc`, `~/.zshrc` and `~/.config/fish/config.fish` are installed with each shell's own syntax checker, and asks whether to continue if any have issues
 - reload your shell!
-- run `hi_configure` any time afterward to revisit the feature toggle prompts - header, prompt, personal settings, git status, editors, aliases, header details, terminal width, and whether hi styles this machine too or only the hosts you say `hi` to - without touching the shell rc wiring. Answers land in `~/.config/hi.d/settings.sh`; see [Configuration](#configuration) below
-- run `hi_check_configs` any time to just re-run that shell rc validation, without the rest of the install
+- run `hi --configure` any time afterward to revisit the feature toggle prompts - header, prompt, personal settings, git status, editors, aliases, header details, terminal width, and whether hi styles this machine too or only the hosts you say `hi` to - without touching the shell rc wiring. Answers land in `~/.config/hi.d/settings.sh`; see [Configuration](#configuration) below
+- run `hi --check-configs` any time to just re-run that shell rc validation, without the rest of the install
 - run `hi --help` (or `hi -h`) for the short version of all of this: the synopsis, the target resolution order, and every flag hi answers itself. `man hi` is the long version. Everything hi does not answer is passed to `ssh` unchanged
 - run `hi --version` to see what is installed - the packaged version, or `git describe` in a checkout; the doctor and the connect header show it too
 - run `hi --tmux <target>` to have the session live inside a named tmux on the target, so a dropped connection detaches instead of losing work - run it again to reattach (`_HI_TMUX_ATTACH=1` makes it the default, `--no-tmux` turns it off, `_HI_TMUX_SESSION` names the session). Offered only where hi.d is permanent on the target: a disposable tree is deleted when the session ends, and hi says so rather than leaving a tmux pointing at nothing
-- run `hi_doctor` (or `hi --doctor <target>`) when something is slow or failing: it reports the tree, the config overlay, every backend probed and timed with the same ceilings the header and completion use, and - with a target - which backend the name resolves to plus an ssh reachability/tooling check, all read-only
+- run `hi --doctor` (or `hi --doctor <target>`, to test one host) when something is slow or failing: it reports the tree, the config overlay, every backend probed and timed with the same ceilings the header and completion use, and - with a target - which backend the name resolves to plus an ssh reachability/tooling check, all read-only
 - configure `~/.ssh/config` tags via sshm
 - [optional] pin specific colors in `~/.config/hi.d/colors` - everything else gets a color automatically. Copy `hi.d/misc/colors` there to start from the shipped defaults
-  - run `hi_color_preview` to preview what every ssh host/your user resolves to
+  - run `hi --color-preview` to preview what every ssh host/your user resolves to
 - [optional] copy `hi.d/misc/packages` to `~/.config/hi.d/packages` and edit it to your preferences
-  - run `hi_packages_preview` to see what each priority means, the colors it renders installed and missing packages in, one real example of each from your own file, and the check itself as a connect will print it
+  - run `hi --packages-preview` to see what each priority means, the colors it renders installed and missing packages in, one real example of each from your own file, and the check itself as a connect will print it
 - say `hi`!
-- [optional] modify `~/hi.d/misc/*` and `~/hi.d/shells/*` to your liking - though anything with an overlay (`settings.sh`, `colors`, `packages`, `tmux.conf`, `aliases.sh`) is better edited in `~/.config/hi.d/`, which keeps the checkout clean for `hi_update`
-  - tip: `~/hi.d` is a git checkout, so if you do edit it, push to your own fork and clone that on your next device - same setup everywhere, kept in sync by `hi_update`
-- done with it? `hi.d/scripts/uninstall.sh` (aliased to `hi_uninstall`, a one-line shim onto `install.sh --uninstall`) is the install's inverse: it strips hi's lines back out of your rc files, removes the `settings.sh` it wrote, and unlinks `/usr/bin/hi`. It leaves the `hi.d` directory alone, and your `colors`/`packages` too - delete those yourself if you want them gone
+- [optional] modify `~/hi.d/misc/*` and `~/hi.d/shells/*` to your liking - though anything with an overlay (`settings.sh`, `colors`, `packages`, `tmux.conf`, `aliases.sh`) is better edited in `~/.config/hi.d/`, which keeps the checkout clean for `hi --update`
+  - tip: `~/hi.d` is a git checkout, so if you do edit it, push to your own fork and clone that on your next device - same setup everywhere, kept in sync by `hi --update`
+- done with it? `hi.d/scripts/uninstall.sh` (what `hi --uninstall` runs, a one-line shim onto `install.sh --uninstall`) is the install's inverse: it strips hi's lines back out of your rc files, removes the `settings.sh` it wrote, and unlinks `/usr/bin/hi`. It leaves the `hi.d` directory alone, and your `colors`/`packages` too - delete those yourself if you want them gone
 
 ---
 
@@ -244,7 +244,7 @@ Reminder - place local only changes after the "`# hi-config-end`" comment in the
 
 Your config lives **outside the checkout**, in `${XDG_CONFIG_HOME:-$HOME/.config}/hi.d/`, and rides along to
 every host you say `hi` to in its own small archive - `colors`, `packages`, `tmux.conf` and `aliases.sh`
-overlay the tree's copies one file at a time, and `settings.sh` (what `hi_configure` writes) has no in-tree
+overlay the tree's copies one file at a time, and `settings.sh` (what `hi --configure` writes) has no in-tree
 counterpart at all. The full picture - the overlay file table, every `_HI_DISABLE_*` feature toggle, the
 header-line toggles, tmux's `update-environment` behavior, and every other environment variable hi reads
 (`_HI_SHELL_PREFERENCE`, `_HI_PROMPT`, `_HI_ASCII`, `_HI_HEADER_GHZ`, ...) - is in
@@ -252,7 +252,7 @@ header-line toggles, tmux's `update-environment` behavior, and every other envir
 
 ## Testing
 
-`tests/test_runner.sh` (aliased to `hi_test` once installed) runs the suite, times each one and prints a
+`tests/test_runner.sh` (reachable as `hi --test` once installed) runs the suite, times each one and prints a
 colored pass/fail summary - `--group fast` is what CI runs on every push/PR. The container suites run their
 cases in parallel (each one boots its own container), capped at four at a time and saying so in the output;
 `_HI_PAR_WIDTH=1` puts a suite back on one case at a time when you are bisecting a flake. The full runbook
@@ -283,7 +283,7 @@ path — so the truth can't drift the way a second copy of it once did.
 
 #### Hostname, username, and group/tag colors
 
-Every username and hostname gets a color deterministically derived from its name - nothing to generate, nothing that can go missing. To pin one instead, add a line to `~/hi.d/misc/colors` (`username,root,red` / `hostname,prod-db,yellow` / `hosttag,desktop,green`); `hosttag` entries match the _leftmost_ tag in a `# Tags: ...` comment directly above a `Host` line in `~/.ssh/config`. `hi_color_preview` shows what every ssh host and your user currently resolve to, in their actual colors.
+Every username and hostname gets a color deterministically derived from its name - nothing to generate, nothing that can go missing. To pin one instead, add a line to `~/hi.d/misc/colors` (`username,root,red` / `hostname,prod-db,yellow` / `hosttag,desktop,green`); `hosttag` entries match the _leftmost_ tag in a `# Tags: ...` comment directly above a `Host` line in `~/.ssh/config`. `hi --color-preview` shows what every ssh host and your user currently resolve to, in their actual colors.
 
 ##### Built from/with/in mind
 

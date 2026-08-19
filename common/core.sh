@@ -246,7 +246,7 @@ function _hi_on_exit() {
 
 # What each shell's prompt ends with unless overridden, <SHELL>:<char>. SH is
 # the ksh/mksh/sh fallback hi.sh bakes on the client. config.fish keeps its
-# own copy (fish parses no bash); hi_test pins it here.
+# own copy (fish parses no bash); hi_test.sh pins it here.
 _HI_PROMPT_END_DEFAULTS=('BASH:\$' 'ZSH:>' 'FISH:|' 'SH:\$')
 
 # _hi_prompt_end_default <SHELL> - the shipped default for one shell, empty if

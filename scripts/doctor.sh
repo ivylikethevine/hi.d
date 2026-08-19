@@ -5,7 +5,7 @@
 # completion make - and, given a target, walks the same resolution chain and
 # opens the same multiplexed ssh probe a real `hi` would. Read-only
 # throughout: nothing here modifies a thing, locally or remotely.
-# Run via `hi_doctor` or `hi --doctor [target]`.
+# Run via `hi --doctor` or `hi --doctor [target]`.
 #
 # SC2317/SC2329: shellcheck follows the `source "$_HI_LAUNCHER"` below into
 # hi.sh's trailing `_hi "$@"`, decides that call never returns, and marks
@@ -78,7 +78,7 @@ function doctor_local() {
     changes="$(git -C "$_HI_ROOT" status --short 2>/dev/null | grep -c . || true)"
     doctor_row checkout "git, ${branch:-detached HEAD (a release tag?)}, $changes local change(s)"
   else
-    doctor_row checkout "no .git - a package-manager install (hi_update will say so too)"
+    doctor_row checkout "no .git - a package-manager install (hi --update will say so too)"
   fi
   # two numbers because they answer two questions: what leaves this machine
   # (a gzipped tar, base64-armored for the ssh path) and how big the thing is
@@ -106,7 +106,7 @@ function doctor_config() {
       doctor_row settings.sh "present, parses" ok
     fi
   else
-    doctor_row settings.sh "none - defaults apply (hi_configure writes one)"
+    doctor_row settings.sh "none - defaults apply (hi --configure writes one)"
   fi
   # every overlay file hi ships (hi.sh's _HI_OVERLAY_FILES is the contract),
   # minus settings.sh, which got its richer parse-checked row above
@@ -118,12 +118,12 @@ function doctor_config() {
       doctor_row "$f" "tree default"
     fi
   done
-  # whether the overlay has history - hi_overlay_init's optional-and-quiet
+  # whether the overlay has history - hi --overlay-init's optional-and-quiet
   # contract means untracked is a state, not a problem
   if [ -d "$_HI_CONFIG_DIR/.git" ]; then
     doctor_row versioning "tracked ($(git -C "$_HI_CONFIG_DIR" rev-list --count HEAD 2>/dev/null || echo 0) commits)" ok
   else
-    doctor_row versioning "untracked (hi_overlay_init gives it history)"
+    doctor_row versioning "untracked (hi --overlay-init gives it history)"
   fi
   # only the non-default toggles: a default setup stays one quiet line
   for t in "${_HI_TOGGLES[@]}"; do

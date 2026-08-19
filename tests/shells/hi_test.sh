@@ -830,6 +830,129 @@ function test_fallback_rc_points_config_dir_at_the_overlay() {
   [[ "$(CMDARG="" _hi_fallback_rc)" == *'export _HI_CONFIG_DIR=$_HI_ROOT/config'* ]]
 }
 
+# hi's local sub-commands - `hi --install` and friends - are the case block at
+# the foot of hi.sh, on the far side of the BASH_SOURCE hatch. Unlike every
+# function above they cannot be reached by sourcing, so these cases run hi.sh
+# as a process against two throwaway trees.
+#
+# _hi_subcmd_home builds the shape a *target* gets: common/, misc/, shells/,
+# load.sh and hi.sh symlinked in, and deliberately no scripts/, no tests/ and
+# no .git. That is the shape every one of these flags has to refuse by name,
+# and it is the reason $_HI_NO_CHECKOUT exists.
+function _hi_subcmd_home() {
+  local home="$_HI_WORKDIR/$1" f
+  mkdir -p "$home/hi.d"
+  for f in common misc shells load.sh hi.sh; do
+    ln -sfn "$_HI_ROOT/$f" "$home/hi.d/$f"
+  done
+  printf '%s' "$home"
+}
+
+# The same tree plus a stub for every script a flag reaches. Each stub prints
+# its own name and its argv verbatim, which is what lets the cases below pin
+# the mapping - `hi --configure` has to become install.sh --features-only, not
+# just "some install.sh".
+function _hi_subcmd_stubs() {
+  local home stub dir
+  home="$(_hi_subcmd_home subcmd-stubs)"
+  mkdir -p "$home/hi.d/scripts" "$home/hi.d/tests"
+  for stub in install:scripts/install.sh uninstall:scripts/uninstall.sh \
+    color_preview:scripts/color_preview.sh doctor:scripts/doctor.sh \
+    packages_preview:scripts/packages_preview.sh test_runner:tests/test_runner.sh; do
+    dir="$home/hi.d/${stub#*:}"
+    printf '#!/bin/sh\nprintf %s\nfor a in "$@"; do printf " %%s" "$a"; done\nprintf "\\n"\n' \
+      "'STUB ${stub%%:*}'" >"$dir"
+    chmod +x "$dir"
+  done
+  printf '%s' "$home"
+}
+
+function _hi_subcmd_run() {
+  local home="$1"
+  shift
+  (_HI_HOME="$home" "$home/hi.d/hi.sh" "$@" 2>&1)
+}
+
+# every one of them names itself rather than dying on a missing path
+function test_local_subcommands_refuse_without_the_checkout() {
+  local home flag out
+  home="$(_hi_subcmd_home subcmd-bare)"
+  for flag in --install --uninstall --configure --check-configs --overlay-init \
+    --color-preview --doctor --test; do
+    out="$(_hi_subcmd_run "$home" "$flag")" && {
+      _hi_cecho " | $flag exited 0 without a checkout" "$RED"
+      return 1
+    }
+    [[ "$out" == *"hi $flag needs the full hi.d checkout"* ]] || {
+      _hi_cecho " | $flag said: $out" "$RED"
+      return 1
+    }
+  done
+}
+
+# --update is the one that cannot borrow that sentence: .git, not scripts/
+function test_update_refuses_without_a_git_dir() {
+  local home out
+  home="$(_hi_subcmd_home subcmd-bare)"
+  out="$(_hi_subcmd_run "$home" --update)" && return 1
+  [[ "$out" == *"hi --update: no .git in"* ]]
+}
+
+# ...and --packages-preview is the one that does not refuse at all: the check
+# itself ships in common/header.sh, so on a target it falls back to that
+function test_packages_preview_falls_back_to_the_shipped_check() {
+  local home out
+  home="$(_hi_subcmd_home subcmd-bare)"
+  out="$(_hi_subcmd_run "$home" --packages-preview)" || return 1
+  [ -n "$out" ] && [[ "$out" != *"needs the full hi.d checkout"* ]]
+}
+
+# the mapping itself: which script, with which arguments
+function test_local_subcommands_exec_the_right_script() {
+  local home out spec flag want
+  home="$(_hi_subcmd_stubs)"
+  for spec in \
+    '--install|STUB install' \
+    '--uninstall|STUB uninstall' \
+    '--configure|STUB install --features-only' \
+    '--check-configs|STUB install --check-configs' \
+    '--overlay-init|STUB install --overlay-init' \
+    '--color-preview|STUB color_preview' \
+    '--packages-preview|STUB packages_preview' \
+    '--doctor|STUB doctor' \
+    '--test|STUB test_runner'; do
+    flag="${spec%%|*}"
+    want="${spec#*|}"
+    out="$(_hi_subcmd_run "$home" "$flag")" || return 1
+    [ "$out" = "$want" ] || {
+      _hi_cecho " | $flag ran '$out', wanted '$want'" "$RED"
+      return 1
+    }
+  done
+}
+
+# a sub-command is still a command line: what follows the flag rides along
+function test_local_subcommands_forward_extra_arguments() {
+  local home out
+  home="$(_hi_subcmd_stubs)"
+  out="$(_hi_subcmd_run "$home" --doctor myhost)" || return 1
+  [ "$out" = "STUB doctor myhost" ] || return 1
+  out="$(_hi_subcmd_run "$home" --test --group fast)" || return 1
+  [ "$out" = "STUB test_runner --group fast" ]
+}
+
+# the other half of the move: paths.sh must not grow them back. hi_info is the
+# deliberate exception - it is an echo, not a script entry point, and the test
+# harness probes for it (see _hi_probe_cmd in test_lib.sh).
+function test_paths_defines_no_command_aliases() {
+  local stray
+  stray="$(grep -oE '^alias hi_[a-z_]+' "$_HI_ROOT/common/paths.sh" | grep -vx 'alias hi_info' || true)"
+  [ -z "$stray" ] || {
+    _hi_cecho " | paths.sh still defines: $stray" "$RED"
+    return 1
+  }
+}
+
 function run_hi_tests() {
   _hi_workdir hitest
   _hi_probe_shims "$_HI_WORKDIR/shims"
@@ -936,6 +1059,14 @@ function run_hi_tests() {
   _hi_check "The segment is expanded per prompt" test_fallback_prompt_git_segment_is_deferred
   _hi_check "No segment for sh/ash/dash" test_fallback_prompt_has_no_segment_by_default
   _hi_check "It rides the payload" test_payload_carries_ksh_sh
+
+  _hi_h2 "Testing: hi's local sub-commands"
+  _hi_check "Each refuses by name without the checkout" test_local_subcommands_refuse_without_the_checkout
+  _hi_check "--update refuses without a .git" test_update_refuses_without_a_git_dir
+  _hi_check "--packages-preview falls back instead" test_packages_preview_falls_back_to_the_shipped_check
+  _hi_check "Each execs the right script and args" test_local_subcommands_exec_the_right_script
+  _hi_check "Extra arguments ride along" test_local_subcommands_forward_extra_arguments
+  _hi_check "paths.sh defines no command aliases" test_paths_defines_no_command_aliases
 
   _hi_h2 "Testing: hi --help"
   _hi_check "--help prints the usage line" test_help_long_flag_prints_usage

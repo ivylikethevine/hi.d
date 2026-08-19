@@ -1,6 +1,6 @@
 # Color pins, one "type,name,color" per line. Copy this file to
 # ~/.config/hi.d/colors and edit it there - the copy in the tree is the default
-# hi.d ships, and editing it dirties the checkout `hi_update` pulls into.
+# hi.d ships, and editing it dirties the checkout `hi --update` pulls into.
 #
 # type  = hosttag | username | hostname | usertag
 # color = red, green, yellow, blue, magenta, cyan, brred, brgreen, bryellow, brblue, brmagenta, brcyan
@@ -11,7 +11,7 @@
 # name, without hardcoding the name itself. an exact "username,jeff,..." or
 # "hostname,jeff-desktop,..." override still takes priority over these.
 # anything with no pin at all falls back to a hash of the name.
-# run `hi_color_preview` to preview what everything currently resolves to.
+# run `hi --color-preview` to preview what everything currently resolves to.
 #type,name,color
 hosttag,terminal,brmagenta
 hosttag,baremetal,brred

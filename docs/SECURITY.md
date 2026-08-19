@@ -13,7 +13,7 @@ trust boundaries sit, and how to report what slipped through.
   checks, no `curl`/`wget` anywhere in the shipped tree.
 - **No `curl | bash`.** Installing is `git clone` plus
   `scripts/install.sh`, or a distro package (deb/rpm/apk, AUR, Homebrew)
-  built from that same script. `hi_update` is `git pull` in a checkout
+  built from that same script. `hi --update` is `git pull` in a checkout
   you can read.
 - **The payload is an allow list.** What goes over the wire is exactly
   `$_HI_PAYLOAD` at the top of `hi.sh` (`common misc shells load.sh`) -

@@ -79,8 +79,8 @@ class HiD < Formula
       --no-link is what skips the /usr/bin/hi symlink: Homebrew already put `hi`
       on your PATH, and on macOS /usr/bin is read-only under SIP anyway.
 
-      Re-run it as `hi_configure` any time to revisit the feature toggles.
-      `hi_update` will tell you to update through Homebrew, which is correct -
+      Re-run it as `hi --configure` any time to revisit the feature toggles.
+      `hi --update` will tell you to update through Homebrew, which is correct -
       run `brew upgrade hi.d` instead.
     EOS
   end

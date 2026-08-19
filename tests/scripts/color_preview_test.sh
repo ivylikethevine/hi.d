@@ -1,5 +1,5 @@
 #!/bin/bash
-# Unit tests for scripts/color_preview.sh - the `hi_color_preview` table.
+# Unit tests for scripts/color_preview.sh - the `hi --color-preview` table.
 #
 # Its job is to render the same answers the live prompt would give, so what
 # matters is that its own precedence logic (_hi_color_source) agrees with

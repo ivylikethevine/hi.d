@@ -1,5 +1,5 @@
 #!/bin/bash
-# Unit tests for scripts/packages_preview.sh - the `hi_packages_preview` legend.
+# Unit tests for scripts/packages_preview.sh - the `hi --packages-preview` legend.
 #
 # The preview's whole claim is that it shows what the *header* will do, so what
 # matters is that it reads its facts from header.sh rather than from a copy:

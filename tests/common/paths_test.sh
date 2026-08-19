@@ -219,7 +219,7 @@ function test_overlay_colors_win() {
 }
 
 # per file, not all-or-nothing: an overlay holding only colors must leave
-# packages tracking the tree, or `hi_update` would stop delivering new defaults
+# packages tracking the tree, or `hi --update` would stop delivering new defaults
 # for everything the user never overrode
 function test_overlay_falls_back_per_file() {
   local dir

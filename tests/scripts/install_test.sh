@@ -202,7 +202,7 @@ function test_shebang_is_written_to_a_new_settings_file() {
 }
 
 # the whole point of the overlay: a fresh install leaves the tree untouched, so
-# `hi_update`'s git pull still applies and a root-owned tree still works
+# `hi --update`'s git pull still applies and a root-owned tree still works
 function test_settings_are_written_outside_the_tree() {
   _hi_settings_fixture outside _hi_shebang_fresh
   [ -f "$(_hi_fixture_settings outside)" ] && [ ! -e "$_HI_WORKDIR/outside/misc/settings.sh" ]
@@ -489,7 +489,7 @@ function test_install_tree_copies_the_tree_under_destdir() {
 }
 
 # scripts/ is the one place this list differs from hi.sh's $_HI_PAYLOAD: a
-# payload doesn't need it, but a packaged install does, or `hi_install` (which
+# payload doesn't need it, but a packaged install does, or `hi --install` (which
 # every user of that package has to run once) would not be there to run.
 function test_install_tree_ships_scripts() {
   _hi_package_fixture scripts
@@ -657,7 +657,7 @@ function test_unlink_hi_skips_when_link_points_elsewhere() {
   ) | grep -q "leaving it alone"
 }
 
-# the shim is the only reason `hi_uninstall` and the documented
+# the shim is the only reason `hi --uninstall` and the documented
 # scripts/uninstall.sh path still work, so assert it points at the flag
 function test_uninstall_shim_delegates_to_install() {
   grep -qF -- '--uninstall' "$_HI_UNINSTALL" && grep -qF 'install.sh' "$_HI_UNINSTALL"

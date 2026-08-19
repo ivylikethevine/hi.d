@@ -57,120 +57,45 @@ here: git history is the ledger, and this file is only what is left to do.
     least the header and git-prompt paths, and its header says what the numbers
     do and do not mean as bluntly as `coverage.sh`'s does.
 
-- [ ] **`hi_*` aliases become `hi --*` sub-commands** — the eleven aliases at
-      the foot of `../common/paths.sh` (`hi_install`, `hi_uninstall`,
-      `hi_configure`, `hi_check_configs`, `hi_overlay_init`, `hi_update`,
-      `hi_info`, `hi_color_preview`, `hi_doctor`, `hi_packages_preview`,
-      `hi_test`) should be flags on `hi` instead. `hi.sh` already dispatches
-      `-h`/`--help`, `--version` and `--doctor` from one `case` block, and
-      `hi_doctor` is nothing but a second spelling of `hi --doctor`: this
-      finishes a pattern that already exists rather than starting a new one.
+- [ ] **Test hi.d from a non-standard install location** — every path in the
+      product already resolves through `$_HI_HOME/hi.d`
+      (`../common/paths.sh`, `../common/core.sh`, `../shells/config.fish`), and
+      `install.sh` emits an `_HI_HOME` export precisely when the tree is *not*
+      at `$HOME/hi.d`. So the mechanism exists; what is missing is a suite that
+      pins it, rather than exercising it by accident because a developer's
+      checkout happens to sit elsewhere.
 
-  - **Why they are wrong where they are.** `paths.sh` is the four-shell
-    plain-export file — no functions, no `${var:-...}`, every line has to parse
-    under fish too. The aliases fit that subset only as
-    `[ ! -f X ] && echo ... || X` one-liners, which is why the file carries a
-    file-wide `# shellcheck disable=SC2139`. They are also invisible to any
-    non-interactive shell, so no script can call them, and they complete as
-    eleven unrelated names rather than as one command's flags.
-  - **`hi_info` is load-bearing for the harness.** `_hi_probe_cmd`
-    (`../tests/test_lib.sh`) uses `alias hi_info` / `functions -q hi_info` as
-    the "the session is up" marker for the `bash`, `ssh_fallback`,
-    `ssh_fallback_fish` and `installed` shapes, so every e2e suite rides on it.
-    Whatever replaces it has to answer the same question in one line, in four
-    shells, over a pty — do that first or the suites go dark.
-  - **Keep the old names working.** They are user-facing and documented
-    throughout the README (`hi_configure` alone appears nine times). Land the
-    flags first, leave the aliases as thin forwarders to `hi --*` for a
-    release, and only then decide whether to drop them.
-  - **Out of scope:** `hi_header` (`../common/header.sh`) and `hi_copy`
-    (`../misc/aliases.sh`) are shell-integration functions, not entry points to
-    a script. They stay where they are.
-  - **Both payload numbers move.** `paths.sh` and `hi.sh` both ship in
-    `$_HI_PAYLOAD`, so this shifts text between two already-shipped files;
-    check `bench_payload_size` and the README's `_hi_wire_bytes` badge
-    together, as CLAUDE.md says to whenever a shipped file is touched.
-  - **Ticks when:** every command above has a `hi --<name>` form covered by
-    `../tests/shells/hi_test.sh`, `paths.sh` has no `alias` lines left and its
-    `SC2139` disable is gone, and the README and `FEATURES.md` document the
-    flags as the primary spelling.
+  - **The gap is the `installed` shape.** `_hi_probe_cmd`
+    (`../tests/test_lib.sh`) asserts `[ "$_HI_ROOT" = "$HOME/hi.d" ]` for the
+    `installed` case, so the one e2e shape modelling a permanent install only
+    ever models it at the default path. A second shape, installed to something
+    like `$HOME/opt/nested/hi.d`, is what would catch a hardcoded `~/hi.d`
+    creeping back into a shipped file.
+  - **Cover the rc wiring, not just the launcher.** The export install.sh
+    writes into `.bashrc` / `.zshrc` / `config.fish` is what makes a
+    non-default location survive into a new shell, and nothing reads it back.
+  - **Ticks when:** a case installs hi.d somewhere other than `$HOME/hi.d`,
+    opens a fresh shell in each of the four dialects, and gets a working
+    header, prompt and `hi --doctor` out of it.
+
+- [ ] **Find a non-standard permanent hi.d on a target** — `_hi_remote_root`
+      (`../hi.sh`) probes exactly one path, `_r="$HOME/hi.d"`. A target whose
+      hi.d lives anywhere else is invisible to it, so hi copies the payload
+      over instead of reusing what is already installed there: the slow path,
+      silently, on precisely the machines most likely to have a curated tree.
+
+  - **A product gap before it is a test gap.** The probe has to ask the target
+    where its hi.d is — the `_HI_HOME` export `install.sh` already writes into
+    the login rc files is the obvious source — and fall back to `$HOME/hi.d`
+    when it gets no answer.
+  - **`--tmux` rides on the same answer.** It needs a permanent hi.d on the
+    target, so today it is equally blind to one in a non-standard place.
+  - **Ticks when:** an e2e case installs hi.d to a non-default path on a target
+    and `hi` there reuses it — asserted on the connect path, not on the session
+    merely working, since copying the payload would produce a working session
+    too.
 
 ## Outside this repo
-
-### GitHub repo settings
-
-All four are one-time, pre-first-release, and none can be done from a workflow
-file. The exact commands live in the entries below — this file is the single
-copy, and the README's "Packaging & releases" points at it. The last two are
-what `vars.RUNNER_LABEL` waits on: until both are set, pointing that variable
-at a self-hosted runner is the thing that exposes it.
-
-- [ ] **The `release` approval gate** — `release.yml`'s `publish` job declares
-      `environment: release`, but an environment with no required reviewer is
-      **no gate at all**: a pushed `v*` tag would publish unattended.
-
-  - **Where:** Settings → Environments
-  - **Do:** New environment → name it `release` → tick **Required reviewers** and add yourself → Save. Optionally set _Deployment branches and tags_ to `v*` so nothing but a tag can reach it.
-  - **Ticks when:** the environment exists with a reviewer on it.
-
-- [ ] **Branch protection on `main`** — required checks = the fast suites. The
-      wrinkle: `publish` pushes the regenerated manifests straight to `main` as
-      `github-actions[bot]`, so the protection must let that App through — a
-      ruleset with a bypass actor does, classic branch protection does not.
-
-  - **Where:** the `gh` CLI (a repo setting under the hood)
-  - **Do:** run the command below — one shot, bypass actor 15368 (the GitHub Actions App) already filled in. Do it alongside the `release` environment above.
-  - **Ticks when:** the ruleset is active on the repo.
-
-    ```sh
-    gh api repos/{owner}/{repo}/rulesets --method POST --input - <<'JSON'
-    {
-      "name": "protect-main",
-      "target": "branch",
-      "enforcement": "active",
-      "conditions": { "ref_name": { "include": ["~DEFAULT_BRANCH"], "exclude": [] } },
-      "bypass_actors": [
-        { "actor_id": 15368, "actor_type": "Integration", "bypass_mode": "always" }
-      ],
-      "rules": [
-        { "type": "deletion" },
-        { "type": "non_fast_forward" },
-        {
-          "type": "required_status_checks",
-          "parameters": {
-            "strict_required_status_checks_policy": false,
-            "required_status_checks": [
-              { "context": "fast suites (ubuntu-latest)" },
-              { "context": "fast suites (macos-latest)" }
-            ]
-          }
-        }
-      ]
-    }
-    JSON
-    ```
-
-- [ ] **Fork PRs need approval to run at all** — a public repo plus a
-      self-hosted runner is the combination GitHub warns about: a fork PR is a
-      stranger's branch, and `ci.yml` runs `tests/test_runner.sh` from it.
-      `ci.yml`'s `runner` job already denies fork PRs the self-hosted label
-      whatever `RUNNER_LABEL` says; this is the other half, and it stops the
-      run before it starts rather than redirecting it.
-
-  - **Where:** Settings → Actions → General → *Fork pull request workflows from outside collaborators*
-  - **Do:** select **Require approval for all outside collaborators** — the default is only first-time contributors, which is not the same promise.
-  - **Ticks when:** the strictest of the three options is the one selected.
-
-- [ ] **The `manual-dispatch` approval gate** — `macos-e2e.yml`,
-      `windows-e2e.yml`, `scorecard.yml` and `release.yml`'s rehearsal `gate`
-      job all declare `environment: manual-dispatch`. As with `release` above,
-      an environment with no required reviewer is **no gate at all** — the
-      declarations are inert until this exists. `workflow_dispatch` already
-      demands write access, so this is the second lock, not the first.
-
-  - **Where:** Settings → Environments
-  - **Do:** New environment → name it `manual-dispatch` → tick **Required reviewers** and add yourself → Save.
-  - **Ticks when:** the environment exists with a reviewer on it, and a dispatch of `scorecard.yml` lands in *Waiting* instead of running.
 
 ### Secrets & keys
 
@@ -265,21 +190,6 @@ All three are written, committed, and dispatch-only. They need nothing but the r
   - **Ticks when:** it has been run once and the report read. Only then decide about a README badge.
 
 ### Docs & submissions
-
-- [ ] **Jekyll GitHub Pages site** — _Written; the one click is the remaining
-      half._ `pages.yml` builds the repo's markdown with the stock
-      `jekyll-build-pages` → `upload-pages-artifact` → `deploy-pages` chain,
-      SHA-pinned and minimal-permission like every workflow here (write scopes
-      on the `deploy` job alone; Pages deploys never cancel in flight).
-      `_config.yml` picks the primer theme, excludes everything that is code
-      rather than prose, and turns on the four plugins the markdown needs:
-      `readme-index` (so `README.md` is the index, as on github.com),
-      `relative-links` (so `docs/GLOSSARY.md`-style cross-links resolve on the
-      site too), `optional-front-matter` and `titles-from-headings`.
-
-  - **Where:** Settings → Pages
-  - **Do:** set _Source_ to **GitHub Actions**. Only exists once the repo is public.
-  - **Ticks when:** that is set and a dispatch of `pages.yml` has deployed once, with the README rendering as the index and the docs cross-links resolving.
 
 - [ ] **tldr page** — five example lines reach everyone who types `tldr hi`
       before anyone reads a man page. Upstream has its own style guide and

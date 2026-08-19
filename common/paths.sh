@@ -61,26 +61,19 @@ export _HI_HOME_FISH_CONFIG="$HOME/.config/fish/config.fish"
 export _HI_HUMAN_CENTRIC_DATE="+%a %b %e %Y %H:%M:%S %Z"
 export _HI_HUMAN_SHORT_DATE="+%b %e %y %H:%M %Z"
 
-# Helper aliases; the payload ships no scripts/tests/.git, so each says so on a
-# target. Negation first: `[ -f ] && cmd || echo` would print on cmd failure.
+# The two sentences hi.sh's local sub-commands print when they cannot run: the
+# payload ships no scripts/, no tests/ and no .git, so `hi --install` and its
+# siblings have to say why rather than fail as a missing path. They live here,
+# exported, so this file stays the one place that wording exists.
 export _HI_NO_CHECKOUT="needs the full hi.d checkout - not available in a hi session"
-# one message for both no-.git shapes: the alias has room for one condition
+# one message for both no-.git shapes
 export _HI_NO_GIT="no .git in $_HI_ROOT - if a package manager installed hi.d, update it there; if this is a hi session, update on the machine hi.d lives on"
 alias hi="$_HI_LAUNCHER"
-alias hi_install="[ ! -f $_HI_INSTALL ] && echo 'hi_install $_HI_NO_CHECKOUT' || $_HI_INSTALL"
-alias hi_uninstall="[ ! -f $_HI_UNINSTALL ] && echo 'hi_uninstall $_HI_NO_CHECKOUT' || $_HI_UNINSTALL"
-alias hi_configure="[ ! -f $_HI_INSTALL ] && echo 'hi_configure $_HI_NO_CHECKOUT' || $_HI_INSTALL --features-only"
-alias hi_check_configs="[ ! -f $_HI_INSTALL ] && echo 'hi_check_configs $_HI_NO_CHECKOUT' || $_HI_INSTALL --check-configs"
-alias hi_overlay_init="[ ! -f $_HI_INSTALL ] && echo 'hi_overlay_init $_HI_NO_CHECKOUT' || $_HI_INSTALL --overlay-init"
-# .git as the test: absent from payloads and packaged installs alike
-alias hi_update="[ ! -d $_HI_ROOT/.git ] && echo 'hi_update: $_HI_NO_GIT' || git -C $_HI_ROOT pull"
+# The only hi_* alias left; the rest became `hi --flag` (see hi.sh's case
+# block). This one is not a script entry point: it is a single echo, it has to
+# answer in all four shells, and the test harness uses `alias hi_info` /
+# `functions -q hi_info` as its "the session is up" probe.
 alias hi_info="echo ' | hi_home: $_HI_HOME | hi_root: $_HI_ROOT | script: $_HI_LAUNCHER'"
-alias hi_color_preview="[ ! -f $_HI_COLOR_PREVIEW ] && echo 'hi_color_preview $_HI_NO_CHECKOUT' || $_HI_COLOR_PREVIEW"
-alias hi_doctor="[ ! -f $_HI_DOCTOR ] && echo 'hi_doctor $_HI_NO_CHECKOUT' || $_HI_DOCTOR"
-# The full preview lives in scripts/, which targets do not get; there the alias
-# falls back to the check itself, out of the shipped common/header.sh.
-alias hi_packages_preview="[ ! -f $_HI_PACKAGES_PREVIEW ] && bash -c 'source \"$_HI_HEADER\" && full_check' || $_HI_PACKAGES_PREVIEW"
-alias hi_test="[ ! -f $_HI_TEST_RUN ] && echo 'hi_test $_HI_NO_CHECKOUT' || $_HI_TEST_RUN"
 
 # Local-only gate, reading settings each entry point sourced *ahead* of this
 # file (no include line parses in all four shells); _HI_REMOTE_SESSION is what

@@ -100,6 +100,42 @@ print the version and exit: the version stamped in at packaging time, or
 .B git describe
 output in a checkout.
 .PP
+The following act on this machine instead of connecting. Each needs the
+full hi.d checkout, so inside a hi session \- where the payload carries no
+.BR scripts/ ,
+.B tests/
+or
+.B .git
+\- each says so and stops.
+.TP
+.B \-\-install\fR, \fB\-\-uninstall
+install or repair hi.d's lines in your shell rc files, or take them back
+out again.
+.TP
+.B \-\-configure
+revisit the feature toggles only, leaving the rc wiring alone.
+.TP
+.B \-\-check\-configs
+re\-run just the shell rc syntax validation, without the rest of the install.
+.TP
+.B \-\-overlay\-init
+make the config overlay at
+.B ~/.config/hi.d/
+a git repo, in place, so it carries history.
+.TP
+.B \-\-update
+.B git pull
+in the hi.d checkout.
+.TP
+.B \-\-color\-preview
+what every ssh host and your user resolve to, in their actual colors.
+.TP
+.B \-\-packages\-preview
+the package\-priority legend, as the header prints it.
+.TP
+.B \-\-test
+run the test suite.
+.PP
 Everything else is passed through to
 .BR ssh (1)
 unchanged \-
@@ -120,7 +156,7 @@ Configuration lives outside the tree, in
 and additive personal
 .BR aliases.sh ),
 written by
-.B hi_configure
+.B hi \-\-configure
 and carried along to every target. Every feature is an environment
 variable toggle \- header, prompt, git status, aliases, editors \- each on
 by default and documented in the README. The tree itself can be
@@ -134,7 +170,7 @@ works identically).
 .TP
 .B ~/.config/hi.d/settings.sh
 feature toggles, written by
-.BR hi_configure .
+.BR hi \-\-configure .
 .TP
 .B ~/.config/hi.d/colors, ~/.config/hi.d/packages, ~/.config/hi.d/tmux.conf
 per\-user overrides of the tree's defaults.

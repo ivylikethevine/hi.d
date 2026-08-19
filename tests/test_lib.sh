@@ -138,9 +138,9 @@ function _hi_assert() {
   local label="$1"
   shift
   if "$@"; then
-    _hi_cecho " | $label: OK" "$GREEN"
+    _hi_align " | $label" "OK" "$GREEN"
   else
-    _hi_cecho " | $label: FAILED" "$RED"
+    _hi_align " | $label" "FAILED" "$RED"
     _hi_note_failure "$label"
     return 1
   fi
@@ -283,7 +283,7 @@ function _hi_par_wait() {
     if [ -s "$_HI_PAR_DIR/$i.res" ]; then
       read -r rc skipped <"$_HI_PAR_DIR/$i.res"
     else
-      _hi_cecho " | [$label] -- FAILED: the case left no verdict (killed, or it exited the subshell)" "$RED"
+      _hi_align " | [$label] -- the case left no verdict (killed, or it exited the subshell)" "FAILED" "$RED"
       _hi_note_failure "[$label] left no verdict"
     fi
     _HI_TOTAL=$((_HI_TOTAL + 1))
@@ -577,7 +577,7 @@ function _hi_transcript_is_clean() {
   local label="$1" file="$2" hits
   hits="$(grep -nE "$_HI_SHELL_ERROR_RE" "$file" 2>/dev/null || true)"
   if [ -z "$hits" ]; then
-    _hi_cecho " | [$label] -- transcript is free of shell errors OK" "$GREEN"
+    _hi_align " | [$label] -- transcript is free of shell errors" "OK" "$GREEN"
     return 0
   fi
   _hi_h3 " | [$label] -- FAILED: the session printed shell errors" "$RED"
@@ -596,6 +596,24 @@ function _hi_has_rendered() {
   [[ "$1" == *"$needle"* ]]
 }
 
+# _hi_align <left> <right> [color] - one status line, with <right> pushed out
+# to _HI_MAX_WIDTH: the width the summary table and the _hi_h1 rules already
+# span, so every verdict in a run lands in the same column instead of ragging
+# along behind labels of every length. That is what made scanning a verbose
+# transcript for the one red line hard.
+#
+# <left> is the whole left-hand side, prefix included, because callers do not
+# share one: " | ", " | [label] -- " and "  [shell] -- " all pass through here.
+# A left too long to leave room overflows the line rather than truncating, but
+# never past a two-space gutter, so the label and the verdict cannot run
+# together into one unreadable word.
+function _hi_align() {
+  local left="$1" right="$2" pad floor=$((${#2} + 2))
+  pad=$((${_HI_MAX_WIDTH:-80} - ${#left}))
+  ((pad < floor)) && pad=$floor
+  _hi_cecho "$(printf '%s%*s' "$left" "$pad" "$right")" "${3:-}"
+}
+
 function _hi_suite_begin() {
   _HI_FAILED=0
   _HI_TOTAL=0
@@ -608,7 +626,7 @@ function _hi_suite_begin() {
 # what it just reported was actually exercised.
 function _hi_skip() {
   _HI_SKIPPED=$((${_HI_SKIPPED:-0} + 1))
-  _hi_cecho " | $1: SKIPPED${2:+ ($2)}" "$YELLOW"
+  _hi_align " | $1" "SKIPPED${2:+ ($2)}" "$YELLOW"
 }
 
 # _hi_report_counts <total> <failed> [skipped] - hand this suite's tally up to
@@ -1035,7 +1053,7 @@ function _hi_case_result() {
     grep -qF "$marker" "$out_file" 2>/dev/null || ok=0
   done
   if [ "$ok" -eq 1 ]; then
-    _hi_cecho " | [$label] -- $what OK ($(_hi_elapsed "$t0" "$t1")s)" "$GREEN"
+    _hi_align " | [$label] -- $what" "OK ($(_hi_elapsed "$t0" "$t1")s)" "$GREEN"
     return 0
   fi
   _hi_h3 " | [$label] -- FAILED (exit $exit_code, $(_hi_elapsed "$t0" "$t1")s)" "$RED"
@@ -1176,6 +1194,15 @@ exec /usr/sbin/sshd -D -e -o PasswordAuthentication=no -o PermitRootLogin=no -o 
 EOF
 )"
 
+# _hi_dockerfile <name> - the checked-in image definition by that name. The
+# Dockerfiles live in dockerfiles/ rather than being written into each build
+# context at runtime, so they are readable, diffable files rather than heredocs;
+# the *context* is still per-case, since it carries the generated entrypoint.sh.
+# Every caller pairs this with `-f`, which _hi_build_image passes through.
+function _hi_dockerfile() {
+  printf '%s' "$_HI_ROOT/dockerfiles/$1.Dockerfile"
+}
+
 function _hi_build_image() {
   local label="$1" tag="$2" what="$3"
   shift 3
@@ -1214,22 +1241,11 @@ function _hi_sshd_image() {
   local ctx="$_HI_WORKDIR/sshd"
   mkdir -p "$ctx"
 
-  cat >"$ctx/Dockerfile" <<'EOF'
-FROM debian:bookworm-slim
-RUN apt-get update && apt-get install -y --no-install-recommends \
-      openssh-server bash dash zsh fish \
-    && rm -rf /var/lib/apt/lists/* \
-    && mkdir -p /run/sshd \
-    && useradd -m -s /bin/bash hitest
-COPY entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
-ENTRYPOINT ["/entrypoint.sh"]
-EOF
-
   # shellcheck disable=SC2016 # entrypoint.sh content, resolved on the container
   _hi_sshd_entrypoint "$ctx" /bin/bash 'usermod -s "${LOGIN_SHELL:-/bin/bash}" hitest'
 
-  _hi_build_image sshd "$_HI_SSHD_IMAGE" "$1" "$ctx"
+  _hi_build_image sshd "$_HI_SSHD_IMAGE" "$1" \
+    -f "$(_hi_dockerfile sshd-debian)" "$ctx"
 }
 
 function _hi_ssh_reachable() {
@@ -1440,7 +1456,7 @@ function _hi_backend_interactive_case() {
     "$timeout_s" "$_HI_LAUNCHER" "$_HI_CONTAINER"; then
     ok=1
     if "$_HI_BACKEND" exec "$_HI_CONTAINER" sh -c 'ls -d /tmp/*.hi.log.* >/dev/null 2>&1'; then
-      _hi_cecho " | [$label] -- FAILED: hi.d's copy was left behind in the container" "$RED"
+      _hi_align " | [$label] -- hi.d's copy was left behind in the container" "FAILED" "$RED"
       ok=0
     fi
   fi
@@ -1472,9 +1488,11 @@ function _hi_container_backend_test() {
   local shell shell_ok=""
   local -a built_images=()
   for shell in zsh fish mksh; do
+    # an empty context: alpine-shell.Dockerfile has no COPY, and the build
+    # still wants a directory to be handed
     mkdir -p "$_HI_WORKDIR/$shell"
-    printf 'FROM alpine:3.20\nRUN apk add --no-cache %s\n' "$shell" >"$_HI_WORKDIR/$shell/Dockerfile"
-    if _hi_build_image "$shell" "hi-${backend}test-$shell-$$" "the $shell fallback" "$_HI_WORKDIR/$shell"; then
+    if _hi_build_image "$shell" "hi-${backend}test-$shell-$$" "the $shell fallback" \
+      --build-arg "PKGS=$shell" -f "$(_hi_dockerfile alpine-shell)" "$_HI_WORKDIR/$shell"; then
       _hi_kv_set shell_ok "$shell" 1
     else
       _hi_kv_set shell_ok "$shell" 0

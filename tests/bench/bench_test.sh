@@ -56,7 +56,7 @@ function _hi_bench() {
     avg="$(awk -v a="$t0" -v b="$t1" -v n="$n" 'BEGIN { printf "%.1f", (b - a) * 1000 / n }')"
   fi
   if awk -v x="$avg" -v c="$ceiling" 'BEGIN { exit !(x <= c) }'; then
-    _hi_cecho " | $label: ${avg}ms avg (${backend}ceiling ${ceiling}ms, n=$n): OK" "$GREEN"
+    _hi_align " | $label: ${avg}ms avg (${backend}ceiling ${ceiling}ms, n=$n)" "OK" "$GREEN"
   else
     _hi_cecho " | $label: ${avg}ms avg BLEW the ${ceiling}ms ceiling (${backend}n=$n)" "$RED"
     return 1
@@ -120,7 +120,7 @@ function bench_payload_size() {
   source "$_HI_LAUNCHER"
   bytes="$(_hi_payload_tar | wc -c)"
   if ((bytes <= budget)); then
-    _hi_cecho " | payload: $bytes bytes gzipped (budget $budget): OK" "$GREEN"
+    _hi_align " | payload: $bytes bytes gzipped (budget $budget)" "OK" "$GREEN"
   else
     _hi_cecho " | payload: $bytes bytes gzipped BLEW the $budget budget" "$RED"
     return 1
@@ -153,7 +153,7 @@ function bench_payload_readme_badge() {
   slack=$(((kb * 5 + 99) / 100))
   ((slack)) || slack=1
   if ((badge >= kb - slack && badge <= kb + slack)); then
-    _hi_cecho " | README payload badge: says ${badge}KB, a session sends ${kb}KB (±${slack}KB): OK" "$GREEN"
+    _hi_align " | README payload badge: says ${badge}KB, a session sends ${kb}KB (±${slack}KB)" "OK" "$GREEN"
   else
     _hi_cecho " | README payload badge says ${badge}KB but a session sends ${kb}KB - update the badge" "$RED"
     return 1

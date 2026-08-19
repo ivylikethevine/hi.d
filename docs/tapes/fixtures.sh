@@ -20,13 +20,9 @@ function demo_keypair() {
 }
 
 function demo_sshd_image() {
-  # the e2e sshd image shape: debian + sshd + the four shells, PUBKEY wired
-  # by the entrypoint; on top of it, this checkout preinstalled at ~/hi.d -
-  # the permanent-install story is the one the README GIF cannot show.
-  #
-  # hitest's login shell is fish on purpose: hi follows the login shell now
-  # (load.sh's _hi_session_shell), so this is what makes the demo land in a
-  # shell other than the client's - which is the whole point of the GIF.
+  # the image is dockerfiles/demo-sshd.Dockerfile; what this function assembles
+  # is its build context - the entrypoint below, and the clean checkout further
+  # down
   cat >"$_HI_DEMO_DIR/entrypoint.sh" <<'EOF'
 #!/bin/bash
 set -eu
@@ -36,19 +32,6 @@ chown -R hitest:hitest /home/hitest/.ssh
 chmod 700 /home/hitest/.ssh
 ssh-keygen -A
 exec /usr/sbin/sshd -D -e
-EOF
-  cat >"$_HI_DEMO_DIR/Dockerfile" <<EOF
-FROM debian:bookworm-slim
-RUN apt-get update && apt-get install -y --no-install-recommends \\
-      openssh-server bash zsh fish git ca-certificates \\
-    && rm -rf /var/lib/apt/lists/* \\
-    && mkdir -p /run/sshd \\
-    && useradd -m -s /usr/bin/fish hitest
-COPY --chown=hitest:hitest checkout /home/hitest/hi.d
-RUN chmod +x /home/hitest/hi.d/hi.sh
-COPY entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
-ENTRYPOINT ["/entrypoint.sh"]
 EOF
   # A clean copy rather than the live checkout as context: .git and dist/ would
   # bloat the build context and the image alike.
@@ -68,7 +51,8 @@ EOF
   else
     (cd "$_HI_ROOT" && git archive HEAD | tar -x -C "$_HI_DEMO_DIR/checkout")
   fi
-  docker build -q -t hi-demo-sshd "$_HI_DEMO_DIR" >/dev/null
+  docker build -q -t hi-demo-sshd \
+    -f "$_HI_ROOT/dockerfiles/demo-sshd.Dockerfile" "$_HI_DEMO_DIR" >/dev/null
 }
 
 function up_ssh() {
@@ -113,8 +97,8 @@ function up_container() { # <backend> <name> <flavor: debian|zsh|fish|ash> [host
   debian) image=debian:bookworm-slim ;;
   ash) image=alpine:3.20 ;;
   zsh | fish)
-    printf 'FROM alpine:3.20\nRUN apk add --no-cache %s git\n' "$flavor" >"$_HI_DEMO_DIR/Dockerfile.$flavor"
-    "$backend" build -q -t "hi-demo-$flavor-img" -f "$_HI_DEMO_DIR/Dockerfile.$flavor" "$_HI_DEMO_DIR" >/dev/null
+    "$backend" build -q -t "hi-demo-$flavor-img" --build-arg "PKGS=$flavor git" \
+      -f "$_HI_ROOT/dockerfiles/alpine-shell.Dockerfile" "$_HI_DEMO_DIR" >/dev/null
     image="hi-demo-$flavor-img"
     ;;
   *)

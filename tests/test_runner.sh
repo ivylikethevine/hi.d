@@ -295,19 +295,11 @@ _HI_CASES_SKIPPED=0
 _HI_RUN_T0="$(_hi_now)"
 
 # _hi_status_line <name> <result> <color> - the one line collapsed mode leaves
-# behind per suite. The result is right-aligned to _HI_MAX_WIDTH - the width
-# the summary table and the _hi_h1 rules already span - so every suite's
-# verdict lands in the same column instead of ragging along behind names of
-# every length, which is what made scanning a long run for the red one hard.
-# A name too long to leave room overflows the line rather than truncating, the
-# same rule the summary table's name column follows - but never past the
-# two-space gutter the table keeps between its cells, so the name and the
-# verdict can't run together into one unreadable word.
+# behind per suite, in the same column as every per-case verdict inside a
+# suite: test_lib.sh's _hi_align is the shared rule, and this is just the
+# runner's prefix in front of it.
 function _hi_status_line() {
-  local name="$1" result="$2" color="$3" pad floor=$((${#2} + 2))
-  pad=$((${_HI_MAX_WIDTH:-80} - 3 - ${#name}))
-  ((pad < floor)) && pad=$floor
-  _hi_cecho "$(printf ' | %s%*s' "$name" "$pad" "$result")" "$color"
+  _hi_align " | $1" "$2" "$3"
 }
 
 for _hi_t in "${_HI_SELECTED[@]}"; do

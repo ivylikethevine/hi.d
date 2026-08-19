@@ -184,7 +184,7 @@ function _hi_run_scenario() {
     _HI_DISABLE_EDITORS="${_HI_DISABLE_EDITORS:-0}" _HI_DISABLE_ALIASES="${_HI_DISABLE_ALIASES:-0}" \
     "$@" "$shell_bin" "$script" 2>"$_HI_WORKDIR/err"; then
     t1="$(_hi_now)"
-    _hi_cecho "  [$shell] -- $label: OK ($(_hi_elapsed "$t0" "$t1")s)" "$GREEN"
+    _hi_align "  [$shell] -- $label" "OK ($(_hi_elapsed "$t0" "$t1")s)" "$GREEN"
   else
     t1="$(_hi_now)"
     _hi_h3 "[$shell] -- $label: FAILED ($(_hi_elapsed "$t0" "$t1")s)" "$RED"

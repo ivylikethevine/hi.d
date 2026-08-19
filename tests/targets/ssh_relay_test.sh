@@ -296,7 +296,7 @@ function _hi_relay_disconnect_case() {
     # beat later still - hence one budget covering both
     if _hi_poll_bool 120 0.5 _hi_relay_dirs_gone "$b_dir" "$c_dir"; then
       ok=1
-      _hi_cecho " | [relay-disconnect] -- both hops cleaned up after the kill: OK" "$GREEN"
+      _hi_align " | [relay-disconnect] -- both hops cleaned up after the kill" "OK" "$GREEN"
     else
       _hi_relay_report_leftovers relay-disconnect
       _hi_note_failure "[relay-disconnect] a tree survived the kill"

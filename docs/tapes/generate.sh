@@ -1,0 +1,420 @@
+#!/bin/bash
+# Renders every demo GIF from its tape: one `vhs` run per tape, with a
+# `fixtures.sh down` in between - no tape cleans up after itself, on purpose
+# (typing into the pty right after a session teardown proved flaky), so somebody
+# has to, and that somebody used to be a person following README.
+#
+# The two things a hand-render has to get right every single time, both handled
+# below:
+#
+#   1. `hi` on $PATH must be *this* checkout. A tape's `Require hi` is satisfied
+#      by any hi at all, and /usr/bin/hi commonly points at some other install -
+#      so the render quietly records the wrong tree, and a committed GIF is the
+#      only place that would ever show. Fixed with a shim directory on the front
+#      of $PATH *and* $_HI_HOME: two halves of one fix, because hi.sh sources its
+#      libraries from $_HI_HOME, so setting only that pairs the other tree's
+#      hi.sh with this tree's common/.
+#   2. The ssh tape's target image builds from HEAD (fixtures.sh's
+#      demo_sshd_image) while the *client* side of every tape is the working
+#      tree, so rendering a dirty tree gives a new client talking to an old
+#      target. A dirty tree switches HI_DEMO_SOURCE=worktree here automatically;
+#      --head opts back out.
+#
+# It lives beside fixtures.sh rather than in scripts/ because scripts/ ships in
+# packaged installs (install.sh's $_HI_PACKAGE_CONTENTS) and nothing outside a
+# checkout has a docs/tapes/ to render. Unlike fixtures.sh, which is standalone
+# because a tape render happens outside the test harness, this one does source
+# common/core.sh - it has to establish $_HI_HOME for the render anyway, and that
+# hands over the palette, the headings and the timers for free.
+#
+# Not run by CI and not meant to be: the GIFs are manual artifacts, reviewed by
+# eye before committing.
+set -euo pipefail
+
+# The tree from this file's own location, never from the environment - the whole
+# point of the script is that an inherited $_HI_HOME (a login profile exports
+# one on the author's machine) points somewhere else entirely.
+_HI_GEN_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+export _HI_HOME="${_HI_GEN_ROOT%/*}"
+if [ -z "$_HI_HOME" ] || [ "$_HI_HOME/hi.d" != "$_HI_GEN_ROOT" ]; then
+  echo "generate.sh: the checkout has to be named hi.d; this one is $_HI_GEN_ROOT" >&2
+  exit 1
+fi
+# shellcheck source=../../common/core.sh
+source "$_HI_HOME/hi.d/common/core.sh"
+# core.sh clears all three on its way out (it is sourced into interactive
+# shells, where an error must not close the session). This is a batch tool, so
+# take two of them back - but not errexit: one tape failing has to leave the
+# rest of the run and the summary intact, and every call that can fail here is
+# checked where it is made.
+set -uo pipefail
+
+# Every tape's `Output docs/demos/<name>.gif` and every Hide block's
+# `docs/tapes/fixtures.sh up ...` is relative to wherever vhs was started, so
+# the render has to happen from the checkout root - not from wherever the caller
+# happened to be standing.
+cd "$_HI_ROOT"
+
+_HI_USAGE="Usage: generate.sh [-l|--list] [--head] [--keep] [--require-run] [--down] [name ...]"
+
+# "<name>:<fixture>:<tool...>", in render order. A string table rather than an
+# associative array: bash 3.2 is the floor (see the lint suite), and the same
+# shape is what tests/shells/shellcheck_test.sh's own tables use.
+#
+# The tool column is not a copy of the tape's `Require` lines - those cover the
+# backend only. Nothing declares the tape's own client shell (`Set Shell zsh`,
+# `Set Shell fish`), and a missing one is a vhs error rather than a clean stand
+# down, so the client shell is listed here too.
+#
+# Order is deliberate at both ends. color_preview needs no backend at all and
+# renders in seconds, so a broken vhs/ttyd/font setup surfaces immediately
+# instead of after a four-minute image build; kube is last because taking the
+# fixtures down deletes the kind cluster, and recreating it is the most
+# expensive fixture there is.
+_HI_GEN_TAPES=(
+  "color_preview:colors:"
+  "demo:demo:docker"
+  "ssh:ssh:docker ssh ssh-keygen"
+  "docker:docker:docker zsh"
+  "podman:podman:podman fish"
+  "nomad:nomad:nomad docker"
+  "kube:kube:kind kubectl docker zsh"
+)
+
+_HI_GEN_LIST=0
+_HI_GEN_HEAD=0
+_HI_GEN_KEEP=0
+_HI_GEN_REQUIRE=0
+_HI_GEN_DOWN=0
+_HI_GEN_WANT=()
+_HI_GEN_RUN=()
+
+# Set once the first tape has started: what the exit trap keys its teardown off,
+# so an interrupted run cannot leave hi-demo-* containers, a nomad dev agent or
+# a kind cluster behind. Cleared again by every completed teardown, so the trap
+# does not repeat one the loop already did.
+_HI_GEN_STAGED=0
+_HI_GEN_SHIM=""
+
+_HI_GEN_OK=0
+_HI_GEN_SKIPPED=0
+_HI_GEN_FAILED=0
+
+# One aligned result line, the shape doctor.sh's doctor_row uses: the status
+# column is the thing being scanned, so it is fixed-width, and the whole row
+# takes the severity's color.
+function gen_row() { # <name> <status> <color> [detail]
+  _hi_cecho " | $(printf '%-14s %-9s' "$1" "$2")${4:+$4}" "$3"
+}
+
+# gen_missing <tool...> - of the tools named, the ones that are not installed
+function gen_missing() {
+  local tool out=""
+  # shellcheck disable=SC2086 # split on purpose: the table's tool column
+  for tool in $1; do
+    command -v "$tool" >/dev/null 2>&1 || out="$out $tool"
+  done
+  printf '%s' "${out# }"
+}
+
+# gen_bytes <path> - the file's size, or 0 when it isn't there
+function gen_bytes() {
+  [ -f "$1" ] || {
+    printf '0'
+    return 0
+  }
+  wc -c <"$1" | tr -d ' '
+}
+
+# gen_head_bytes <path> - the committed size of the same file, or 0 when HEAD
+# has no copy (a brand new GIF). Read from git rather than a backup, so the
+# comparison survives however many times the file is rewritten in one run.
+function gen_head_bytes() {
+  git -C "$_HI_ROOT" show "HEAD:$1" 2>/dev/null | wc -c | tr -d ' '
+}
+
+# gen_size_note <new-bytes> <head-bytes> - "168 KB (HEAD 171 KB, -2%)". The
+# delta is the point: a GIF that suddenly doubled is the failure mode a render
+# has (a stuck Wait, a fixture that took the slow path), and it is invisible in
+# a diff of a binary file.
+function gen_size_note() {
+  awk -v n="$1" -v h="$2" 'BEGIN {
+    printf "%.0f KB", n / 1024
+    if (h > 0) printf " (HEAD %.0f KB, %+.0f%%)", h / 1024, (n - h) * 100 / h
+    else printf " (new)"
+  }'
+}
+
+# gen_secs <start> - whole seconds since <start>, for the result rows
+function gen_secs() {
+  local now
+  now="$(_hi_now)"
+  printf '%.0f' "$(_hi_elapsed "$1" "$now")" 2>/dev/null || printf '?'
+}
+
+# Every fixture the tapes bring up, gone. Idempotent, and quiet unless it fails
+# - the point of running it between tapes is that the next one starts on a clean
+# stage, so a failure here is worth seeing.
+function gen_teardown() {
+  local out
+  if out="$("$_HI_ROOT/docs/tapes/fixtures.sh" down 2>&1)"; then
+    _HI_GEN_STAGED=0
+    return 0
+  fi
+  gen_row fixtures WARN "$YELLOW" "fixtures.sh down failed:"
+  printf '%s\n' "$out" | sed 's/^/      /'
+  return 1
+}
+
+function gen_cleanup() {
+  if [ -n "$_HI_GEN_SHIM" ]; then
+    rm -rf "$_HI_GEN_SHIM"
+  fi
+  if [ "$_HI_GEN_STAGED" = 1 ] && [ "$_HI_GEN_KEEP" != 1 ]; then
+    _hi_cecho " | taking the fixtures down" "$YELLOW"
+    gen_teardown || true
+  fi
+}
+
+function gen_list() {
+  local entry name fixture requires
+  _hi_h2 "The tapes, in render order"
+  gen_row TAPE FIXTURE "$BLUE" "NEEDS"
+  for entry in "${_HI_GEN_TAPES[@]}"; do
+    IFS=: read -r name fixture requires <<<"$entry"
+    gen_row "$name" "$fixture" "" "${requires:-nothing - no backend at all}"
+  done
+}
+
+# Everything that is worth knowing before the first four-minute image build, and
+# the two footguns this script exists to remove. Returns non-zero if the run
+# cannot go ahead.
+function gen_preflight() {
+  local missing was dirty toggle val overlay=""
+  _hi_h2 "Preflight"
+
+  missing="$(gen_missing "vhs ttyd ffmpeg")"
+  if [ -n "$missing" ]; then
+    gen_row renderer FAILED "$RED" "not installed: $missing"
+    return 1
+  fi
+  gen_row renderer ok "$GREEN" "$(vhs --version 2>/dev/null | head -1)"
+
+  # The shim: `hi` has to be this checkout's, and $_HI_HOME (exported at the top)
+  # has to agree with it. Not under /tmp/hi-demo - fixtures.sh's `down` does an
+  # rm -rf on that directory and would delete the shim mid-run.
+  was="$(command -v hi 2>/dev/null || true)"
+  _HI_GEN_SHIM="$(mktemp -d "${TMPDIR:-/tmp}/hi-gifs.XXXXXX")"
+  ln -s "$_HI_ROOT/hi.sh" "$_HI_GEN_SHIM/hi"
+  PATH="$_HI_GEN_SHIM:$PATH"
+  export PATH
+  if [ "$(command -v hi 2>/dev/null || true)" != "$_HI_GEN_SHIM/hi" ]; then
+    gen_row hi FAILED "$RED" "the shim did not take on \$PATH"
+    return 1
+  fi
+  gen_row hi ok "$GREEN" "$_HI_ROOT/hi.sh, $(hi --version 2>/dev/null || echo 'version unknown')"
+  if [ -n "$was" ] && [ "$was" != "$_HI_ROOT/hi.sh" ]; then
+    gen_row "" note "$BLUE" "shimmed past the $was already on \$PATH"
+  fi
+
+  # HEAD vs the working tree. Only demo_sshd_image reads HI_DEMO_SOURCE, so this
+  # changes ssh.gif and nothing else - every other tape's target gets the tree
+  # over the wire from the client, which is the working tree either way.
+  dirty="$(git -C "$_HI_ROOT" status --porcelain 2>/dev/null | grep -c . || true)"
+  if [ "$_HI_GEN_HEAD" = 1 ]; then
+    export HI_DEMO_SOURCE=head
+    gen_row source head "$GREEN" "ssh's target builds from HEAD (--head)"
+  elif [ "${dirty:-0}" -gt 0 ]; then
+    export HI_DEMO_SOURCE=worktree
+    gen_row source worktree "$YELLOW" "$dirty local change(s): ssh's target builds from the working tree too"
+    gen_row "" note "$YELLOW" "tracked files only - a new untracked file still misses ssh's image"
+    gen_row "" note "$YELLOW" "and the client prompt renders its git-dirty markers into every GIF"
+  else
+    export HI_DEMO_SOURCE=head
+    gen_row source head "$GREEN" "clean tree"
+  fi
+
+  # The renderer's own overlay rides into the recording: core.sh exports the
+  # toggles and $_HI_CONFIG_DIR, and vhs inherits this environment. Reported
+  # rather than neutralized - rendering under a config the manual `vhs <tape>`
+  # route would not use is its own surprise, and the color tape already stages
+  # a throwaway $HOME for the one case where it truly matters.
+  [ -f "$_HI_CONFIG_DIR/settings.sh" ] && overlay="settings.sh"
+  for toggle in ${_HI_TOGGLES[@]+"${_HI_TOGGLES[@]}"}; do
+    eval "val=\${$toggle:-0}"
+    [ "$val" = 0 ] || overlay="$overlay $toggle=$val"
+  done
+  if [ -n "$overlay" ]; then
+    gen_row config WARN "$YELLOW" "in effect for the render: $overlay"
+  else
+    gen_row config ok "$GREEN" "no overlay, every toggle at its default"
+  fi
+
+  return 0
+}
+
+# One tape, start to finish. Returns non-zero only for a failed render: a tape
+# whose backend is missing stands down yellow, the same way the e2e suites do,
+# unless --require-run says otherwise.
+function gen_render() { # <name> <requires>
+  local name="$1" tape gif log stamp missing rc t0 secs size was
+  tape="docs/tapes/$name.tape"
+  gif="docs/demos/$name.gif"
+  log="$_HI_GEN_SHIM/$name.log"
+  stamp="$_HI_GEN_SHIM/$name.stamp"
+
+  missing="$(gen_missing "$2")"
+  if [ -n "$missing" ]; then
+    if [ "$_HI_GEN_REQUIRE" = 1 ]; then
+      gen_row "$name" FAILED "$RED" "not installed: $missing (--require-run)"
+      _HI_GEN_FAILED=$((_HI_GEN_FAILED + 1))
+      return 1
+    fi
+    gen_row "$name" SKIPPED "$YELLOW" "not installed: $missing"
+    _HI_GEN_SKIPPED=$((_HI_GEN_SKIPPED + 1))
+    return 0
+  fi
+
+  was="$(gen_head_bytes "$gif")"
+  : >"$stamp"
+  _hi_cecho " | rendering $tape ..." "$BLUE"
+  _HI_GEN_STAGED=1
+  t0="$(_hi_now)"
+  rc=0
+  vhs "$tape" >"$log" 2>&1 || rc=$?
+  secs="$(gen_secs "$t0")"
+
+  if [ "$rc" -ne 0 ]; then
+    gen_row "$name" FAILED "$RED" "vhs exited $rc after ${secs}s:"
+    tail -20 "$log" | sed 's/^/      /'
+    _HI_GEN_FAILED=$((_HI_GEN_FAILED + 1))
+    return 1
+  fi
+  # vhs reports a Require failure on stderr and still exits 0 in some versions,
+  # and a tape whose Output never fired leaves the committed GIF in place - both
+  # look like success from the exit status alone.
+  if [ ! "$gif" -nt "$stamp" ]; then
+    gen_row "$name" FAILED "$RED" "vhs exited 0 but $gif was not rewritten:"
+    tail -20 "$log" | sed 's/^/      /'
+    _HI_GEN_FAILED=$((_HI_GEN_FAILED + 1))
+    return 1
+  fi
+
+  size="$(gen_bytes "$gif")"
+  gen_row "$name" RENDERED "$GREEN" "$(gen_size_note "$size" "$was") in ${secs}s"
+  _HI_GEN_OK=$((_HI_GEN_OK + 1))
+  return 0
+}
+
+# The selected tapes, in table order, each followed by a teardown so the next
+# one starts on a clean stage. --keep spares the last one's fixtures, which is
+# the only reason to keep any of them: something to poke at after a render that
+# came out wrong.
+function gen_run() {
+  local entry name fixture requires last i=0
+  last=$((${#_HI_GEN_RUN[@]} - 1))
+  for entry in "${_HI_GEN_RUN[@]}"; do
+    IFS=: read -r name fixture requires <<<"$entry"
+    gen_render "$name" "$requires" || true
+    if [ "$_HI_GEN_KEEP" = 1 ] && [ "$i" -eq "$last" ]; then
+      gen_row "" kept "$YELLOW" "fixtures left up (--keep); remove them with generate.sh --down"
+    elif [ "$_HI_GEN_STAGED" = 1 ]; then
+      gen_teardown || true
+    fi
+    i=$((i + 1))
+  done
+}
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+  -h | --help)
+    cat <<'EOF'
+Usage: generate.sh [options] [name ...]
+
+Renders docs/demos/<name>.gif from docs/tapes/<name>.tape with vhs, one tape at
+a time, taking the fixtures down in between. With no names it renders all of
+them, cheapest first.
+
+Options:
+  -l, --list         the tapes, their fixtures and what each needs, then exit
+      --head         build ssh's target from HEAD even on a dirty tree. A dirty
+                     tree otherwise switches to HI_DEMO_SOURCE=worktree, so the
+                     client and the target show the same tree
+      --keep         leave the last tape's fixtures up, for poking at
+      --require-run  a missing backend fails instead of skipping
+      --down         take leftover fixtures down and exit (after a crashed run)
+  -h, --help
+
+Needs vhs (with ttyd and ffmpeg) and the backend each tape names; a tape whose
+backend is missing is skipped, not failed. `hi` is shimmed onto $PATH from this
+checkout, so wherever /usr/bin/hi points does not matter.
+
+Renders nothing in CI and answers to nothing: the GIFs are manual artifacts.
+Look at what came out before committing it.
+EOF
+    exit 0
+    ;;
+  -l | --list) _HI_GEN_LIST=1 ;;
+  --head) _HI_GEN_HEAD=1 ;;
+  --keep) _HI_GEN_KEEP=1 ;;
+  --require-run) _HI_GEN_REQUIRE=1 ;;
+  --down) _HI_GEN_DOWN=1 ;;
+  -*)
+    echo "generate.sh: unknown option: $1" >&2
+    echo "$_HI_USAGE" >&2
+    exit 1
+    ;;
+  *) _HI_GEN_WANT+=("$1") ;;
+  esac
+  shift
+done
+
+if [ "$_HI_GEN_LIST" = 1 ]; then
+  gen_list
+  exit 0
+fi
+
+if [ "$_HI_GEN_DOWN" = 1 ]; then
+  _hi_h1 "Taking the demo fixtures down"
+  gen_teardown
+  exit $?
+fi
+
+# Names are validated before anything is built, and the run list is filtered in
+# table order rather than argument order - so `generate.sh kube color_preview`
+# still renders the cheap one first and leaves the kind cluster for last.
+_HI_GEN_NAMES=" ${_HI_GEN_TAPES[*]%%:*} "
+for _hi_gen_want in ${_HI_GEN_WANT[@]+"${_HI_GEN_WANT[@]}"}; do
+  case "$_HI_GEN_NAMES" in
+  *" $_hi_gen_want "*) ;;
+  *)
+    echo "generate.sh: no such tape: $_hi_gen_want" >&2
+    echo "generate.sh: the tapes are:$_HI_GEN_NAMES" >&2
+    exit 1
+    ;;
+  esac
+done
+for _hi_gen_entry in "${_HI_GEN_TAPES[@]}"; do
+  _hi_gen_name="${_hi_gen_entry%%:*}"
+  if [ "${#_HI_GEN_WANT[@]}" -eq 0 ]; then
+    _HI_GEN_RUN+=("$_hi_gen_entry")
+    continue
+  fi
+  for _hi_gen_want in ${_HI_GEN_WANT[@]+"${_HI_GEN_WANT[@]}"}; do
+    [ "$_hi_gen_want" = "$_hi_gen_name" ] && _HI_GEN_RUN+=("$_hi_gen_entry")
+  done
+done
+
+trap gen_cleanup EXIT
+trap 'exit 130' INT
+
+_hi_h1 "Rendering ${#_HI_GEN_RUN[@]} demo GIF(s)"
+gen_preflight || exit 1
+_hi_h2 "Renders"
+gen_run
+
+_hi_h2 "Summary"
+_hi_cecho " | $_HI_GEN_OK rendered, $_HI_GEN_SKIPPED skipped, $_HI_GEN_FAILED failed" \
+  "$([ "$_HI_GEN_FAILED" -eq 0 ] && printf '%s' "$GREEN" || printf '%s' "$RED")"
+[ "$_HI_GEN_OK" -gt 0 ] && _hi_cecho " | look at them before committing: git status docs/demos" "$BLUE"
+[ "$_HI_GEN_FAILED" -eq 0 ]

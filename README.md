@@ -282,16 +282,22 @@ This started as code written entirely by [me](https://github.com/ivylikethevine)
 
 ### Regenerating the demo GIFs
 
-Each GIF above is rendered from the tape beside it (`vhs docs/tapes/<name>.tape` from the repo root, with the
-backend running and `hi` on PATH; `docs/tapes/fixtures.sh` builds every target
-the tapes connect to, `fixtures.sh down` removes them). There is one more in
-[CONFIGURATION.md](docs/CONFIGURATION.md#colors) — `color_preview.tape`, the only one needing no backend at
-all. Manual artifacts, reviewed by eye — regenerate whenever the header or prompt changes.
+[`docs/tapes/generate.sh`](docs/tapes/generate.sh) renders all of them: one `vhs` run per tape, cheapest first,
+with a `fixtures.sh down` in between — no tape cleans up after itself — and a summary of what rendered, what
+stood down for a missing backend, and what failed. Name tapes to render a subset (`generate.sh docker kube`);
+`--list` shows them, `--down` clears up after a crashed run. Manual artifacts, reviewed by eye — regenerate
+whenever the header or prompt changes, and look at what came out before committing it.
 
-Two things to get right when you do: `hi` on `$PATH` must be _this_ checkout
-(`/usr/bin/hi` may point elsewhere), and the target image builds from `HEAD`,
-so uncommitted work shows on the client side of the GIF but not the target's.
-Render from a commit, or set `HI_DEMO_SOURCE=worktree`.
+By hand it is one `vhs docs/tapes/<name>.tape` per GIF from the repo root, with the backend running and `hi`
+on PATH; `docs/tapes/fixtures.sh` builds every target the tapes connect to, `fixtures.sh down` removes them.
+There is one more in [CONFIGURATION.md](docs/CONFIGURATION.md#colors) — `color_preview.tape`, the only one
+needing no backend at all.
+
+Two things to get right when you do it that way — the two the script exists to take care of. `hi` on `$PATH`
+must be _this_ checkout (`/usr/bin/hi` may point elsewhere; the script shims its own onto the front of
+`$PATH`). And the target image builds from `HEAD`, so uncommitted work shows on the client side of the GIF
+but not the target's: render from a commit, or set `HI_DEMO_SOURCE=worktree`, which is what the script picks
+for you on a dirty tree.
 
 Both sides of every GIF are staged, not inherited. Each tape sources a small rc
 `fixtures.sh` writes, giving the outside shell hi's own prompt under a chosen

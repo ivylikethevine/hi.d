@@ -27,6 +27,19 @@ a same-OS one if substituted. The three lint jobs — `actionlint`, `zizmor`,
 and open no socket, so pointing them at your own machine buys nothing and only
 adds jobs contending for its workspace.
 
+Those five `ci.yml` jobs run in a chain rather than in parallel — `test` →
+`bench` → `packaging-smoke` → `e2e` → `e2e-backends` — so at most one of them
+occupies the runner at a time. Their `needs:` are ordering, not data
+dependencies, which is why each link is guarded with `!cancelled()`: a red job
+still lets the next one run and report its own verdict.
+
+Know the limit of that guarantee, though: it holds *within* this workflow only.
+`coverage.yml`, `pages.yml`, `link-check.yml`, `tool-versions.yml` and
+`scorecard.yml` read `RUNNER_LABEL` too, and nothing in a workflow file can
+order one workflow against another. The runner is the only thing that can: one
+runner process takes one job at a time, so registering exactly one on the box
+is what actually makes "never two at once" true.
+
 Do the two repo settings under [ROADMAP.md](ROADMAP.md)'s "GitHub repo
 settings" — the fork-PR approval and the `manual-dispatch` environment —
 *before* pointing any of these variables at a self-hosted runner. Neither can

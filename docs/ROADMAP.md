@@ -57,6 +57,44 @@ here: git history is the ledger, and this file is only what is left to do.
     least the header and git-prompt paths, and its header says what the numbers
     do and do not mean as bluntly as `coverage.sh`'s does.
 
+- [ ] **`hi_*` aliases become `hi --*` sub-commands** — the eleven aliases at
+      the foot of `../common/paths.sh` (`hi_install`, `hi_uninstall`,
+      `hi_configure`, `hi_check_configs`, `hi_overlay_init`, `hi_update`,
+      `hi_info`, `hi_color_preview`, `hi_doctor`, `hi_packages_preview`,
+      `hi_test`) should be flags on `hi` instead. `hi.sh` already dispatches
+      `-h`/`--help`, `--version` and `--doctor` from one `case` block, and
+      `hi_doctor` is nothing but a second spelling of `hi --doctor`: this
+      finishes a pattern that already exists rather than starting a new one.
+
+  - **Why they are wrong where they are.** `paths.sh` is the four-shell
+    plain-export file — no functions, no `${var:-...}`, every line has to parse
+    under fish too. The aliases fit that subset only as
+    `[ ! -f X ] && echo ... || X` one-liners, which is why the file carries a
+    file-wide `# shellcheck disable=SC2139`. They are also invisible to any
+    non-interactive shell, so no script can call them, and they complete as
+    eleven unrelated names rather than as one command's flags.
+  - **`hi_info` is load-bearing for the harness.** `_hi_probe_cmd`
+    (`../tests/test_lib.sh`) uses `alias hi_info` / `functions -q hi_info` as
+    the "the session is up" marker for the `bash`, `ssh_fallback`,
+    `ssh_fallback_fish` and `installed` shapes, so every e2e suite rides on it.
+    Whatever replaces it has to answer the same question in one line, in four
+    shells, over a pty — do that first or the suites go dark.
+  - **Keep the old names working.** They are user-facing and documented
+    throughout the README (`hi_configure` alone appears nine times). Land the
+    flags first, leave the aliases as thin forwarders to `hi --*` for a
+    release, and only then decide whether to drop them.
+  - **Out of scope:** `hi_header` (`../common/header.sh`) and `hi_copy`
+    (`../misc/aliases.sh`) are shell-integration functions, not entry points to
+    a script. They stay where they are.
+  - **Both payload numbers move.** `paths.sh` and `hi.sh` both ship in
+    `$_HI_PAYLOAD`, so this shifts text between two already-shipped files;
+    check `bench_payload_size` and the README's `_hi_wire_bytes` badge
+    together, as CLAUDE.md says to whenever a shipped file is touched.
+  - **Ticks when:** every command above has a `hi --<name>` form covered by
+    `../tests/shells/hi_test.sh`, `paths.sh` has no `alias` lines left and its
+    `SC2139` disable is gone, and the README and `FEATURES.md` document the
+    flags as the primary spelling.
+
 ## Outside this repo
 
 ### GitHub repo settings

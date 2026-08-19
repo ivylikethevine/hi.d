@@ -20,7 +20,7 @@ manager. All of it rides along to every host you say `hi` to, in its own small a
 Want history on it? `hi_overlay_init` makes `~/.config/hi.d` a git repo _in place_: from then on
 `hi_configure` commits its own settings writes, `hi_doctor` reports the commit count, and a push remote is one
 `git remote add` away. Entirely optional. (Keeping the same directory in chezmoi or yadm works just as well -
-see the README's [hi.d and the alternatives](../README.md#hid-and-the-alternatives).)
+see [ALTERNATIVES.md](ALTERNATIVES.md).)
 
 Everything below is an environment variable, checked where it's used. `hi_configure` writes your answers to
 `~/.config/hi.d/settings.sh`, which every shell sources ahead of `common/paths.sh` - a plain `#!/bin/sh` script

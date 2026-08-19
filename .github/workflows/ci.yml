@@ -108,8 +108,12 @@ jobs:
   # workflows and composite actions are code too, so they get a linter
   actionlint:
     name: actionlint
-    runs-on: ${{ needs.runner.outputs.ubuntu }}
-    needs: runner
+    # Pinned hosted, not needs.runner: this job installs no apt packages and
+    # never touches the Docker socket, so it has nothing to gain from a
+    # self-hosted box - and staying off it keeps one less thing contending
+    # for that runner's workspace. See docs/PACKAGING.md for the list that
+    # does need it.
+    runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -134,8 +138,12 @@ jobs:
   # credentialed release checkout) is suppressed inline where it happens.
   zizmor:
     name: zizmor
-    runs-on: ${{ needs.runner.outputs.ubuntu }}
-    needs: runner
+    # Pinned hosted, not needs.runner: this job installs no apt packages and
+    # never touches the Docker socket, so it has nothing to gain from a
+    # self-hosted box - and staying off it keeps one less thing contending
+    # for that runner's workspace. See docs/PACKAGING.md for the list that
+    # does need it.
+    runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -162,8 +170,12 @@ jobs:
   # do not add this job to the required checks - it is designed to be ignorable.
   markdownlint:
     name: markdownlint (advisory)
-    runs-on: ${{ needs.runner.outputs.ubuntu }}
-    needs: runner
+    # Pinned hosted, not needs.runner: this job installs no apt packages and
+    # never touches the Docker socket, so it has nothing to gain from a
+    # self-hosted box - and staying off it keeps one less thing contending
+    # for that runner's workspace. See docs/PACKAGING.md for the list that
+    # does need it.
+    runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

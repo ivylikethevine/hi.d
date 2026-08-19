@@ -13,14 +13,19 @@ Every workflow's `runs-on:` reads a repo/org Actions variable first —
 `vars.RUNNER_LABEL`, or `vars.MACOS_RUNNER_LABEL` / `vars.WINDOWS_RUNNER_LABEL`
 for the two OS-locked e2e jobs — falling back to the GitHub-hosted label when
 unset, so nothing changes until you set one. `ci.yml` reads them one job
-earlier: its `runner` job resolves the pair once and the other nine take
-`needs.runner.outputs.*` from it. That job is also where the one exception
+earlier: its `runner` job resolves the pair once and the six substitutable jobs
+take `needs.runner.outputs.*` from it. That job is also where the one exception
 lives — a pull request from a *fork* gets the GitHub-hosted label whatever the
-variable says, so a stranger's branch never runs on your machine. Jobs that
-install apt packages or touch the Docker socket (`ci.yml`'s `test`, `bench`,
-`packaging-smoke`, `e2e`, `e2e-backends`, and `coverage.yml`) need a
+variable says, so a stranger's branch never runs on your machine.
+
+Jobs that install apt packages or touch the Docker socket (`ci.yml`'s `test`,
+`bench`, `packaging-smoke`, `e2e`, `e2e-backends`, and `coverage.yml`) need a
 self-hosted runner providing those; `macos-e2e.yml` and `windows-e2e.yml` need
-a same-OS one if substituted.
+a same-OS one if substituted. The three lint jobs — `actionlint`, `zizmor`,
+`markdownlint` — are the other side of that list, and are pinned to
+`ubuntu-latest` outright rather than reading the variable: they install nothing
+and open no socket, so pointing them at your own machine buys nothing and only
+adds jobs contending for its workspace.
 
 Do the two repo settings under [ROADMAP.md](ROADMAP.md)'s "GitHub repo
 settings" — the fork-PR approval and the `manual-dispatch` environment —

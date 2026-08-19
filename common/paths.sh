@@ -1,7 +1,7 @@
 #!/bin/sh
-# every path hi uses, in one place. Fish sources this too, so plain `export
-# NAME=value` lines only (plus `[ ] && export` guards) - no functions, no
-# ${var:-...}. $_HI_HOME and $_HI_CONFIG_DIR must already be set.
+# Every path hi uses, in one place. Fish sources this too, so plain
+# `export NAME=value` lines only (plus `[ ] && export` guards) - no functions,
+# no ${var:-...}. $_HI_HOME and $_HI_CONFIG_DIR must already be set.
 # shellcheck disable=SC2139 # aliases are meant to expand $_HI_* now, not later
 # shellcheck disable=SC2153 # $_HI_HOME is set by whoever sources this, not here
 
@@ -22,10 +22,9 @@ export _HI_DOCTOR="$_HI_ROOT/scripts/doctor.sh"
 export _HI_TEST_LIB="$_HI_ROOT/tests/test_lib.sh"
 export _HI_TEST_RUN="$_HI_ROOT/tests/test_runner.sh"
 
-# User config lives in $_HI_CONFIG_DIR, outside the tree (no dirty checkout,
-# no writable-tree need); each entry point sets the var itself. Overridden
-# per file - unoverridden ones keep tracking the tree copy; settings.sh has
-# no in-tree half, so its path is unguarded.
+# User config lives in $_HI_CONFIG_DIR, outside the tree; each entry point sets
+# the var itself. Overridden per file - unoverridden ones keep tracking the
+# tree copy, and settings.sh has no in-tree half, so its path is unguarded.
 export _HI_SETTINGS="$_HI_CONFIG_DIR/settings.sh"
 export _HI_COLORS="$_HI_ROOT/misc/colors"
 [ -f "$_HI_CONFIG_DIR/colors" ] && export _HI_COLORS="$_HI_CONFIG_DIR/colors"
@@ -43,8 +42,8 @@ export _HI_BASHRC="$_HI_ROOT/shells/bash.sh"
 export _HI_ZSHRC="$_HI_ROOT/shells/zsh.zsh"
 export _HI_FISH_CONFIG="$_HI_ROOT/shells/config.fish"
 
-# install.sh's line tag and managed symlink - here so install, --uninstall
-# and anyone else recognising hi's lines read one string
+# install.sh's line tag and managed symlink, so everything recognising hi's
+# lines reads one string
 export _HI_MARKER="# added by hi during install"
 export _HI_LINK="/usr/bin/hi"
 
@@ -62,11 +61,10 @@ export _HI_HOME_FISH_CONFIG="$HOME/.config/fish/config.fish"
 export _HI_HUMAN_CENTRIC_DATE="+%a %b %e %Y %H:%M:%S %Z"
 export _HI_HUMAN_SHORT_DATE="+%b %e %y %H:%M %Z"
 
-# Helper aliases; the payload ships no scripts/tests/.git, so each says so on
-# a target. Negation first: `[ -f ] && cmd || echo` would print on cmd failure.
+# Helper aliases; the payload ships no scripts/tests/.git, so each says so on a
+# target. Negation first: `[ -f ] && cmd || echo` would print on cmd failure.
 export _HI_NO_CHECKOUT="needs the full hi.d checkout - not available in a hi session"
-# one message for both no-.git shapes (hi session, packaged install) - the
-# alias has room for one condition and the advice is the same
+# one message for both no-.git shapes: the alias has room for one condition
 export _HI_NO_GIT="no .git in $_HI_ROOT - if a package manager installed hi.d, update it there; if this is a hi session, update on the machine hi.d lives on"
 alias hi="$_HI_LAUNCHER"
 alias hi_install="[ ! -f $_HI_INSTALL ] && echo 'hi_install $_HI_NO_CHECKOUT' || $_HI_INSTALL"
@@ -79,21 +77,19 @@ alias hi_update="[ ! -d $_HI_ROOT/.git ] && echo 'hi_update: $_HI_NO_GIT' || git
 alias hi_info="echo ' | hi_home: $_HI_HOME | hi_root: $_HI_ROOT | script: $_HI_LAUNCHER'"
 alias hi_color_preview="[ ! -f $_HI_COLOR_PREVIEW ] && echo 'hi_color_preview $_HI_NO_CHECKOUT' || $_HI_COLOR_PREVIEW"
 alias hi_doctor="[ ! -f $_HI_DOCTOR ] && echo 'hi_doctor $_HI_NO_CHECKOUT' || $_HI_DOCTOR"
-# The full preview - priorities, their colors, examples - lives in scripts/,
-# which targets do not get. There the alias falls back to what it has always
-# run: the check itself, out of the shipped common/header.sh.
+# The full preview lives in scripts/, which targets do not get; there the alias
+# falls back to the check itself, out of the shipped common/header.sh.
 alias hi_packages_preview="[ ! -f $_HI_PACKAGES_PREVIEW ] && bash -c 'source \"$_HI_HEADER\" && full_check' || $_HI_PACKAGES_PREVIEW"
 alias hi_test="[ ! -f $_HI_TEST_RUN ] && echo 'hi_test $_HI_NO_CHECKOUT' || $_HI_TEST_RUN"
 
 # Local-only gate, reading settings each entry point sourced *ahead* of this
-# file (no include line parses in all four shells - new entry points source
-# them there, not here); _HI_REMOTE_SESSION is what tells local from remote.
+# file (no include line parses in all four shells); _HI_REMOTE_SESSION is what
+# tells local from remote.
 export _HI_DISABLE_LOCAL
 export _HI_REMOTE_SESSION
 
-# The list below is core.sh's _HI_TOGGLES minus the gate's own two inputs,
-# spelled out because this dialect can't loop; paths_test.sh pins the two
-# lists together (OSC52 and TMUX had already gone missing here once).
+# core.sh's _HI_TOGGLES minus the gate's own two inputs, spelled out because
+# this dialect can't loop; paths_test.sh pins the two lists together.
 [ "$_HI_DISABLE_LOCAL" = 1 ] && [ "$_HI_REMOTE_SESSION" != 1 ] && {
   export _HI_DISABLE_HEADER=1
   export _HI_DISABLE_PROMPT=1

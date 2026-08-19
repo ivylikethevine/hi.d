@@ -286,6 +286,7 @@ function run_ssh_tests() {
   # "+" separates extra packages, not a space: the specs are split on
   # whitespace by the loop itself. The mksh image carries git because it is the
   # only one whose prompt has a live git segment to render (shells/ksh.sh).
+  _HI_SSH_IMAGES=()
   for _hi_img in alpine: alpine-zsh:zsh alpine-fish:fish alpine-ksh:mksh+git; do
     _hi_label="${_hi_img%%:*}"
     _hi_ctx="$_HI_WORKDIR/$_hi_label"
@@ -294,6 +295,7 @@ function run_ssh_tests() {
       "$(printf '%s' "${_hi_img#*:}" | tr '+' ' ')" >"$_hi_ctx/Dockerfile"
     _hi_sshd_entrypoint "$_hi_ctx" /bin/sh
 
+    _HI_SSH_IMAGES+=("hi-sshtest-$_hi_label-$$")
     if _hi_build_image "$_hi_label" "hi-sshtest-$_hi_label-$$" "its fallback case" "$_hi_ctx"; then
       _hi_kv_set _HI_ALPINE_OK "$_hi_label" 1
     else
@@ -470,8 +472,9 @@ EOF
   # concurrent run on the same host mid-case. $_HI_SSHD_IMAGE is deliberately
   # *not* removed - it's shared with ssh_disconnect_test.sh so a full run
   # builds it once rather than twice.
-  docker image rm -f "hi-sshtest-alpine-$$" "hi-sshtest-alpine-zsh-$$" "hi-sshtest-alpine-fish-$$" \
-    "hi-sshtest-alpine-ksh-$$" \
+  # the alpine tags come from the build loop above, so a variant added there
+  # is cleaned up without a second list to remember
+  docker image rm -f "${_HI_SSH_IMAGES[@]}" \
     "hi-sshtest-bash32-$$" "hi-sshtest-debian-installed-$$" "hi-sshtest-debian-tmux-$$" >/dev/null 2>&1 || true
 
   _hi_suite_end "" \

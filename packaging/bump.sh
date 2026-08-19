@@ -13,7 +13,7 @@
 # nobody reviewed.
 set -euo pipefail
 
-# the locator, core.sh, and the shared primitives (sha256_of/b2_of/rewrite/
+# the locator, core.sh, and the shared primitives (sha256_of/b2_of/
 # pkgbuild_version) all come from lib.sh, found beside this script
 # shellcheck source=./lib.sh
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
@@ -122,12 +122,12 @@ function write_manifests() {
   _hi_cecho " b2     $b2" "$BLUE"
 
   _hi_h2 "Writing the manifests"
-  rewrite "$_HI_PKGBUILD" \
+  _hi_rewrite "$_HI_PKGBUILD" \
     "s/^pkgver=.*/pkgver=$_HI_VERSION/" \
     "s/^b2sums=.*/b2sums=('$b2')/"
   _hi_cecho " $_HI_PKGBUILD :)" "$GREEN"
 
-  rewrite "$_HI_FORMULA" \
+  _hi_rewrite "$_HI_FORMULA" \
     "s|^  url \".*\"|  url \"$_HI_URL_BASE/refs/tags/v$_HI_VERSION.tar.gz\"|" \
     "s/^  sha256 \".*\"/  sha256 \"$sha\"/"
   _hi_cecho " $_HI_FORMULA :)" "$GREEN"
@@ -146,7 +146,7 @@ function write_manifests() {
 # \([[:space:]]*\) capture keeps .SRCINFO's leading tab.
 function rewrite_srcinfo_lines() {
   local b2="$1"
-  rewrite "$_HI_SRCINFO" \
+  _hi_rewrite "$_HI_SRCINFO" \
     "s/^\\([[:space:]]*\\)pkgver = .*/\\1pkgver = $_HI_VERSION/" \
     "s|^\\([[:space:]]*\\)source = .*|\\1source = hi.d-$_HI_VERSION.tar.gz::$_HI_URL_BASE/v$_HI_VERSION.tar.gz|" \
     "s/^\\([[:space:]]*\\)b2sums = .*/\\1b2sums = $b2/"

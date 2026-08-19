@@ -40,9 +40,9 @@ function _hi_fake_rcs() {
   printf '%s\n' "$_HI_USER_LINE" >"$_HI_FAKE_HOME/.bashrc"
   printf '%s\n' "$_HI_USER_LINE" >"$_HI_FAKE_HOME/.zshrc"
   _HI_CONFIGS=(
-    "$_HI_FAKE_HOME/src.bashrc:$_HI_FAKE_HOME/.bashrc"
-    "$_HI_FAKE_HOME/src.zshrc:$_HI_FAKE_HOME/.zshrc"
-    "$_HI_FAKE_HOME/src.fishconf:$_HI_FAKE_HOME/.config/fish/config.fish"
+    "bash|$_HI_FAKE_HOME/src.bashrc|$_HI_FAKE_HOME/.bashrc"
+    "zsh|$_HI_FAKE_HOME/src.zshrc|$_HI_FAKE_HOME/.zshrc"
+    "fish|$_HI_FAKE_HOME/src.fishconf|$_HI_FAKE_HOME/.config/fish/config.fish"
   )
 }
 
@@ -52,7 +52,7 @@ function _hi_clean_all() {
 }
 
 function _hi_clean_only_root() {
-  local -a _HI_CONFIGS=("$_HI_WORKDIR/no.src:$_HI_WORKDIR/no.such.rc")
+  local -a _HI_CONFIGS=("bash|$_HI_WORKDIR/no.src|$_HI_WORKDIR/no.such.rc")
   _hi_clean_all "$@"
 }
 
@@ -130,9 +130,9 @@ function test_dead_graft_is_silent_in_fish() {
   local out
   _hi_fake_rcs deadfish
   mkdir -p "$_HI_FAKE_HOME/.config/fish"
-  # a source named *.fish, so the guard comes out in fish syntax
+  # the row's shell column is what selects fish's guard syntax
   printf 'not-a-command\n' >"$_HI_FAKE_HOME/src.rc.fish"
-  local -a _HI_CONFIGS=("$_HI_FAKE_HOME/src.rc.fish:$_HI_FAKE_HOME/.config/fish/config.fish")
+  local -a _HI_CONFIGS=("fish|$_HI_FAKE_HOME/src.rc.fish|$_HI_FAKE_HOME/.config/fish/config.fish")
   configure_files
   out="$(env -i HOME="$_HI_FAKE_HOME" TERM=dumb PATH="$PATH" \
     fish -c 'echo probe-ok' 2>&1)"

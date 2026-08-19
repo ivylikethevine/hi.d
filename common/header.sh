@@ -12,11 +12,9 @@ function header_row() {
   printf '%b\n' "$out$NC"
 }
 
-# hi's own version for the header, resolved once per shell (the row is printed
-# twice a session, at connect and at disconnect). core.sh's ladder answers -
-# stamp, else git describe - and only a stampless, gitless install falls
-# through to "unknown"; the header shows the bare word where `hi --version`
-# spells out which half was missing.
+# hi's version for the header, resolved once per shell (the row prints twice a
+# session). core.sh's ladder answers; only a stampless, gitless install falls
+# through to the bare "unknown" that `hi --version` spells out in full.
 function _hi_header_version() {
   if [ -z "${_HI_HEADER_VERSION+x}" ]; then
     _hi_sanitize_var _HI_HEADER_VERSION "$(_hi_release_or_describe)"
@@ -25,8 +23,7 @@ function _hi_header_version() {
   printf '%s\n' "$_HI_HEADER_VERSION"
 }
 
-# UTC | version | local: the version sits between the two clocks, and carries
-# no "hi.d" of its own - the banner above it already says whose header this is
+# UTC | version | local: no "hi.d" label - the banner above already says whose
 function timestamp() {
   header_row "$BRBLUE$(date -u "$_HI_HUMAN_CENTRIC_DATE") " \
     "$GREEN$(_hi_header_version)" \
@@ -35,8 +32,7 @@ function timestamp() {
 
 function system_info() {
   local kernel arch os cpus ram base_mhz boost_mhz
-  # process substitution, not a here-string: <<< is a real temp file on bash
-  # before 5.1, which is every macOS client and most targets
+  # process substitution, not <<<: a here-string is a temp file before bash 5.1
   read -r kernel arch < <(uname -sm)
   _hi_sanitize_var kernel "$kernel"
   _hi_sanitize_var arch "$arch"
@@ -47,34 +43,29 @@ function system_info() {
   if [ -f "$_HI_LINUX_RELEASE" ]; then
     # also covers WSL - it's a real Linux kernel with its own /etc/os-release
     os=$(awk -F= '$1 == "PRETTY_NAME" { gsub(/"/, "", $2); print $2 }' "$_HI_LINUX_RELEASE")
-    # every probe ends in `|| true`: a stripped-down target (no procps, no
-    # lscpu) falls through to "?" instead of aborting under set -e
+    # every probe ends in `|| true`: a stripped-down target falls through to
+    # "?" instead of aborting under set -e
     cpus=$(nproc 2>/dev/null || true)
     # straight at the file free(1) itself reads, rather than free | awk
     ram=$(awk '/^MemTotal:/ { printf "%.0fG", $2 / 1048576 }' /proc/meminfo 2>/dev/null || true)
-    # base clock: try the model name first (eg "... @ 2.80GHz") - AMD chips (Ryzen/EPYC) don't
-    # print one, so fall back to cpufreq's base_frequency (Intel P-State / amd-pstate only)
+    # base clock from the model name (eg "... @ 2.80GHz"); AMD chips print none,
+    # so fall back to cpufreq's base_frequency (Intel P-State / amd-pstate only)
     base_mhz=$(awk -F'@ *' '/model name/ && NF>1 { gsub(/GHz.*/, "", $2); printf "%.0f", $2 * 1000; exit }' /proc/cpuinfo 2>/dev/null || true)
-    # `read < file`, not $(cat file): the redirect fails silently on a missing
-    # file and read is a builtin, so a miss costs no fork
-    local khz=0
-    if [ -z "$base_mhz" ] && [ -f "$base_freq_path" ]; then
-      read -r khz <"$base_freq_path" 2>/dev/null || khz=0
+    # `read < file`, not $(cat file): a miss fails silently and costs no fork.
+    # The second path is amd-pstate-epp, which publishes neither of the others;
+    # lowest_nonlinear_freq is the driver's floor rather than the rated base
+    # clock, but it beats "?".
+    local khz=0 freq_path
+    for freq_path in "$base_freq_path" "$amd_floor_path"; do
+      [ -n "$base_mhz" ] && break
+      [ -f "$freq_path" ] || continue
+      read -r khz <"$freq_path" 2>/dev/null || khz=0
       base_mhz=$((khz / 1000))
       ((base_mhz)) || base_mhz=""
-    fi
-    # amd-pstate-epp (the "active" AMD driver on recent kernels/CPUs) publishes
-    # neither of the above - lowest_nonlinear_freq isn't the rated base clock,
-    # just the lowest floor the driver will request, but it beats a bare "?"
-    if [ -z "$base_mhz" ] && [ -f "$amd_floor_path" ]; then
-      read -r khz <"$amd_floor_path" 2>/dev/null || khz=0
-      base_mhz=$((khz / 1000))
-      ((base_mhz)) || base_mhz=""
-    fi
-    # boost/max clock: cpufreq first (works for any driver that exposes it), falling back to lscpu.
-    # khz is reset first: the two base-clock probes above leave their reading in
-    # it, so a host with base_frequency but no cpuinfo_max_freq used to report
-    # the base clock as its own boost ("CPU: 3000/3000") and never reach lscpu.
+    done
+    # boost/max clock: cpufreq first, else lscpu. khz is reset because the base
+    # probes above leave their reading in it - a host with base_frequency but no
+    # cpuinfo_max_freq would report its base clock as its own boost.
     khz=0
     if [ -f "$max_freq_path" ] && [ -f "$scaling_freq_path" ]; then
       read -r khz <"$scaling_freq_path" 2>/dev/null || khz=0
@@ -102,9 +93,8 @@ function system_info() {
   local freq_unit="MHz"
   if [ "${_HI_HEADER_GHZ:-0}" = 1 ]; then
     freq_unit="GHz"
-    # whole MHz -> x.x GHz with printf, not an awk fork apiece. Rounded to
-    # tenths *before* splitting, so a carry lands properly: 2950 -> 3.0, not
-    # the "2.10" a bare remainder would print.
+    # MHz -> x.x GHz with printf, not an awk fork apiece; rounded to tenths
+    # *before* splitting so a carry lands properly (2950 -> 3.0, not "2.10")
     local ghz_tenths
     [ -n "$base_mhz" ] && {
       ghz_tenths=$(((base_mhz + 50) / 100))
@@ -119,16 +109,15 @@ function system_info() {
     "${CYAN}RAM: ${ram:-?}" "${BRBLUE}CPU: ${base_mhz:-?}/${boost_mhz:-?} $freq_unit"
 }
 
-# identity()'s backend probes are independent and each is capped at
-# $_HI_PROBE_TIMEOUT, so run in turn a host with three wedged daemons makes
-# the user wait the *sum* of the ceilings at connect; started together it is
-# the longest of them. Files, not process substitutions, because the probes
-# are wanted for their output and one substitution each is back to waiting on
-# each in turn. `wait <pid>` and never `wait -n`: macOS ships bash 3.2.
+# identity()'s backend probes are independent and each capped at
+# $_HI_PROBE_TIMEOUT: run in turn, three wedged daemons cost the *sum* of the
+# ceilings; started together, the longest. Files rather than process
+# substitutions, which would be back to waiting on each in turn.
+# `wait <pid>` and never `wait -n`: macOS ships bash 3.2.
 declare -a _HI_PROBE_PIDS=()
 
-# _hi_probe_start <file> <cmd...> - one probe into <file>, backgrounded;
-# 2>/dev/null so a downed daemon reports to itself, not into the header
+# one probe into <file>, backgrounded; 2>/dev/null so a downed daemon
+# reports to itself, not into the header
 function _hi_probe_start() {
   local out="$1"
   shift
@@ -143,16 +132,14 @@ function _hi_probe_wait() {
   _HI_PROBE_PIDS=()
 }
 
-# Where _hi_probe_launch drops its output for identity() to read; empty until
-# something is actually launched, so a host answering none of the three pays
-# no mktemp and no rm at all.
+# Where _hi_probe_launch drops its output; empty until something is launched,
+# so a host answering none of the three pays no mktemp and no rm.
 _HI_PROBE_DIR=""
 
-# _hi_probe_launch - start whichever of the three backends this host can
-# answer, all at once. Split out of identity() so hi_header can start them
-# before the rows that cost no wall clock: these probes are the only part of
-# the header bounded by $_HI_PROBE_TIMEOUT, and the timestamp/sysinfo/packages
-# rows now run in their shadow rather than ahead of them.
+# Start whichever of the three backends this host can answer, all at once.
+# Split out of identity() so hi_header can start them first: they are the only
+# part of the header bounded by $_HI_PROBE_TIMEOUT, and the other rows then
+# run in their shadow rather than ahead of them.
 function _hi_probe_launch() {
   local container_bin nomad=0 kube=0
   # idempotent: hi_header starts these early, and identity() calls it too so a
@@ -165,18 +152,15 @@ function _hi_probe_launch() {
   _HI_PROBE_DIR="$(mktemp -d -t hi.probes.XXXXXX)"
   [ -n "$container_bin" ] && _hi_probe_start "$_HI_PROBE_DIR/containers" _hi_probe "$container_bin" container ls -q
   ((nomad)) && _hi_probe_start "$_HI_PROBE_DIR/nomad" _hi_probe nomad job status
-  # kube is a target hi can connect to (hi.sh's _hi_is_k8s_pod), so it belongs
-  # on the same count line as the other two - counted through targets.sh,
-  # whose list_kube owns the "which pods count as reachable" rule (and brings
-  # its probe timeout along). docker/nomad stay direct on purpose: their
-  # counts answer different questions than the completion listers do.
+  # kube counts through targets.sh, whose list_kube owns the "which pods count
+  # as reachable" rule (and brings its own probe timeout). docker/nomad stay
+  # direct: their counts answer a different question than the listers do.
   ((kube)) && _hi_probe_start "$_HI_PROBE_DIR/kube" sh "$_HI_TARGETS" kube
   return 0
 }
 
-# git identity (domain masked), containers/jobs/pods, ssh key counts - all
-# through _hi_probe: the user is waiting, a dead daemon must not hang this.
-# Reads what _hi_probe_launch started; calls it itself if nobody did.
+# git identity (domain masked), containers/jobs/pods, ssh key counts. Reads
+# what _hi_probe_launch started; calls it itself if nobody did.
 function identity() {
   local email="" domain user_part bullets containers="No docker/podman :(" jobs="" pods="" authorized=0 public=0
   local -a lines cells
@@ -193,11 +177,9 @@ function identity() {
   _hi_probe_launch
   _hi_probe_wait
 
-  # A host answering none of the three made no temp dir, so there is nothing to
-  # read and nothing to remove. Below it, the probe file's existence *is* the
-  # answer to "can this host answer at all" - _hi_probe_start creates it before
-  # backgrounding and the wait is done - so no second set of flags is tracked
-  # alongside the files that already say so.
+  # No temp dir means nothing to read or remove. Below it the probe file's
+  # existence *is* the answer - _hi_probe_start creates it before backgrounding
+  # and the wait is done - so no flags are tracked beside the files.
   if [ -n "$_HI_PROBE_DIR" ]; then
     if [ -f "$_HI_PROBE_DIR/containers" ]; then
       _hi_read_lines lines <"$_HI_PROBE_DIR/containers"
@@ -224,27 +206,26 @@ function identity() {
   header_row "${cells[@]}"
 }
 
-# "~~~ <label> [host] ~~~", prefixed with hi.d's local change count
-# this whole line is always _HI_MAX_WIDTH columns, regardless of other factors
+# "~~~ <label> [host] ~~~" prefixed with hi.d's local change count, always
+# _HI_MAX_WIDTH columns wide
 function banner() {
   [[ "${_HI_HEADER_BANNER:-1}" == 0 ]] && return 0
   local label="$1" color="${2:-$BRGREEN}" changes="" prefix="${3:-}" changes_w=0
-  # banner runs twice a session for a count that cannot change between;
-  # ~10ms of `git status` computed once and kept
+  # twice a session for a count that cannot change between: ~10ms of
+  # `git status`, computed once and kept
   if [ -d "$_HI_ROOT/.git" ]; then
     if [ -z "${_HI_BANNER_CHANGES+x}" ]; then
       local -a lines
       _hi_read_lines lines < <(git -C "$_HI_ROOT" status --short 2>/dev/null)
       _HI_BANNER_CHANGES="${#lines[@]}"
-      # memoized beside the count; symbolic-ref is empty on detached HEAD and
-      # main is blanked, so only an unusual branch earns a callout
+      # symbolic-ref is empty on detached HEAD and main is blanked, so only
+      # an unusual branch earns a callout
       _hi_sanitize_var _HI_BANNER_BRANCH \
         "$(git -C "$_HI_ROOT" symbolic-ref --short -q HEAD 2>/dev/null || true)"
       [ "$_HI_BANNER_BRANCH" = main ] && _HI_BANNER_BRANCH=""
     fi
     changes="$BRYELLOW$_HI_BANNER_CHANGES $_HI_GLYPH_AHEAD "
-    # columns counted, not ${#}-measured (GLOSSARY: bytes vs columns):
-    # digits + "␣↑␣", with the glyph (↑ or its ASCII ^) one column wide
+    # columns, not ${#} bytes (GLOSSARY: bytes vs columns): digits + "␣↑␣"
     changes_w=$((${#_HI_BANNER_CHANGES} + 3))
     # the Online (local) banner only: a remote session's Connected banner
     # describes the target, and the disconnect banner stays as-is
@@ -254,8 +235,7 @@ function banner() {
     fi
   fi
   local host tildes start_len end_len start_tildes end_tildes width left core
-  # memoized beside the git state above, and for the same reason: two forks a
-  # banner for a name that cannot change under a running shell
+  # memoized for the same reason: two forks a banner for a fixed name
   [ -n "${_HI_BANNER_HOST+x}" ] || _hi_sanitize_var _HI_BANNER_HOST "$(_hi_hostname)"
   host="$_HI_BANNER_HOST"
   width=${_HI_MAX_WIDTH:-80}
@@ -276,9 +256,8 @@ function banner() {
 function hi_header() {
   [[ "${_HI_DISABLE_HEADER:-0}" == 1 ]] && return 0
   banner "$@"
-  # started before the rows that cost only forks, so their ~30ms runs inside
-  # the probes' wall clock instead of in front of it; same toggle, so a hidden
-  # identity row still starts nothing
+  # ahead of the fork-only rows, so their ~30ms runs inside the probes' wall
+  # clock; same toggle, so a hidden identity row still starts nothing
   [[ "${_HI_HEADER_IDENTITY:-1}" == 0 ]] || _hi_probe_launch
   [[ "${_HI_HEADER_TIMESTAMP:-1}" == 0 ]] || timestamp
   [[ "${_HI_HEADER_SYSINFO:-1}" == 0 ]] || system_info
@@ -287,9 +266,8 @@ function hi_header() {
 }
 
 # --- the packages check -----------------------------------------------------
-# Reads misc/packages and prints which of them are installed, sorting by priority.
-
-# priority, lowest to highest (more can be added)
+# Reads misc/packages and prints which are installed, sorted by priority,
+# lowest to highest (more can be added)
 # 0 nice-to-haves (netstat, distro tools)
 # 1 second line (git, curl, ping)
 # 2 first line (sed, awk, bc)
@@ -299,15 +277,13 @@ function hi_header() {
 _HI_YES=("$BRBLUE" "$BRBLUE" hide "$GREEN" "$BRGREEN" "$BRGREEN")
 _HI_NO=(hide "$BRYELLOW" "$YELLOW" hide hide "$BRRED")
 
-# The marks themselves (_HI_MARK_OK/_ALT/_NO) live in core.sh's
-# _hi_choose_glyphs, beside the rest of the glyph set and its ASCII fallback.
-
-# For each "cmd:priority[,...]": the highest-priority installed package (or
-# the first, if none), colored and marked installed/missing/hidden per above
+# For each "cmd:priority[,...]": the highest-priority installed package (or the
+# first, if none), colored and marked per above. The marks themselves live in
+# core.sh's _hi_choose_glyphs, beside the rest of the glyph set.
 function check_line() {
   local pair cmd priority color best best_priority best_idx=0 idx=0 found=0 symbol rendered
-  # word-split on the local IFS rather than `read -ra <<<`, whose here-string is
-  # a pipe (or temp file on bash < 5.1) per package line - ~30 per header
+  # word-split on the local IFS, not `read -ra <<<`: that here-string is a pipe
+  # (temp file before bash 5.1) per package line, ~30 a header
   local IFS=','
   # shellcheck disable=SC2206 # deliberate split on IFS; the file has no globs
   local -a pairs=($1)
@@ -340,8 +316,8 @@ function check_line() {
     symbol="$RED$_HI_MARK_NO" mark_w="$_HI_MARK_NO_W"
   fi
   rendered="$color $best $symbol"
-  # 4 = the "| " lead plus the spaces around the item; the mark's own column
-  # width comes from the chosen set (the ASCII "ok" is two columns, ✓ is one)
+  # 4 = the "| " lead plus the spaces around the item; the mark's width comes
+  # from the chosen set (ASCII "ok" is two columns, ✓ is one)
   [[ "$color" == hide ]] || visible+=("$best_priority"$'\x1f'"$((${#best} + 4 + mark_w))"$'\x1f'"$rendered")
 }
 
@@ -355,7 +331,7 @@ function full_check() {
   ((${#visible[@]})) || return 0
 
   # GLOSSARY: LC_ALL=C sort - numeric key over opaque bytes; unpinned, BSD
-  # sort under UTF-8 printed *nothing* and the whole check rendered empty.
+  # sort under UTF-8 printed nothing and the check rendered empty.
   while IFS=$'\x1f' read -r priority width_item rendered; do
     if ((count == 0)) || ((width + width_item > ${_HI_MAX_WIDTH:-80})); then # start of a row
       ((count == 0)) || printf '\n'

@@ -15,8 +15,8 @@ else
   run_backend() { "$@"; }
 fi
 
-# Everything below the first line of $1, fork-free - faster than a `tail` exec
-# at this size, and it keeps the cache working on a PATH with no coreutils.
+# Everything below the first line of $1, fork-free: faster than a `tail` exec
+# at this size, and the cache keeps working on a PATH with no coreutils.
 cache_body() {
   _hi_first=1
   while IFS= read -r _hi_line || [ -n "$_hi_line" ]; do
@@ -28,8 +28,8 @@ cache_body() {
   done <"$1"
 }
 
-# emit_backend <label> <bin> <lister...> - kind gate + presence check +
-# timeout wrap. Listers go through "$@" (hence SC2329).
+# emit_backend <label> <bin> <lister...> - kind gate, presence check, timeout
+# wrap. Listers go through "$@" (hence SC2329).
 # shellcheck disable=SC2329
 emit_backend() {
   label="$1" bin="$2"
@@ -60,8 +60,8 @@ emit_targets() {
 # The listers, each reached indirectly through emit_backend's "$@".
 # shellcheck disable=SC2329
 
-# docker and podman are one call (drop-in CLIs); the tag rides a `sed` over
-# the result, so it holds whatever the backend does with --format
+# docker and podman are one call (drop-in CLIs); the tag rides a `sed` over the
+# result, so it holds whatever the backend does with --format
 list_ps() {
   run_backend "$1" ps --format '{{.Names}}' 2>/dev/null | sed "s/\$/	$1/"
 }
@@ -87,13 +87,13 @@ if [ "$ttl" -le 0 ]; then
   exit 0
 fi
 
-# $XDG_RUNTIME_DIR is per-user and 0700 where it exists; the fallback makes its
-# own private directory rather than a predictable name in a shared /tmp.
+# $XDG_RUNTIME_DIR is per-user and 0700 where it exists; the fallback makes a
+# private directory of its own, not a predictable name in a shared /tmp.
 cache_dir="${XDG_RUNTIME_DIR:-}"
 if [ -z "$cache_dir" ] || [ ! -d "$cache_dir" ]; then
   cache_dir="${TMPDIR:-/tmp}/hi-$(id -u 2>/dev/null || echo unknown)"
-  # only on the first TAB - mkdir+chmod otherwise cost two execs per completion
-  # on any host without $XDG_RUNTIME_DIR (macOS, most containers)
+  # first TAB only: otherwise two execs per completion on any host without
+  # $XDG_RUNTIME_DIR (macOS, most containers)
   [ -d "$cache_dir" ] || {
     mkdir -p "$cache_dir" 2>/dev/null && chmod 700 "$cache_dir" 2>/dev/null
   }
@@ -101,11 +101,11 @@ fi
 cache="$cache_dir/hi.targets.$kind"
 now="$(date +%s 2>/dev/null || echo 0)"
 
-# The timestamp is the cache's first line, not the file's mtime: every portable
-# way to read an mtime in seconds is a GNU `find`/`stat` extension.
+# The timestamp is the cache's first line, not the mtime: every portable way to
+# read an mtime in seconds is a GNU `find`/`stat` extension.
 if [ -f "$cache" ] && [ -r "$cache" ]; then
-  # `read < file`, not $(head -n1): this is the cache-*hit* path, where the
-  # subshell+exec was most of the cost.
+  # `read < file`, not $(head -n1): on the cache-*hit* path the subshell+exec
+  # was most of the cost
   IFS= read -r stamp <"$cache" 2>/dev/null || stamp=""
   case "$stamp" in
   '' | *[!0-9]*) ;; # not a timestamp - treat as a miss and rewrite it
@@ -119,7 +119,7 @@ if [ -f "$cache" ] && [ -r "$cache" ]; then
 fi
 
 # Swept once, then temp-file-and-mv so a mid-refresh reader sees old or new,
-# never half; a cache that can't be written is not an error - answer anyway.
+# never half. A cache that can't be written is not an error - answer anyway.
 out="$(emit_targets)"
 tmp="$cache.$$"
 if {

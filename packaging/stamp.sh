@@ -47,8 +47,30 @@ _HI_OPTS='--version:_HI_VERSION:a value
 while [ $# -gt 0 ]; do
   _hi_opt=""
   case "$1" in
-  --version | --date | --root | --launcher | --man)
-    _hi_opt="$(printf '%s\n' "$_HI_OPTS" | grep "^$1:")"
+  -h | --help)
+    echo "$_HI_USAGE"
+    exit 0
+    ;;
+  *)
+    # The table is the list of flags that take a value, so their names are
+    # spelled there and nowhere else - a `case` arm repeating them is the
+    # second home that goes stale. A literal prefix match, not `grep "^$1:"`:
+    # that reads the argument as a regex (`--.*` would match a real row) and
+    # costs a fork besides.
+    while IFS= read -r _hi_row; do
+      case "$_hi_row" in "$1":*)
+        _hi_opt="$_hi_row"
+        break
+        ;;
+      esac
+    done <<EOF
+$_HI_OPTS
+EOF
+    [ -n "$_hi_opt" ] || {
+      echo "stamp.sh: unknown argument: $1" >&2
+      echo "$_HI_USAGE" >&2
+      exit 1
+    }
     _hi_var="${_hi_opt#*:}"
     _hi_noun="${_hi_var#*:}"
     _hi_var="${_hi_var%%:*}"
@@ -59,19 +81,10 @@ while [ $# -gt 0 ]; do
     eval "$_hi_var=\$2"
     shift
     ;;
-  -h | --help)
-    echo "$_HI_USAGE"
-    exit 0
-    ;;
-  *)
-    echo "stamp.sh: unknown argument: $1" >&2
-    echo "$_HI_USAGE" >&2
-    exit 1
-    ;;
   esac
   shift
 done
-unset _hi_opt _hi_var _hi_noun
+unset _hi_opt _hi_row _hi_var _hi_noun
 
 [ -n "$_HI_VERSION" ] || {
   echo "stamp.sh: --version is required" >&2

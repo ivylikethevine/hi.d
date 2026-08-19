@@ -22,8 +22,8 @@ function _hi_restore_profile() {
 
 set -euo pipefail
 
-# only hi's remote paths chainload this file - it is how common/paths.sh
-# tells "reached via hi" from "the machine hi.d lives on"
+# only hi's remote paths chainload this file - how common/paths.sh tells
+# "reached via hi" from "the machine hi.d lives on"
 export _HI_REMOTE_SESSION=1
 
 # shellcheck source=./common/core.sh
@@ -35,30 +35,34 @@ _HI_CONFIG_START="# hi-config-start"
 _HI_CONFIG_END="# hi-config-end"
 
 # rc file <- hi config; fish only when installed (no config dir otherwise).
-# The pairs come from core.sh's _HI_SHELL_TABLE, filtered to the rows flagged
-# `graft` - the same roster scripts/install.sh reads for its local half
+# "<shell>|<hi's rc>|<the user's rc>", from core.sh's _HI_SHELL_TABLE rows
+# flagged `graft` - the same roster scripts/install.sh reads for its local
+# half. The shell name is carried, not re-derived from the rc's suffix: it is
+# what picks the guard dialect below, and a graft whose rc is not named
+# *.fish would otherwise get sh syntax appended to a real fish config.
 _HI_CONFIGS=()
 while IFS='|' read -r _hi_shell _hi_label _hi_tree_rc _hi_home_rc _hi_check _hi_flags; do
-  _HI_CONFIGS+=("$_hi_tree_rc:$_hi_home_rc")
+  _HI_CONFIGS+=("$_hi_shell|$_hi_tree_rc|$_hi_home_rc")
 done < <(_hi_shell_rows graft)
 unset _hi_shell _hi_label _hi_tree_rc _hi_home_rc _hi_check _hi_flags
 
 function configure_files() {
-  local pair target src open body
-  for pair in "${_HI_CONFIGS[@]}"; do
-    target="${pair#*:}"
-    src="${pair%:*}"
+  local row shell target src open body
+  for row in "${_HI_CONFIGS[@]}"; do
+    shell="${row%%|*}"
+    src="${row#*|}"
+    src="${src%|*}"
+    target="${row##*|}"
     [ -d "${target%/*}" ] || continue # targets are absolute; no dirname fork
-    # `: >>` creates without truncating and without exec'ing touch; `$(<f)`
-    # is the builtin read, where `grep -q` was a second exec. Both ran per rc
-    # file on every connect, and a repeat connect pays them only to `continue`.
-    # $(<f) slurps where grep short-circuits - fine for an rc file.
+    # `: >>` creates without truncating or exec'ing touch, and `$(<f)` is the
+    # builtin read where `grep -q` was a second exec - both ran per rc file on
+    # every connect. $(<f) slurps where grep short-circuits: fine for an rc.
     : >>"$target"
     case "$(<"$target")" in *"$_HI_CONFIG_START"*) continue ;; esac
     # GLOSSARY: graft crash guard - why every graft wraps
     # shellcheck disable=SC2016 # single quotes are the point: the guard expands at shell start, not graft time
-    case "$src" in
-    *.fish)
+    case "$shell" in
+    fish)
       open='set -l _hi_tree $HOME'$'\n''test -n "$_HI_HOME"; and set _hi_tree $_HI_HOME'$'\n''if test -f $_hi_tree/hi.d/common/core.sh'
       body="$open"$'\n'"$(<"$src")"$'\n'"end"
       ;;
@@ -72,19 +76,18 @@ function configure_files() {
 }
 
 function clean_all() {
-  local pair target pattern
-  for pair in "${_HI_CONFIGS[@]}"; do
-    target="${pair#*:}"
+  local row target pattern
+  for row in "${_HI_CONFIGS[@]}"; do
+    target="${row##*|}"
     [ -f "$target" ] || continue
     if grep -q "^$_HI_CONFIG_END" "$target"; then
       pattern="/^$_HI_CONFIG_START/,/^$_HI_CONFIG_END/d"
     else
       pattern="/^$_HI_CONFIG_START/d"
     fi
-    # core.sh's _hi_rewrite, not `sed -i`: its flag differs BSD/GNU (this used
-    # to sniff /etc/os-release to guess which), and -i would replace a
-    # symlinked rc with a regular file - the opposite of what configure_files
-    # did when it appended these lines through that same link
+    # core.sh's _hi_rewrite, not `sed -i`: the flag differs BSD/GNU, and -i
+    # would replace a symlinked rc with a regular file - the opposite of what
+    # configure_files did appending through that same link
     _hi_rewrite "$target" "$pattern"
   done
   [ -n "${_HI_CLEANUP:-}" ] && rm -rf "$_HI_ROOT"
@@ -101,12 +104,11 @@ function _hi_login_shell() {
   printf '%s' "${shell##*/}"
 }
 
-# The default tail is core.sh's $_HI_SHELL_TREE, not a literal of its own: the
-# case below is the allow list, so the tree's bash-less tiers (mksh, ksh, dash,
-# ash, sh) fall through it unmatched - they are reachable only where bash is
-# absent, and this file is bash. What survives is fish > zsh > bash, which is
-# what $_HI_SHELL_PREFERENCE's documented default has always meant.
-# GLOSSARY: session-shell ranking - why login leads the default
+# The default tail is core.sh's $_HI_SHELL_TREE, not a literal of its own. The
+# case below is the allow list, so the tree's bash-less tiers fall through it
+# unmatched - they are reachable only where bash is absent, and this file is
+# bash. What survives is fish > zsh > bash, $_HI_SHELL_PREFERENCE's documented
+# default. GLOSSARY: session-shell ranking - why login leads the default
 function _hi_session_shell() {
   local want
   for want in ${_HI_SHELL_PREFERENCE:-login} $_HI_SHELL_TREE; do
@@ -122,8 +124,8 @@ function _hi_session_shell() {
 }
 
 # True when this session should run inside a named tmux (`hi --tmux` /
-# _HI_TMUX_ATTACH=1). Both refusals print and carry on: a disposable tree
-# would outlive a detached tmux, and the client can't know if tmux exists.
+# _HI_TMUX_ATTACH=1). Both refusals print and carry on: a disposable tree would
+# outlive a detached tmux, and the client can't know whether tmux exists.
 function _hi_tmux_wanted() {
   [ "${_HI_TMUX_ATTACH:-0}" = 1 ] || return 1
   if [ -n "${_HI_CLEANUP:-}" ]; then
@@ -168,8 +170,8 @@ function load() {
   # the header above is our greeting
   [ "$shell" = fish ] && shell_cmd=(fish -C "set fish_greeting ''" -i)
   if _hi_tmux_wanted; then
-    # -A: attach-or-create, the answer that never loses work; separate args so
-    # fish's -C survives unquoted. GLOSSARY: tmux server-start rules
+    # -A: attach-or-create, which never loses work; separate args so fish's -C
+    # survives unquoted. GLOSSARY: tmux server-start rules
     tmux -f "$_HI_TMUXCONF" new-session -A -s "${_HI_TMUX_SESSION:-hi}" \
       "${shell_cmd[@]}" || shell_ec=$?
   else

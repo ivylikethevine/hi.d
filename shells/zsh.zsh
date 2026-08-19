@@ -5,8 +5,8 @@ source "${_HI_HOME:-$HOME}/hi.d/common/core.sh"
 source "$_HI_GIT_PROMPT"
 source "$_HI_ALIASES"
 
-# NOT setopt KSH_ARRAYS: it is global, hi's block runs *after* oh-my-zsh's,
-# and their code assumes zsh's 1-based arrays - core.sh counts instead.
+# NOT setopt KSH_ARRAYS: it is global, hi's block runs after oh-my-zsh's, and
+# their code assumes zsh's 1-based arrays - core.sh counts instead.
 setopt prompt_subst
 
 _hi_interactive_extras
@@ -17,13 +17,12 @@ if [[ "${_HI_DISABLE_PROMPT:-0}" != 1 ]]; then
     eval "$(starship init zsh)"
   else
     _hi_prime_identity
-    # git info through a precmd out-var reference, never a $( ) in PS1: the
-    # same fork-free, pw3nage-safe form bash.sh's ps1() uses (prompt_subst
-    # expands the reference at render time)
+    # git info through a precmd out-var reference, never a $( ) in PS1 - the
+    # fork-free, pw3nage-safe form bash.sh's ps1() uses
     __hi_git_precmd() { _hi_git_prompt __hi_git_info; }
     precmd_functions+=(__hi_git_precmd)
-    # concatenated onto the $'...' strings, not interpolated - those stay
-    # literal so zsh's prompt expansion happens at render time, not assignment
+    # concatenated onto the $'...' strings, not interpolated, so zsh's prompt
+    # expansion happens at render time rather than at assignment
     HI_PS1_END="$(_hi_prompt_end ZSH)"
     if _hi_has_color; then
       export CLICOLOR=1
@@ -43,12 +42,12 @@ fi
 # completion: `hi` from the shared target list, `exa` the same way as `eza`
 zmodload zsh/complist
 autoload -Uz compinit promptinit
-# bare `compinit` costs 50-150ms per start; full check once a day, -C in
-# between. (#qN.mh+24): N tolerates a missing dump, .mh+24 = older than 24h.
+# bare `compinit` costs 50-150ms a start; full check once a day, -C between.
+# (#qN.mh+24): N tolerates a missing dump, .mh+24 = older than 24h.
 if [[ -n ${ZDOTDIR:-$HOME}/.zcompdump(#qN.mh+24) ]]; then
   compinit
-  # compinit leaves an unchanged dump's mtime alone, which would make this
-  # branch permanent once the dump turns a day old - touch restarts the clock
+  # compinit leaves an unchanged dump's mtime alone, making this branch
+  # permanent once the dump turns a day old - touch restarts the clock
   touch "${ZDOTDIR:-$HOME}/.zcompdump" 2>/dev/null || true
 else
   compinit -C
@@ -75,10 +74,9 @@ _hi() {
   compadd -d _HI_TARGET_DESCS -a _HI_TARGET_ROWS
 }
 compdef _hi hi
-# only when something actually completes `eza` - compdef's service form errors
-# out ("unknown command or service: eza") when the right-hand side has no
-# binding, which is every shell where eza isn't installed. _comps is compinit's
-# own command -> completion map, so this asks the question without a fork.
+# only when something actually completes `eza`: compdef's service form errors
+# out when the right-hand side has no binding, which is every shell without
+# eza. _comps is compinit's own command -> completion map, so no fork.
 (( ${+_comps[eza]} )) && compdef exa=eza
 # === end required configuration ===
 
@@ -109,8 +107,8 @@ if [[ "${_HI_DISABLE_PERSONAL:-0}" != 1 ]]; then
   zstyle ':completion:*' verbose yes
   zstyle ':completion:*' use-cache on
   zstyle ':completion:*' rehash true
-  # XDG_CACHE_HOME is unset on most targets, which would leave this pointing at
-  # an unwritable /zsh/.zcompcache - fall back to the spec's own default
+  # XDG_CACHE_HOME is unset on most targets, leaving this at an unwritable
+  # /zsh/.zcompcache - fall back to the spec's own default
   zstyle ':completion:*' cache-path "${XDG_CACHE_HOME:-$HOME/.cache}/zsh/.zcompcache"
   zstyle ':completion:*' squeeze-slashes true
   zstyle ':completion:*' complete-options true

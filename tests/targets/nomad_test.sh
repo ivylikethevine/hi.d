@@ -23,12 +23,13 @@ source "${_HI_HOME:-$HOME}/hi.d/common/core.sh"
 source "$_HI_TEST_LIB"
 
 _HI_NOMAD_PID=""
-declare -a _HI_JOBS=()
 
 function _hi_nomad_cleanup() {
   local j
-  for j in "${_HI_JOBS[@]:-}"; do
-    [ -n "$j" ] && nomad job stop -purge "$j" >/dev/null 2>&1 || true
+  # the harness ledger, not a shell array: it is file-backed, so a job
+  # registered inside a background case survives the subshell that ran it
+  for j in $(_hi_ledger_rows job); do
+    nomad job stop -purge "$j" >/dev/null 2>&1 || true
   done
   if [ -n "$_HI_NOMAD_PID" ] && kill -0 "$_HI_NOMAD_PID" 2>/dev/null; then
     kill "$_HI_NOMAD_PID" 2>/dev/null
@@ -85,7 +86,7 @@ EOF
     _hi_cecho " | failed to submit job (see $_HI_WORKDIR/$label.run.log)" "$RED"
     return 1
   fi
-  _HI_JOBS+=("$job")
+  _hi_ledger job "$job"
   _hi_cecho " | Job: $job (image: $image)"
 
   if ! alloc="$(_hi_poll_value 80 0.25 _hi_first_running_alloc "$job")"; then
@@ -139,12 +140,10 @@ EOF
 
   _hi_pty_stdin force "no python3 to give the launcher its own pty - nomad alloc exec's attach may not get a real pty, results may be unreliable"
 
-  # Serial on purpose, and said out loud by _hi_par_begin: this suite's jobs are
-  # tracked in the $_HI_JOBS shell array that _hi_nomad_cleanup purges, and an
-  # append inside a background case would die with it - the one fixture here
-  # that is not case-scoped. Two cases against a single-node dev agent were
-  # worth ~3s of a 348s run anyway; the ssh, framework and container suites are
-  # where the wall clock actually is.
+  # Serial on purpose, and said out loud by _hi_par_begin: two cases against a
+  # single-node dev agent were worth ~3s of a 348s run, and the ssh, framework
+  # and container suites are where the wall clock actually is. (Job teardown is
+  # no longer a reason - that moved to the ledger, which is subshell-safe.)
   export _HI_PAR_WIDTH=1
   _hi_backend_pair_cases nomad "driver shape"
 }

@@ -1,29 +1,26 @@
 #!/bin/sh
-# Shared by bash, zsh AND fish, so this file must stay to the subset all three
+# Shared by bash, zsh AND fish, so this file must stay in the subset all three
 # parse: `alias`, `export`, `&&` chains - no if/then/fi, no $(...) conditionals.
 # shellcheck disable=SC2139 # aliases are meant to expand $_HI_* now, not later
 # shellcheck disable=SC2155
 # shellcheck disable=SC2089 # the *_OPTS quotes are literal alias text; the overlay source below makes the linter guess otherwise
-# GLOSSARY: command -v fallthrough - first-installed wins; reorder to taste
-# This file is an example of my personal setup. Feel free to change it to suit
-# your needs, but only in the POSIX+fish subset above.
+# GLOSSARY: command -v fallthrough - first-installed wins; reorder to taste.
+# An example of my personal setup: change it freely, but stay in the subset.
 
 # Backstop toggle defaults, in an eval gated on a builtin fish lacks; `-` not
-# `:-` so intentional empties survive. GLOSSARY: toggle defaulting
+# `:-`, so intentional empties survive. GLOSSARY: toggle defaulting
 command -v getopts >/dev/null 2>&1 &&
   eval 'export _HI_DISABLE_EDITORS="${_HI_DISABLE_EDITORS-0}" _HI_DISABLE_ALIASES="${_HI_DISABLE_ALIASES-0}" _HI_DISABLE_OSC52="${_HI_DISABLE_OSC52-0}" _HI_OSC52="${_HI_OSC52-}" _HI_DISABLE_TMUX="${_HI_DISABLE_TMUX-0}" _HI_TMUXCONF="${_HI_TMUXCONF-}" _HI_CLEANUP="${_HI_CLEANUP-}" _HI_CONFIG_DIR="${_HI_CONFIG_DIR-}" _HI_ROOT="${_HI_ROOT-}"' || true
 
-# Resolve these before any alias exists: zsh/dash `command -v` returns an
-# alias's definition once one is set, poisoning later fallthrough chains.
+# Resolved before any alias exists: once one is set, zsh/dash `command -v`
+# returns its definition and poisons later fallthrough chains.
 export _HI_EDITOR_BIN="$(command -v nano || command -v micro || command -v pico || command -v vim || command -v vi)"
 export _HI_BATCAT_BIN="$(command -v bat || command -v batcat || command -v ccat || command -v cat)"
-# exa and eza intentionally differ in preference order (exa picks exa first,
-# eza/l pick eza first), so each needs its own resolved variable.
+# exa and eza differ in preference order on purpose, so each needs its own var
 export _HI_EXA_BIN="$(command -v exa || command -v eza || command -v ls)"
 export _HI_EZA_BIN="$(command -v eza || command -v exa || command -v ls)"
 
-# off on _HI_DISABLE_EDITORS=1; `|| true` keeps set -e sourcers alive when
-# the guard fails
+# off on _HI_DISABLE_EDITORS=1; `|| true` keeps set -e sourcers alive
 [ "$_HI_DISABLE_EDITORS" != 1 ] && alias nano="nano --rcfile $_HI_NANORC" || true
 [ "$_HI_DISABLE_EDITORS" != 1 ] && alias vim="$(command -v nvim || command -v vim) -u $_HI_VIMRC" || true
 
@@ -36,12 +33,12 @@ export _HI_EZA_BIN="$(command -v eza || command -v exa || command -v ls)"
 # ones): a detached tmux would wake up reading a deleted tree.
 [ "$_HI_DISABLE_TMUX" != 1 ] && [ -z "$_HI_CLEANUP" ] && [ -f "$_HI_TMUXCONF" ] && alias tmux="tmux -f $_HI_TMUXCONF" || true
 
-# styles eza itself, not an alias - above the early return so disabling
-# personal aliases keeps the theme for an eza run directly
+# styles eza itself, not an alias - above the early return, so disabling
+# personal aliases still leaves the theme for a direct eza run
 export EZA_CONFIG_DIR="$_HI_THEME_DIR"
 
-# everything below is personal preference, freely editable without touching hi's
-# own functionality. Skipped wholesale when _HI_DISABLE_ALIASES=1.
+# everything below is personal preference, freely editable and skipped whole
+# when _HI_DISABLE_ALIASES=1
 [ "$_HI_DISABLE_ALIASES" = 1 ] && return || true
 
 alias sudo="command sudo " # works in bash/zsh, fish has a sudo wrapper in config.fish
@@ -188,14 +185,13 @@ alias sctl="sudo systemctl"
 alias chron="cron"
 alias chrontab="crontab"
 
-# Last on purpose: the user's own aliases.sh - ~/.config/hi.d/aliases.sh at
-# home, shipped into the target's config/ by the overlay stream - wins over
-# anything above by coming after it. Same POSIX+fish subset as this file.
+# Last on purpose: the user's own aliases.sh (~/.config/hi.d/aliases.sh, or the
+# overlay stream's copy on a target) wins by coming after everything above.
+# Same POSIX+fish subset as this file.
 #
-# The first test is the guard against $_HI_CONFIG_DIR being this file's own
-# directory, which would make the line source the file it is in, forever. hi
-# no longer lands the overlay over misc/, so nothing in the tree points here
-# any more - but an unbounded recursion is a hang, not an error, and this is
-# one comparison.
+# The first test guards against $_HI_CONFIG_DIR being this file's own directory,
+# which would source this file forever. Nothing in the tree points here any
+# more, but an unbounded recursion is a hang, not an error, and this is one
+# comparison.
 [ "$_HI_CONFIG_DIR/aliases.sh" != "$_HI_ROOT/misc/aliases.sh" ] &&
   [ -f "$_HI_CONFIG_DIR/aliases.sh" ] && . "$_HI_CONFIG_DIR/aliases.sh" || true

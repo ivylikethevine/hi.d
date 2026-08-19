@@ -15,23 +15,20 @@ _HI_USAGE="Usage: hi [ssh-options] <target> [command ...]"
 _HI_PAYLOAD=(common misc shells load.sh)
 
 # The user's config overlay, by the names it lands under in the target's
-# config/ - its own second stream, since it lives outside the tree. It gets a
-# directory of its own rather than being unpacked over misc/, because
-# aliases.sh is additive, not a replacement: the shipped misc/aliases.sh
-# sources $_HI_CONFIG_DIR/aliases.sh as its last act, so the user's
-# definitions win. Landed in misc/ the two would be the same file - the
-# shipped aliases overwritten, and then sourcing itself forever.
+# config/ - a second stream, since it lives outside the tree. It gets a
+# directory of its own rather than being unpacked over misc/: aliases.sh is
+# additive, and the shipped misc/aliases.sh sources $_HI_CONFIG_DIR/aliases.sh
+# last, so landing them in one place would make it source itself forever.
 _HI_OVERLAY_FILES=(settings.sh colors packages tmux.conf aliases.sh)
 
 # What a bash-less target falls back to, best first: core.sh's $_HI_SHELL_TREE
-# with bash removed, because bash being missing is this ladder's precondition -
-# derived rather than spelled out, so the two orderings cannot drift apart
-# again. ksh and mksh need no arm of their own in _hi_remote_suffix: they read
-# $ENV exactly as sh does. dash and ash land in that same arm; they are here to
-# be *preferred* over a `sh` that may be either.
+# minus bash (a missing bash is this ladder's precondition), derived rather
+# than spelled out so the two orderings cannot drift. ksh/mksh need no arm of
+# their own in _hi_remote_suffix - they read $ENV as sh does; dash and ash are
+# here to be *preferred* over a `sh` that may be either.
 export _HI_SHELL_LADDER="${_HI_SHELL_TREE//bash /}"
 
-# Stands in for the connect line's size until the script carrying it has been
+# Stands in for the connect line's size until the script carrying it is
 # assembled and measured (see _say_hi); wider than any answer it can produce.
 _HI_SIZE_TOKEN="@@SIZE@@"
 
@@ -47,8 +44,8 @@ function _hi_armored_line() {
 }
 
 # The client-derived env both transports export into the session, one
-# NAME<TAB>value pair per line: the ssh preamble renders `export NAME="v"`
-# lines, the container path folds them into its one `sh -c "export ..."` string
+# NAME<TAB>value pair per line: the ssh preamble renders `export NAME="v"`,
+# the container path folds them into one `sh -c "export ..."` string
 function _hi_session_env() {
   printf '_HI_TARGET\t%s\n' "$DOMAIN"
   printf '_HI_TARGET_COLOR\t%s\n' "$(_hi_target_color)"
@@ -66,9 +63,9 @@ function _hi_session_env() {
   return 0
 }
 
-# Memoized: _hi_session_env asks once and _hi_fallback_prompt asks again for
-# each of the two arms _hi_remote_suffix generates, and $DOMAIN is fixed for
-# the run - each miss walked the colors file and ~/.ssh/config over again.
+# Memoized: _hi_session_env asks once and _hi_fallback_prompt again for each of
+# _hi_remote_suffix's two arms, and $DOMAIN is fixed for the run - each miss
+# walked the colors file and ~/.ssh/config again.
 function _hi_target_color() {
   [ "${_HI_TARGET_COLOR_MEMO+x}" = x ] ||
     _HI_TARGET_COLOR_MEMO="$(_hi_resolve_color hostname "${DOMAIN##*@}")"
@@ -127,10 +124,9 @@ function _hi_is_k8s_pod() {
 
 # The backend roster, in resolution order:
 # "<name>|<what a target resolves as>|<liveness probe>|<predicate>".
-# _hi's dispatch walks name and predicate; scripts/doctor.sh probes and
-# prints the other columns. One list, so a backend added here reaches the
-# dispatch and both halves of `hi --doctor` together - doctor's own copy of
-# this chain had already drifted from the dispatch once.
+# _hi's dispatch walks name and predicate; scripts/doctor.sh probes and prints
+# the other columns. One list, so a backend added here reaches the dispatch and
+# both halves of `hi --doctor` together.
 _HI_BACKENDS=(
   "docker|docker container|docker ps -q|_hi_is_docker_container"
   "podman|podman container|podman ps -q|_hi_is_podman_container"
@@ -147,9 +143,9 @@ function _hi_ssh_sh() {
   ssh "$@" "${SSHARGS[@]}" "$DOMAIN" "sh -c '${script//\'/\'\\\'\'}'"
 }
 
-# _hi_ctl_open <persist-secs> [ssh-opts...] - a fresh ControlMaster socket
-# into the caller's ctl_path/ctl_opts, so an install probe and the session
-# that follows multiplex one authentication; _hi_ctl_close tears it down
+# _hi_ctl_open <persist-secs> [ssh-opts...] - a fresh ControlMaster socket into
+# the caller's ctl_path/ctl_opts, so the install probe and the session that
+# follows multiplex one authentication; _hi_ctl_close tears it down
 function _hi_ctl_open() {
   ctl_path="$(mktemp -u -t hi.cm.XXXXXX)"
   ctl_opts=(-o ControlMaster=auto -o ControlPath="$ctl_path" -o "ControlPersist=$1")
@@ -185,16 +181,15 @@ EOF
 }
 
 # The no-bash target's rc: every line valid in sh, zsh *and* fish at once.
-# GLOSSARY: fallback rc - the three-shell subset, and why each line is there
+# GLOSSARY: fallback rc - the three-shell subset, and why each line is there.
 # With --aliases-only <dir>, the container fallback's shape: that path ships
-# aliases.sh alone into <dir> - no tree, so nothing to source paths.sh or
-# settings.sh from, and no $_HI_ROOT in the environment
+# aliases.sh alone into <dir>, with no tree and no $_HI_ROOT to source from.
 function _hi_fallback_rc() {
   local t aliases_dir=""
   [ "${1:-}" = --aliases-only ] && aliases_dir="$2"
   printf 'export _HI_REMOTE_SESSION=1\n'
-  # the toggle list is core.sh's _HI_TOGGLES, so a new toggle can't be missed
-  # here (unset + `set -u` on a bash-less target was exactly that failure)
+  # core.sh's _HI_TOGGLES, so a new toggle can't be missed here (unset under
+  # `set -u` on a bash-less target was exactly that failure)
   for t in "${_HI_TOGGLES[@]}"; do
     [ "$t" = _HI_REMOTE_SESSION ] || printf 'export %s=0\n' "$t"
   done
@@ -217,18 +212,17 @@ function _hi_fallback_rc() {
 }
 
 # The fallback-shell probe both transports interpolate: one sh loop over
-# $_HI_SHELL_LADDER, running $1 (with $_hi_s naming the hit) at the first
-# shell found. Emitted on the client, so the loop's shape can't drift between
-# the transports the way the ladder itself once did.
+# $_HI_SHELL_LADDER running $1 (with $_hi_s naming the hit) at the first shell
+# found. Emitted on the client, so its shape can't drift between transports.
 function _hi_ladder_probe() {
   # shellcheck disable=SC2016 # $_hi_s is the target's to expand, on purpose
   printf 'for _hi_s in %s; do command -v "$_hi_s" >/dev/null 2>&1 && { %s; break; }; done' \
     "$_HI_SHELL_LADDER" "$1"
 }
 
-# A prompt for the bash-less tiers (sh, ash, dash, ksh, mksh - fish and zsh
-# get their own rc), baked on the client; $1 = "git" adds the live segment
-# only the ksh/mksh arm of _hi_remote_suffix asks for.
+# A prompt for the bash-less tiers (sh, ash, dash, ksh, mksh - fish and zsh get
+# their own rc), baked on the client; $1 = "git" adds the live segment only
+# _hi_remote_suffix's ksh/mksh arm asks for.
 # GLOSSARY: split-quoted prompt segment - why baked, and the quoting trick
 # shellcheck disable=SC2016 # $_hi_u, the segment and the separator are the target's to expand
 function _hi_fallback_prompt() {
@@ -249,31 +243,19 @@ function _hi_size() {
   _hi_du_size "${_HI_PAYLOAD[@]/#/$_HI_ROOT/}"
 }
 
-# base64 length of <n> bytes: four chars per three-byte group, rounded up.
-# Divide-then-multiply is the formula, not a slip - n * 4 / 3 loses the padding.
-function _hi_armored_len() {
-  # shellcheck disable=SC2017
-  printf '%s' "$((($1 + 2) / 3 * 4))"
-}
-
 # What a fresh session puts on the wire, without connecting (doctor.sh and the
 # README badge both quote it); no overlay counted - which files ride is a
-# question about a target.
-#
-# It assembles the real script through the same _hi_remote_middle/_preamble/
-# _suffix that _say_hi uses, rather than summing the three armored streams:
-# summing them is cheaper, but it silently omitted the shell boilerplate those
-# streams are wrapped in, and reported ~6KB under what the connect line printed
-# for the same session. A number on a badge has to be the number the user sees,
-# so this pays one base64 of the payload to be exact.
+# question about a target. It assembles the real script through the same
+# _preamble/_middle/_suffix _say_hi uses rather than summing the armored
+# streams: summing omitted the boilerplate they are wrapped in and read ~6KB
+# low. A badge has to show the number the user sees, so this pays one base64.
 function _hi_wire_bytes() {
   local hi_esc="" nc_esc="" overlay_line="" launcher bootloader tree script
   local size="$_HI_SIZE_TOKEN"
-  # the size token still stands in here exactly as it does in _say_hi, so this
-  # counts what _say_hi counts before it substitutes the figure back in
+  # the token stands in exactly as in _say_hi, so this counts what _say_hi
+  # counts before it substitutes the figure back in
   local DOMAIN="${DOMAIN:-target}"
-  # $_HI_LAUNCHER, not $0 - reached by *sourcing*, where $0 is the sourcer;
-  # _say_hi keeps $0 because there it is the running, shipped copy
+  # $_HI_LAUNCHER, not $0: reached by *sourcing*, where $0 is the sourcer
   launcher="$($_HI_ARMOR <"$_HI_LAUNCHER")"
   bootloader="$(_hi_bootloader | $_HI_ARMOR)"
   tree="$(_hi_payload_tar | $_HI_ARMOR)"
@@ -283,8 +265,8 @@ $(_hi_remote_suffix)"
   printf '%s' "${#script}"
 }
 
-# the same figure for humans; the bench suite takes the bytes instead, so the
-# README badge is checked against a number and not against a rounded string
+# the same figure for humans; the bench suite takes the bytes, so the README
+# badge is checked against a number and not a rounded string
 function _hi_wire_estimate() {
   _hi_human_bytes "$(_hi_wire_bytes)"
 }
@@ -304,8 +286,7 @@ function _hi_human_bytes() {
   }'
 }
 
-# core.sh's ladder, plus the diagnostic the header's cell has no room for:
-# which half was missing when there is no answer.
+# core.sh's ladder, plus the diagnostic the header's cell has no room for
 function _hi_version() {
   local v
   v="$(_hi_release_or_describe)"
@@ -319,9 +300,8 @@ function _hi_version() {
 }
 
 # _hi_env_each <printf-format> - _hi_session_env's NAME<TAB>value pairs through
-# <format>, which gets the name and the value in that order. Both transports
-# render the same stream, differing only in the shape they need it in, so the
-# tab contract is stated here once rather than in two loops that must agree.
+# <format>, name then value. Both transports render the same stream in
+# different shapes, so the tab contract is stated once, not in two loops.
 function _hi_env_each() {
   local n v
   while IFS=$'\t' read -r n v; do
@@ -334,9 +314,9 @@ function _hi_env_exports() {
   _hi_env_each '      export %s="%s"\n'
 }
 
-# The bit both _say_hi branches need first; tmux lines settle only "asked
-# for?" - the rest is load.sh's question. Everything expands on the client:
-# no backtick or unescaped $( ) below, not even inside a comment.
+# The bit both _say_hi branches need first; tmux lines settle only "asked for?"
+# - the rest is load.sh's question. Everything expands on the client: no
+# backtick or unescaped $( ) below, not even inside a comment.
 function _hi_remote_preamble() {
   cat <<REMOTE
       _hi_now() { d=\$(date +%s.%N 2>/dev/null); case "\$d" in *N*|'') date +%s ;; *) printf '%s' "\$d" ;; esac; }
@@ -362,9 +342,9 @@ $(_hi_env_exports)
 REMOTE
 }
 
-# What both _say_hi branches need once their own setup is done: report copy
-# time, then hand off to bash, or to the best fallback shell. Expects
-# \$_hi_rc_dir to point at wherever hi.bashrc/.hi_fallback_rc lives.
+# What both _say_hi branches need once their setup is done: report copy time,
+# then hand off to bash or to the best fallback shell. Expects \$_hi_rc_dir to
+# point at wherever hi.bashrc/.hi_fallback_rc lives.
 # GLOSSARY: bash --rcfile -i - the flag order, and fish's -C arm
 function _hi_remote_suffix() {
   # shellcheck disable=SC2016 # _hi_armored_line's destinations are the target's to expand
@@ -385,7 +365,7 @@ function _hi_remote_suffix() {
         fish) fish -C "\$(cat "\$_hi_rc_dir/.hi_fallback_rc")" ;;
         # ksh/mksh read \$ENV as sh does, sharing the rc; on top they get
         # shells/ksh.sh and the live git segment (both expand \$( ) at prompt
-        # time, which busybox ash below cannot). Header stays bash-only.
+        # time, which busybox ash cannot). Header stays bash-only.
         ksh | mksh)
           printf '%s\n' '. \$_HI_ROOT/shells/ksh.sh' >> "\$_hi_rc_dir/.hi_fallback_rc"
           $(_hi_fallback_prompt git | _hi_armored_line '>>' '"$_hi_rc_dir/.hi_fallback_rc"')
@@ -404,10 +384,9 @@ REMOTE
 
 # The disposable-tree half of the script: unpack the three armored streams into
 # a fresh /tmp root. Reads $hi_esc/$nc_esc/$size and the three stream variables
-# from its caller, the way _hi_remote_suffix already reads $hi_esc/$nc_esc -
-# so that _say_hi and _hi_wire_estimate assemble one shape, not two that have
-# to be kept in step. (The permanent-install branch stays inline in _say_hi:
-# nothing else builds it.)
+# from its caller, as _hi_remote_suffix reads $hi_esc/$nc_esc, so _say_hi and
+# _hi_wire_estimate assemble one shape rather than two kept in step. (The
+# permanent-install branch stays inline in _say_hi; nothing else builds it.)
 # shellcheck disable=SC2016 # the destinations are the target's to expand
 function _hi_remote_middle() {
   cat <<REMOTE
@@ -435,8 +414,8 @@ function _say_hi() {
   local launcher="" bootloader="" tree="" overlay_line=""
   local -a ctl_opts
 
-  # only this path armors (containers stream via their CLI); no base64 probe
-  # needed - a target without one fails the one-liner loudly on its own
+  # only this path armors (containers stream via their CLI); a target with no
+  # base64 fails the one-liner loudly on its own
   command -v base64 >/dev/null 2>&1 || {
     _hi_cecho >&2 "hi requires base64 on [$(_hi_hostname)] to reach an ssh target, but it is not installed. Aborting..." "$RED"
     return 1
@@ -467,16 +446,15 @@ REMOTE
     bootloader="$(_hi_bootloader | $_HI_ARMOR)"
     tree="$(_hi_payload_tar | $_HI_ARMOR)"
     # second, tiny stream: the overlay lives outside the tree, so it cannot
-    # ride the payload; omitted entirely when empty. It lands in its own
-    # config/ beside misc/ - never over it - and _HI_CONFIG_DIR points there,
-    # not at the login user's ~/.config/hi.d
+    # ride the payload, and is omitted when empty. It lands in its own config/
+    # beside misc/, with _HI_CONFIG_DIR pointing there.
     # shellcheck disable=SC2016 # $_HI_ROOT is the target's to expand
     if _hi_has_overlay; then
       overlay_line="mkdir -p \"\$_HI_ROOT/config\"
 $(_hi_overlay_tar | _hi_armored_line '|' 'tar mxzf - -C "$_HI_ROOT/config"')"
     fi
-    # not known yet: the figure counts the assembled script, and everything
-    # above is part of it, so it can only be measured once that exists
+    # not known yet: the figure counts the assembled script, so it can only be
+    # measured once that exists
     size="$_HI_SIZE_TOKEN"
     middle="$(_hi_remote_middle)"
   fi
@@ -486,24 +464,23 @@ $middle
 $(_hi_remote_suffix)"
 
   # the connection's true byte count: the script goes over the wire as it
-  # stands, its three streams already armored one apiece
-  # $_HI_SIZE_TOKEN holds a same-width place, honest to a few bytes
+  # stands, its streams already armored. $_HI_SIZE_TOKEN held a same-width
+  # place, so the figure is honest to a few bytes.
   if [ -z "$remote_root" ]; then
     size="$(_hi_human_bytes "${#script}")"
     script="${script//$_HI_SIZE_TOKEN/$size}"
   fi
 
-  # -u: a name only, never a local file - the directory it names is created on
-  # the *target* by the mkdir below (which fails loudly if the name is taken)
+  # -u: a name only, never a local file - the directory is created on the
+  # *target* by the mkdir below, which fails loudly if the name is taken
   boot_tmp="$(mktemp -u -t hi.boot.XXXXXX)"
 
-  # The bootloader rides stdin of the first of two calls on one connection;
-  # the write doubles as the POSIX-shell probe that selects the PowerShell
-  # fallback, and `command -v base64` keeps a target that cannot decode the
-  # streams inside the script on that same fallback rather than half-landing.
-  # It travels as the plain script: stdin is a pipe, so it needs no armor of
-  # its own - only the three streams *inside* it do, and armoring the whole
-  # thing again cost a third of every session's bytes for nothing.
+  # The bootloader rides stdin of the first of two calls on one connection. The
+  # write doubles as the POSIX-shell probe that selects the PowerShell fallback,
+  # and `command -v base64` keeps a target that cannot decode the inner streams
+  # on that same fallback rather than half-landing. It travels as the plain
+  # script: stdin is a pipe, so only the streams *inside* it need armor -
+  # armoring the whole thing again cost a third of every session for nothing.
   # GLOSSARY: stdin transport - the argv cap, and why it must be two calls
   # shellcheck disable=SC2029 # $boot_tmp is ours to expand, into the target's shell
   if printf '%s\n' "$script" | ssh "${ctl_opts[@]}" "${SSHARGS[@]}" "$DOMAIN" \
@@ -521,8 +498,7 @@ $(_hi_remote_suffix)"
   return "$ec"
 }
 
-# Four backends share this: docker, podman (drop-in CLI), nomad, kube
-# _say_hi_container <label> <errlog> <copy_start>
+# _say_hi_container <label> <errlog> <copy_start> - docker, podman, nomad, kube
 function _say_hi_container() {
   local label="$1" tmp="$2" copy_start="$3"
   local shell_end root fallback exit_code shell_secs size prefix tarball env_kv
@@ -537,8 +513,8 @@ function _say_hi_container() {
   nomad)
     probe=(nomad alloc exec -i=false -t=false "$DOMAIN")
     cp=(nomad alloc exec -i=true -t=false "$DOMAIN")
-    # explicit -t=true: nomad's stdin-is-a-tty auto-detect lands wrong on a
-    # shared/wrapped pty and then hangs the exec outright
+    # explicit -t=true: nomad's stdin-is-a-tty guess lands wrong on a wrapped
+    # pty and then hangs the exec outright
     attach=(nomad alloc exec -i=true -t=true "$DOMAIN")
     ;;
   kube)
@@ -564,9 +540,9 @@ function _say_hi_container() {
       return $?
     fi
 
-    # ksh/mksh get the live git segment, as they do on the ssh path - but that
-    # path already has the whole tree on the target, and this one ships
-    # aliases.sh alone, so the segment has to be copied too
+    # ksh/mksh get the live git segment as on the ssh path - but that path has
+    # the whole tree there, and this one ships aliases.sh alone, so the segment
+    # has to be copied too
     case "$fallback" in
     ksh | mksh)
       "${cp[@]}" sh -c "cat > '$root/ksh.sh'" <"$_HI_ROOT/shells/ksh.sh" 2>"$tmp" &&
@@ -574,16 +550,14 @@ function _say_hi_container() {
       ;;
     esac
 
-    # the shared fallback rc in its aliases-only shape (full toggle list,
-    # client verdicts, aliases.sh, CMDARG on its own raw line), plus the
-    # POSIX prompt for the shells that can parse it - the same rule as the
-    # ssh path's `*)` arm, applied while the file is being written rather
-    # than in a second `exec` round trip afterwards
+    # the shared fallback rc in its aliases-only shape, plus the POSIX prompt
+    # for the shells that can parse it - the ssh path's `*)` rule, applied
+    # while the file is written rather than in a second `exec` round trip
     {
       _hi_fallback_rc --aliases-only "$root"
       if [ -n "$ksh_git" ]; then
-        # the source line lands after the rc's verdict exports, which is what
-        # shells/ksh.sh reads for its glyphs and colors
+        # after the rc's verdict exports, which shells/ksh.sh reads for its
+        # glyphs and colors
         printf '. %s/ksh.sh\n' "$root"
         _hi_fallback_prompt git
       else
@@ -641,10 +615,9 @@ function _say_hi_container() {
   "${cp[@]}" sh -c "cat > '$root/hi.d/hi.sh' && chmod +x '$root/hi.d/hi.sh'" <"$0"
   _hi_bootloader | "${cp[@]}" sh -c "cat > '$root/hi.d/hi.bashrc'"
 
-  # _HI_CLEANUP marks this tree as disposable for load.sh's clean_all - the
-  # `rm -rf "$root"` below is the client-side belt to its braces. The shared
-  # client-derived vars come from _hi_session_env; the tree paths and timing
-  # are this transport's own.
+  # _HI_CLEANUP marks the tree disposable for load.sh's clean_all; the
+  # `rm -rf "$root"` below is the client-side belt to it. Shared vars come from
+  # _hi_session_env; the tree paths and timing are this transport's own.
   env_kv="$(_hi_env_each " %s='%s'")"
   "${attach[@]}" sh -c "export$env_kv _HI_HOME='$root' _HI_ROOT='$root/hi.d' _HI_CONFIG_DIR='$root/hi.d/config' _HI_CLEANUP='$root' _HI_COPY_TIME='$(_hi_copy_time "$copy_start" "$_HI_SHELL_START" "$shell_end")' _HI_CONNECT_PREFIX='$prefix'; exec bash --rcfile '$root/hi.d/hi.bashrc'"
   exit_code=$?
@@ -658,8 +631,7 @@ function _hi_parse() {
   SSHARGS=()
   while [ $# -gt 0 ]; do
     case $1 in
-    # every ssh option taking a separate value, so the value is never mistaken
-    # for the target
+    # every ssh option taking a separate value, so it is never read as the target
     -B | -b | -c | -D | -E | -e | -F | -I | -i | -J | -L | -l | -m | -O | -o | -p | -Q | -R | -S | -W | -w)
       [ "$#" -ge 2 ] || {
         _hi_cecho "hi: $1 needs a value" "$RED" >&2
@@ -688,9 +660,8 @@ function _hi_parse() {
   }
 }
 
-# `${!array[@]}` rather than a counter incremented in lockstep with the loop:
-# the index is what pairs a row with its pid, so index on it. (bash 3.0+, and
-# not one of the bash-4 forms the lint suite greps for.)
+# `${!array[@]}`, not a counter kept in lockstep: the index is what pairs a row
+# with its pid. (bash 3.0+, not one of the bash-4 forms the lint suite greps.)
 function _hi_resolve_backend() {
   local target="$1" i
   local -a pids=()
@@ -747,16 +718,14 @@ function _hi() {
 
 set +euo pipefail # the connection paths below run against unknown hosts, where a probe that fails is normal, not fatal
 
-# sourcing this file defines its functions
-# without connecting to anything, for testing
+# sourcing this file defines its functions without connecting, for testing
 [[ "${BASH_SOURCE[0]}" == "$0" ]] || return 0
 
-# hi's own flags, dispatched on $1 alone: _hi_parse hands every other -flag
-# to ssh, so anything hi answers itself has to be caught before it.
+# hi's own flags, dispatched on $1 alone: _hi_parse hands every other -flag to
+# ssh, so anything hi answers itself has to be caught first.
 case "${1:-}" in
-# `hi -h`/`--help`, caught before the ssh pass-through (which once answered
-# with ssh's usage block, for a tool that is not ssh). A bare `hi` still
-# execs ssh on purpose, so `hi -V` and friends behave as they do there.
+# caught before the ssh pass-through, which once answered with ssh's usage
+# block. A bare `hi` still execs ssh, so `hi -V` behaves as it does there.
 -h | --help)
   cat <<EOF
 $_HI_USAGE

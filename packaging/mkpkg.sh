@@ -12,7 +12,7 @@
 # Arch packages for one project would only conflict.
 set -euo pipefail
 
-# the locator, core.sh, and the shared primitives (rewrite/sha256_lines/
+# the locator, core.sh, and the shared primitives (sha256_lines/
 # pkgbuild_version) all come from lib.sh, found beside this script
 # shellcheck source=./lib.sh
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"

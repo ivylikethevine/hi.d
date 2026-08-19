@@ -19,15 +19,17 @@
 # caller because measuring is half of this file's measure-then-render contract.
 # An out-var, not stdout: show_preview measures every line twice (once to size
 # the box, once to pad it), and through $( ) each of those was a fork plus an
-# extglob save/restore. extglob is needed for the +(...) pattern and restored
-# to whatever it was, rather than left on for the rest of the caller.
+# extglob save/restore. extglob is needed for the *(...) pattern and restored
+# to whatever it was, rather than left on for the rest of the caller. The
+# pattern matches test_lib.sh's _hi_strip_ansi: *(...) and not +(...), so a
+# bare `\e[m` reset counts as zero columns in both.
 function _hi_visible_len() {
   local restore=0 stripped
   shopt -q extglob || {
     shopt -s extglob
     restore=1
   }
-  stripped="${2//$'\e'\[+([0-9;])m/}"
+  stripped="${2//$'\e'\[*([0-9;])m/}"
   ((restore)) && shopt -u extglob
   printf -v "$1" '%s' "${#stripped}"
 }

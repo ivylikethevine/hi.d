@@ -14,14 +14,12 @@ export GCC_COLORS='error=01;31:warning=01;35:note=01;36:caret=01;32:locus=01:quo
 
 if [[ "${_HI_DISABLE_PROMPT:-0}" != 1 ]] && ! _hi_wants_starship; then
   _hi_prime_identity
-  # the character this prompt ends with (`\$` here, which bash renders as $ for
-  # a user and # for root) - see _hi_prompt_end in common/core.sh
+  # `\$` renders as $ for a user and # for root - see core.sh's _hi_prompt_end
   HI_PS1_END="$(_hi_prompt_end BASH)"
   if _hi_has_color; then
-    # the *_var forms, not $( ): _hi_prime_identity above already resolved both
-    # escapes in this shell, and a command substitution would pay for them
-    # again. Spelled empty first so shellcheck sees the `printf -v` assignment
-    # (SC2154) - these are file scope, where `local` is not available.
+    # the *_var forms, not $( ): _hi_prime_identity resolved both escapes in
+    # this shell already. Spelled empty first so shellcheck sees the
+    # `printf -v` assignment (SC2154); file scope, so no `local`.
     _hi_ps1_u="" _hi_ps1_h=""
     _hi_user_escape_var _hi_ps1_u
     _hi_host_escape_var _hi_ps1_h
@@ -33,10 +31,9 @@ if [[ "${_HI_DISABLE_PROMPT:-0}" != 1 ]] && ! _hi_wants_starship; then
 fi
 
 if ! shopt -oq posix; then
-  # $BASH_COMPLETION_VERSINFO is the loader's own sentinel: the host's stock
-  # rc (Debian's skeleton, notably) often sourced it before hi's grafted
-  # block runs, and re-parsing the ~2000-line script costs every shell start
-  # 20-50ms for nothing
+  # $BASH_COMPLETION_VERSINFO is the loader's own sentinel: the host's stock rc
+  # often sourced it before hi's grafted block runs, and re-parsing the
+  # ~2000-line script costs 20-50ms a shell for nothing
   # shellcheck disable=SC1091
   [ -n "${BASH_COMPLETION_VERSINFO-}" ] ||
     source /usr/share/bash-completion/bash_completion 2>/dev/null ||
@@ -44,16 +41,14 @@ if ! shopt -oq posix; then
 fi
 
 # complete `hi` from the same target list zsh/fish use, and make `exa` complete
-# exactly the way `eza` does, whatever bash-completion bound to it.
+# the way `eza` does, whatever bash-completion bound to it.
 #
-# targets.sh file-caches its answer for $_HI_TARGETS_TTL seconds, so a repeat
-# TAB is cheap - but finding that out is still a fork and an exec. Holding the
-# names in the shell for the same window makes it free, and means the same
-# thing: a container started inside the window was already invisible until the
-# file cache turned over. $SECONDS is the stamp because it is a builtin (a
-# `date +%s` would cost the fork it saves); -1 is "never filled", and a TTL of
-# 0 refreshes every time, the "no cache wanted" targets.sh reads it as.
-# GLOSSARY: completion probe knobs
+# targets.sh file-caches for $_HI_TARGETS_TTL seconds, but finding that out is
+# still a fork and an exec. Holding the names in the shell for the same window
+# makes it free and means the same thing: a container started inside the window
+# was already invisible until the file cache turned over. $SECONDS is the stamp
+# because it is a builtin; -1 is "never filled", and a TTL of 0 refreshes every
+# time, as targets.sh reads it. GLOSSARY: completion probe knobs
 _HI_TARGET_NAMES=""
 _HI_TARGET_NAMES_AT=-1
 
@@ -69,11 +64,10 @@ function _hi_target_names() {
   _HI_TARGET_NAMES_AT="$SECONDS"
 }
 
-# On a warm cache _hi_target_names returns without doing anything, and then
-# `compgen` through a process substitution cost a fork plus one `eval` per
-# candidate (core.sh's _hi_read_lines) on every single TAB. Matching in-shell
-# costs neither. targets.sh already drops names carrying `*` or `?`, so `set -f`
-# is belt to that: a stored name is matched, never globbed.
+# On a warm cache _hi_target_names does nothing, and `compgen` through a
+# process substitution then cost a fork plus an `eval` per candidate on every
+# TAB; matching in-shell costs neither. targets.sh already drops names carrying
+# `*` or `?`, and `set -f` is belt to that: names are matched, never globbed.
 function _hi_complete() {
   local cur="${COMP_WORDS[COMP_CWORD]}" n
   _hi_target_names
@@ -86,7 +80,7 @@ function _hi_complete() {
 }
 complete -F _hi_complete hi
 
-# Deferred to the first TAB after `exa` - startup shouldn't parse a multi-KB
+# Deferred to the first TAB after `exa`: startup shouldn't parse a multi-KB
 # spec most sessions never use. 124 is bash-completion's "retry".
 function _hi_load_exa_completion() {
   local spec
@@ -104,7 +98,7 @@ if [[ "${_HI_DISABLE_PROMPT:-0}" != 1 ]]; then
     eval "$(starship init bash)"
   else
     function ps1() {
-      # git info through a reference, never expanded into PS1 - expanding user
+      # git info through a reference, never expanded into PS1: expanding user
       # strings is the pw3nage class of bug (github.com/njhartwell/pw3nage)
       if shopt -q promptvars; then
         _hi_git_prompt __powerline_git_info # out-var form: no $( ) fork per prompt
@@ -127,8 +121,8 @@ if [[ "${_HI_DISABLE_PERSONAL:-0}" != 1 ]]; then
   PROMPT_DIRTRIM=2
 
   shopt -s histappend checkwinsize cmdhist
-  # globstar is bash 4; on bash 3.2 (macOS) `shopt -s` on an unknown option is an
-  # error, which under an rc file that keeps going is just noise on every prompt
+  # globstar is bash 4; on bash 3.2 `shopt -s` on an unknown option is an error,
+  # which under an rc file that keeps going is noise on every prompt
   shopt -s globstar 2>/dev/null || true
 
   bind "set completion-ignore-case on"

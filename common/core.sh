@@ -1,15 +1,13 @@
 #!/bin/bash
 # The entry point every bash/zsh script sources: toggles, settings, paths,
 # colors, shared primitives. One file - fish reaches it via bare `bash -c`.
-set -euo pipefail # must be disabled after our code (this file is part of the interactive shell - any error would close the session)
+set -euo pipefail # off again at the end: an error must not close an interactive shell
 
-# Sourced twice in one shell is a no-op; $_hi_core_loaded is deliberately not
-# exported, so a child process (fish's `bash -c`) still runs the preamble.
+# Re-sourcing is a no-op. Not exported, so fish's `bash -c` child still runs it.
 if [ -z "${_hi_core_loaded:-}" ]; then
   _hi_core_loaded=1
 
-  # `: "${X:=default}"` assigns only when X is unset, so a value an outer layer
-  # already exported (hi.sh on the client, load.sh on the target) survives
+  # `:=` only when unset, so an outer layer's export (hi.sh, load.sh) survives
   : "${_HI_HOME:=$HOME}"
   export _HI_HOME
   # GLOSSARY: toggle defaulting + dynamic-name assignment. List shared with
@@ -21,8 +19,7 @@ if [ -z "${_hi_core_loaded:-}" ]; then
     eval ": \"\${$_hi_t:=0}\"; export $_hi_t"
   done
   unset _hi_t
-  # the config overlay's home - every entry point sets it (fish can't expand
-  # this); `:=` lets hi.sh point a target at its shipped copy instead
+  # the overlay's home; `:=` lets hi.sh point a target at its shipped copy
   : "${_HI_CONFIG_DIR:=${XDG_CONFIG_HOME:-$HOME/.config}/hi.d}"
   export _HI_CONFIG_DIR
   # settings ahead of paths.sh, whose gate reads them - hence the spelled path
@@ -37,9 +34,8 @@ fi
 # Every shell hi wires up, one row each:
 # <shell>|<rc label>|<hi's rc>|<the user's rc>|<syntax check>|<flags>.
 # Flags name the mechanism: `local` is install.sh appending to the user's own
-# rc, `graft` is load.sh copying hi's rc into a target's. The mechanisms stay
-# separate (see install.sh's config_shell); only the roster is single-homed,
-# since three copies is what let a shell go missing from one.
+# rc, `graft` is load.sh copying hi's rc into a target's. Only the roster is
+# single-homed; the mechanisms stay separate (see install.sh's config_shell).
 _HI_SHELL_TABLE=(
   "bash|bashrc|$_HI_BASHRC|$_HI_HOME_BASHRC|bash -n|local,graft"
   "zsh|zshrc|$_HI_ZSHRC|$_HI_HOME_ZSHRC|zsh -n|local,graft"
@@ -61,21 +57,17 @@ function _hi_shell_rows() {
   done
 }
 
-# The one ordering hi resolves shells by, best first. Two consumers read it and
-# each takes the part it can serve: load.sh's _hi_session_shell walks it for a
-# shell hi styles (fish, zsh, bash - it only ever runs where bash exists), and
-# hi.sh's $_HI_SHELL_LADDER is this same list with bash taken out, since a
-# missing bash is that ladder's whole precondition. One list because it used to
-# be two literals that disagreed: the ladder led with zsh and mksh-before-ksh,
-# the session picker with fish. dash/ash/sh are one tier in practice - naming
-# them separately is what says which `sh` a target gets when it has more.
+# The one ordering hi resolves shells by, best first, so the two consumers
+# cannot drift: load.sh's _hi_session_shell takes the shells hi styles, and
+# hi.sh's $_HI_SHELL_LADDER is this list minus bash (a missing bash is that
+# ladder's precondition). dash/ash/sh are one tier - named separately to say
+# which `sh` a target gets when it has more than one.
 export _HI_SHELL_TREE="fish zsh bash mksh ksh dash ash sh"
 
 # color names match fish's set_color vocabulary; greys are skipped, since fish has none.
 _HI_COLOR_NAMES=(red green yellow blue magenta cyan brred brgreen bryellow brblue brmagenta brcyan)
 
-# https://no-color.org: non-empty $NO_COLOR blanks the palette, which is what
-# turns the rule into behavior everywhere bash renders; hi.sh ships it along.
+# https://no-color.org: non-empty $NO_COLOR blanks the palette. hi.sh ships it along.
 if [ -n "${NO_COLOR:-}" ]; then
   export NC='' RED='' GREEN='' YELLOW='' BLUE='' PURPLE='' CYAN='' \
     BRRED='' BRGREEN='' BRYELLOW='' BRBLUE='' BRPURPLE='' BRCYAN=''
@@ -157,8 +149,7 @@ function _hi_elapsed() {
 }
 
 # total size of the given paths; --apparent-size is GNU-only, so the verdict is
-# taken once per shell rather than per call - load.sh asks at session close,
-# with the user waiting on it
+# taken once per shell - load.sh asks at session close, with the user waiting
 function _hi_du_size() {
   if [ -z "${_HI_DU_FLAGS+x}" ]; then
     _HI_DU_FLAGS=""
@@ -183,11 +174,9 @@ function _hi_whoami() {
 }
 
 # Fill the memos in the *calling* shell: prompt builders reach them through
-# $( ), where a cache filled inside the subshell dies with it. The two *colors*
-# and not the two escapes - resolving a color is the expensive half (see
-# _hi_host_escape), and it is the half both prompt builders want; zsh.zsh takes
-# the names and never asks for an escape, so priming those too made it pay for
-# two answers it throws away.
+# $( ), where a cache filled inside the subshell dies with it. Colors, not
+# escapes - resolving a color is the expensive half, and zsh.zsh wants only
+# the names, so priming escapes made it pay for answers it throws away.
 function _hi_prime_identity() {
   _hi_whoami >/dev/null
   _hi_hostname >/dev/null
@@ -211,25 +200,18 @@ function _hi_interactive_extras() {
   [ -r /etc/debian_chroot ] && debian_chroot="($(</etc/debian_chroot)) "
 }
 
-function _hi_sanitize() {
-  local out="${1//[[:cntrl:]]/}"
-  printf '%s' "${out//\\/}"
-}
-
-# _hi_sanitize_var <var> <text> - the same scrub straight into <var>. The
-# header reaches this seven times a banner, and through $( ) each one was a
-# fork to run two parameter expansions. GLOSSARY: printf -v out-var
+# _hi_sanitize_var <var> <text> - control chars and backslashes out, into
+# <var>; the header reaches it seven times a banner, each a fork through $( ).
+# GLOSSARY: printf -v out-var
 function _hi_sanitize_var() {
   local _hi_s="${2//[[:cntrl:]]/}"
   printf -v "$1" '%s' "${_hi_s//\\/}"
 }
 
 # _hi_rewrite <file> <sed-expr>... - every expression in one pass, in place.
-# A temp file rather than `sed -i`: its in-place flag differs BSD/GNU (which
-# made the caller sniff the userland), and -i replaces a *symlinked* rc with a
-# regular file, where the append that put hi's lines there wrote through the
-# link. Written back with cat, not mv, so the destination keeps its own inode,
-# mode and any hardlink or ACL on it.
+# A temp file, not `sed -i`: its flag differs BSD/GNU, and -i replaces a
+# *symlinked* rc with a regular file where the append wrote through the link.
+# Written back with cat, not mv, to keep the inode, mode, hardlinks and ACLs.
 function _hi_rewrite() {
   local file="$1" e tmp
   shift
@@ -241,11 +223,9 @@ function _hi_rewrite() {
   rm -f "$tmp"
 }
 
-# The version this tree answers with, raw and unpresented: a packager's stamp
-# (or the client's answer, which the ssh preamble exports) wins, else git
-# describe in a checkout, else nothing. Each caller adds its own presentation -
-# the header wants a short sanitized cell, `hi --version` and the doctor want a
-# diagnostic that says *why* there is no answer.
+# The version, raw and unpresented: a packager's stamp (or the client's, which
+# the ssh preamble exports) wins, else git describe, else nothing. Callers add
+# their own presentation - the header a short cell, --version a diagnostic.
 function _hi_release_or_describe() {
   if [ -n "${_HI_RELEASE:-}" ]; then
     printf '%s\n' "$_HI_RELEASE"
@@ -264,10 +244,9 @@ function _hi_on_exit() {
   fi
 }
 
-# What each shell's prompt ends with unless overridden, <SHELL>:<char>. Four
-# different characters, so they are data rather than something each call site
-# repeats. SH is the ksh/mksh/sh fallback prompt hi.sh bakes on the client.
-# config.fish keeps its own copy (fish parses no bash); hi_test pins it here.
+# What each shell's prompt ends with unless overridden, <SHELL>:<char>. SH is
+# the ksh/mksh/sh fallback hi.sh bakes on the client. config.fish keeps its
+# own copy (fish parses no bash); hi_test pins it here.
 _HI_PROMPT_END_DEFAULTS=('BASH:\$' 'ZSH:>' 'FISH:|' 'SH:\$')
 
 # _hi_prompt_end_default <SHELL> - the shipped default for one shell, empty if
@@ -282,12 +261,10 @@ function _hi_prompt_end_default() {
   done
 }
 
-# _hi_prompt_end <SHELL> - the prompt's end character: per-shell setting, then
-# the all-three one, then the roster's default. Empty counts as unset (`' '`
-# still means "none"); reaches $PS1 unescaped on purpose, so `%#` and `\$` keep
-# their meaning. The roster default sits inside the expansion so it is resolved
-# only when nothing overrode it - the overriding case costs no fork at all.
-# config.fish keeps its own copy of this rule.
+# _hi_prompt_end <SHELL> - per-shell setting, then the all-three one, then the
+# roster default. Empty counts as unset (`' '` still means "none"); reaches
+# $PS1 unescaped so `%#` and `\$` keep their meaning. The default sits inside
+# the expansion, so an override costs no fork. config.fish mirrors this rule.
 function _hi_prompt_end() {
   local specific
   eval "specific=\"\${_HI_PROMPT_END_$1:-}\""
@@ -298,11 +275,10 @@ function _hi_at_color() {
   [ -n "${SSH_TTY:-}" ] && printf '%b' "$YELLOW" || printf '%b' "$NC"
 }
 
-# Deference: _HI_PROMPT=starship hands the prompt to starship when the
-# target has it, keeping hi's header and aliases; anything else - unset
-# included - keeps hi's own prompt, and a missing starship falls back to it
-# silently. Never auto-detected: a target that happens to carry starship
-# must not surprise a user who chose hi's prompt.
+# Deference: _HI_PROMPT=starship hands the prompt over when the target has it,
+# keeping hi's header and aliases; anything else keeps hi's prompt, and a
+# missing starship falls back to it silently. Never auto-detected - a target
+# that happens to carry starship must not surprise the user.
 function _hi_wants_starship() {
   [ "${_HI_PROMPT:-}" = starship ] && command -v starship >/dev/null 2>&1
 }
@@ -332,8 +308,7 @@ function _hi_ascii_flag() { _hi_use_ascii && echo 1 || echo 0; }
 
 # One glyph set per session, decided at source time so hot paths read plain
 # variables; tests flip _HI_ASCII and re-call. The _W widths are visible
-# columns, not bytes (GLOSSARY: bytes vs columns); the marks are named so the
-# suite matches these bytes, not a lookalike codepoint.
+# columns, not bytes (GLOSSARY: bytes vs columns).
 function _hi_choose_glyphs() {
   if _hi_use_ascii; then
     _HI_GLYPH_AHEAD="^" _HI_GLYPH_BEHIND="v" _HI_GLYPH_STAGED="*"
@@ -356,8 +331,7 @@ function _hi_choose_glyphs() {
 _hi_choose_glyphs
 
 # the ANSI escape for a palette name (see _HI_COLOR_NAMES); unknown names
-# reset, and $NO_COLOR blanks the lot - the hashed user/host/target colors
-# all come through here, so this is their one gate
+# reset, and $NO_COLOR blanks the lot. Every hashed color comes through here.
 function _hi_color_escape() {
   local i=0 name
   if [ -n "${NO_COLOR:-}" ]; then return 0; fi
@@ -373,10 +347,8 @@ function _hi_color_escape() {
 
 # Deterministic name -> palette bucket, right in zsh as well as bash:
 # `${name:$i:1}` needs the `$` (zsh reads `:i` as a history modifier), and the
-# bucket is taken with the *slice* form, not `${arr[n]}` - zsh indexes arrays
-# from 1 (`setopt KSH_ARRAYS` papered over that at oh-my-zsh's expense), while
-# `${arr[@]:n:1}` counts from 0 in both shells. It replaced a counted walk over
-# the whole palette per resolution.
+# bucket uses the *slice* form, not `${arr[n]}` - zsh indexes arrays from 1,
+# while `${arr[@]:n:1}` counts from 0 in both shells.
 function _hi_hash_color() {
   local name="$1" sum=0 i=0 ord
   while [ "$i" -lt "${#name}" ]; do
@@ -387,13 +359,13 @@ function _hi_hash_color() {
   printf '%s\n' "${_HI_COLOR_NAMES[@]:$((sum % ${#_HI_COLOR_NAMES[@]})):1}"
 }
 
-# the user/host of the machine hi.d is permanently installed on. hi.sh ships
-# these ahead as _HI_LOCAL_USER/_HI_LOCAL_HOSTNAME (see hi.sh's _hi_remote_preamble)
+# the user/host hi.d is permanently installed on; hi.sh ships these ahead as
+# _HI_LOCAL_USER/_HI_LOCAL_HOSTNAME (see its _hi_remote_preamble)
 function _hi_local_username() { printf '%s\n' "${_HI_LOCAL_USER:-$(_hi_whoami)}"; }
 function _hi_local_hostname() { printf '%s\n' "${_HI_LOCAL_HOSTNAME:-$(_hi_hostname)}"; }
 
-# The two readers of misc/colors' "<type>,<name>,<color>" lines; everything that
-# needs the file goes through them rather than re-deriving the format.
+# The two readers of misc/colors' "<type>,<name>,<color>" lines; everything
+# needing the file goes through them rather than re-deriving the format.
 # _hi_colors_lookup <type> <name> - that pin's color, or 1 if there isn't one
 function _hi_colors_lookup() {
   local cur_type cur_name color
@@ -416,8 +388,8 @@ function _hi_colors_names() {
   done <"$_HI_COLORS" | awk '!seen[$0]++'
 }
 
-# look up an exact "<type>,<name>,<color>" override
-# most names won't have an override and will return 1. exact matches always win.
+# an exact "<type>,<name>,<color>" override; exact matches always win, and
+# most names have none and return 1
 function _hi_override_color() {
   local special=""
   _hi_colors_lookup "$1" "$2" && return 0
@@ -429,11 +401,9 @@ function _hi_override_color() {
   _hi_colors_lookup "$1" "$special"
 }
 
-# _hi_ssh_host_tag <name>, memoized one deep: every caller asks about the same
-# host in a row - the connect path alone reaches it from _hi_is_ssh_host, from
-# _hi_session_env and from each _hi_resolve_color hostname - and each miss was
-# a full in-shell walk of ~/.ssh/config. The rc carries meaning (see below), so
-# it is remembered alongside the value.
+# _hi_ssh_host_tag <name>, memoized one deep: callers ask about the same host
+# in a row (the connect path reaches it three ways) and each miss walked
+# ~/.ssh/config. The rc carries meaning (see below), so it is remembered too.
 function _hi_ssh_host_tag() {
   if [ "${_HI_TAG_NAME+x}" != x ] || [ "$_HI_TAG_NAME" != "$1" ]; then
     _HI_TAG_RC=0
@@ -445,8 +415,8 @@ function _hi_ssh_host_tag() {
 }
 
 # The "# Tags: a, b" comment directly above a "Host <alias>" line in
-# ~/.ssh/config; unknown host returns 1, a known host with no tag returns 2 -
-# `Host` matches case-insensitively (ssh reads its keywords that way
+# ~/.ssh/config; unknown host returns 1, a known host with no tag returns 2.
+# `Host` matches case-insensitively, the way ssh reads its keywords.
 function _hi_ssh_host_tag_walk() {
   local line trimmed rest tag="" aliases
   [ -f "$_HI_SSH_CONFIG" ] || return 1
@@ -503,13 +473,11 @@ function _hi_resolve_color() {
   _hi_hash_color "$name"
 }
 
-# This machine's own two colors, and the escapes for them. All four are
-# memoized because none of them can change under a running shell, and none was
-# cheap: every layer returns on stdout, so one unmemoized escape cost about
-# seven forks - hostname, up to three reads of misc/colors, and a walk of
-# ~/.ssh/config - which the prompt paid at every shell start and the banner
-# twice a session. `+x` tests *set*, not non-empty: a $NO_COLOR shell resolves
-# to the empty string and must not re-resolve it forever.
+# This machine's own two colors and their escapes. All four are memoized: none
+# can change under a running shell, and one unmemoized escape cost ~7 forks
+# (hostname, up to three reads of misc/colors, a walk of ~/.ssh/config).
+# `+x` tests *set*, not non-empty - a $NO_COLOR shell resolves to empty and
+# must not re-resolve forever.
 function _hi_host_color() {
   [ "${_HI_HOST_COLOR+x}" = x ] ||
     _HI_HOST_COLOR="${_HI_TARGET_COLOR:-$(_hi_resolve_color hostname "$(_hi_hostname)")}"
@@ -529,9 +497,8 @@ function _hi_user_escape() {
   printf '%s' "$_HI_USER_ESC"
 }
 
-# The out-var forms, for the prompt builders: reached through $( ), the memo
-# above is filled inside a subshell and dies with it, so the caller pays every
-# time. GLOSSARY: printf -v out-var
+# Out-var forms for the prompt builders: through $( ) the memo above is filled
+# in a subshell and dies with it. GLOSSARY: printf -v out-var
 function _hi_host_escape_var() {
   _hi_host_escape >/dev/null
   printf -v "$1" '%s' "$_HI_HOST_ESC"
@@ -541,11 +508,10 @@ function _hi_user_escape_var() {
   printf -v "$1" '%s' "$_HI_USER_ESC"
 }
 
-# The literal colored " user@host" fragment (@ yellow over ssh) that
-# install.sh's preview renders; bash.sh/zsh.zsh keep their escape-based
-# (\u/%n) forms, which are a different substrate on purpose.
+# The literal colored " user@host" fragment (@ yellow over ssh) install.sh's
+# preview renders; bash.sh/zsh.zsh keep their escape-based (\u/%n) forms.
 function _hi_userhost() {
   printf '%b' " $(_hi_user_escape)$(_hi_whoami)$(_hi_at_color)@$(_hi_host_escape)$(_hi_hostname)$NC"
 }
 
-set +euo pipefail # must be disabled after our code (this file is part of the interactive shell - any error would close the session)
+set +euo pipefail # see the top of the file

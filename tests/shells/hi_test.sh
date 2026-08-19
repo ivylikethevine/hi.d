@@ -747,20 +747,6 @@ function test_human_bytes_matches_du_shapes() {
   [ "$(_hi_human_bytes 5000000)" = 4.8M ]
 }
 
-# four characters per three bytes, rounded up - the padding is part of the
-# answer, so n * 4 / 3 (which truncates it) is the wrong formula
-function test_armored_len_rounds_up() {
-  [ "$(_hi_armored_len 0)" = 0 ] || return 1
-  [ "$(_hi_armored_len 1)" = 4 ] || return 1
-  [ "$(_hi_armored_len 3)" = 4 ] || return 1
-  [ "$(_hi_armored_len 4)" = 8 ] || return 1
-  # against the real encoder, which is the only opinion that counts
-  local n
-  for n in 1 2 3 100 999; do
-    [ "$(_hi_armored_len "$n")" -eq "$(head -c "$n" /dev/zero | base64 | tr -d '\n' | wc -c)" ] || return 1
-  done
-}
-
 # the reported number counts what is sent, not what is on disk: it must be
 # nowhere near `du` over the payload, which is what it used to be
 function test_wire_size_is_not_the_disk_size() {
@@ -770,14 +756,12 @@ function test_wire_size_is_not_the_disk_size() {
   [ -n "$wire" ] && [ "$wire" != "$disk" ]
 }
 
-# The guard with teeth. The script hi sends carries the tar and hi.sh armored
-# one apiece (the whole thing used to be armored again on top, back when it
-# travelled as one argv entry - both of those are gone). The number is still
-# worth watching: it is what every session pays in bandwidth.
+# The guard with teeth: the assembled script is what every session pays in
+# bandwidth, so measure the thing that is sent rather than re-deriving it from
+# the armored streams (which omits the boilerplate wrapping them).
 function test_payload_stays_clear_of_the_arg_limit() {
   local bytes
-  bytes="$(($(_hi_armored_len "$(wc -c <"$_HI_LAUNCHER")") + \
-  $(_hi_armored_len "$(_hi_payload_tar | wc -c)")))"
+  bytes="$(_hi_wire_bytes)"
   # 128KB (MAX_ARG_STRLEN) is where it used to break outright; 256KB is the
   # "this has doubled, come and look" line
   [ "$bytes" -lt 262144 ]
@@ -954,7 +938,6 @@ function run_hi_tests() {
 
   _hi_h2 "Testing: the size hi reports"
   _hi_check "_hi_human_bytes matches du's shapes" test_human_bytes_matches_du_shapes
-  _hi_check "_hi_armored_len rounds up like base64" test_armored_len_rounds_up
   _hi_check "The wire size isn't the disk size" test_wire_size_is_not_the_disk_size
   _hi_check "The payload stays clear of the argv limit" test_payload_stays_clear_of_the_arg_limit
 

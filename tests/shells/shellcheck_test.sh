@@ -99,27 +99,28 @@ function _hi_lint_source_lines() {
 # Flag every match outside a comment. Comments are excluded on purpose: half of
 # these constructs are *named* in the notes explaining why they aren't used.
 function lint_bash32() {
-  local entry pattern what file hits bad=0 i blanks="$_HI_WORKDIR/bash32"
+  local entry pattern what file rel hits bad=0 blanks="$_HI_WORKDIR/bash32"
   _hi_h2 "Checking for bash-4-only constructs (macOS ships bash 3.2)"
-  # blank each file once, not once per pattern - the awk pass is the expensive
-  # half of this loop and its output is identical for every pattern
+  # Blank each file once, not once per pattern - the awk pass is the expensive
+  # half of this loop and its output is identical for every pattern. The blanks
+  # mirror the source tree's own layout, so one recursive `grep -H` per pattern
+  # reports the real path: a grep per (pattern x file) was ~1000 processes a
+  # run, and this is the CI gate.
+  rm -rf "$blanks"
   mkdir -p "$blanks"
-  i=0
   for file in "${_HI_SH_FILES[@]}"; do
-    _hi_lint_source_lines "$file" >"$blanks/$i"
-    i=$((i + 1))
+    rel="${file#"$_HI_ROOT/"}"
+    case "$rel" in */*) mkdir -p "$blanks/${rel%/*}" ;; esac
+    _hi_lint_source_lines "$file" >"$blanks/$rel"
   done
   for entry in "${_HI_BASH32_LINT[@]}"; do
     pattern="${entry%|*}"
     what="${entry##*|}"
     _HI_LINT_TOTAL=$((_HI_LINT_TOTAL + 1))
-    hits=""
-    i=0
-    for file in "${_HI_SH_FILES[@]}"; do
-      hits+="$(grep -nE "$pattern" "$blanks/$i" | grep -v ':[[:space:]]*#' |
-        sed "s|^|${file#"$_HI_ROOT/"}:|" || true)"
-      i=$((i + 1))
-    done
+    # anchored and non-global, so a '%' or a path-like string inside a matched
+    # line survives into the report untouched
+    hits="$(grep -rnHE "$pattern" "$blanks" 2>/dev/null | grep -v ':[[:space:]]*#' |
+      sed "s|^$blanks/||" || true)"
     if [ -z "$hits" ]; then
       _hi_cecho " | no $what: OK" "$GREEN"
       continue
@@ -161,14 +162,17 @@ function lint_shfmt() {
 # files embed '#!/bin/sh' inside the shim scripts they generate). Skips yellow
 # when absent; CI installs a pinned copy via .github/actions/setup-checkbashisms.
 function lint_checkbashisms() {
-  local file rel out bad=0
+  local file rel out shebang bad=0
   _hi_h2 "Checking the #!/bin/sh files for bashisms (checkbashisms)"
   if ! command -v checkbashisms >/dev/null 2>&1; then
     _hi_skip "checkbashisms" "not installed"
     return 0
   fi
   for file in "${_HI_SH_FILES[@]}"; do
-    head -1 "$file" | grep -q '^#!/bin/sh' || continue
+    # `read` builtin, not `head | grep`: two forks per file over ~110 files,
+    # to answer a question about one line
+    IFS= read -r shebang <"$file" 2>/dev/null || shebang=""
+    case "$shebang" in '#!/bin/sh'*) ;; *) continue ;; esac
     rel="${file#"$_HI_ROOT/"}"
     _HI_LINT_TOTAL=$((_HI_LINT_TOTAL + 1))
     if out="$(checkbashisms "$file" 2>&1)"; then

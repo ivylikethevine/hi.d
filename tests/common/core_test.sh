@@ -52,11 +52,15 @@ function test_choose_glyphs_picks_a_whole_set() {
 }
 
 function test_sanitize_leaves_plain_text_alone() {
-  [ "$(_hi_sanitize "hello world")" = "hello world" ]
+  local out
+  _hi_sanitize_var out "hello world"
+  [ "$out" = "hello world" ]
 }
 
 function test_sanitize_strips_control_chars_and_backslashes() {
-  [ "$(_hi_sanitize $'a\tb\\c')" = "abc" ]
+  local out
+  _hi_sanitize_var out $'a\tb\\c'
+  [ "$out" = "abc" ]
 }
 
 function test_color_escape_matches_red_constant() {
@@ -379,7 +383,7 @@ function run_core_tests() {
   _hi_check "_HI_ASCII beats the locale" test_use_ascii_override_beats_the_locale
   _hi_check "The chooser swaps whole sets" test_choose_glyphs_picks_a_whole_set
 
-  _hi_h2 "Testing: _hi_sanitize"
+  _hi_h2 "Testing: _hi_sanitize_var"
   _hi_check "Leaves plain text alone" test_sanitize_leaves_plain_text_alone
   _hi_check "Strips control chars and backslashes" test_sanitize_strips_control_chars_and_backslashes
 

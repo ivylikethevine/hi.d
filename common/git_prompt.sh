@@ -1,17 +1,17 @@
 #!/bin/bash
 # Shared bash/zsh git prompt segment, styled to match fish's fish_vcs_prompt
 # (see config.fish's __fish_git_prompt_* settings). Needs the palette sourced.
-set -euo pipefail # must be disabled after our code (this file is part of the interactive shell - any error would close the session)
+set -euo pipefail # off again at the end: an error must not close an interactive shell
 
-# _hi_git_prompt [outvar] - with outvar, the segment lands there instead of
+# _hi_git_prompt [outvar] - with outvar the segment lands there instead of
 # stdout, saving bash.sh's per-prompt fork. GLOSSARY: printf -v out-var
 # shellcheck disable=SC2120 # the argument is optional by design
 _hi_git_prompt() {
   [[ -n "${1:-}" ]] && printf -v "$1" ''
   [[ "${_HI_DISABLE_GIT_STATUS:-0}" == 1 ]] && return
 
-  # --no-optional-locks or `git status` rewrites .git/index per prompt -
-  # real I/O per keystroke on a large checkout, for identical output
+  # --no-optional-locks, or `git status` rewrites .git/index per prompt - real
+  # I/O per keystroke on a large checkout, for identical output
   local git_dir ref="" oid="" detached=0
   git_dir=$(LC_ALL=C git --no-optional-locks rev-parse --git-dir 2>/dev/null) || return
 
@@ -39,19 +39,18 @@ _hi_git_prompt() {
 
   if [[ -z "$ref" ]]; then
     detached=1
-    # This ladder is the slowest thing in the file - `describe --contains`
-    # walks history - and a detached HEAD (bisect, mid-rebase, `checkout
-    # <sha>`) redraws the prompt constantly. branch.oid already rode the
-    # porcelain stream, so it is a free invalidation key: HEAD moves, the memo
-    # drops itself. A tag added to the commit you are already sitting on shows
-    # up in the next shell rather than the next prompt - worth two forks a draw.
+    # The slowest thing in the file - `describe --contains` walks history - and
+    # a detached HEAD redraws constantly. branch.oid rode the porcelain stream
+    # already, so it is a free invalidation key: HEAD moves, the memo drops
+    # itself. A tag added to the commit you are sitting on shows up next shell
+    # rather than next prompt - worth two forks a draw.
     if [[ -n "$oid" && "$oid" == "${_HI_DESC_OID:-}" ]]; then
       ref="$_HI_DESC_REF"
     else
       ref=$(LC_ALL=C git describe --tags --contains HEAD 2>/dev/null)
       [[ -z "$ref" ]] && ref=$(LC_ALL=C git describe --tags HEAD 2>/dev/null)
-      # branch.oid already rode the porcelain stream - not a third git fork; the
-      # rev-parse answers only for a stream too old to carry the header
+      # branch.oid rode the porcelain stream - not a third fork; the rev-parse
+      # answers only for a stream too old to carry the header
       [[ -z "$ref" && -n "$oid" && "$oid" != "(initial)" ]] && ref="(${oid:0:8})"
       [[ -z "$ref" ]] && ref="($(LC_ALL=C git rev-parse --short=8 HEAD 2>/dev/null))"
       _HI_DESC_OID="$oid" _HI_DESC_REF="$ref"
@@ -59,8 +58,7 @@ _hi_git_prompt() {
   fi
   [[ -n "$ref" ]] || return
 
-  # in-progress operation (rebase/merge/cherry-pick/revert/bisect), using the
-  # same labels fish_vcs_prompt shows in the same slot
+  # in-progress operation, in fish_vcs_prompt's slot and with its labels
   local state="" dir="" step total
   if [[ -d "$git_dir/rebase-merge" ]]; then
     dir="$git_dir/rebase-merge"
@@ -88,7 +86,7 @@ _hi_git_prompt() {
   if [[ -n "$dir" ]]; then
     state+=" ${step:-?}/${total:-?}"
     # a rebase knows the branch it started from, so show that instead of HEAD;
-    # `read < file` + expansion, not a `sed` fork per prompt for the whole rebase
+    # `read` + expansion, not a `sed` fork per prompt for the whole rebase
     [[ -f "$dir/head-name" ]] && read -r ref <"$dir/head-name" && ref="${ref#refs/heads/}" && detached=0
   fi
 
@@ -99,13 +97,17 @@ _hi_git_prompt() {
   ((ahead > 0)) && upstream+="$_HI_GLYPH_AHEAD${ahead}"
   ((behind > 0)) && upstream+="$_HI_GLYPH_BEHIND${behind}"
 
-  # one line per stash push/apply, same count `rev-list --walk-reflogs` gives
-  local -a stash_lines=()
-  [[ -f "$git_dir/logs/refs/stash" ]] && _hi_read_lines stash_lines <"$git_dir/logs/refs/stash"
-  local stash=${#stash_lines[@]}
+  # one line per stash push/apply, the count `rev-list --walk-reflogs` gives;
+  # counted with the read builtin rather than _hi_read_lines, whose two evals a
+  # line are real work per draw on a long reflog - the shape ksh.sh already uses
+  local stash=0
+  if [[ -f "$git_dir/logs/refs/stash" ]]; then
+    while IFS= read -r line || [[ -n "$line" ]]; do
+      stash=$((stash + 1))
+    done <"$git_dir/logs/refs/stash"
+  fi
 
-  # glyphs (with their C-locale ASCII fallbacks) come from core.sh's
-  # _hi_choose_glyphs, one decision per session
+  # glyphs (and their ASCII fallbacks) come from core.sh's _hi_choose_glyphs
   local flags=""
   ((staged > 0)) && flags+="${YELLOW}${_HI_GLYPH_STAGED}${staged}${NC}"
   ((dirty > 0)) && flags+="${RED}${_HI_GLYPH_DIRTY}${dirty}${NC}"
@@ -127,4 +129,4 @@ _hi_git_prompt() {
   fi
 }
 
-set +euo pipefail # must be disabled after our code (this file is part of the interactive shell - any error would close the session)
+set +euo pipefail # see the top of the file

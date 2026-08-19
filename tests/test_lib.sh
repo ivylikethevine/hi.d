@@ -1461,6 +1461,7 @@ function _hi_container_backend_test() {
   # shellcheck disable=SC2034 # read back through _hi_kv_get, which shellcheck
   # cannot follow (the name is a string there)
   local shell shell_ok=""
+  local -a built_images=()
   for shell in zsh fish mksh; do
     mkdir -p "$_HI_WORKDIR/$shell"
     printf 'FROM alpine:3.20\nRUN apk add --no-cache %s\n' "$shell" >"$_HI_WORKDIR/$shell/Dockerfile"
@@ -1469,6 +1470,9 @@ function _hi_container_backend_test() {
     else
       _hi_kv_set shell_ok "$shell" 0
     fi
+    # recorded whether or not the build succeeded: a half-built tag still
+    # wants removing, and `image rm -f` on a name that never existed is a no-op
+    built_images+=("hi-${backend}test-$shell-$$")
   done
 
   _HI_TEST_MARKER="HI_$(printf '%s' "$backend" | tr '[:lower:]' '[:upper:]')_TEST_OK"
@@ -1493,8 +1497,10 @@ function _hi_container_backend_test() {
   _hi_par_wait
 
   # $$-suffixed like the container names: without it a second run of this
-  # suite on the same host removes the images the first is still running from
-  "$backend" image rm -f "hi-${backend}test-zsh-$$" "hi-${backend}test-fish-$$" >/dev/null 2>&1 || true
+  # suite on the same host removes the images the first is still running from.
+  # The list comes from the build loop rather than being spelled again - the
+  # hand-written copy had already gone stale and was leaking the mksh image.
+  "$backend" image rm -f "${built_images[@]}" >/dev/null 2>&1 || true
 
   _hi_suite_end "$backend" \
     "hi's $backend path survived every shell environment tested ($_HI_TOTAL cases)" \

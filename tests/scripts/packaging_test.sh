@@ -31,7 +31,7 @@ _HI_PKGBUILD_GIT="$_HI_PKG_DIR/aur/hi.d-git/PKGBUILD"
 _HI_RELEASE_WF="$_HI_ROOT/.github/workflows/release.yml"
 _HI_TOOLS_TXT="$_HI_ROOT/.github/actions/setup-tool/tools.txt"
 
-# bump.sh's functions (sha256_of, b2_of, rewrite, write/check_manifests) -
+# bump.sh's functions (sha256_of, b2_of, write/check_manifests) -
 # inert under its source guard, and its derived paths equal the ones above
 # shellcheck source=../../packaging/bump.sh
 source "$_HI_PKG_DIR/bump.sh"
@@ -440,7 +440,7 @@ function _hi_bump_check_rejects() {
   bump_fixture
   (
     _hi_bump_written
-    rewrite "$_HI_SRCINFO" "$1"
+    _hi_rewrite "$_HI_SRCINFO" "$1"
     ! check_manifests >/dev/null 2>&1
   )
 }
@@ -477,7 +477,7 @@ function test_bump_rewrite_preserves_file_mode() {
   printf 'pkgver=0\n' >"$f"
   chmod 604 "$f"
   before="$(ls -l "$f" | awk '{ print $1 }')"
-  rewrite "$f" 's/^pkgver=.*/pkgver=1.2.3/'
+  _hi_rewrite "$f" 's/^pkgver=.*/pkgver=1.2.3/'
   [ "$(ls -l "$f" | awk '{ print $1 }')" = "$before" ]
 }
 
@@ -652,7 +652,7 @@ function test_stamp_is_idempotent() {
 }
 
 # the launcher has to stay executable - `cat` back rather than `mv`, the same
-# reason lib.sh's rewrite does (see test_bump_rewrite_preserves_file_mode)
+# reason core.sh's _hi_rewrite does (see test_bump_rewrite_preserves_file_mode)
 # shellcheck disable=SC2012 # ls -l for the mode column is the point
 function test_stamp_keeps_the_launcher_exec_bit() {
   local d before after
@@ -812,7 +812,7 @@ function run_packaging_tests() {
   else
     _hi_skip "b2 fallback agrees with b2sum" "no openssl"
   fi
-  _hi_check "rewrite preserves the file mode" test_bump_rewrite_preserves_file_mode
+  _hi_check "_hi_rewrite preserves the file mode" test_bump_rewrite_preserves_file_mode
 
   _hi_h2 "Testing: the version stamp"
   _hi_check "hi.sh's stamp line is unique and empty" test_launcher_release_line_is_unique_and_empty

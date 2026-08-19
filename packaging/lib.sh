@@ -44,13 +44,6 @@ function b2_of() {
   fi
 }
 
-# rewrite <file> <sed-expr>... - core.sh's _hi_rewrite under the name packaging/
-# has always called it. The implementation moved there when load.sh's clean_all
-# needed the same thing (it was reaching for `sed -i` and sniffing the userland
-# to pick the flag); the reasons for the shape - a temp file, and cat rather
-# than mv so the target keeps its mode - are written up beside it.
-function rewrite() { _hi_rewrite "$@"; }
-
 # The version of record lives in the versioned PKGBUILD (bump.sh writes it
 # there); reading it back rather than keeping copies is what stops the
 # channels disagreeing. Reads $1, defaulting to the caller's $_HI_PKGBUILD.

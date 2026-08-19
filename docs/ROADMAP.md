@@ -24,6 +24,72 @@ here: git history is the ledger, and this file is only what is left to do.
       rehearsal): attach it as an asset, list it in `SHA256SUMS`, point both
       `url=`s at it. Touches `bump.sh`, both manifests and their tests.
 
+### Tooling
+
+- [ ] **timep profiling for the paths the bench suite guards** — `_hi_bench`
+      (`../tests/bench/bench_test.sh`) gives one average per hot path against a
+      generous ceiling, which answers *whether* something got slower and never
+      *which command inside it did* — so every regression starts by
+      hand-bisecting an rc file. [timep](https://github.com/jkool702/timep) is
+      the missing half: a trap-based bash profiler that maps the call-stack tree
+      and emits per-command SELF and TOTAL wall time, TOTAL CPU time, and an
+      optional flamegraph. Shape it like `tests/coverage.sh` — a
+      `tests/profile.sh` run by hand, deliberately **not** in CI. The bench
+      ceilings stay the gate; this is what you run once one of them trips.
+      `tests/` ships in neither `$_HI_PAYLOAD` nor `$_HI_PACKAGE_CONTENTS`,
+      which is why `coverage.sh` lives there and why this belongs beside it.
+
+  - **Point it at the product, never at a suite.** timep drives the DEBUG trap —
+    the same mechanism `coverage.sh`'s header documents kcov losing the moment
+    `test_lib.sh` is sourced. Profile the argv `_hi_bench_env` already builds
+    (`bash -c 'source shells/bash.sh'`; `header.sh` then `hi_header Online`; the
+    50-call `_hi_git_prompt` loop; `hi.sh`'s payload assembly) rather than
+    wrapping `test_runner.sh`, or this lands in kcov's hole for the same reason.
+  - **bash arms only.** It profiles bash, so `shells/config.fish`,
+    `shells/zsh.zsh` and `common/targets.sh`-under-`sh` stay bench-only. Scope is
+    `shells/bash.sh`, `common/header.sh`, `common/git_prompt.sh` and `hi.sh`.
+  - **Dev-only dependencies, so state them and skip cleanly:** bash loadable
+    builtins, `/dev/shm` (or `$TMPDIR`), and perl for the flamegraph. Print a
+    yellow skip naming where to get it rather than failing, as `coverage.sh`
+    does for a missing kcov, and say which backend actually ran, as `_hi_bench`
+    does for hyperfine.
+  - **Ticks when:** `tests/profile.sh` produces a per-command profile for at
+    least the header and git-prompt paths, and its header says what the numbers
+    do and do not mean as bluntly as `coverage.sh`'s does.
+
+- [ ] **Run each container suite's cases in parallel** — the container suites are
+      the whole cost of a full run: ssh 38s, ssh_relay 44s, docker 7s, framework
+      26s, podman 75s, nomad 6s, kube 42s — **239s of a 348s run**, nearly all of
+      it spent waiting on one container at a time while the machine idles. Every
+      case already builds its own container with a unique name, so the containers
+      themselves do not collide; the harness around them does. What has to change
+      first, in `tests/test_lib.sh`:
+
+  - **`$_HI_SSH_PORT` is a single global** (`:1029`), set by `_hi_sshd_container`
+    and read by `_hi_ssh_launch` and `_hi_ssh_clients` (`:1051` greps the process
+    table *by port*). Two concurrent cases clobber it. It has to become a value
+    the case carries, not a global the last starter wins.
+  - **The counters are incremented in the current shell.** `_hi_case` (`:80`) does
+    `_HI_TOTAL=$((_HI_TOTAL + 1))`; run the case in a background subshell and both
+    counts are lost with it. Needs per-case result files collected after the
+    `wait`, the shape `_hi_probe_start`/`_hi_probe_wait` already uses for the
+    header's backend probes.
+  - **`_hi_track_container` appends to a global array** the exit trap consumes, so
+    a container started in a subshell is never registered and leaks on a crash.
+    Same fix: a file per case, swept by the trap.
+  - **Interleaved output.** Concurrent `_hi_cecho` lines make a transcript nobody
+    can read. `test_runner.sh` already collapses per-suite output and has
+    `--verbose` to stream it; per-case buffering should reuse that idea rather
+    than invent a second one.
+  - **Pick a width deliberately.** Unbounded fan-out on a laptop will thrash the
+    docker daemon and swap the box; the bench suite's honesty rule applies here
+    too - if a cap is imposed, say so in the output rather than let it look like
+    everything ran at once.
+  - **Ticks when:** a full `--group e2e` and `--group backends` run produces the
+    same pass/fail verdict as today, no leaked `hi-*test-*` containers after a
+    forced interrupt, and the wall clock is meaningfully below the 239s serial
+    figure above.
+
 ### Product
 
 - [ ] **Shells hi doesn't style yet** — the README's

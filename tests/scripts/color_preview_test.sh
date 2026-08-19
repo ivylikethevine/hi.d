@@ -220,12 +220,7 @@ function test_tables_name_the_matching_tag() {
 # characters, which PREVIEW (escape-laden, sized by _hi_group_preview_width)
 # and HOST (unwrappably long names) both got wrong.
 function test_tables_are_rectangular() {
-  printf '%s\n' "$_HI_PREVIEW_OUT" | sed 's/\x1b\[[0-9;]*m//g' |
-    awk '
-      /^$/ { table++; next }
-      { if (!(table in w)) w[table] = length($0)
-        if (length($0) != w[table]) { bad = 1 } }
-      END { exit (bad || table == 0) }'
+  _hi_table_is_rectangular "$_HI_PREVIEW_OUT"
 }
 
 function run_color_preview_tests() {

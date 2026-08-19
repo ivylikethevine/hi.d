@@ -23,15 +23,17 @@ _HI_PAYLOAD=(common misc shells load.sh)
 # shipped aliases overwritten, and then sourcing itself forever.
 _HI_OVERLAY_FILES=(settings.sh colors packages tmux.conf aliases.sh)
 
-# GLOSSARY: base64 armor - why base64 over openssl, the -d/-D ladder, the tr
-# Stands in for the connect line's size until the script carrying it has been
-# assembled and measured (see _say_hi); wider than any answer it can produce.
 # What a bash-less target falls back to, best first.
 # ksh and mksh need no arm of their own: they read $ENV exactly as sh does.
 export _HI_SHELL_LADDER="zsh fish ksh mksh sh"
 
+# Stands in for the connect line's size until the script carrying it has been
+# assembled and measured (see _say_hi); wider than any answer it can produce.
 _HI_SIZE_TOKEN="@@SIZE@@"
 
+# GLOSSARY: base64 armor - why base64 over openssl, the -d/-D ladder, and the
+# `tr` fold $_HI_UNARMOR puts in front of the decode (armor that arrived as an
+# argv word could be space-folded; the stdin transport needs no fold)
 _HI_ARMOR="base64"
 _HI_UNARMOR_RAW="{ base64 -d 2>/dev/null || base64 -D; }"
 _HI_UNARMOR="tr -s ' ' '\n' | $_HI_UNARMOR_RAW"
@@ -60,8 +62,13 @@ function _hi_session_env() {
   return 0
 }
 
+# Memoized: _hi_session_env asks once and _hi_fallback_prompt asks again for
+# each of the two arms _hi_remote_suffix generates, and $DOMAIN is fixed for
+# the run - each miss walked the colors file and ~/.ssh/config over again.
 function _hi_target_color() {
-  _hi_resolve_color hostname "${DOMAIN##*@}"
+  [ "${_HI_TARGET_COLOR_MEMO+x}" = x ] ||
+    _HI_TARGET_COLOR_MEMO="$(_hi_resolve_color hostname "${DOMAIN##*@}")"
+  printf '%s\n' "$_HI_TARGET_COLOR_MEMO"
 }
 
 function _hi_overlay_files() {
@@ -245,22 +252,37 @@ function _hi_armored_len() {
   printf '%s' "$((($1 + 2) / 3 * 4))"
 }
 
-# What a fresh session would put on the wire, without connecting (doctor.sh
-# asks); no overlay counted - which files ride is a question about a target.
-# Measured as *sent* - each stream armored once, which is what the assembled
-# script carries; `du` over the source dirs overstated every session.
-function _hi_wire_estimate() {
-  local total=0 bytes
+# What a fresh session puts on the wire, without connecting (doctor.sh and the
+# README badge both quote it); no overlay counted - which files ride is a
+# question about a target.
+#
+# It assembles the real script through the same _hi_remote_middle/_preamble/
+# _suffix that _say_hi uses, rather than summing the three armored streams:
+# summing them is cheaper, but it silently omitted the shell boilerplate those
+# streams are wrapped in, and reported ~6KB under what the connect line printed
+# for the same session. A number on a badge has to be the number the user sees,
+# so this pays one base64 of the payload to be exact.
+function _hi_wire_bytes() {
+  local hi_esc="" nc_esc="" overlay_line="" launcher bootloader tree script
+  local size="$_HI_SIZE_TOKEN"
+  # the size token still stands in here exactly as it does in _say_hi, so this
+  # counts what _say_hi counts before it substitutes the figure back in
+  local DOMAIN="${DOMAIN:-target}"
   # $_HI_LAUNCHER, not $0 - reached by *sourcing*, where $0 is the sourcer;
-  # _say_hi keeps $0 because there it is the running, shipped copy. Counted
-  # through _hi_armored_len rather than by armoring each stream into a
-  # variable: base64 of the whole payload, to measure it, is a fork and a
-  # 50KB copy the answer never needed.
-  for bytes in "$(wc -c <"$_HI_LAUNCHER")" "$(_hi_bootloader | wc -c)" \
-    "$(_hi_payload_tar | wc -c)"; do
-    total=$((total + $(_hi_armored_len "$bytes")))
-  done
-  _hi_human_bytes "$total"
+  # _say_hi keeps $0 because there it is the running, shipped copy
+  launcher="$($_HI_ARMOR <"$_HI_LAUNCHER")"
+  bootloader="$(_hi_bootloader | $_HI_ARMOR)"
+  tree="$(_hi_payload_tar | $_HI_ARMOR)"
+  script="$(_hi_remote_preamble)
+$(_hi_remote_middle)
+$(_hi_remote_suffix)"
+  printf '%s' "${#script}"
+}
+
+# the same figure for humans; the bench suite takes the bytes instead, so the
+# README badge is checked against a number and not against a rounded string
+function _hi_wire_estimate() {
+  _hi_human_bytes "$(_hi_wire_bytes)"
 }
 
 function _hi_file_bytes() {
@@ -278,22 +300,34 @@ function _hi_human_bytes() {
   }'
 }
 
+# core.sh's ladder, plus the diagnostic the header's cell has no room for:
+# which half was missing when there is no answer.
 function _hi_version() {
-  if [ -n "$_HI_RELEASE" ]; then
-    printf '%s\n' "$_HI_RELEASE"
+  local v
+  v="$(_hi_release_or_describe)"
+  if [ -n "$v" ]; then
+    printf '%s\n' "$v"
   elif [ -d "$_HI_ROOT/.git" ]; then
-    git -C "$_HI_ROOT" describe --tags --always --dirty 2>/dev/null ||
-      printf 'unknown (git would not answer)\n'
+    printf 'unknown (git would not answer)\n'
   else
     printf 'unknown (no stamp, no git)\n'
   fi
 }
 
-function _hi_env_exports() {
+# _hi_env_each <printf-format> - _hi_session_env's NAME<TAB>value pairs through
+# <format>, which gets the name and the value in that order. Both transports
+# render the same stream, differing only in the shape they need it in, so the
+# tab contract is stated here once rather than in two loops that must agree.
+function _hi_env_each() {
   local n v
   while IFS=$'\t' read -r n v; do
-    printf '      export %s="%s"\n' "$n" "$v"
+    # shellcheck disable=SC2059 # the format is ours, not user data
+    printf "$1" "$n" "$v"
   done < <(_hi_session_env)
+}
+
+function _hi_env_exports() {
+  _hi_env_each '      export %s="%s"\n'
 }
 
 # The bit both _say_hi branches need first; tmux lines settle only "asked
@@ -364,6 +398,32 @@ function _hi_remote_suffix() {
 REMOTE
 }
 
+# The disposable-tree half of the script: unpack the three armored streams into
+# a fresh /tmp root. Reads $hi_esc/$nc_esc/$size and the three stream variables
+# from its caller, the way _hi_remote_suffix already reads $hi_esc/$nc_esc -
+# so that _say_hi and _hi_wire_estimate assemble one shape, not two that have
+# to be kept in step. (The permanent-install branch stays inline in _say_hi:
+# nothing else builds it.)
+# shellcheck disable=SC2016 # the destinations are the target's to expand
+function _hi_remote_middle() {
+  cat <<REMOTE
+      export _HI_HOME=\$(mktemp -d -t $(_hi_whoami).hi.XXXXXX) # busybox mktemp needs exactly six X
+      export _HI_ROOT=\$_HI_HOME/hi.d
+      export _HI_CONFIG_DIR=\$_HI_ROOT/config
+      export _HI_CLEANUP=\$_HI_HOME
+      mkdir "\$_HI_ROOT"
+      trap 'rm -rf \$_HI_CLEANUP' exit
+      _hi_rc_dir="\$_HI_ROOT"
+      printf '%s %s%s' "$hi_esc" "$nc_esc" "$size"
+      echo "$launcher" | $_HI_UNARMOR > "\$_HI_ROOT/hi.sh"
+      chmod +x "\$_HI_ROOT/hi.sh"
+      echo "$bootloader" | $_HI_UNARMOR > "\$_hi_rc_dir/hi.bashrc"
+      echo "$tree" | $_HI_UNARMOR | tar mxzf - -C "\$_HI_HOME"
+      $overlay_line
+      export _HI_CONNECT_PREFIX=" $size"
+REMOTE
+}
+
 # Connect, copy hi.d over, hand off to load.sh. Everything up to the bash
 # branch is plain POSIX under one `sh -c` (GLOSSARY: sh -c wrapping)
 function _say_hi() {
@@ -414,24 +474,7 @@ $(_hi_overlay_tar | _hi_armored_line '|' 'tar mxzf - -C "$_HI_ROOT/config"')"
     # not known yet: the figure counts the assembled script, and everything
     # above is part of it, so it can only be measured once that exists
     size="$_HI_SIZE_TOKEN"
-    middle="$(
-      cat <<REMOTE
-      export _HI_HOME=\$(mktemp -d -t $(_hi_whoami).hi.XXXXXX) # busybox mktemp needs exactly six X
-      export _HI_ROOT=\$_HI_HOME/hi.d
-      export _HI_CONFIG_DIR=\$_HI_ROOT/config
-      export _HI_CLEANUP=\$_HI_HOME
-      mkdir "\$_HI_ROOT"
-      trap 'rm -rf \$_HI_CLEANUP' exit
-      _hi_rc_dir="\$_HI_ROOT"
-      printf '%s %s%s' "$hi_esc" "$nc_esc" "$size"
-      echo "$launcher" | $_HI_UNARMOR > "\$_HI_ROOT/hi.sh"
-      chmod +x "\$_HI_ROOT/hi.sh"
-      echo "$bootloader" | $_HI_UNARMOR > "\$_hi_rc_dir/hi.bashrc"
-      echo "$tree" | $_HI_UNARMOR | tar mxzf - -C "\$_HI_HOME"
-      $overlay_line
-      export _HI_CONNECT_PREFIX=" $size"
-REMOTE
-    )"
+    middle="$(_hi_remote_middle)"
   fi
 
   script="$(_hi_remote_preamble)
@@ -478,7 +521,7 @@ $(_hi_remote_suffix)"
 # _say_hi_container <label> <errlog> <copy_start>
 function _say_hi_container() {
   local label="$1" tmp="$2" copy_start="$3"
-  local shell_end root fallback exit_code shell_secs size prefix tarball env_kv n v
+  local shell_end root fallback exit_code shell_secs size prefix tarball env_kv
   local ksh_git=""
   local -a probe cp attach
   case "$label" in
@@ -598,8 +641,7 @@ function _say_hi_container() {
   # `rm -rf "$root"` below is the client-side belt to its braces. The shared
   # client-derived vars come from _hi_session_env; the tree paths and timing
   # are this transport's own.
-  env_kv=""
-  while IFS=$'\t' read -r n v; do env_kv+=" $n='$v'"; done < <(_hi_session_env)
+  env_kv="$(_hi_env_each " %s='%s'")"
   "${attach[@]}" sh -c "export$env_kv _HI_HOME='$root' _HI_ROOT='$root/hi.d' _HI_CONFIG_DIR='$root/hi.d/config' _HI_CLEANUP='$root' _HI_COPY_TIME='$(_hi_copy_time "$copy_start" "$_HI_SHELL_START" "$shell_end")' _HI_CONNECT_PREFIX='$prefix'; exec bash --rcfile '$root/hi.d/hi.bashrc'"
   exit_code=$?
 
@@ -642,19 +684,21 @@ function _hi_parse() {
   }
 }
 
+# `${!array[@]}` rather than a counter incremented in lockstep with the loop:
+# the index is what pairs a row with its pid, so index on it. (bash 3.0+, and
+# not one of the bash-4 forms the lint suite greps for.)
 function _hi_resolve_backend() {
-  local target="$1" row i=0
+  local target="$1" i
   local -a pids=()
-  for row in "${_HI_BACKENDS[@]}"; do
-    "${row##*|}" "$target" &
+  for i in "${!_HI_BACKENDS[@]}"; do
+    "${_HI_BACKENDS[i]##*|}" "$target" &
     pids+=("$!")
   done
-  for row in "${_HI_BACKENDS[@]}"; do
-    if wait "${pids[$i]}"; then
-      printf '%s' "${row%%|*}"
+  for i in "${!_HI_BACKENDS[@]}"; do
+    if wait "${pids[i]}"; then
+      printf '%s' "${_HI_BACKENDS[i]%%|*}"
       return 0
     fi
-    i=$((i + 1))
   done
   return 0
 }

@@ -227,7 +227,7 @@ function _hi_prompt_tail() {
   zsh) script='source "$_HI_HOME/hi.d/shells/zsh.zsh" 2>/dev/null; print -rn -- "$PS1"' ;;
   fish) script='source $_HI_HOME/hi.d/shells/config.fish 2>/dev/null; fish_prompt' ;;
   esac
-  _hi_rc_shell xterm-256color "$shell" "$script" "$@" | sed -E 's/\x1b\[[0-9;]*m//g'
+  _hi_strip_ansi "$(_hi_rc_shell xterm-256color "$shell" "$script" "$@")"
 }
 
 # the shipped defaults, one per shell: bash's `\$` (which bash itself renders as

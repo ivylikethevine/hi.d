@@ -39,12 +39,23 @@ _hi_git_prompt() {
 
   if [[ -z "$ref" ]]; then
     detached=1
-    ref=$(LC_ALL=C git describe --tags --contains HEAD 2>/dev/null)
-    [[ -z "$ref" ]] && ref=$(LC_ALL=C git describe --tags HEAD 2>/dev/null)
-    # branch.oid already rode the porcelain stream - not a third git fork; the
-    # rev-parse answers only for a stream too old to carry the header
-    [[ -z "$ref" && -n "$oid" && "$oid" != "(initial)" ]] && ref="(${oid:0:8})"
-    [[ -z "$ref" ]] && ref="($(LC_ALL=C git rev-parse --short=8 HEAD 2>/dev/null))"
+    # This ladder is the slowest thing in the file - `describe --contains`
+    # walks history - and a detached HEAD (bisect, mid-rebase, `checkout
+    # <sha>`) redraws the prompt constantly. branch.oid already rode the
+    # porcelain stream, so it is a free invalidation key: HEAD moves, the memo
+    # drops itself. A tag added to the commit you are already sitting on shows
+    # up in the next shell rather than the next prompt - worth two forks a draw.
+    if [[ -n "$oid" && "$oid" == "${_HI_DESC_OID:-}" ]]; then
+      ref="$_HI_DESC_REF"
+    else
+      ref=$(LC_ALL=C git describe --tags --contains HEAD 2>/dev/null)
+      [[ -z "$ref" ]] && ref=$(LC_ALL=C git describe --tags HEAD 2>/dev/null)
+      # branch.oid already rode the porcelain stream - not a third git fork; the
+      # rev-parse answers only for a stream too old to carry the header
+      [[ -z "$ref" && -n "$oid" && "$oid" != "(initial)" ]] && ref="(${oid:0:8})"
+      [[ -z "$ref" ]] && ref="($(LC_ALL=C git rev-parse --short=8 HEAD 2>/dev/null))"
+      _HI_DESC_OID="$oid" _HI_DESC_REF="$ref"
+    fi
   fi
   [[ -n "$ref" ]] || return
 

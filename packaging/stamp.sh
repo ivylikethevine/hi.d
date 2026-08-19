@@ -13,8 +13,9 @@
 # which needs the checkout to be named exactly hi.d. That holds for mkpkg and
 # both PKGBUILDs (the AUR recipe symlinks $srcdir/hi.d in prepare()), but
 # Homebrew unpacks to hi.d-<version>, where sourcing lib.sh would abort before
-# this script ran. The `rewrite` below is lib.sh's, copied for that reason -
-# the same boundary that makes scripts/install.sh carry its own _hi_write_back.
+# this script ran. The `rewrite` below is core.sh's _hi_rewrite, copied for that
+# reason - the same boundary that makes scripts/install.sh carry its own
+# _hi_write_back.
 set -euo pipefail
 
 _HI_USAGE="Usage: stamp.sh --version <v> [--date <YYYY-MM-DD>] [--root <dir>]
@@ -33,46 +34,29 @@ _HI_ROOT_DIR=""
 _HI_LAUNCHER_FILE=""
 _HI_MAN_FILE=""
 
+# Five flags took a value and each spelled the same guard out: without one, a
+# flag typed with its value left off silently eats the *next* flag. One table
+# instead, mapping flag -> variable and the noun its error says; `eval` to
+# assign through a name is the bash-3.2-safe form (no namerefs).
+_HI_OPTS='--version:_HI_VERSION:a value
+--date:_HI_DATE:a value
+--root:_HI_ROOT_DIR:a path
+--launcher:_HI_LAUNCHER_FILE:a path
+--man:_HI_MAN_FILE:a path'
+
 while [ $# -gt 0 ]; do
+  _hi_opt=""
   case "$1" in
-  --version)
+  --version | --date | --root | --launcher | --man)
+    _hi_opt="$(printf '%s\n' "$_HI_OPTS" | grep "^$1:")"
+    _hi_var="${_hi_opt#*:}"
+    _hi_noun="${_hi_var#*:}"
+    _hi_var="${_hi_var%%:*}"
     [ $# -ge 2 ] || {
-      echo "stamp.sh: --version requires a value" >&2
+      echo "stamp.sh: $1 requires $_hi_noun" >&2
       exit 1
     }
-    _HI_VERSION="$2"
-    shift
-    ;;
-  --date)
-    [ $# -ge 2 ] || {
-      echo "stamp.sh: --date requires a value" >&2
-      exit 1
-    }
-    _HI_DATE="$2"
-    shift
-    ;;
-  --root)
-    [ $# -ge 2 ] || {
-      echo "stamp.sh: --root requires a path" >&2
-      exit 1
-    }
-    _HI_ROOT_DIR="$2"
-    shift
-    ;;
-  --launcher)
-    [ $# -ge 2 ] || {
-      echo "stamp.sh: --launcher requires a path" >&2
-      exit 1
-    }
-    _HI_LAUNCHER_FILE="$2"
-    shift
-    ;;
-  --man)
-    [ $# -ge 2 ] || {
-      echo "stamp.sh: --man requires a path" >&2
-      exit 1
-    }
-    _HI_MAN_FILE="$2"
+    eval "$_hi_var=\$2"
     shift
     ;;
   -h | --help)
@@ -87,6 +71,7 @@ while [ $# -gt 0 ]; do
   esac
   shift
 done
+unset _hi_opt _hi_var _hi_noun
 
 [ -n "$_HI_VERSION" ] || {
   echo "stamp.sh: --version is required" >&2
@@ -117,10 +102,11 @@ if [ -z "$_HI_DATE" ]; then
     date -u -r "$SOURCE_DATE_EPOCH" +%Y-%m-%d)"
 fi
 
-# rewrite <file> <sed-expr>... - lib.sh's, copied (see the header). A temp file
-# rather than `sed -i` (whose in-place flag differs BSD/GNU), written back with
-# cat, not mv - mv would put mktemp's 0600 on the target, losing the launcher's
-# exec bit.
+# rewrite <file> <sed-expr>... - the third copy of core.sh's _hi_rewrite, and
+# the only one that has to exist: lib.sh's is now a one-line call into core.sh,
+# but this script can source neither (see the header). A temp file rather than
+# `sed -i` (whose in-place flag differs BSD/GNU), written back with cat, not mv
+# - mv would put mktemp's 0600 on the target, losing the launcher's exec bit.
 function rewrite() {
   local file="$1" e tmp
   shift

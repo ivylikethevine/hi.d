@@ -31,12 +31,15 @@ Symptom of forgetting: suites report fewer/MISSING cases, or a script runs
 
 - bash 3.2 floor: no mapfile/readarray, associative arrays, namerefs, or case
   conversion. The lint suite greps for violations.
-- `common/` and `shells/` ship in the ssh payload, which has a CI-enforced
-  size budget (bench suite + README badge). Tooling-only helpers must not go
-  into `common/core.sh`; check the payload delta when touching shipped files.
+- `common/` and `shells/` ship in the ssh payload, which is CI-enforced twice
+  and they are different numbers: `bench_payload_size` budgets the gzipped tar
+  (49152 B), while the README badge tracks `_hi_wire_bytes` — the assembled
+  script a session actually sends, which is what `hi` prints on connect — to
+  within 5%. Tooling-only helpers must not go into `common/core.sh`; check both
+  numbers when touching shipped files.
 - Several files are dialect-constrained and say so at the top: paths.sh's
-  four-shell plain-export subset, aliases.sh's POSIX+fish subset, targets.sh
-  and bin/hi standalone POSIX. Respect the stated subset over "cleaner" bash.
+  four-shell plain-export subset, aliases.sh's POSIX+fish subset, and
+  targets.sh's standalone POSIX. Respect the stated subset over "cleaner" bash.
 
 ## Workflow
 

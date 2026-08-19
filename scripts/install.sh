@@ -127,6 +127,9 @@ export _HI_HOME
 
 # shellcheck source=../common/core.sh
 source "$_HI_HOME/hi.d/common/core.sh"
+# the measure-then-render primitives; deliberately outside the shipped common/
+# shellcheck source=./table.sh
+source "$_HI_HOME/hi.d/scripts/table.sh"
 
 # The live previews borrow header.sh's banner/timestamp/system_info/identity/
 # full_check and git_prompt.sh's segment. Sourced on first use (the two
@@ -251,7 +254,11 @@ function setting_off() {
     [ "$answer" = "$off" ]
     return
   fi
-  case $'\n'"$(cat "$target" 2>/dev/null || true)" in
+  # `$(<f)` is the builtin read where `cat` was a process, and the guard covers
+  # the missing file the redirect would otherwise complain about. ~15 questions
+  # run per hi_configure, each asking this.
+  [ -f "$target" ] || return 1
+  case $'\n'"$(<"$target")" in
   *$'\n'"export $var=$off"*) return 0 ;;
   esac
   return 1
@@ -285,19 +292,6 @@ function ask_setting() {
 
 # visible width of $1: printable characters once ANSI SGR codes are stripped,
 # since the raw length color escapes inflate is meaningless for alignment.
-# extglob is needed for the +(...) pattern and restored to whatever it was,
-# rather than left on for the rest of the script.
-function _hi_visible_len() {
-  local stripped restore=0
-  shopt -q extglob || {
-    shopt -s extglob
-    restore=1
-  }
-  stripped="${1//$'\e'\[+([0-9;])m/}"
-  ((restore)) && shopt -u extglob
-  printf '%s' "${#stripped}"
-}
-
 # Run $@ and box what it writes to stdout - a live render using hi's own
 # functions, sized to its longest line rather than the terminal width, since
 # previews range from one short colored line to full_check's wrapped block.
@@ -308,16 +302,18 @@ function show_preview() {
   [ -n "$out" ] || return 0
   _hi_read_lines lines <<<"$out"
   for line in "${lines[@]}"; do
-    len="$(_hi_visible_len "$line")"
+    _hi_visible_len len "$line"
     ((len > content_w)) && content_w=$len
   done
-  printf -v fill_top '%*s' $((content_w + 2 - ${#label})) ''
-  printf -v fill_bottom '%*s' $((content_w + 2)) ''
-  top="┌${label}${fill_top// /─}┐"
-  bottom="└${fill_bottom// /─}┘"
+  # core.sh's _hi_repeat, which is exactly this padding idiom and exists to
+  # spare the `printf | tr` fork a hand-rolled one costs
+  _hi_repeat fill_top $((content_w + 2 - ${#label})) '─'
+  _hi_repeat fill_bottom $((content_w + 2)) '─'
+  top="┌${label}${fill_top}┐"
+  bottom="└${fill_bottom}┘"
   _hi_cecho "   $top" "$NC"
   for line in "${lines[@]}"; do
-    len="$(_hi_visible_len "$line")"
+    _hi_visible_len len "$line"
     pad=$((content_w - len))
     printf '   │ %s%*s │\n' "$line" "$pad" ""
   done
@@ -363,11 +359,17 @@ function _hi_tmux_preview() {
 
 # alias count plus a handful of names, read straight from misc/aliases.sh
 # rather than duplicating its fallthrough logic here
+# One awk, not three pipelines over the same file: it counts and collects the
+# examples in a single pass, and reports 0 for a file with no aliases where
+# `printf '%s\n' "" | wc -l` used to say 1.
 function _hi_aliases_preview() {
-  local names count
-  names="$(grep -oE '^alias [A-Za-z0-9_]+=' "$_HI_ALIASES" | sed -E 's/^alias //; s/=$//')"
-  count="$(printf '%s\n' "$names" | wc -l)"
-  printf '%s personal aliases, e.g.: %s, ...\n' "$count" "$(printf '%s\n' "$names" | head -6 | paste -sd, -)"
+  awk '{
+         if (match($0, /^alias [A-Za-z0-9_]+=/)) {
+           n++
+           if (n <= 6) e = e (n > 1 ? "," : "") substr($0, 7, RLENGTH - 7)
+         }
+       }
+       END { printf "%d personal aliases, e.g.: %s, ...\n", n, e }' "$_HI_ALIASES"
 }
 
 # Every setting the config_* groups decide on, written to $_HI_SETTINGS in one

@@ -148,12 +148,18 @@ function _hi_elapsed() {
   awk -v a="$1" -v b="$2" 'BEGIN { printf "%.3f", b - a }'
 }
 
-# total size of the given paths; --apparent-size is GNU-only, probed per call
+# total size of the given paths; --apparent-size is GNU-only, so the verdict is
+# taken once per shell rather than per call - load.sh asks at session close,
+# with the user waiting on it
 function _hi_du_size() {
-  local flags=""
-  du --version 2>/dev/null | grep -q "GNU coreutils" && flags="--apparent-size"
+  if [ -z "${_HI_DU_FLAGS+x}" ]; then
+    _HI_DU_FLAGS=""
+    case "$(du --version 2>/dev/null)" in
+    *"GNU coreutils"*) _HI_DU_FLAGS="--apparent-size" ;;
+    esac
+  fi
   # shellcheck disable=SC2086 # unquoted so an empty flag list disappears
-  du -shc $flags "$@" | awk 'END { print $1 }'
+  du -shc $_HI_DU_FLAGS "$@" | awk 'END { print $1 }'
 }
 
 # Memoized; the binaries stay authoritative over $HOSTNAME/$USER - the exact
@@ -168,11 +174,17 @@ function _hi_whoami() {
   printf '%s\n' "$_HI_WHOAMI_CACHE"
 }
 
-# Fill both memos in the *calling* shell: prompt builders reach them through
-# $( ), where a cache filled inside the subshell dies with it.
+# Fill the memos in the *calling* shell: prompt builders reach them through
+# $( ), where a cache filled inside the subshell dies with it. The two *colors*
+# and not the two escapes - resolving a color is the expensive half (see
+# _hi_host_escape), and it is the half both prompt builders want; zsh.zsh takes
+# the names and never asks for an escape, so priming those too made it pay for
+# two answers it throws away.
 function _hi_prime_identity() {
   _hi_whoami >/dev/null
   _hi_hostname >/dev/null
+  _hi_host_color >/dev/null
+  _hi_user_color >/dev/null
 }
 
 # Bound a backend CLI so a downed daemon can't hang a waited-on path; bare
@@ -194,6 +206,44 @@ function _hi_interactive_extras() {
 function _hi_sanitize() {
   local out="${1//[[:cntrl:]]/}"
   printf '%s' "${out//\\/}"
+}
+
+# _hi_sanitize_var <var> <text> - the same scrub straight into <var>. The
+# header reaches this seven times a banner, and through $( ) each one was a
+# fork to run two parameter expansions. GLOSSARY: printf -v out-var
+function _hi_sanitize_var() {
+  local _hi_s="${2//[[:cntrl:]]/}"
+  printf -v "$1" '%s' "${_hi_s//\\/}"
+}
+
+# _hi_rewrite <file> <sed-expr>... - every expression in one pass, in place.
+# A temp file rather than `sed -i`: its in-place flag differs BSD/GNU (which
+# made the caller sniff the userland), and -i replaces a *symlinked* rc with a
+# regular file, where the append that put hi's lines there wrote through the
+# link. Written back with cat, not mv, so the destination keeps its own inode,
+# mode and any hardlink or ACL on it.
+function _hi_rewrite() {
+  local file="$1" e tmp
+  shift
+  local -a exprs=()
+  for e in "$@"; do exprs+=(-e "$e"); done
+  tmp="$(mktemp -t hi.rewrite.XXXXXX)"
+  sed "${exprs[@]}" "$file" >"$tmp"
+  cat "$tmp" >"$file"
+  rm -f "$tmp"
+}
+
+# The version this tree answers with, raw and unpresented: a packager's stamp
+# (or the client's answer, which the ssh preamble exports) wins, else git
+# describe in a checkout, else nothing. Each caller adds its own presentation -
+# the header wants a short sanitized cell, `hi --version` and the doctor want a
+# diagnostic that says *why* there is no answer.
+function _hi_release_or_describe() {
+  if [ -n "${_HI_RELEASE:-}" ]; then
+    printf '%s\n' "$_HI_RELEASE"
+  elif [ -d "$_HI_ROOT/.git" ]; then
+    git -C "$_HI_ROOT" describe --tags --always --dirty 2>/dev/null || true
+  fi
 }
 
 # zsh's `trap ... EXIT` doesn't fire the way bash's does; it has TRAPEXIT instead
@@ -224,16 +274,16 @@ function _hi_prompt_end_default() {
   done
 }
 
-# _hi_prompt_end <SHELL> [default] - the prompt's end character: per-shell
-# setting, then the all-three one, then the roster's default (or the one given,
-# which is how a caller outside the roster asks). Empty counts as unset
-# (`' '` still means "none"); reaches $PS1 unescaped on purpose, so `%#` and
-# `\$` keep their meaning. config.fish keeps its own copy of this rule.
+# _hi_prompt_end <SHELL> - the prompt's end character: per-shell setting, then
+# the all-three one, then the roster's default. Empty counts as unset (`' '`
+# still means "none"); reaches $PS1 unescaped on purpose, so `%#` and `\$` keep
+# their meaning. The roster default sits inside the expansion so it is resolved
+# only when nothing overrode it - the overriding case costs no fork at all.
+# config.fish keeps its own copy of this rule.
 function _hi_prompt_end() {
-  local specific fallback="${2:-}"
-  [ -n "$fallback" ] || fallback="$(_hi_prompt_end_default "$1")"
+  local specific
   eval "specific=\"\${_HI_PROMPT_END_$1:-}\""
-  printf '%s' "${specific:-${_HI_PROMPT_END:-$fallback}}"
+  printf '%s' "${specific:-${_HI_PROMPT_END:-$(_hi_prompt_end_default "$1")}}"
 }
 
 function _hi_at_color() {
@@ -316,23 +366,18 @@ function _hi_color_escape() {
 
 # Deterministic name -> palette bucket, right in zsh as well as bash:
 # `${name:$i:1}` needs the `$` (zsh reads `:i` as a history modifier), and the
-# bucket is picked by counting, not `${arr[n]}` - zsh indexes from 1, and
-# `setopt KSH_ARRAYS` papered over that at oh-my-zsh's expense.
+# bucket is taken with the *slice* form, not `${arr[n]}` - zsh indexes arrays
+# from 1 (`setopt KSH_ARRAYS` papered over that at oh-my-zsh's expense), while
+# `${arr[@]:n:1}` counts from 0 in both shells. It replaced a counted walk over
+# the whole palette per resolution.
 function _hi_hash_color() {
-  local name="$1" sum=0 i=0 ord bucket idx=0 candidate
+  local name="$1" sum=0 i=0 ord
   while [ "$i" -lt "${#name}" ]; do
     printf -v ord '%d' "'${name:$i:1}"
     sum=$((sum + ord))
     i=$((i + 1))
   done
-  bucket=$((sum % ${#_HI_COLOR_NAMES[@]}))
-  for candidate in "${_HI_COLOR_NAMES[@]}"; do
-    if [ "$idx" -eq "$bucket" ]; then
-      printf '%s\n' "$candidate"
-      return 0
-    fi
-    idx=$((idx + 1))
-  done
+  printf '%s\n' "${_HI_COLOR_NAMES[@]:$((sum % ${#_HI_COLOR_NAMES[@]})):1}"
 }
 
 # the user/host of the machine hi.d is permanently installed on. hi.sh ships
@@ -377,10 +422,25 @@ function _hi_override_color() {
   _hi_colors_lookup "$1" "$special"
 }
 
+# _hi_ssh_host_tag <name>, memoized one deep: every caller asks about the same
+# host in a row - the connect path alone reaches it from _hi_is_ssh_host, from
+# _hi_session_env and from each _hi_resolve_color hostname - and each miss was
+# a full in-shell walk of ~/.ssh/config. The rc carries meaning (see below), so
+# it is remembered alongside the value.
+function _hi_ssh_host_tag() {
+  if [ "${_HI_TAG_NAME+x}" != x ] || [ "$_HI_TAG_NAME" != "$1" ]; then
+    _HI_TAG_RC=0
+    _HI_TAG_VALUE="$(_hi_ssh_host_tag_walk "$1")" || _HI_TAG_RC=$?
+    _HI_TAG_NAME="$1"
+  fi
+  [ -n "$_HI_TAG_VALUE" ] && printf '%s\n' "$_HI_TAG_VALUE"
+  return "$_HI_TAG_RC"
+}
+
 # The "# Tags: a, b" comment directly above a "Host <alias>" line in
 # ~/.ssh/config; unknown host returns 1, a known host with no tag returns 2 -
 # `Host` matches case-insensitively (ssh reads its keywords that way
-function _hi_ssh_host_tag() {
+function _hi_ssh_host_tag_walk() {
   local line trimmed rest tag="" aliases
   [ -f "$_HI_SSH_CONFIG" ] || return 1
   while IFS= read -r line || [ -n "$line" ]; do
@@ -436,11 +496,43 @@ function _hi_resolve_color() {
   _hi_hash_color "$name"
 }
 
-# locally calculated to properly apply colors
-function _hi_host_color() { printf '%s\n' "${_HI_TARGET_COLOR:-$(_hi_resolve_color hostname "$(_hi_hostname)")}"; }
-function _hi_user_color() { _hi_resolve_color username "$(_hi_whoami)" "${_HI_TARGET_TAG:-}"; }
-function _hi_host_escape() { _hi_color_escape "$(_hi_host_color)"; }
-function _hi_user_escape() { _hi_color_escape "$(_hi_user_color)"; }
+# This machine's own two colors, and the escapes for them. All four are
+# memoized because none of them can change under a running shell, and none was
+# cheap: every layer returns on stdout, so one unmemoized escape cost about
+# seven forks - hostname, up to three reads of misc/colors, and a walk of
+# ~/.ssh/config - which the prompt paid at every shell start and the banner
+# twice a session. `+x` tests *set*, not non-empty: a $NO_COLOR shell resolves
+# to the empty string and must not re-resolve it forever.
+function _hi_host_color() {
+  [ "${_HI_HOST_COLOR+x}" = x ] ||
+    _HI_HOST_COLOR="${_HI_TARGET_COLOR:-$(_hi_resolve_color hostname "$(_hi_hostname)")}"
+  printf '%s\n' "$_HI_HOST_COLOR"
+}
+function _hi_user_color() {
+  [ "${_HI_USER_COLOR+x}" = x ] ||
+    _HI_USER_COLOR="$(_hi_resolve_color username "$(_hi_whoami)" "${_HI_TARGET_TAG:-}")"
+  printf '%s\n' "$_HI_USER_COLOR"
+}
+function _hi_host_escape() {
+  [ "${_HI_HOST_ESC+x}" = x ] || _HI_HOST_ESC="$(_hi_color_escape "$(_hi_host_color)")"
+  printf '%s' "$_HI_HOST_ESC"
+}
+function _hi_user_escape() {
+  [ "${_HI_USER_ESC+x}" = x ] || _HI_USER_ESC="$(_hi_color_escape "$(_hi_user_color)")"
+  printf '%s' "$_HI_USER_ESC"
+}
+
+# The out-var forms, for the prompt builders: reached through $( ), the memo
+# above is filled inside a subshell and dies with it, so the caller pays every
+# time. GLOSSARY: printf -v out-var
+function _hi_host_escape_var() {
+  _hi_host_escape >/dev/null
+  printf -v "$1" '%s' "$_HI_HOST_ESC"
+}
+function _hi_user_escape_var() {
+  _hi_user_escape >/dev/null
+  printf -v "$1" '%s' "$_HI_USER_ESC"
+}
 
 # The literal colored " user@host" fragment (@ yellow over ssh) that nu's
 # prompt and install.sh's preview both render; bash.sh/zsh.zsh keep their

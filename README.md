@@ -3,7 +3,7 @@
 ![CI (main)](https://github.com/ivylikethevine/hi.d/actions/workflows/ci.yml/badge.svg)
 ![CI (develop)](https://github.com/ivylikethevine/hi.d/actions/workflows/ci.yml/badge.svg?branch=develop)
 [![Coverage](https://github.com/ivylikethevine/hi.d/actions/workflows/coverage.yml/badge.svg)](https://github.com/ivylikethevine/hi.d/actions/workflows/coverage.yml)
-![ssh payload](https://img.shields.io/badge/ssh_payload-39KB_gzipped-4c1)
+![ssh payload](https://img.shields.io/badge/ssh_payload-104KB_per_session-4c1)
 ![bash](https://img.shields.io/badge/bash-3.2%2B-4EAA25?logo=gnubash&logoColor=white)
 ![shells](https://img.shields.io/badge/shells-bash%20%7C%20zsh%20%7C%20fish%20%7C%20nu%20%7C%20sh-blue)
 ![targets](https://img.shields.io/badge/targets-ssh%20%7C%20docker%20%7C%20podman%20%7C%20nomad%20%7C%20k8s-8A2BE2)
@@ -20,8 +20,9 @@ variety of shells on both sides — [just below](#every-target-the-same-session)
 `xxh`, `kyrat` or `chezmoi`, including where one of those is the better tool:
 [hi.d and the alternatives](#hid-and-the-alternatives).
 
-The payload badge is enforced, not aspirational: the bench suite rebuilds the real payload (`$_HI_PAYLOAD`
-only — no tests, docs or CI ever ride along) and fails CI when the badge drifts more than a kilobyte.
+The payload badge is enforced, not aspirational: the bench suite assembles the real connect script — the
+same one `hi` prints the size of when you say hi to a target, carrying `$_HI_PAYLOAD` only, with no tests,
+docs or CI ever riding along — and fails CI when the badge drifts more than 5% from it.
 
 ## Every target, the same session
 
@@ -84,7 +85,7 @@ hi's aliases-only fallback. Client: zsh.
 
 1. `hi.sh` runs on the client, archives `hi.d/` and sends it to the target, which unpacks it into a `/tmp` directory. Left out: `hi.sh` itself, `.git`, `scripts/`, `tests/`, `docs/`, `.github/`, this README and the editor/tooling dotfiles — `$_HI_PAYLOAD` at the top of `hi.sh` is the authoritative allow list. `_HI_ROOT` is `$INSTALL_DIR/hi.d` on the client, `$_HI_HOME/hi.d` on the target.
    Your `settings.sh`, `colors`, `packages`, `tmux.conf` and `aliases.sh` live outside the tree (see [Configuration](#configuration)) and follow in a second, much smaller archive — `$_HI_OVERLAY_FILES` in `hi.sh`, `$_HI_CONFIG_DIR` on the target. It lands in a `config/` of its own beside `misc/` rather than over it, so your `aliases.sh` stays additive. Nothing is sent if you have overridden nothing.
-   The tar, `hi.sh` and the bootloader are each base64-armored, assembled into one script, and written over the **stdin** of the first of two calls multiplexed on one ssh connection; the second runs it. Not as an argv entry, which it used to be: Linux caps a single one at 128KB regardless of `ARG_MAX`, and the payload had grown within a few kilobytes of that. The script itself travels unarmored — stdin is a pipe, so only the three streams *inside* it need armor, and a second pass over the whole thing cost a third of every session's bytes for nothing. The size hi prints on connect is that script, which is still larger than the badge: `hi.sh` (~30KB) rides the wire beside the payload, and armor is 4/3 — `(payload + hi.sh + bootloader) × 4/3`, or roughly 2.3× the gzipped figure the badge measures. The size on **disconnect** is a different measurement again: `du --apparent-size` of the unpacked tree on the target, which is why it is bigger still — those files land decompressed. `hi --doctor` prints both, labeled.
+   The tar, `hi.sh` and the bootloader are each base64-armored, assembled into one script, and written over the **stdin** of the first of two calls multiplexed on one ssh connection; the second runs it. Not as an argv entry, which it used to be: Linux caps a single one at 128KB regardless of `ARG_MAX`, and the payload had grown within a few kilobytes of that. The script itself travels unarmored — stdin is a pipe, so only the three streams *inside* it need armor, and a second pass over the whole thing cost a third of every session's bytes for nothing. The size hi prints on connect is that script, and it is what the badge above measures: `hi.sh` (~30KB) rides the wire beside the payload and armor is 4/3, so a session costs roughly `(payload + hi.sh + bootloader) × 4/3` — about 2.4× the gzipped tar on its own. The size on **disconnect** is a different measurement again: `du --apparent-size` of the unpacked tree on the target, which is why it is bigger still — those files land decompressed. `hi --doctor` prints both, labeled.
 2. On the target, `$_HI_ROOT/hi.bashrc` sources `$_HI_ROOT/load.sh` and calls `load`.
 3. `load.sh` prints the header, appends hi's shell configs to the host's own rc files, and starts a session in **your login shell** when hi styles it (bash, zsh or fish), else the first of `fish > zsh > bash` the target has. `_HI_SHELL_PREFERENCE` is that rule as a setting. The `zsh > fish > ksh > sh` order quoted elsewhere is the **no-bash fallback**: what's left when bash turned out to be missing.
 4. When the session ends, `load.sh`'s `trap` strips those additions back out, and the `/tmp` directory is removed by the cleanup trap `hi.sh` set up on connect.
@@ -425,7 +426,6 @@ work, and detecting a permanent `~/hi.d` on the target to use in place.
 ## Installation/Usage
 
 - `hi.d/scripts/install.sh` (re-run it any time; it repairs its own lines, even if hi.d moved) - before touching your shell rc files it validates whichever of `~/.bashrc`, `~/.zshrc` and `~/.config/fish/config.fish` are installed with each shell's own syntax checker, and asks whether to continue if any have issues
-  - or `basher install ivylikethevine/hi.d` if [basher](https://github.com/basherpm/basher) manages your shell packages: it clones the repo and links `bin/hi` onto PATH (the shim exports `_HI_HOME` for the cellar location). The rc wiring, toggles and validation are still `scripts/install.sh`'s job - run it from the cloned package for the full setup
 - reload your shell!
 - run `hi_configure` any time afterward to revisit the feature toggle prompts - header, prompt, personal settings, git status, editors, aliases, header details, terminal width, and whether hi styles this machine too or only the hosts you say `hi` to - without touching the shell rc wiring. Answers land in `~/.config/hi.d/settings.sh`; see [Configuration](#configuration) below
 - run `hi_check_configs` any time to just re-run that shell rc validation, without the rest of the install

@@ -217,7 +217,7 @@ function test_preview_renders_without_error() {
 
 function test_preview_names_every_priority() {
   local i stripped
-  stripped="$(printf '%s\n' "$_HI_PREVIEW_OUT" | sed 's/\x1b\[[0-9;]*m//g')"
+  stripped="$(_hi_strip_ansi "$_HI_PREVIEW_OUT")"
   for i in "${!_HI_YES[@]}"; do
     printf '%s\n' "$stripped" | grep -q "^| $i  *| " || return 1
   done
@@ -249,18 +249,12 @@ function test_preview_reports_a_missing_packages_file() {
   [[ "$out" == *"No packages file"* ]]
 }
 
-# Every cell is padded to its column's width, so each table has exactly one
-# printed width once the color escapes are stripped - the geometry check
-# color_preview_test.sh runs on its own tables, for the same reason: a column
-# measured in something other than printed characters overflows its rule.
+# The same invariant color_preview_test.sh asserts, and now literally the same
+# code: test_lib.sh's _hi_table_is_rectangular. The two used to segment tables
+# differently - one on blank lines, one on `^[+|]` - so they were not actually
+# checking the same thing.
 function test_tables_are_rectangular() {
-  printf '%s\n' "$_HI_PREVIEW_OUT" | sed 's/\x1b\[[0-9;]*m//g' |
-    awk '
-      /^[+|]/ { if (!(t in w)) w[t] = length($0)
-                else if (length($0) != w[t]) bad = 1
-                next }
-      { t++ }
-      END { exit (bad || t == 0) }'
+  _hi_table_is_rectangular "$_HI_PREVIEW_OUT"
 }
 
 function run_packages_preview_tests() {

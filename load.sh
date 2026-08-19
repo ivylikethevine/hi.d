@@ -46,13 +46,17 @@ unset _hi_shell _hi_label _hi_tree_rc _hi_home_rc _hi_check _hi_flags
 function configure_files() {
   local pair target src open body
   # nu makes its config dir on first run, not install - so a fresh nu would dodge the loop's dir gate
-  command -v nu >/dev/null 2>&1 && mkdir -p "$_HI_HOME_NU_DIR"
+  command -v nu >/dev/null 2>&1 && [ ! -d "$_HI_HOME_NU_DIR" ] && mkdir -p "$_HI_HOME_NU_DIR"
   for pair in "${_HI_CONFIGS[@]}"; do
     target="${pair#*:}"
     src="${pair%:*}"
     [ -d "${target%/*}" ] || continue # targets are absolute; no dirname fork
-    touch "$target"
-    grep -q "$_HI_CONFIG_START" "$target" && continue
+    # `: >>` creates without truncating and without exec'ing touch; `$(<f)`
+    # is the builtin read, where `grep -q` was a second exec. Both ran per rc
+    # file on every connect, and a repeat connect pays them only to `continue`.
+    # $(<f) slurps where grep short-circuits - fine for an rc file.
+    : >>"$target"
+    case "$(<"$target")" in *"$_HI_CONFIG_START"*) continue ;; esac
     # GLOSSARY: graft crash guard - why every graft wraps, and nu's exception
     # shellcheck disable=SC2016 # single quotes are the point: the guard expands at shell start, not graft time
     case "$src" in
@@ -80,12 +84,11 @@ function clean_all() {
     else
       pattern="/^$_HI_CONFIG_START/d"
     fi
-    # BSD/macOS sed needs an explicit (empty) suffix argument for -i
-    if [ -f "$_HI_LINUX_RELEASE" ]; then
-      sed -i "$pattern" -- "$target"
-    else
-      sed -i '' "$pattern" "$target"
-    fi
+    # core.sh's _hi_rewrite, not `sed -i`: its flag differs BSD/GNU (this used
+    # to sniff /etc/os-release to guess which), and -i would replace a
+    # symlinked rc with a regular file - the opposite of what configure_files
+    # did when it appended these lines through that same link
+    _hi_rewrite "$target" "$pattern"
   done
   [ -n "${_HI_CLEANUP:-}" ] && rm -rf "$_HI_ROOT"
   return 0
@@ -104,7 +107,7 @@ function _hi_login_shell() {
 # GLOSSARY: session-shell ranking - login-first, and nu's allow-list-only seat
 function _hi_session_shell() {
   local want
-  for want in ${_HI_SHELL_PREFERENCE:-login fish zsh bash} fish zsh bash; do
+  for want in ${_HI_SHELL_PREFERENCE:-login} fish zsh bash; do
     [ "$want" = login ] && want="$(_hi_login_shell)"
     case "$want" in
     bash | zsh | fish | nu) command -v "$want" >/dev/null 2>&1 && {

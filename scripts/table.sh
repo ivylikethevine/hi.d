@@ -14,6 +14,24 @@
 # measure, _hi_widen_to to a width the caller already worked out (a cell full of
 # color escapes has no length worth taking).
 
+# _hi_visible_len <var> <text> - <text>'s printed width into <var>: the ANSI
+# escapes stripped, then the characters counted. It lives here rather than in a
+# caller because measuring is half of this file's measure-then-render contract.
+# An out-var, not stdout: show_preview measures every line twice (once to size
+# the box, once to pad it), and through $( ) each of those was a fork plus an
+# extglob save/restore. extglob is needed for the +(...) pattern and restored
+# to whatever it was, rather than left on for the rest of the caller.
+function _hi_visible_len() {
+  local restore=0 stripped
+  shopt -q extglob || {
+    shopt -s extglob
+    restore=1
+  }
+  stripped="${2//$'\e'\[+([0-9;])m/}"
+  ((restore)) && shopt -u extglob
+  printf -v "$1" '%s' "${#stripped}"
+}
+
 # _hi_widen <var> <string...> - grow the width variable named <var> to the
 # longest of the strings.
 function _hi_widen() {

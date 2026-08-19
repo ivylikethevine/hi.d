@@ -44,20 +44,12 @@ function b2_of() {
   fi
 }
 
-# rewrite <file> <sed-expr>... - all expressions in one pass. A temp file
-# rather than `sed -i` (whose in-place flag differs BSD/GNU), written back with
-# cat, not mv - mv would put mktemp's 0600 on the target, losing its mode (a
-# tracked manifest's, or a staged launcher's exec bit).
-function rewrite() {
-  local file="$1" e tmp
-  shift
-  local -a exprs=()
-  for e in "$@"; do exprs+=(-e "$e"); done
-  tmp="$(mktemp -t hi.rewrite.XXXXXX)"
-  sed "${exprs[@]}" "$file" >"$tmp"
-  cat "$tmp" >"$file"
-  rm -f "$tmp"
-}
+# rewrite <file> <sed-expr>... - core.sh's _hi_rewrite under the name packaging/
+# has always called it. The implementation moved there when load.sh's clean_all
+# needed the same thing (it was reaching for `sed -i` and sniffing the userland
+# to pick the flag); the reasons for the shape - a temp file, and cat rather
+# than mv so the target keeps its mode - are written up beside it.
+function rewrite() { _hi_rewrite "$@"; }
 
 # The version of record lives in the versioned PKGBUILD (bump.sh writes it
 # there); reading it back rather than keeping copies is what stops the

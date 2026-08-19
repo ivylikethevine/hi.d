@@ -231,9 +231,6 @@ function run_shellcheck() {
   # the source of it.
   _hi_read_lines _HI_SH_FILES < <(find "$_HI_ROOT" -name '*.sh' \
     -not -path '*/.git/*' -not -path "$_HI_ROOT/dist/*" | sort)
-  # bin/hi is sh with no .sh suffix (basher links it by filename), so the
-  # find above cannot see it - named here or it escapes every lint
-  _HI_SH_FILES+=("$_HI_ROOT/bin/hi")
   _HI_LINT_TOTAL="${#_HI_SH_FILES[@]}"
   _HI_SKIPPED=0
 

@@ -106,11 +106,57 @@ function _hi_check() {
 # _hi_before <text> <first-pattern> <second-pattern> - both patterns present
 # in <text>, and the first's earliest match on an earlier line. The ordering
 # assertion several suites make about generated rc/bootloader content.
+# `grep -m1` and a here-string, not `printf | grep | head | cut`: two processes
+# per pattern instead of four, across ten call sites in the fast suites. The
+# patterns stay grep's BREs on purpose - bash's own `=~` is an ERE, where the
+# unescaped `+` in a caller's 'set +euo pipefail' silently stops being literal.
 function _hi_before() {
   local a b
-  a="$(printf '%s\n' "$1" | grep -n "$2" | head -1 | cut -d: -f1)"
-  b="$(printf '%s\n' "$1" | grep -n "$3" | head -1 | cut -d: -f1)"
-  [ -n "$a" ] && [ -n "$b" ] && [ "$a" -lt "$b" ]
+  a="$(grep -n -m1 "$2" <<<"$1")"
+  b="$(grep -n -m1 "$3" <<<"$1")"
+  [ -n "$a" ] && [ -n "$b" ] && [ "${a%%:*}" -lt "${b%%:*}" ]
+}
+
+# _hi_strip_ansi <text> - the palette taken back out, for suites asserting on
+# geometry or plain content. The inverse of _hi_rendered, and one home for a
+# regex that was hand-written in six suites, where a silent stop-matching is
+# the failure mode.
+function _hi_strip_ansi() {
+  local out="$1" restore=0
+  shopt -q extglob || {
+    shopt -s extglob
+    restore=1
+  }
+  out="${out//$'\e'\[*([0-9;])m/}"
+  ((restore)) && shopt -u extglob
+  printf '%s' "$out"
+}
+
+# _hi_table_is_rectangular <text> - every line of every boxed table in <text>
+# is the same printed width. Both preview suites assert this and had drifted
+# into segmenting tables differently; the rule lives here now. A table is a run
+# of adjacent lines starting with `+` or `|`, so blank lines and prose between
+# two tables separate them without being measured.
+function _hi_table_is_rectangular() {
+  local line stripped width=0 len seen=0
+  while IFS= read -r line; do
+    stripped="$(_hi_strip_ansi "$line")"
+    case "$stripped" in
+    [+\|]*)
+      len=${#stripped}
+      if [ "$width" -eq 0 ]; then
+        width=$len
+        seen=1
+      elif [ "$len" -ne "$width" ]; then
+        return 1
+      fi
+      ;;
+    # anything else ends the current table; the next run measures itself afresh,
+    # since two tables in one output need not share a width
+    *) width=0 ;;
+    esac
+  done <<<"$1"
+  [ "$seen" -eq 1 ]
 }
 
 # _hi_check_requires <bin> <label> <predicate...> - _hi_check, unless <bin> is
@@ -625,12 +671,10 @@ function _hi_pty_wrap() {
 # launcher's stdin, so that stdin is a pipe from us rather than the terminal,
 # and both `ssh -t` and `<backend> exec -it` want a tty there. Left empty when
 # python3 is missing, which is what makes those cases skip rather than fail.
+# Filled here rather than by a function four suites had to remember to call
+# first: it takes no arguments and reads nothing that varies between cases.
 _HI_PTY_FORCED=()
-function _hi_pty_force() {
-  _HI_PTY_FORCED=()
-  command -v python3 >/dev/null 2>&1 && _HI_PTY_FORCED=(python3 -c "$_HI_PTY_SPAWN")
-  return 0
-}
+command -v python3 >/dev/null 2>&1 && _HI_PTY_FORCED=(python3 -c "$_HI_PTY_SPAWN")
 
 # The _hi_pty_wrap preamble every suite that backgrounds the launcher needs:
 # stash our real stdin on fd 3 and decide the pty wrap from *that*. $1 is the
@@ -809,9 +853,9 @@ function _hi_session_ready() {
 # _hi_interactive_case [-c <closing>] [-m <marker>]... [-f <fn>] \
 #   <label> <what> <marker> <timeout_s> <launcher...> -
 # where <launcher...> is the *bare* command, with no pty prefix of its own:
-# _HI_PTY_FORCED is prepended here (see _hi_pty_force, which the suite must
-# have called first). The options are what let every pty-driven suite share
-# this one driver instead of forking it:
+# _HI_PTY_FORCED is prepended here; it is filled at source time, so no suite
+# has to remember to ask for it. The options are what let every pty-driven
+# suite share this one driver instead of forking it:
 #   -c <closing>  the line whose appearance means the session is over - the
 #                 feeder holds the pipe open until it lands, and it is
 #                 asserted as a marker. Default: load()'s "hi closing"; a tier
@@ -1086,7 +1130,7 @@ function _hi_freeze_session() {
 # the callers redirect and background it differently - append the remote
 # command and go. Call it *after* _hi_pty_wrap, whose result it captures.
 # $_HI_SSH_LAUNCH_BARE is the same command without that prefix, for
-# _hi_interactive_case, which brings its own (see _hi_pty_force).
+# _hi_interactive_case, which brings its own (see _HI_PTY_FORCED).
 function _hi_ssh_launch() {
   _HI_SSH_LAUNCH_BARE=("$_HI_LAUNCHER" -p "$1" -i "$_HI_WORKDIR/id"
     "${_HI_SSH_OPTS[@]}" -o ConnectTimeout=5 hitest@127.0.0.1)
@@ -1196,7 +1240,6 @@ function _hi_container_backend_test() {
   _HI_TEST_MARKER="HI_$(printf '%s' "$backend" | tr '[:lower:]' '[:upper:]')_TEST_OK"
 
   _hi_pty_stdin auto "no tty and no python3 to fake one - $backend exec -it will fail outright, results may be unreliable"
-  _hi_pty_force
 
   _hi_suite_begin
 

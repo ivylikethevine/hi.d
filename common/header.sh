@@ -12,18 +12,15 @@ function header_row() {
   printf '%b\n' "$out$NC"
 }
 
-# hi's own version for the header, resolved once per shell (the row is
-# printed twice a session, at connect and at disconnect). The stamp wins - a
-# packager wrote it, or the ssh preamble exported the client's answer - and a
-# checkout falls back to git describe, so every machine has one to show. Only
-# a stampless, gitless install is left with "unknown".
+# hi's own version for the header, resolved once per shell (the row is printed
+# twice a session, at connect and at disconnect). core.sh's ladder answers -
+# stamp, else git describe - and only a stampless, gitless install falls
+# through to "unknown"; the header shows the bare word where `hi --version`
+# spells out which half was missing.
 function _hi_header_version() {
   if [ -z "${_HI_HEADER_VERSION+x}" ]; then
-    _HI_HEADER_VERSION="${_HI_RELEASE:-}"
-    if [ -z "$_HI_HEADER_VERSION" ] && [ -d "$_HI_ROOT/.git" ]; then
-      _HI_HEADER_VERSION="$(git -C "$_HI_ROOT" describe --tags --always --dirty 2>/dev/null || true)"
-    fi
-    _HI_HEADER_VERSION="$(_hi_sanitize "${_HI_HEADER_VERSION:-unknown}")"
+    _hi_sanitize_var _HI_HEADER_VERSION "$(_hi_release_or_describe)"
+    [ -n "$_HI_HEADER_VERSION" ] || _HI_HEADER_VERSION="unknown"
   fi
   printf '%s\n' "$_HI_HEADER_VERSION"
 }
@@ -38,9 +35,11 @@ function timestamp() {
 
 function system_info() {
   local kernel arch os cpus ram base_mhz boost_mhz
-  read -r kernel arch <<<"$(uname -sm)"
-  kernel=$(_hi_sanitize "$kernel")
-  arch=$(_hi_sanitize "$arch")
+  # process substitution, not a here-string: <<< is a real temp file on bash
+  # before 5.1, which is every macOS client and most targets
+  read -r kernel arch < <(uname -sm)
+  _hi_sanitize_var kernel "$kernel"
+  _hi_sanitize_var arch "$arch"
   local base_freq_path="/sys/devices/system/cpu/cpu0/cpufreq/base_frequency"
   local max_freq_path="/sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq"
   local scaling_freq_path="/sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq"
@@ -72,7 +71,11 @@ function system_info() {
       base_mhz=$((khz / 1000))
       ((base_mhz)) || base_mhz=""
     fi
-    # boost/max clock: cpufreq first (works for any driver that exposes it), falling back to lscpu
+    # boost/max clock: cpufreq first (works for any driver that exposes it), falling back to lscpu.
+    # khz is reset first: the two base-clock probes above leave their reading in
+    # it, so a host with base_frequency but no cpuinfo_max_freq used to report
+    # the base clock as its own boost ("CPU: 3000/3000") and never reach lscpu.
+    khz=0
     if [ -f "$max_freq_path" ] && [ -f "$scaling_freq_path" ]; then
       read -r khz <"$scaling_freq_path" 2>/dev/null || khz=0
     fi
@@ -93,14 +96,24 @@ function system_info() {
     # Apple Silicon doesn't expose either clock via sysctl; only Intel Macs get a value here
     base_mhz=$(sysctl -n hw.cpufrequency 2>/dev/null | awk '{ printf "%.0f", $1 / 1000000 }' || true)
   fi
-  os=$(_hi_sanitize "$os")
+  _hi_sanitize_var os "$os"
   # _HI_HEADER_GHZ=1 (settings.sh) swaps the CPU cell to x.xxx GHz; unset/0
   # keeps the MHz integers every test and script still pins
   local freq_unit="MHz"
   if [ "${_HI_HEADER_GHZ:-0}" = 1 ]; then
     freq_unit="GHz"
-    [ -n "$base_mhz" ] && base_mhz=$(awk -v m="$base_mhz" 'BEGIN { printf "%.3f", m / 1000 }')
-    [ -n "$boost_mhz" ] && boost_mhz=$(awk -v m="$boost_mhz" 'BEGIN { printf "%.3f", m / 1000 }')
+    # whole MHz -> x.x GHz with printf, not an awk fork apiece. Rounded to
+    # tenths *before* splitting, so a carry lands properly: 2950 -> 3.0, not
+    # the "2.10" a bare remainder would print.
+    local ghz_tenths
+    [ -n "$base_mhz" ] && {
+      ghz_tenths=$(((base_mhz + 50) / 100))
+      printf -v base_mhz '%d.%d' "$((ghz_tenths / 10))" "$((ghz_tenths % 10))"
+    }
+    [ -n "$boost_mhz" ] && {
+      ghz_tenths=$(((boost_mhz + 50) / 100))
+      printf -v boost_mhz '%d.%d' "$((ghz_tenths / 10))" "$((ghz_tenths % 10))"
+    }
   fi
   header_row "$PURPLE$arch" "$GREEN$os" "${YELLOW}Cores: ${cpus:-?}" \
     "${CYAN}RAM: ${ram:-?}" "${BRBLUE}CPU: ${base_mhz:-?}/${boost_mhz:-?} $freq_unit"
@@ -130,14 +143,45 @@ function _hi_probe_wait() {
   _HI_PROBE_PIDS=()
 }
 
+# Where _hi_probe_launch drops its output for identity() to read; empty until
+# something is actually launched, so a host answering none of the three pays
+# no mktemp and no rm at all.
+_HI_PROBE_DIR=""
+
+# _hi_probe_launch - start whichever of the three backends this host can
+# answer, all at once. Split out of identity() so hi_header can start them
+# before the rows that cost no wall clock: these probes are the only part of
+# the header bounded by $_HI_PROBE_TIMEOUT, and the timestamp/sysinfo/packages
+# rows now run in their shadow rather than ahead of them.
+function _hi_probe_launch() {
+  local container_bin nomad=0 kube=0
+  # idempotent: hi_header starts these early, and identity() calls it too so a
+  # direct `identity` (the suites, hi_doctor) still probes
+  [ -z "$_HI_PROBE_DIR" ] || return 0
+  container_bin="$(command -v docker || command -v podman || true)"
+  command -v nomad &>/dev/null && nomad=1
+  command -v kubectl &>/dev/null && kube=1
+  [ -n "$container_bin" ] || ((nomad || kube)) || return 0
+  _HI_PROBE_DIR="$(mktemp -d -t hi.probes.XXXXXX)"
+  [ -n "$container_bin" ] && _hi_probe_start "$_HI_PROBE_DIR/containers" _hi_probe "$container_bin" container ls -q
+  ((nomad)) && _hi_probe_start "$_HI_PROBE_DIR/nomad" _hi_probe nomad job status
+  # kube is a target hi can connect to (hi.sh's _hi_is_k8s_pod), so it belongs
+  # on the same count line as the other two - counted through targets.sh,
+  # whose list_kube owns the "which pods count as reachable" rule (and brings
+  # its probe timeout along). docker/nomad stay direct on purpose: their
+  # counts answer different questions than the completion listers do.
+  ((kube)) && _hi_probe_start "$_HI_PROBE_DIR/kube" sh "$_HI_TARGETS" kube
+  return 0
+}
+
 # git identity (domain masked), containers/jobs/pods, ssh key counts - all
-# through _hi_probe: the user is waiting, a dead daemon must not hang this
+# through _hi_probe: the user is waiting, a dead daemon must not hang this.
+# Reads what _hi_probe_launch started; calls it itself if nobody did.
 function identity() {
   local email="" domain user_part bullets containers="No docker/podman :(" jobs="" pods="" authorized=0 public=0
   local -a lines cells
-  local container_bin nomad_bin="" kube_bin="" dir
   command -v git &>/dev/null && email=$(git config --get user.email 2>/dev/null || true)
-  email=$(_hi_sanitize "$email")
+  _hi_sanitize_var email "$email"
   if [ -n "$email" ]; then
     domain=${email#*@}
     _hi_repeat bullets "${#domain}" "$_HI_GLYPH_MASK"
@@ -146,35 +190,31 @@ function identity() {
     user_part="${YELLOW}No Git ID Found..."
   fi
 
-  # which of the three this host can answer at all, then all of them at once
-  container_bin="$(command -v docker || command -v podman || true)"
-  command -v nomad &>/dev/null && nomad_bin=nomad
-  command -v kubectl &>/dev/null && kube_bin=kubectl
-  dir="$(mktemp -d -t hi.probes.XXXXXX)"
-  [ -n "$container_bin" ] && _hi_probe_start "$dir/containers" _hi_probe "$container_bin" container ls -q
-  [ -n "$nomad_bin" ] && _hi_probe_start "$dir/nomad" _hi_probe nomad job status
-  # kube is a target hi can connect to (hi.sh's _hi_is_k8s_pod), so it belongs
-  # on the same count line as the other two - counted through targets.sh,
-  # whose list_kube owns the "which pods count as reachable" rule (and brings
-  # its probe timeout along). docker/nomad stay direct on purpose: their
-  # counts answer different questions than the completion listers do.
-  [ -n "$kube_bin" ] && _hi_probe_start "$dir/kube" sh "$_HI_TARGETS" kube
+  _hi_probe_launch
   _hi_probe_wait
 
-  if [ -n "$container_bin" ]; then
-    _hi_read_lines lines <"$dir/containers"
-    containers="Containers: ${#lines[@]}"
+  # A host answering none of the three made no temp dir, so there is nothing to
+  # read and nothing to remove. Below it, the probe file's existence *is* the
+  # answer to "can this host answer at all" - _hi_probe_start creates it before
+  # backgrounding and the wait is done - so no second set of flags is tracked
+  # alongside the files that already say so.
+  if [ -n "$_HI_PROBE_DIR" ]; then
+    if [ -f "$_HI_PROBE_DIR/containers" ]; then
+      _hi_read_lines lines <"$_HI_PROBE_DIR/containers"
+      containers="Containers: ${#lines[@]}"
+    fi
+    if [ -f "$_HI_PROBE_DIR/nomad" ]; then
+      _hi_read_lines lines <"$_HI_PROBE_DIR/nomad"
+      lines=("${lines[@]:1}") # drop the header row
+      jobs="Jobs: ${#lines[@]}"
+    fi
+    if [ -f "$_HI_PROBE_DIR/kube" ]; then
+      _hi_read_lines lines <"$_HI_PROBE_DIR/kube"
+      pods="Pods: ${#lines[@]}"
+    fi
+    rm -rf "$_HI_PROBE_DIR"
+    _HI_PROBE_DIR=""
   fi
-  if [ -n "$nomad_bin" ]; then
-    _hi_read_lines lines <"$dir/nomad"
-    lines=("${lines[@]:1}") # drop the header row
-    jobs="Jobs: ${#lines[@]}"
-  fi
-  if [ -n "$kube_bin" ]; then
-    _hi_read_lines lines <"$dir/kube"
-    pods="Pods: ${#lines[@]}"
-  fi
-  rm -rf "$dir"
   [ -f "$_HI_SSH_AUTHORIZED_KEYS" ] && _hi_read_lines lines <"$_HI_SSH_AUTHORIZED_KEYS" && authorized=${#lines[@]}
   [ -d "$_HI_SSH_DIR" ] && _hi_read_lines lines < <(find "$_HI_SSH_DIR" -type f -name "*.pub") && public=${#lines[@]}
   cells=("$user_part" "$BLUE$containers")
@@ -198,7 +238,8 @@ function banner() {
       _HI_BANNER_CHANGES="${#lines[@]}"
       # memoized beside the count; symbolic-ref is empty on detached HEAD and
       # main is blanked, so only an unusual branch earns a callout
-      _HI_BANNER_BRANCH="$(_hi_sanitize "$(git -C "$_HI_ROOT" symbolic-ref --short -q HEAD 2>/dev/null || true)")"
+      _hi_sanitize_var _HI_BANNER_BRANCH \
+        "$(git -C "$_HI_ROOT" symbolic-ref --short -q HEAD 2>/dev/null || true)"
       [ "$_HI_BANNER_BRANCH" = main ] && _HI_BANNER_BRANCH=""
     fi
     changes="$BRYELLOW$_HI_BANNER_CHANGES $_HI_GLYPH_AHEAD "
@@ -213,7 +254,10 @@ function banner() {
     fi
   fi
   local host tildes start_len end_len start_tildes end_tildes width left core
-  host="$(_hi_sanitize "$(_hi_hostname)")"
+  # memoized beside the git state above, and for the same reason: two forks a
+  # banner for a name that cannot change under a running shell
+  [ -n "${_HI_BANNER_HOST+x}" ] || _hi_sanitize_var _HI_BANNER_HOST "$(_hi_hostname)"
+  host="$_HI_BANNER_HOST"
   width=${_HI_MAX_WIDTH:-80}
   tildes=$((width - 6 - changes_w - ${#label} - ${#host} - ${#prefix}))
   ((tildes < 4)) && tildes=4
@@ -232,6 +276,10 @@ function banner() {
 function hi_header() {
   [[ "${_HI_DISABLE_HEADER:-0}" == 1 ]] && return 0
   banner "$@"
+  # started before the rows that cost only forks, so their ~30ms runs inside
+  # the probes' wall clock instead of in front of it; same toggle, so a hidden
+  # identity row still starts nothing
+  [[ "${_HI_HEADER_IDENTITY:-1}" == 0 ]] || _hi_probe_launch
   [[ "${_HI_HEADER_TIMESTAMP:-1}" == 0 ]] || timestamp
   [[ "${_HI_HEADER_SYSINFO:-1}" == 0 ]] || system_info
   [[ "${_HI_HEADER_IDENTITY:-1}" == 0 ]] || identity

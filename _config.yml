@@ -44,7 +44,6 @@ exclude:
   - docs/hi.1
   - hi.sh
   - load.sh
-  - package.sh
   - CLAUDE.md
   - Gemfile
   - Gemfile.lock

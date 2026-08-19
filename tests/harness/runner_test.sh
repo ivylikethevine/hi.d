@@ -152,7 +152,7 @@ function test_summary_lists_every_suite_with_a_duration() {
 # first and then reads the row whose name cell is $1 - "SUITE" for the header
 # and "TOTAL" for the totals row, both of which sit in the same column.
 function _hi_summary_field() {
-  printf '%s\n' "$_HI_RUN_OUT" | sed 's/\x1b\[[0-9;]*m//g' |
+  printf '%s\n' "$(_hi_strip_ansi "$_HI_RUN_OUT")" |
     awk -v n="$1" -v what="$2" '$1 == "|" && $2 == n {
       print (what == "len" ? length($0) : index($0, "PASS")); exit
     }'

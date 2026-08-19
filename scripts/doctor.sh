@@ -170,9 +170,10 @@ function doctor_backends() {
   else
     doctor_row ssh "no $_HI_SSH_CONFIG - names still reach ssh, just without completion or tags"
   fi
-  local row name what probe predicate
+  # only name and probe here; doctor_target below reads the other two columns
+  local row name probe
   for row in "${_HI_BACKENDS[@]}"; do
-    IFS='|' read -r name what probe predicate <<<"$row"
+    IFS='|' read -r name _ probe _ <<<"$row"
     # the probe column's word split is the point - it is a command line
     # shellcheck disable=SC2086
     doctor_backend "$name" $probe
@@ -186,10 +187,10 @@ function doctor_backends() {
 # the same chain _hi dispatches on, each predicate timed, first match wins -
 # ssh leads (its predicate isn't a backend row), then the roster in order
 function doctor_target() {
-  local target="$1" kind="" pair row name what probe predicate t0 t1
+  local target="$1" kind="" pair row name what predicate t0 t1
   local -a chain=("ssh host:_hi_is_ssh_host")
   for row in "${_HI_BACKENDS[@]}"; do
-    IFS='|' read -r name what probe predicate <<<"$row"
+    IFS='|' read -r _ what _ predicate <<<"$row"
     chain+=("$what:$predicate")
   done
   _hi_h2 "Target: $target"

@@ -18,7 +18,15 @@ if [[ "${_HI_DISABLE_PROMPT:-0}" != 1 ]] && ! _hi_wants_starship; then
   # a user and # for root) - see _hi_prompt_end in common/core.sh
   HI_PS1_END="$(_hi_prompt_end BASH)"
   if _hi_has_color; then
-    HI_PS1=" ${debian_chroot:-}$(_hi_user_escape)\u$(_hi_at_color)@$(_hi_host_escape)\h$NC $BRBLUE\w$NC"
+    # the *_var forms, not $( ): _hi_prime_identity above already resolved both
+    # escapes in this shell, and a command substitution would pay for them
+    # again. Spelled empty first so shellcheck sees the `printf -v` assignment
+    # (SC2154) - these are file scope, where `local` is not available.
+    _hi_ps1_u="" _hi_ps1_h=""
+    _hi_user_escape_var _hi_ps1_u
+    _hi_host_escape_var _hi_ps1_h
+    HI_PS1=" ${debian_chroot:-}$_hi_ps1_u\u$(_hi_at_color)@$_hi_ps1_h\h$NC $BRBLUE\w$NC"
+    unset _hi_ps1_u _hi_ps1_h
   else
     HI_PS1=" ${debian_chroot:-}\u@\h:\w"
   fi
@@ -61,9 +69,20 @@ function _hi_target_names() {
   _HI_TARGET_NAMES_AT="$SECONDS"
 }
 
+# On a warm cache _hi_target_names returns without doing anything, and then
+# `compgen` through a process substitution cost a fork plus one `eval` per
+# candidate (core.sh's _hi_read_lines) on every single TAB. Matching in-shell
+# costs neither. targets.sh already drops names carrying `*` or `?`, so `set -f`
+# is belt to that: a stored name is matched, never globbed.
 function _hi_complete() {
+  local cur="${COMP_WORDS[COMP_CWORD]}" n
   _hi_target_names
-  _hi_read_lines COMPREPLY < <(compgen -W "$_HI_TARGET_NAMES" -- "${COMP_WORDS[COMP_CWORD]}")
+  COMPREPLY=()
+  set -f
+  for n in $_HI_TARGET_NAMES; do
+    case "$n" in "$cur"*) COMPREPLY+=("$n") ;; esac
+  done
+  set +f
 }
 complete -F _hi_complete hi
 

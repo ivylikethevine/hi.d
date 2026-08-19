@@ -310,7 +310,6 @@ function run_relay_tests() {
   _hi_sshd_image "the relay" || _hi_stand_down "sshd image build failed"
 
   _hi_pty_stdin auto "no tty and no python3 to fake one - results may be unreliable"
-  _hi_pty_force
 
   _hi_suite_begin
   _hi_h2 "A relay that ends the way it should"

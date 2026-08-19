@@ -127,9 +127,18 @@ function _hi_run_tmux_case() {
   # open for is dead sat here for its full two minutes, which was 120s of this
   # suite's 157 (the other 22 cases take about a second each). Same 120s
   # ceiling, reached only if the kill never happens.
+  # TERM is pinned rather than inherited: tmux refuses to start on a terminal
+  # whose terminfo has no `clear`, and `dumb` is exactly such an entry - so
+  # running this suite from a dumb terminal (CI, an editor pane, an agent
+  # session) failed the case with "open terminal failed: terminal does not
+  # support clear" and no fault of hi's. hi passes `dumb` through on purpose
+  # (it is in _HI_TERM_FALLBACK's allow list), which is right for a shell and
+  # useless for tmux. The term-* cases below vary TERM deliberately; this one
+  # is asserting that a session survives a dropped connection, so it holds the
+  # terminal still.
   # shellcheck disable=SC2094 # separate processes; the reader only polls
   { _hi_poll_bool 480 0.25 test -f "$cut" || true; } |
-    "${_HI_PTY_FORCED[@]}" "${launch[@]}" >"$out" 2>&1 &
+    TERM=xterm-256color "${_HI_PTY_FORCED[@]}" "${launch[@]}" >"$out" 2>&1 &
   session_pid=$!
 
   if _hi_poll_bool 60 0.5 _hi_tmux_session_listed "$name"; then
@@ -341,7 +350,6 @@ EOF
   }
 
   _hi_pty_stdin auto "no tty and no python3 to fake one - ssh -t may not get a real pty, results may be unreliable"
-  _hi_pty_force
 
   _hi_suite_begin
 

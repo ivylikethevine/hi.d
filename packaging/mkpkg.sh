@@ -2,10 +2,10 @@
 # Builds the distributable packages: stage the tree with scripts/install.sh's
 # packaging mode, then hand that staging root to nfpm for .deb/.rpm/.apk.
 #
-# Named mkpkg.sh because both obvious names are taken: .gitignore's `**build**`
+# Named mkpkg.sh because the obvious name is taken: .gitignore's `**build**`
 # rule would silently swallow a build.sh (see the note at the top of
-# .gitignore), and package.sh at the repo root is basher's manifest. Not to be
-# confused with Arch's makepkg - Arch is deliberately not built here (below).
+# .gitignore). Not to be confused with Arch's makepkg - Arch is deliberately
+# not built here (below).
 #
 # Arch is deliberately not built here even though nfpm can: packaging/aur/ makes
 # a better Arch package (real optdepends, a -git variant, AUR updates), and two

@@ -177,27 +177,18 @@ ship with macOS and with any Linux that would install this.
 A mac is still worth using before the first publish, since the container exercises Linuxbrew's paths
 rather than a keg under `/opt/homebrew` — but nothing about the formula itself is unverified now.
 
-### basher (shipped) and fisher (assessed, didn't fit)
+### fisher (assessed, didn't fit)
 
-The two shell-native channels need no manifest here and nothing on release
-day — both install straight from the repo at a ref.
-
-**basher** works today: `basher install ivylikethevine/hi.d`. Its contract is
-a `package.sh` at the _repo root_ — a name basher dictates, and why the build
-script is `mkpkg.sh` — whose `BINS=bin/hi` names what links onto PATH. basher
-links by filename with no rename support, which is why `bin/hi` exists: a
-POSIX shim that resolves through basher's cellar symlink, exports `_HI_HOME`
-(a basher clone does not live at `~/hi.d`), and refuses a clone not named
-`hi.d`. Both shim and refusal are unit-tested in `tests/shells/hi_test.sh`.
-
-**fisher** was assessed and deliberately not shipped. fisher installs by
-copying `functions/`, `completions/` and `conf.d/` out of a repo and ignores
-everything else. hi.d has none of those directories, and `shells/config.fish`
-is a client of the whole tree — it reaches `common/` by `$_HI_HOME` and shells
-out to bash for the header, palette and git segment. A fisher install would
-copy the fish half and leave every one of those paths dangling: a plugin that
-installs green and does nothing. Fish users get the same full setup as
-everyone else through `scripts/install.sh` or any package channel.
+fisher needs no manifest here and nothing on release day — it installs straight
+from the repo at a ref — but it was assessed and deliberately not shipped.
+fisher installs by copying `functions/`, `completions/` and `conf.d/` out of a
+repo and ignores everything else. hi.d has none of those directories, and
+`shells/config.fish` is a client of the whole tree — it reaches `common/` by
+`$_HI_HOME` and shells out to bash for the header, palette and git segment. A
+fisher install would copy the fish half and leave every one of those paths
+dangling: a plugin that installs green and does nothing. Fish users get the
+same full setup as everyone else through `scripts/install.sh` or any package
+channel.
 
 ### deb / rpm / apk
 

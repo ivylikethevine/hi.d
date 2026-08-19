@@ -173,10 +173,39 @@ function test_resolve_backend_picks_the_first_matching_row() {
 function test_resolve_backend_follows_the_roster_order() {
   local out
   out="$(
+    # SC2030: subshell-local is exactly the intent - the swap must not leak
+    # into the cases below, which read the real roster
+    # shellcheck disable=SC2030
     _HI_BACKENDS=("${_HI_BACKENDS[1]}" "${_HI_BACKENDS[0]}")
     PATH="$_HI_SHIM_PATH" _hi_resolve_backend yes
   )"
   [ "$out" = podman ]
+}
+
+# The header's identity() row counts the same backends this roster dispatches
+# on, but it cannot read $_HI_BACKENDS - hi.sh is never sourced in a session,
+# and a shared roster would cost the ssh payload bytes for a list that changes
+# about once a year. So the drift is caught here instead of prevented there:
+# doctor's own copy of this chain had already gone stale once, and the header
+# is the copy a user sees on every single connect. Add a backend to the roster
+# and this goes red until common/header.sh's _hi_probe_launch counts it too.
+function test_header_probes_every_backend_in_the_roster() {
+  local row name launch
+  launch="$(sed -n '/^function _hi_probe_launch()/,/^}/p' "$_HI_HEADER")"
+  [ -n "$launch" ] || return 1
+  # SC2031: the roster swap above happens inside a $( ) and never reaches here;
+  # this reads the file-scope table, which is the whole point of the check
+  # shellcheck disable=SC2031
+  for row in "${_HI_BACKENDS[@]}"; do
+    name="${row%%|*}"
+    # podman is docker's drop-in and shares its probe, so either name counts;
+    # kube is probed by its CLI's name rather than the roster's
+    case "$name" in
+    podman) [[ "$launch" == *podman* || "$launch" == *docker* ]] || return 1 ;;
+    kube) [[ "$launch" == *kubectl* || "$launch" == *kube* ]] || return 1 ;;
+    *) [[ "$launch" == *"$name"* ]] || return 1 ;;
+    esac
+  done
 }
 
 function test_resolve_backend_prints_nothing_for_a_stranger() {
@@ -334,26 +363,6 @@ function test_overlay_tar_carries_aliases() {
   local dir
   dir="$(_hi_overlay_fixture withaliases aliases.sh)"
   [ "$(_HI_CONFIG_DIR="$dir" _hi_overlay_tar | tar tzf -)" = "aliases.sh" ]
-}
-
-# --- the basher shim (bin/hi) -------------------------------------------------
-#
-# basher links bin/hi onto PATH as a symlink into its cellar; the shim has to
-# resolve through that link, name the package root's parent as _HI_HOME, and
-# refuse a clone not named hi.d (every path resolves against $_HI_HOME/hi.d).
-function test_basher_shim_works_through_a_symlink() {
-  local dir="$_HI_WORKDIR/basherlink"
-  mkdir -p "$dir"
-  ln -sf "$_HI_ROOT/bin/hi" "$dir/hi"
-  [ -n "$("$dir/hi" --version)" ]
-}
-
-function test_basher_shim_refuses_a_misnamed_clone() {
-  local dir="$_HI_WORKDIR/not-hid/bin" out rc=0
-  mkdir -p "$dir"
-  cp "$_HI_ROOT/bin/hi" "$dir/hi"
-  out="$("$dir/hi" --version 2>&1)" || rc=$?
-  [ "$rc" -ne 0 ] && [[ "$out" == *"not named hi.d"* ]]
 }
 
 # --- the ksh/mksh git segment -------------------------------------------------
@@ -883,6 +892,7 @@ function run_hi_tests() {
   _hi_h2 "Testing: _hi_resolve_backend"
   _hi_check "Picks the roster's first match" test_resolve_backend_picks_the_first_matching_row
   _hi_check "The roster decides, not the resolver" test_resolve_backend_follows_the_roster_order
+  _hi_check "The header counts every backend the roster dispatches" test_header_probes_every_backend_in_the_roster
   _hi_check "Nothing for an unknown target" test_resolve_backend_prints_nothing_for_a_stranger
   _hi_check "Nothing with no backend CLI at all" test_resolve_backend_prints_nothing_without_any_cli
 
@@ -922,10 +932,6 @@ function run_hi_tests() {
   _hi_check "Members are bare names" test_overlay_tar_members_are_bare_names
   _hi_check "Carries only what exists" test_overlay_tar_carries_only_what_exists
   _hi_check "aliases.sh rides the stream" test_overlay_tar_carries_aliases
-
-  _hi_h2 "Testing: the basher shim (bin/hi)"
-  _hi_check "Works through a symlink" test_basher_shim_works_through_a_symlink
-  _hi_check "Refuses a clone not named hi.d" test_basher_shim_refuses_a_misnamed_clone
 
   _hi_h2 "Testing: the bash-less prompt"
   _hi_check "Carries user, host, color and separator" test_fallback_prompt_carries_user_host_and_color

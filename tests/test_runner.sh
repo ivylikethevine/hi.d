@@ -195,9 +195,13 @@ if [ -n "$_HI_GROUP" ]; then
 elif [ "${#_HI_ARGS[@]}" -eq 0 ]; then
   _HI_SELECTED=("${_HI_TESTS[@]}")
 else
+  # the name depends on the outer item alone; resolved once per suite rather
+  # than once per (suite x argument) pair, which was 58 forks to compare 29
+  # strings for a two-argument run
   for _hi_t in "${_HI_TESTS[@]}"; do
+    _hi_name="$(_hi_test_name "$_hi_t")"
     for _hi_arg in "${_HI_ARGS[@]}"; do
-      [ "$(_hi_test_name "$_hi_t")" = "$_hi_arg" ] && _HI_SELECTED+=("$_hi_t")
+      [ "$_hi_name" = "$_hi_arg" ] && _HI_SELECTED+=("$_hi_t")
     done
   done
   if [ "${#_HI_SELECTED[@]}" -eq 0 ]; then
@@ -292,8 +296,11 @@ _HI_CASES_SKIPPED=0
 _HI_RUN_T0="$(_hi_now)"
 
 for _hi_t in "${_HI_SELECTED[@]}"; do
-  _hi_name="$(_hi_test_name "$_hi_t")"
-  _hi_path="$_HI_TESTS_DIR/$(_hi_test_path "$_hi_t")"
+  # the accessors' own expansions, inlined: this runs once per selected suite
+  # and both fields come off the one row, so two forks a suite bought nothing
+  _hi_rest="${_hi_t#*:}"
+  _hi_name="${_hi_rest%%:*}"
+  _hi_path="$_HI_TESTS_DIR/${_hi_t##*:}"
 
   if [ ! -f "$_hi_path" ]; then
     _hi_cecho " | $_hi_name: script missing ($_hi_path), skipping" "$YELLOW"

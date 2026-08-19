@@ -86,14 +86,22 @@ EOF
   # the ladder git_prompt.sh walks
   if [ -z "$_hi_kg_ref" ]; then
     _hi_kg_detached=1
-    _hi_kg_ref=$(LC_ALL=C git describe --tags --contains HEAD 2>/dev/null) ||
-      _hi_kg_ref=$(LC_ALL=C git describe --tags HEAD 2>/dev/null) || _hi_kg_ref=""
-    # branch.oid already rode the porcelain stream - not a third git fork; the
-    # rev-parse answers only for a stream too old to carry the header
-    [ -z "$_hi_kg_ref" ] && [ -n "$_hi_kg_oid" ] && [ "$_hi_kg_oid" != "(initial)" ] &&
-      _hi_kg_ref="($(printf '%.8s' "$_hi_kg_oid"))"
-    [ -z "$_hi_kg_ref" ] &&
-      _hi_kg_ref="($(LC_ALL=C git rev-parse --short=8 HEAD 2>/dev/null))"
+    # memoized on branch.oid, as git_prompt.sh does and for the same reason:
+    # `describe --contains` walks history, and a detached HEAD redraws often
+    if [ -n "$_hi_kg_oid" ] && [ "$_hi_kg_oid" = "${_HI_KG_DESC_OID:-}" ]; then
+      _hi_kg_ref="$_HI_KG_DESC_REF"
+    else
+      _hi_kg_ref=$(LC_ALL=C git describe --tags --contains HEAD 2>/dev/null) ||
+        _hi_kg_ref=$(LC_ALL=C git describe --tags HEAD 2>/dev/null) || _hi_kg_ref=""
+      # branch.oid already rode the porcelain stream - not a third git fork; the
+      # rev-parse answers only for a stream too old to carry the header
+      [ -z "$_hi_kg_ref" ] && [ -n "$_hi_kg_oid" ] && [ "$_hi_kg_oid" != "(initial)" ] &&
+        _hi_kg_ref="($(printf '%.8s' "$_hi_kg_oid"))"
+      [ -z "$_hi_kg_ref" ] &&
+        _hi_kg_ref="($(LC_ALL=C git rev-parse --short=8 HEAD 2>/dev/null))"
+      _HI_KG_DESC_OID="$_hi_kg_oid"
+      _HI_KG_DESC_REF="$_hi_kg_ref"
+    fi
   fi
   [ -n "$_hi_kg_ref" ] || return 0
 

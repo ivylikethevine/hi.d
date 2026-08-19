@@ -341,13 +341,16 @@ function test_ask_setting_default_keeps_disabled() {
 }
 
 function test_visible_len_plain_text() {
-  [ "$(_hi_visible_len "hello")" -eq 5 ]
+  local len
+  _hi_visible_len len "hello"
+  [ "$len" -eq 5 ]
 }
 
 function test_visible_len_strips_color_codes() {
-  local colored
+  local colored len
   colored="$(_hi_rendered "${GREEN}hi${NC}")"
-  [ "$(_hi_visible_len "$colored")" -eq 2 ]
+  _hi_visible_len len "$colored"
+  [ "$len" -eq 2 ]
 }
 
 function test_check_one_config_valid_bash() {

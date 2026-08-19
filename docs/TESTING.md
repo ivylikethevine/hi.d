@@ -8,6 +8,15 @@ export _HI_HOME=/path/to/parent-of-hi.d
 tests/test_runner.sh
 ```
 
+## Contents
+
+- [Running the tests](#running-the-tests)
+  - [The container suites run their cases in parallel](#the-container-suites-run-their-cases-in-parallel)
+  - [The images are files; the build contexts are not](#the-images-are-files-the-build-contexts-are-not)
+- [The lint gate](#the-lint-gate)
+- [Relaying](#relaying)
+- [Local-only](#local-only)
+
 ## Running the tests
 
 Run everything with `tests/test_runner.sh` (reachable as `hi --test` once installed) - it times each suite and

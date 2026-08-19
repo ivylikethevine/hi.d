@@ -53,6 +53,20 @@ jobs:
     needs: runner
     timeout-minutes: 15
     steps:
+      # Self-hosted `_work` persists between jobs, and checkout's own cleanup
+      # runs as the runner user: one root-owned file left behind by a container
+      # test makes its delete throw, and that throw is then masked by the
+      # `Removing auth` teardown (persist-credentials: false), which reports
+      # "fatal: --local can only be used inside a git repository" instead. The
+      # half-deleted workspace has no .git left, so every later run takes the
+      # same path and dies the same way - a wedge, not a flake. Hosted runners
+      # get a fresh workspace and skip this. See docs/PACKAGING.md.
+      - name: Reclaim the workspace
+        if: ${{ runner.environment != 'github-hosted' }}
+        run: |
+          set -euo pipefail
+          sudo chown -R "$(id -u):$(id -g)" "$GITHUB_WORKSPACE"
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
@@ -221,6 +235,14 @@ jobs:
     if: ${{ !cancelled() }}
     timeout-minutes: 10
     steps:
+      # hands the persistent self-hosted workspace back to the runner user, so
+      # checkout's own cleanup can always finish - see docs/PACKAGING.md
+      - name: Reclaim the workspace
+        if: ${{ runner.environment != 'github-hosted' }}
+        run: |
+          set -euo pipefail
+          sudo chown -R "$(id -u):$(id -g)" "$GITHUB_WORKSPACE"
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
@@ -240,6 +262,14 @@ jobs:
     if: ${{ !cancelled() }}
     timeout-minutes: 10
     steps:
+      # hands the persistent self-hosted workspace back to the runner user, so
+      # checkout's own cleanup can always finish - see docs/PACKAGING.md
+      - name: Reclaim the workspace
+        if: ${{ runner.environment != 'github-hosted' }}
+        run: |
+          set -euo pipefail
+          sudo chown -R "$(id -u):$(id -g)" "$GITHUB_WORKSPACE"
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
@@ -290,6 +320,14 @@ jobs:
     if: ${{ !cancelled() && needs.test.result == 'success' }}
     timeout-minutes: 25
     steps:
+      # hands the persistent self-hosted workspace back to the runner user, so
+      # checkout's own cleanup can always finish - see docs/PACKAGING.md
+      - name: Reclaim the workspace
+        if: ${{ runner.environment != 'github-hosted' }}
+        run: |
+          set -euo pipefail
+          sudo chown -R "$(id -u):$(id -g)" "$GITHUB_WORKSPACE"
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
@@ -305,6 +343,14 @@ jobs:
     if: ${{ !cancelled() && needs.test.result == 'success' }}
     timeout-minutes: 40
     steps:
+      # hands the persistent self-hosted workspace back to the runner user, so
+      # checkout's own cleanup can always finish - see docs/PACKAGING.md
+      - name: Reclaim the workspace
+        if: ${{ runner.environment != 'github-hosted' }}
+        run: |
+          set -euo pipefail
+          sudo chown -R "$(id -u):$(id -g)" "$GITHUB_WORKSPACE"
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false

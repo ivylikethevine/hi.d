@@ -24,31 +24,32 @@ _Don't `ssh`ush your hosts, say `hi`!_
 
 ![hi connecting to a container: banner, header, packages check, colored prompt, and the cleanup on exit](docs/demos/demo.gif)
 
-More of these — every backend (ssh with a permanent install, docker, podman, nomad, kubernetes) across a
-variety of shells on both sides — [just below](#every-target-the-same-session). How it compares to `sshrc`,
-`xxh`, `kyrat` or `chezmoi`, including where one of those is the better tool:
-[docs/ALTERNATIVES.md](docs/ALTERNATIVES.md).
-
 ## Contents
 
 - [Every target, the same session](#every-target-the-same-session)
+  - [ssh, with a permanent install](#ssh-with-a-permanent-install)
+  - [docker](#docker)
+  - [podman](#podman)
+  - [nomad](#nomad)
+  - [kubernetes](#kubernetes)
+- [Requirements](#requirements)
 - [Installation/Usage](#installationusage)
-  - [Verifying a release download](#verifying-a-release-download)
 - [Configuration](#configuration)
   - [Hostname, username, and group/tag colors](#hostname-username-and-grouptag-colors)
-- [Requirements](#requirements)
   - [How it works](#how-it-works)
+- [Built from/with/in mind](#built-fromwithin-mind)
   - [Docker / Podman containers](#docker--podman-containers)
   - [Nomad allocations](#nomad-allocations)
   - [Kubernetes pods](#kubernetes-pods)
   - [Windows hosts](#windows-hosts)
-  - [Compatibility](#compatibility)
 - [hi.d and the alternatives](#hid-and-the-alternatives)
-- [Built from/with/in mind](#built-fromwithin-mind)
+  - [Compatibility](#compatibility)
 - [Testing](#testing)
 - [More docs](#more-docs)
 - [AI Usage](#ai-usage)
-- [Regenerating the demo GIFs](#regenerating-the-demo-gifs)
+- [Miscellaneous](#miscellaneous)
+  - [Regenerating the demo GIFs](#regenerating-the-demo-gifs)
+  - [Verifying a release download](#verifying-a-release-download)
 
 ## Every target, the same session
 
@@ -93,6 +94,13 @@ hi's aliases-only fallback. Client: zsh.
 
 ![hi into a kubernetes pod on a kind cluster](docs/demos/kube.gif)
 
+## Requirements
+
+- **Client**: `bash` and `base64` (for ssh targets - armors the bootstrap payload through the login shell; coreutils, busybox, macOS/BSD and Git Bash all ship one) or `docker`/`podman`/`nomad`/`kubectl` for the container/alloc/pod backends.
+- **bash version**: 3.2 or newer, on both ends - what macOS still ships, so hi stays clear of every bash-4-only construct: no `mapfile`/`readarray` (`_hi_read_lines` in `common/core.sh` does that job), no associative arrays, no namerefs, no `${x,,}`. Enforced twice: `tests/shells/shellcheck_test.sh` greps for those constructs, and `tests/targets/ssh_test.sh` runs a real bash 3.2 container target and fails on so much as one shell error.
+- **Target**: `base64` for ssh targets (effectively everywhere - coreutils, busybox, macOS/BSD); nothing extra for container/alloc/pod targets. `bash` gets the full experience (header, colors, git prompt, aliases, vim/nano configs); without it `hi` still lands you in the best available shell (`fish` > `zsh` > `ksh` > `sh`) with the aliases and, on the POSIX tiers, a colored prompt - rather than failing outright.
+- Everything else (client and target) is plain POSIX/bash/zsh/fish shell - no compiled artifacts, no package manager, no build step.
+
 ## Installation/Usage
 
 - `hi.d/scripts/install.sh` (re-run it any time; it repairs its own lines, even if hi.d moved) - before touching your shell rc files it validates whichever of `~/.bashrc`, `~/.zshrc` and `~/.config/fish/config.fish` are installed with each shell's own syntax checker, and asks whether to continue if any have issues
@@ -111,23 +119,7 @@ hi's aliases-only fallback. Client: zsh.
 - say `hi`!
 - [optional] modify `~/hi.d/misc/*` and `~/hi.d/shells/*` to your liking - though anything with an overlay (`settings.sh`, `colors`, `packages`, `tmux.conf`, `aliases.sh`) is better edited in `~/.config/hi.d/`, which keeps the checkout clean for `hi --update`
   - tip: `~/hi.d` is a git checkout, so if you do edit it, push to your own fork and clone that on your next device - same setup everywhere, kept in sync by `hi --update`
-- done with it? `hi.d/scripts/uninstall.sh` (what `hi --uninstall` runs, a one-line shim onto `install.sh --uninstall`) is the install's inverse: it strips hi's lines back out of your rc files, removes the `settings.sh` it wrote, and unlinks `/usr/bin/hi`. It leaves the `hi.d` directory alone, and your `colors`/`packages` too - delete those yourself if you want them gone
-
----
-
-### Verifying a release download
-
-Releases ship a `SHA256SUMS`, signed build provenance, and a detached [minisign](https://jedisct1.github.io/minisign/)
-signature over the sums (the offline half — no `gh`, no network, one static public key):
-
-```sh
-sha256sum -c --ignore-missing SHA256SUMS                        # the bytes match the release
-minisign -Vm SHA256SUMS -P 'RWT-PLACEHOLDER-see-ROADMAP-secrets-and-keys'
-gh attestation verify hi.d_*_all.deb --repo ivylikethevine/hi.d # which CI run built them
-```
-
-<!-- The -P value above is a placeholder until the first release's keypair is
-generated - the minisign entry in docs/ROADMAP.md's "Secrets & keys" replaces it. -->
+- done with it? `hi.d/scripts/uninstall.sh` is the install's inverse: it strips hi's lines back out of your rc files, removes the `settings.sh` it wrote, and unlinks `/usr/bin/hi`. It leaves the `hi.d` directory alone, and your `colors`/`packages` too - delete those yourself if you want them gone
 
 ---
 
@@ -150,13 +142,6 @@ header-line toggles, tmux's `update-environment` behavior, and every other envir
 ### Hostname, username, and group/tag colors
 
 Every username and hostname gets a color deterministically derived from its name - nothing to generate, nothing that can go missing. To pin one instead, add a line to `~/hi.d/misc/colors` (`username,root,red` / `hostname,prod-db,yellow` / `hosttag,desktop,green`); `hosttag` entries match the _leftmost_ tag in a `# Tags: ...` comment directly above a `Host` line in `~/.ssh/config`. `hi --color-preview` shows what every ssh host and your user currently resolve to, in their actual colors.
-
-## Requirements
-
-- **Client**: `bash` and `base64` (for ssh targets - armors the bootstrap payload through the login shell; coreutils, busybox, macOS/BSD and Git Bash all ship one) or `docker`/`podman`/`nomad`/`kubectl` for the container/alloc/pod backends.
-- **bash version**: 3.2 or newer, on both ends - what macOS still ships, so hi stays clear of every bash-4-only construct: no `mapfile`/`readarray` (`_hi_read_lines` in `common/core.sh` does that job), no associative arrays, no namerefs, no `${x,,}`. Enforced twice: `tests/shells/shellcheck_test.sh` greps for those constructs, and `tests/targets/ssh_test.sh` runs a real bash 3.2 container target and fails on so much as one shell error.
-- **Target**: `base64` for ssh targets (effectively everywhere - coreutils, busybox, macOS/BSD); nothing extra for container/alloc/pod targets. `bash` gets the full experience (header, colors, git prompt, aliases, vim/nano configs); without it `hi` still lands you in the best available shell (`fish` > `zsh` > `ksh` > `sh`) with the aliases and, on the POSIX tiers, a colored prompt - rather than failing outright.
-- Everything else (client and target) is plain POSIX/bash/zsh/fish shell - no compiled artifacts, no package manager, no build step.
 
 ### How it works
 
@@ -181,6 +166,13 @@ that in place and copies nothing. `hi --doctor` prints the wire size and the unp
 
 **_IMPORTANT: Local-only changes MUST stay in `~/.bashrc`, `~/.zshrc`, `~/.config/fish/config.fish`, etc. - anything in `${XDG_CONFIG_HOME:-$HOME/.config}/hi.d/` is copied to every host you say `hi` to._**
 
+## Built from/with/in mind
+
+- [sshrc](https://github.com/cdown/sshrc) - _from_ - (became `hi.sh`)
+- [sshm](https://github.com/Gu1llaum-3/sshm) - _with_ - (optional, but _highly_ recommended to configure `~/.ssh/config` hosttags)
+- [bat](https://github.com/sharkdp/bat) - _in mind_ - (essentially my reason to get the aliases.sh fallthrough logic to work as portably as possible)
+- [fish](https://github.com/fish-shell/fish) - _with_ - (my preferred shell because its defaults/built-ins are extremely easy to understand, but one that is not POSIX-compliant)
+
 ### Docker / Podman containers
 
 `hi <name>` also works against a running docker or podman container. If `<name>` isn't a `Host` in `~/.ssh/config` but is a running container (by name or ID, docker checked first), `hi` copies `~/hi.d` in and chainloads `load.sh` exactly as the ssh path does, for an identical session. No armoring is needed (`docker exec -i`/`podman exec -i` pass stdin as raw bytes), and cleanup happens on exit. Podman's CLI is close enough to reuse the same command shapes. The container needs `bash` for the full experience; without it `hi` drops you into the best plain shell available (`zsh`/`fish`/`ksh`/`sh`) with the aliases and a warning.
@@ -201,6 +193,13 @@ that in place and copies nothing. `hi --doctor` prints the wire size and the unp
 - **Stock Windows OpenSSH with no `bash` at all**: `hi` falls back to a plain interactive PowerShell session (no hi.d styling - that's bash-only) rather than failing outright. It still costs one authentication: hi writes its bootloader over the first of two calls multiplexed on the _same ssh connection_, and a target where that write cannot run `sh -c` is a target with no POSIX shell, which is exactly what the fallback is for. `DefaultShell` set to PowerShell lands in the same place.
 
 **Installing hi _on_ Windows:** use WSL. The `.deb` from the releases page installs into a WSL distribution unchanged - `/etc/profile.d/hi.d.sh`, `/usr/bin/hi`, everything as on any Debian - and WSL is where a Windows developer already using `ssh`/`docker`/`kubectl` most likely works.
+
+## hi.d and the alternatives
+
+How hi.d compares to `sshrc`, `xxh`, `kyrat`, `sshdot` and `homeshick`, which
+adjacent tools compose with it rather than compete, what actually makes it
+different, and where another tool is the better choice:
+[docs/ALTERNATIVES.md](docs/ALTERNATIVES.md).
 
 ### Compatibility
 
@@ -233,16 +232,16 @@ every run · 🟡 expected to work, nobody has proven it · ⚠️ works, reduce
 
 **Shells hi does not style, and why that is settled.** Each would need its own rc in `shells/` (prompt,
 aliases, completion) plus a tier in the fallback ladder in `hi.sh`'s `_hi_remote_suffix` and `load.sh`'s
-`load()`. Three of them were open questions; they are answered now, and the answer is no.
+`load()`.
 
-| shell        | status                           | why                                                                                                                                                                                                                                                                                                                                                                                   |
-| ------------ | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `elvish`     | **decided against** (2026-08-18) | its own language, so the prompt and aliases would be a second implementation to keep in sync forever, for an audience hi has no evidence of. A `shells/rc.elv` is what it would take, and nobody has asked                                                                                                                                                                            |
-| `xonsh`      | **decided against** (2026-08-18) | Python — a third implementation, on the same terms as elvish and with the same answer                                                                                                                                                                                                                                                                                                 |
-| `tcsh`/`csh` | **decided against** (2026-08-18) | different rc syntax _and_ no `$ENV` equivalent, so there is no hook to land on at all: it would need its own rc and its own delivery mechanism                                                                                                                                                                                                                                        |
-| `nushell`    | **removed** (2026-08-18)         | it shipped, as `shells/config.nu`, and came back out. Nu is not POSIX, so it can source none of `common/`: the header, palette and git segment were rendered by shelling out to bash - which means the tier needed bash on the target anyway, and where bash exists, bash/zsh/fish already answer. A whole rc in a fourth language, plus a CI toolchain, for a shell nobody asked for |
-| `ksh`/`mksh` | shipped, **all but the header**  | a tier in the no-bash ladder, the POSIX prompt, the aliases, and `shells/ksh.sh`'s git segment. The header, and only the header, is missing: `common/header.sh` is bash, and this tier is defined by bash being absent, so it would have to be written a second time in POSIX and then kept in sync forever - the git segment was worth that, a second header is not                  |
-| PowerShell   | not a POSIX shell                | the greeting hi prints there is the whole extent of it; anything more is a separate project, really                                                                                                                                                                                                                                                                                   |
+| shell        | status                          | why                                                                                                                                                                                                                                                                                                                                                                  |
+| ------------ | ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `elvish`     | **decided against**             | its own language, so the prompt and aliases would be a second implementation to keep in sync forever, for an audience hi has no evidence of. A `shells/rc.elv` is what it would take, and nobody has asked                                                                                                                                                           |
+| `xonsh`      | **decided against**             | Python — a third implementation, on the same terms as elvish and with the same answer                                                                                                                                                                                                                                                                                |
+| `tcsh`/`csh` | **decided against**             | different rc syntax _and_ no `$ENV` equivalent, so there is no hook to land on at all: it would need its own rc and its own delivery mechanism                                                                                                                                                                                                                       |
+| `nushell`    | **decided against**             | Nu is not POSIX, so it can source none of `common/`                                                                                                                                                                                                                                                                                                                  |
+| `ksh`/`mksh` | shipped, **all but the header** | a tier in the no-bash ladder, the POSIX prompt, the aliases, and `shells/ksh.sh`'s git segment. The header, and only the header, is missing: `common/header.sh` is bash, and this tier is defined by bash being absent, so it would have to be written a second time in POSIX and then kept in sync forever - the git segment was worth that, a second header is not |
+| PowerShell   | not a POSIX shell               | the greeting hi prints there is the whole extent of it                                                                                                                                                                                                                                                                                                               |
 
 Using one of these as a _login_ shell still works, and always did — hi lands you in the best of
 `$_HI_SHELL_TREE` (`fish > zsh > bash > mksh > ksh > dash > ash > sh`) the target actually has. Only the
@@ -252,20 +251,6 @@ _session_ shell is limited, and only for the three above.
 `_HI_SHELL_PREFERENCE`'s default (`login`, then the styled head of `$_HI_SHELL_TREE`: `fish zsh bash`) means. `tests/targets/framework_test.sh` tests
 oh-my-zsh, powerlevel10k, starship and bash-it against hi, each asserting the session comes up with no shell
 errors and that hi neither changed zsh's array base under them nor dropped their `PROMPT_COMMAND`.
-
-## hi.d and the alternatives
-
-How hi.d compares to `sshrc`, `xxh`, `kyrat`, `sshdot` and `homeshick`, which
-adjacent tools compose with it rather than compete, what actually makes it
-different, and where another tool is the better choice:
-[docs/ALTERNATIVES.md](docs/ALTERNATIVES.md).
-
-## Built from/with/in mind
-
-- [sshrc](https://github.com/cdown/sshrc) - _from_ - (became `hi.sh`)
-- [sshm](https://github.com/Gu1llaum-3/sshm) - _with_ - (optional, but _highly_ recommended to configure `~/.ssh/config` hosttags)
-- [bat](https://github.com/sharkdp/bat) - _in mind_ - (essentially my reason to get the aliases.sh fallthrough logic to work as portably as possible)
-- [fish](https://github.com/fish-shell/fish) - _with_ - (my preferred shell because its defaults/built-ins are extremely easy to understand, but one that is not POSIX-compliant)
 
 ## Testing
 
@@ -290,7 +275,11 @@ Heavily inspired by: [Dictionarry/Profilarr's AI Transparency Statement](https:/
 
 This started as code written entirely by [me](https://github.com/ivylikethevine), but I have used generative AI to write large parts of it. All of the code here is my _responsibility_ regardless: AI is a tool, not an owner of a project. I have personally understood, reviewed and approved all of the AI-generated code in this repository, and _mainline releases_ carry the same accountability to me as anything I write and publish myself.
 
-## Regenerating the demo GIFs
+---
+
+## Miscellaneous
+
+### Regenerating the demo GIFs
 
 Each GIF above is rendered from the tape beside it (`vhs docs/tapes/<name>.tape` from the repo root, with the
 backend running and `hi` on PATH; `docs/tapes/fixtures.sh` builds every target
@@ -301,3 +290,17 @@ Two things to get right when you do: `hi` on `$PATH` must be _this_ checkout
 (`/usr/bin/hi` may point elsewhere), and the target image builds from `HEAD`,
 so uncommitted work shows on the client side of the GIF but not the target's.
 Render from a commit, or set `HI_DEMO_SOURCE=worktree`.
+
+### Verifying a release download
+
+Releases ship a `SHA256SUMS`, signed build provenance, and a detached [minisign](https://jedisct1.github.io/minisign/)
+signature over the sums (the offline half — no `gh`, no network, one static public key):
+
+```sh
+sha256sum -c --ignore-missing SHA256SUMS                        # the bytes match the release
+minisign -Vm SHA256SUMS -P 'RWT-PLACEHOLDER-see-ROADMAP-secrets-and-keys'
+gh attestation verify hi.d_*_all.deb --repo ivylikethevine/hi.d # which CI run built them
+```
+
+<!-- The -P value above is a placeholder until the first release's keypair is
+generated - the minisign entry in docs/ROADMAP.md's "Secrets & keys" replaces it. -->

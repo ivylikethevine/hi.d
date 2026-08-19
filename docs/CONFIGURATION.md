@@ -27,6 +27,13 @@ Everything below is an environment variable, checked where it's used. `hi --conf
 of `export NAME=value` lines, valid in sh, bash, zsh and fish alike. You never have to use `hi --configure`:
 exporting any of these by hand works just as well, and takes precedence for that shell.
 
+## Contents
+
+- [Features](#features)
+- [tmux](#tmux)
+- [Header details](#header-details)
+- [Everything else](#everything-else)
+
 ## Features
 
 Each is **on by default**; set it to `1` to turn that piece off.

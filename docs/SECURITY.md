@@ -5,6 +5,15 @@ questions up front. This is the threat model: what hi does and
 deliberately doesn't, what runs where, what it leaves behind, where the
 trust boundaries sit, and how to report what slipped through.
 
+## Contents
+
+- [What hi does - and deliberately doesn't](#what-hi-does---and-deliberately-doesnt)
+- [What runs where](#what-runs-where)
+- [Footprint and cleanup on the target](#footprint-and-cleanup-on-the-target)
+- [Trust boundaries](#trust-boundaries)
+- [Supported versions](#supported-versions)
+- [Reporting a vulnerability](#reporting-a-vulnerability)
+
 ## What hi does - and deliberately doesn't
 
 - **No network calls of its own.** `hi` only execs the transports you

@@ -13,6 +13,17 @@ Nothing is wired up until its checkbox is ticked. Entries that are finished,
 and questions that have been decided against, are **deleted** rather than kept
 here: git history is the ledger, and this file is only what is left to do.
 
+## Contents
+
+- [In-repo code work](#in-repo-code-work)
+  - [Release & packaging](#release--packaging)
+  - [Tooling](#tooling)
+- [Outside this repo](#outside-this-repo)
+  - [Secrets & keys](#secrets--keys)
+  - [Release channels](#release-channels)
+  - [CI runs to dispatch](#ci-runs-to-dispatch)
+  - [Docs & submissions](#docs--submissions)
+
 ## In-repo code work
 
 ### Release & packaging

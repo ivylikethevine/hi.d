@@ -40,11 +40,48 @@ order one workflow against another. The runner is the only thing that can: one
 runner process takes one job at a time, so registering exactly one on the box
 is what actually makes "never two at once" true.
 
+Every one of those jobs also shares _one_ directory on the box —
+`_work/<repo>/<repo>`, which the runner keeps between jobs rather than
+recreating. `actions/checkout` cleans it itself, but it does that as the runner
+user, and the container suites here can leave a file behind that the runner
+user cannot delete: root-owned from a docker step, or subuid-owned from
+rootless podman. That delete then throws, and the throw is swallowed — every
+checkout in this repo sets `persist-credentials: false`, so a `Removing auth`
+teardown runs in `finally`, fails its own `git config --local` against the
+now-`.git`-less directory, and replaces the real error with
+
+```
+fatal: --local can only be used inside a git repository
+The process '/usr/bin/git' failed with exit code 128
+```
+
+Read that message as "something in the workspace could not be deleted", not as
+a git problem. It does not clear on a retry either: `.git` is gone, so every
+later run takes the same delete path and dies identically. The `Reclaim the
+workspace` step ahead of each checkout is the guard — a `sudo chown -R` back to
+the runner user, skipped on hosted runners via `runner.environment`. If a box
+has already wedged, look at what survived in `_work/<repo>/<repo>` (`find . !
+-user "$(id -un)"`, plus `mount` for a stale mount point) before clearing it;
+that residue is the only evidence of which step left it there.
+
 Do the two repo settings under [ROADMAP.md](ROADMAP.md)'s "GitHub repo
 settings" — the fork-PR approval and the `manual-dispatch` environment —
 _before_ pointing any of these variables at a self-hosted runner. Neither can
 be done from a workflow file, and the `environment:` declarations already in
 the dispatch-only workflows are inert until the second one exists.
+
+## Contents
+
+- [The one idea](#the-one-idea)
+- [Layout](#layout)
+- [Cutting a release](#cutting-a-release)
+- [Publishing each channel](#publishing-each-channel)
+  - [AUR](#aur)
+  - [Homebrew tap](#homebrew-tap)
+  - [deb / rpm / apk](#deb--rpm--apk)
+- [Verifying a packaged build locally](#verifying-a-packaged-build-locally)
+  - [Reproducibility](#reproducibility)
+- [After installing from a package](#after-installing-from-a-package)
 
 ## The one idea
 

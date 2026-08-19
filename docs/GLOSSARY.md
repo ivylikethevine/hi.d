@@ -12,6 +12,38 @@ instead of re-explaining - every byte in `common/`, `shells/`, `misc/` and
 `load.sh` rides over the wire on each `hi`. This file never ships (the
 payload is `$_HI_PAYLOAD` in `hi.sh`; `docs/` isn't in it).
 
+## Contents
+
+- [empty-array guard](#empty-array-guard)
+- [_hi_read_lines](#_hi_read_lines)
+- [parallel arrays](#parallel-arrays)
+- [dynamic-name assignment](#dynamic-name-assignment)
+- [printf -v out-var](#printf--v-out-var)
+- [source guard](#source-guard)
+- [toggle defaulting](#toggle-defaulting)
+- [sed tempfile rewrite](#sed-tempfile-rewrite)
+- [cat-over-mv](#cat-over-mv)
+- [strftime %e over %-e](#strftime-e-over--e)
+- [LC_ALL=C sort](#lc_allc-sort)
+- [bytes vs columns](#bytes-vs-columns)
+- [command -v fallthrough](#command--v-fallthrough)
+- [_hi_on_exit](#_hi_on_exit)
+- [strict-mode bracketing](#strict-mode-bracketing)
+- [no-fork reads](#no-fork-reads)
+- [base64 armor](#base64-armor)
+- [sh -c wrapping](#sh--c-wrapping)
+- [stdin transport](#stdin-transport)
+- [fallback rc](#fallback-rc)
+- [split-quoted prompt segment](#split-quoted-prompt-segment)
+- [TERM fallback probe](#term-fallback-probe)
+- [bash --rcfile -i](#bash---rcfile--i)
+- [graft crash guard](#graft-crash-guard)
+- [session-shell ranking](#session-shell-ranking)
+- [completion probe knobs](#completion-probe-knobs)
+- [tmux server-start rules](#tmux-server-start-rules)
+- [ksh git segment](#ksh-git-segment)
+- [apostrophes in substitution comments](#apostrophes-in-substitution-comments)
+
 ## empty-array guard
 
 `${a[@]+"${a[@]}"}` wherever an array may be empty under `set -u`: bash 3.2

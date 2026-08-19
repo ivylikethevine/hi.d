@@ -4,6 +4,21 @@ An honest look at what else solves this problem, where hi.d is genuinely
 different, and where another tool is the better one. Written for someone
 deciding whether to use hi.d, not to sell it.
 
+## Contents
+
+- [The problem being solved](#the-problem-being-solved)
+- [The direct alternatives, side by side](#the-direct-alternatives-side-by-side)
+- [Tool by tool](#tool-by-tool)
+  - [sshrc — the ancestor](#sshrc--the-ancestor)
+  - [xxh — the one that solves a harder problem](#xxh--the-one-that-solves-a-harder-problem)
+  - [kyrat — closest in spirit](#kyrat--closest-in-spirit)
+  - [sshdot](#sshdot)
+  - [homeshick — the same constraints, the opposite answer](#homeshick--the-same-constraints-the-opposite-answer)
+- [Adjacent tools, and how they compose](#adjacent-tools-and-how-they-compose)
+- [What actually makes hi.d different](#what-actually-makes-hid-different)
+- [Where hi.d is the wrong choice](#where-hid-is-the-wrong-choice)
+- [Sources](#sources)
+
 ## The problem being solved
 
 You have a shell you have spent years tuning, and you spend your day on

@@ -18,6 +18,15 @@ Symptom of forgetting: suites report fewer/MISSING cases, or a script runs
 - `tests/test_runner.sh` runs everything; `--group fast` is the CI gate. Lint
   (shellcheck, shfmt, checkbashisms, the bash-4 construct grep) is enforced by
   the fast group itself — there is no separate lint step.
+- Skip the suite when the diff is prose only — it costs ~2 minutes, most of it
+  shellcheck, and no case reads ordinary `.md`. "Only `.yml`/`.md`" is *not*
+  the same test, though: the fast group reads several of both. Run it when the
+  diff touches `.github/workflows/*.yml` (`runner_test.sh` checks that every
+  `--group` name `ci.yml` invokes exists; `packaging_test.sh` asserts against
+  `release.yml` and scans every workflow for its `tool:` pins),
+  `docs/GLOSSARY.md` (drift-checked against the shipped files' `# GLOSSARY:`
+  tags by the shellcheck suite), or `packaging/nfpm/nfpm.yaml`. `README.md`'s
+  payload badge is read by `bench_test.sh` — `--group bench`, not fast.
 - The container suites run their cases in parallel (`_hi_par_case` /
   `_hi_par_wait` in `test_lib.sh`), capped at four at a time. Set
   `_HI_PAR_WIDTH=1` to put a suite back on one case at a time — it is the same

@@ -15,7 +15,7 @@ for the two OS-locked e2e jobs — falling back to the GitHub-hosted label when
 unset, so nothing changes until you set one. `ci.yml` reads them one job
 earlier: its `runner` job resolves the pair once and the six substitutable jobs
 take `needs.runner.outputs.*` from it. That job is also where the one exception
-lives — a pull request from a *fork* gets the GitHub-hosted label whatever the
+lives — a pull request from a _fork_ gets the GitHub-hosted label whatever the
 variable says, so a stranger's branch never runs on your machine.
 
 Jobs that install apt packages or touch the Docker socket (`ci.yml`'s `test`,
@@ -33,7 +33,7 @@ occupies the runner at a time. Their `needs:` are ordering, not data
 dependencies, which is why each link is guarded with `!cancelled()`: a red job
 still lets the next one run and report its own verdict.
 
-Know the limit of that guarantee, though: it holds *within* this workflow only.
+Know the limit of that guarantee, though: it holds _within_ this workflow only.
 `coverage.yml`, `pages.yml`, `link-check.yml`, `tool-versions.yml` and
 `scorecard.yml` read `RUNNER_LABEL` too, and nothing in a workflow file can
 order one workflow against another. The runner is the only thing that can: one
@@ -42,7 +42,7 @@ is what actually makes "never two at once" true.
 
 Do the two repo settings under [ROADMAP.md](ROADMAP.md)'s "GitHub repo
 settings" — the fork-PR approval and the `manual-dispatch` environment —
-*before* pointing any of these variables at a self-hosted runner. Neither can
+_before_ pointing any of these variables at a self-hosted runner. Neither can
 be done from a workflow file, and the `environment:` declarations already in
 the dispatch-only workflows are inert until the second one exists.
 
@@ -232,115 +232,6 @@ installs the signed apk on Alpine every PR so the channel can't silently regress
 No `apt upgrade` — the trade for not maintaining a repository. Revisit
 [OBS](https://en.opensuse.org/openSUSE:Build_Service_Debian_builds) only if people ask for a repo to
 subscribe to.
-
-## Windows channels
-
-An assessment, not a plan — nothing here is built. It is the Windows counterpart to the "Shipping hi.d"
-distribution review, which covered Arch, macOS and Debian/Ubuntu and never looked at Windows.
-
-### The question is which POSIX layer, not whether to port
-
-`hi.sh` is `#!/bin/bash` with `set -euo pipefail`, and it shells out to `tar`, `openssl`, `mktemp`, `awk`,
-`sed`, `find`, `du`, `hostname` and `ssh`. Native Windows has none of that, so no Windows package installs
-"hi.d" on its own — every channel below installs _hi.d plus a dependency on somebody's POSIX userland_,
-and they differ mainly in which one they lean on and how honestly they admit it.
-
-Easy to conflate, so stated once: **Windows as a target** is already done (see
-the README's [Windows hosts](../README.md#windows-hosts) section). **Windows
-as a client** — someone sitting at a Windows box typing `hi prod` — is the gap
-this section is about.
-
-### The prerequisite: the CI that exists tests the other half
-
-The one Windows job, `windows-e2e.yml`, is not the one the channels below wait on: it exercises Windows
-**as a target** — a stock OpenSSH server with no bash on `PATH`, driven from the runner's Git Bash,
-asserting the cmd `||` ladder lands in the PowerShell fallback. Dispatch-only, never run.
-
-Missing is the client-side job: **a `windows-latest` job running the fast suites under Git Bash**, which
-would tell us whether hi.d works when Windows is the machine you type `hi` on. It should land before any
-Windows channel. GitHub's `windows-latest` runners ship Git for Windows, so `shell: bash` is Git Bash and
-the fast group is pure shell with no daemons — a cheap job answering four currently open questions:
-
-- whether `_hi_read_lines`, `_hi_repeat` and the rest behave under MSYS2's bash (they should — it is bash
-  4.4+, well past the 3.2 floor)
-- whether the path handling survives `C:`-style paths leaking into `$_HI_HOME` through `cygpath`
-  translation
-- whether `install.sh`'s rc-file rewriting finds the right `~/.bashrc` (Git Bash's `$HOME` is not always
-  `%USERPROFILE%`)
-- whether `hi.sh`'s `tar`/`openssl` payload path works with MSYS2's binaries and CRLF-safe pipes
-
-Until that job exists and is green, a Windows package would ship untested by construction.
-
-### One thing already fixed
-
-`config_hi`'s `sudo ln -sfn "$_HI_LAUNCHER" /usr/bin/hi` means nothing under Git Bash: there is no `sudo`,
-and `/usr/bin` is a virtual path inside the Git for Windows installation no package should write to.
-`scripts/install.sh --no-link` skips it. Windows was the third consumer to need that flag, after Homebrew
-and any distro package.
-
-### The channels
-
-#### WSL — the recommendation
-
-Not a channel at all, which is the point — see the README's [Installing hi on
-Windows](../README.md#windows-hosts) section: the `.deb` installs into WSL
-unchanged and the user gets the real thing rather than an approximation.
-
-Cost: one paragraph in the README. Reaches: most of the plausible audience.
-
-#### Scoop — the only native channel worth building
-
-A bucket is a GitHub repo of JSON manifests with no review queue — structurally the same deal as a
-Homebrew tap, and so the cheapest native option. Scoop installs to `~/scoop/apps/hi.d/current`, making
-the writability problem as soft as Homebrew's.
-
-What it needs beyond a manifest:
-
-- `"depends": "git"` — Git for Windows is what supplies bash, `openssl`, `tar` and `ssh`.
-- A `hi.cmd` shim, because Scoop's own shims cannot execute a bash script directly. It has to translate the
-  install path with `cygpath -u`, export `_HI_HOME` to the parent of the `hi.d` directory, and `exec`
-  `hi.sh` — the same job the Homebrew formula's `bin/hi` wrapper does, in a language that makes it harder.
-- The shim is the part that will actually break, and it is exactly the part no current CI job exercises.
-
-Verdict: **start here if anything gets built, but only after the client-side Windows CI job is green.**
-
-#### winget — reaches the most people, costs the most per release
-
-Microsoft-blessed and preinstalled on Windows 11, so by far the widest reach. The costs are real: it wants
-an installer artifact (a `zip` with a portable nested installer is the workable shape for a script
-project), each version is a YAML manifest PR into `microsoft/winget-pkgs`, and there is a moderation queue
-plus automated validation. Reasonable once hi.d has Windows users; premature before that.
-
-#### MSYS2 — the best technical fit, the narrowest audience
-
-MSYS2 is a real POSIX userland with a real package manager, so hi.d would work there with no shim and no
-dependency hand-waving. Two things make it interesting beyond that: its packages build from PKGBUILDs in
-Arch's format, so `packaging/aur/hi.d/PKGBUILD` is most of the work already, and its `/etc/profile.d` is
-real, so the `_HI_HOME` export lands as on Linux.
-
-Against it: submission goes through `MSYS2/MSYS2-packages` with review, and the audience is small and
-technical enough to be comfortable cloning the repo.
-
-### Side by side
-
-| channel    | reaches            | needs                               | auto-updates          | setup                    | per release         |
-| ---------- | ------------------ | ----------------------------------- | --------------------- | ------------------------ | ------------------- |
-| WSL        | anyone running WSL | nothing new — the `.deb`            | no (same as any deb)  | a README paragraph       | nothing             |
-| Scoop      | Scoop users        | Git for Windows + a `.cmd` shim     | yes, `scoop update`   | a bucket repo + the shim | bump version + hash |
-| winget     | all of Windows 11  | a zip/portable artifact             | yes, `winget upgrade` | manifest PR + moderation | a PR per release    |
-| MSYS2      | MSYS2 users        | nothing — real POSIX                | yes, `pacman -Syu`    | PKGBUILD + review        | bump in their repo  |
-
-### What I would do
-
-1. **Document WSL as the supported Windows path.** Done — it costs a paragraph, and it is honest about
-   what hi.d is.
-2. **Add the `windows-latest` Git Bash CI job** — the client-side one, running the fast suites. This is
-   the actual prerequisite, and it has value even if no Windows package is ever published. (The
-   target-side `windows-e2e.yml` is written but is a different job, and has not been dispatched yet.)
-3. **Revisit Scoop once that job is green and someone asks.** The manifest is an afternoon; the shim is
-   the risk, and the CI job is what makes that risk observable.
-4. **Leave winget and MSYS2 until there is demand**, and prefer MSYS2 of the two if the demand comes from
-   people who already have a POSIX userland.
 
 ## Verifying a packaged build locally
 

@@ -2,7 +2,7 @@ name: Pages
 
 # The repo's markdown as a site: README.md as the index (it carries the demos,
 # the comparison, the architecture, packaging and Windows material inline),
-# plus what is left in docs/ - FEATURES, TESTING, GLOSSARY, SECURITY, PACKAGING,
+# plus what is left in docs/ - CONFIGURATION, TESTING, GLOSSARY, SECURITY, PACKAGING,
 # ROADMAP and tldr - which interlink with relative links link-check.yml keeps
 # honest.
 #
@@ -11,13 +11,14 @@ name: Pages
 # GitHub Actions. Until then this is dispatch-only in practice - the push
 # trigger below is harmless without that setting, since deploy-pages is what
 # needs it and it simply has nothing to deploy to.
+# TODO: Determine if this is deprecated by the automatic(?) pages-build-deployment action in the repo
 on:
-  push:
-    branches: [main]
-    paths:
-      - "**.md"
-      - "_config.yml"
-      - ".github/workflows/pages.yml"
+  # push:
+  #   branches: [main]
+  #   paths:
+  #     - "**.md"
+  #     - "_config.yml"
+  #     - ".github/workflows/pages.yml"
   workflow_dispatch:
 
 permissions:

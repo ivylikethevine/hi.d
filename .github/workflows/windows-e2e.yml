@@ -8,7 +8,11 @@ name: Windows e2e
 # target-side job: the README's "Windows channels" gates every native Windows
 # channel on the *client*-side one (the fast suites under Git Bash), which
 # does not exist yet.
+#
+# ci.yml calls this on every push to main, once both fast-suite jobs are green.
+# Dispatch still works for running it on its own.
 on:
+  workflow_call:
   workflow_dispatch:
 
 permissions:
@@ -19,12 +23,8 @@ jobs:
     name: hi at stock Windows OpenSSH (PowerShell fallback)
     runs-on: ${{ vars.WINDOWS_RUNNER_LABEL || 'windows-latest' }}
     timeout-minutes: 20
-    # workflow_dispatch is this workflow's only trigger, and dispatch already
-    # needs write access - this is the second lock: an environment with a
-    # required reviewer on it. Note that an environment with *no* reviewer
-    # configured is no gate at all - the same caveat release.yml's `release`
-    # environment carries. docs/ROADMAP.md holds the one-time setup step.
-    environment: manual-dispatch
+    # No `environment:` here any more - see the note in macos-e2e.yml. ci.yml
+    # calls this only on `push`, so a fork PR never reaches it.
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

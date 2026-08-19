@@ -48,8 +48,11 @@ function test_banner_includes_label_and_host() {
 # past ~54 characters *both* calls floor, the two lines come out the same length
 # and this reads as a failure of the padding logic when it is really a failure
 # to control the fixture. That is what it did on the macOS CI runner.
+# A bare `local _HI_BANNER_HOST` shadows banner's memo with an unset copy, so
+# the pin below is what banner actually reads no matter what ran before, and the
+# real value is restored on return.
 function test_banner_prefix_shrinks_padding() {
-  local plain prefixed _HI_HOSTNAME_CACHE="pinned-host"
+  local plain prefixed _HI_BANNER_HOST _HI_HOSTNAME_CACHE="pinned-host"
   plain="$(banner TestBanner "$BRGREEN" "")"
   prefixed="$(banner TestBanner "$BRGREEN" "$(printf 'x%.0s' {1..50})")"
   [ "${#prefixed}" -lt "${#plain}" ]
@@ -58,7 +61,7 @@ function test_banner_prefix_shrinks_padding() {
 # ...and the floor itself, reached on purpose with the hostname pinned long
 # rather than by accident on a machine that happens to have a long one.
 function test_banner_floors_padding_on_a_long_hostname() {
-  local out _HI_HOSTNAME_CACHE
+  local out _HI_BANNER_HOST _HI_HOSTNAME_CACHE
   printf -v _HI_HOSTNAME_CACHE 'h%.0s' {1..60}
   out="$(banner TestBanner)"
   [[ "$out" == *"$_HI_HOSTNAME_CACHE"* && "$out" == *"~"* ]]
@@ -157,7 +160,11 @@ function test_banner_prints_when_toggle_unset() {
 function test_banner_change_count_is_computed_once() {
   local first second file
   file="$(mktemp -t hi.banner.XXXXXX)"
-  unset _HI_BANNER_CHANGES
+  # _HI_BANNER_HOST too: banner memoizes the hostname into it, and this is the
+  # one case that deliberately runs banner in the suite's own shell, so anything
+  # it leaves behind outlives it. Left set, it silently overrides the
+  # _HI_HOSTNAME_CACHE pin every later case relies on.
+  unset _HI_BANNER_CHANGES _HI_BANNER_HOST
   banner TestBanner >"$file"
   first="$(cat "$file")"
   [ -n "${_HI_BANNER_CHANGES+x}" ] || {
@@ -169,7 +176,7 @@ function test_banner_change_count_is_computed_once() {
   banner TestBanner >"$file"
   second="$(cat "$file")"
   rm -f "$file"
-  unset _HI_BANNER_CHANGES
+  unset _HI_BANNER_CHANGES _HI_BANNER_HOST
   [ -n "$first" ] && [[ "$second" == *4242* ]]
 }
 
@@ -248,18 +255,23 @@ function test_banner_branch_stays_out_of_remote_banners() {
 
 # the branch spends the tilde budget, not line width: same label, same repo,
 # fewer tildes once the indicator is on the line
+#
+# _HI_BANNER_HOST is unset alongside the rest for the same reason the sibling at
+# the top of this file pins the hostname: banner memoizes it, and a real host
+# name long enough to floor the padding (macOS CI) makes both calls print 4
+# tildes, which reads as a padding bug and is really an uncontrolled fixture.
 function test_banner_branch_shrinks_padding() {
   local dir plain branched _HI_HOSTNAME_CACHE="pinned-host"
   dir="$(_hi_git_fixture)"
   plain="$(
     _HI_ROOT="$dir"
-    unset _HI_BANNER_CHANGES _HI_BANNER_BRANCH
+    unset _HI_BANNER_CHANGES _HI_BANNER_BRANCH _HI_BANNER_HOST
     banner Online
   )"
   git -C "$dir" checkout -qb feature-x
   branched="$(
     _HI_ROOT="$dir"
-    unset _HI_BANNER_CHANGES _HI_BANNER_BRANCH
+    unset _HI_BANNER_CHANGES _HI_BANNER_BRANCH _HI_BANNER_HOST
     banner Online
   )"
   [ "$(tr -dc '~' <<<"$branched" | wc -c)" -lt "$(tr -dc '~' <<<"$plain" | wc -c)" ]

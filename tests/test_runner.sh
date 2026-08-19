@@ -112,6 +112,10 @@ _HI_GROUP=""
 _HI_LIST=0
 _HI_LIST_PATHS=0
 _HI_REQUIRE_RUN=0
+# assigned unconditionally, never defaulted from the environment: runner_test.sh
+# runs a nested runner, which would otherwise inherit the outer run's path and
+# overwrite its totals
+_HI_TOTALS_FILE=""
 _HI_HOST_REPORT="${_HI_HOST_REPORT:-0}"
 declare -a _HI_ARGS=()
 while [ "$#" -gt 0 ]; do
@@ -132,6 +136,10 @@ rather than PASS, so a green run can't overstate what actually ran.
   --list-paths     the same, plus each suite's absolute path as a third column
   --require-run    treat SKIPPED suites as failures - for CI runners where a
                    skip means the runner is broken, not the backend optional
+  --totals-file <path>
+                   write "<passed> <failed> <skipped> <suites>" there once the
+                   run is over, for a caller that needs the numbers rather than
+                   the table. CI reads it to keep README's tests badge honest
   --verbose        stream every suite's transcript live instead of collapsing
                    the passing ones. _HI_VERBOSE=1 does the same
   --host-report    print what this machine is before running anything: bash,
@@ -165,6 +173,15 @@ EOF
     _HI_LIST_PATHS=1
     ;;
   --require-run) _HI_REQUIRE_RUN=1 ;;
+  --totals-file)
+    [ "$#" -ge 2 ] || {
+      _hi_cecho "test_runner.sh: --totals-file needs a value" "$RED" >&2
+      exit 1
+    }
+    _HI_TOTALS_FILE="$2"
+    shift
+    ;;
+  --totals-file=*) _HI_TOTALS_FILE="${1#--totals-file=}" ;;
   # the flag half of _HI_VERBOSE; the default below is `:-0`, so setting it
   # here wins and the two spellings need no further reconciling
   --verbose) _HI_VERBOSE=1 ;;
@@ -443,6 +460,12 @@ _HI_TOTAL_DUR="$(_hi_elapsed "$_HI_RUN_T0" "$(_hi_now)")s"
 # totals row: suites across the status column, summed cases across the rest
 _hi_cecho "$(_hi_summary_row TOTAL "${#_HI_SELECTED[@]} suite(s)" \
   "$_HI_CASES_PASSED" "$_HI_CASES_FAILED" "$_HI_CASES_SKIPPED" "$_HI_TOTAL_DUR")" "$BRBLUE"
+
+# the same four numbers, for a caller that has to act on them rather than read
+# them - CI compares the pass count with README's tests badge
+[ -n "$_HI_TOTALS_FILE" ] && printf '%s %s %s %s\n' \
+  "$_HI_CASES_PASSED" "$_HI_CASES_FAILED" "$_HI_CASES_SKIPPED" "${#_HI_SELECTED[@]}" \
+  >"$_HI_TOTALS_FILE"
 
 # every failing case again, in one place - the transcript above may be
 # thousands of lines and the table only says how many broke, not which

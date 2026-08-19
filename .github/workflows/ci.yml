@@ -89,7 +89,28 @@ jobs:
           tool: checkbashisms
 
       - name: Run fast test suites
-        run: "${{ github.workspace }}/tests/test_runner.sh --verbose --host-report --group fast"
+        run: "${{ github.workspace }}/tests/test_runner.sh --verbose --host-report --group fast --totals-file ${{ runner.temp }}/totals"
+
+      # README's tests badge is a hand-written number, like the ssh_payload one
+      # above it, and a hand-written number goes stale. This is the ubuntu count
+      # on purpose: macOS legitimately skips a handful of cases and lints fewer
+      # files, so there is no single figure both jobs could carry.
+      - name: The tests badge still matches
+        env:
+          TOTALS: ${{ runner.temp }}/totals
+        run: |
+          set -euo pipefail
+          read -r passed _ _ _ <"$TOTALS"
+          badge="$(sed -n 's/.*badge\/tests-\([0-9]*\)_passed.*/\1/p' README.md | head -1)"
+          if [ -z "$badge" ]; then
+            echo "::error::README.md has no tests-<n>_passed badge to check"
+            exit 1
+          fi
+          if [ "$badge" != "$passed" ]; then
+            echo "::error::README tests badge says $badge, the fast group passed $passed"
+            exit 1
+          fi
+          echo "tests badge agrees with the run: $passed passed"
 
   # The same suites on macOS: /bin/bash 3.2, BSD userland. The %e/width/sort
   # fixes in common/ came out of this job, so it gates for real now.
@@ -379,3 +400,20 @@ jobs:
 
       - name: Run backend end-to-end suites
         run: "${{ github.workspace }}/tests/test_runner.sh --verbose --host-report --require-run --group backends"
+
+  # The two platform e2e workflows, promoted out of dispatch-only. `push` only:
+  # both stand up an sshd and authorize a throwaway key, which is not something
+  # to hand a fork's pull request, and the runner job's fork guard covers only
+  # the jobs that name it. Gated on both fast-suite jobs so a red unit test
+  # doesn't cost a 15-minute macOS runner.
+  e2e-macos:
+    name: e2e (macOS)
+    needs: [test, test-macos]
+    if: ${{ !cancelled() && github.event_name == 'push' && needs.test.result == 'success' && needs.test-macos.result == 'success' }}
+    uses: ./.github/workflows/macos-e2e.yml
+
+  e2e-windows:
+    name: e2e (Windows)
+    needs: [test, test-macos]
+    if: ${{ !cancelled() && github.event_name == 'push' && needs.test.result == 'success' && needs.test-macos.result == 'success' }}
+    uses: ./.github/workflows/windows-e2e.yml

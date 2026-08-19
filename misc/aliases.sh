@@ -6,10 +6,16 @@
 # shellcheck disable=SC2089 # the *_OPTS quotes are literal alias text; the overlay source below makes the linter guess otherwise
 # GLOSSARY: command -v fallthrough - first-installed wins; reorder to taste.
 
-# Backstop toggle defaults, in an eval gated on a builtin fish lacks; `-` not
-# `:-`, so intentional empties survive. GLOSSARY: toggle defaulting
-command -v getopts >/dev/null 2>&1 &&
-  eval 'export _HI_DISABLE_EDITORS="${_HI_DISABLE_EDITORS-0}" _HI_DISABLE_ALIASES="${_HI_DISABLE_ALIASES-0}" _HI_DISABLE_OSC52="${_HI_DISABLE_OSC52-0}" _HI_OSC52="${_HI_OSC52-}" _HI_DISABLE_TMUX="${_HI_DISABLE_TMUX-0}" _HI_TMUXCONF="${_HI_TMUXCONF-}" _HI_CLEANUP="${_HI_CLEANUP-}" _HI_CONFIG_DIR="${_HI_CONFIG_DIR-}" _HI_ROOT="${_HI_ROOT-}"' || true
+# Backstop toggle defaults, in an eval fish can't parse. fish's `command -v`
+# reports no builtins at all, so the gate is really "no file of this name on
+# PATH" - which is why `getopts` was wrong: macOS ships FreeBSD's builtin
+# wrappers in /usr/bin, `getopts` among them, and fish then ran the eval and
+# printed a parse error. `shift` has no such file anywhere; `2>/dev/null` is the
+# belt for the host that proves that wrong too, since the cases that assert
+# silence compare stderr. `-` not `:-`, so intentional empties survive.
+# GLOSSARY: toggle defaulting
+command -v shift >/dev/null 2>&1 &&
+  eval 'export _HI_DISABLE_EDITORS="${_HI_DISABLE_EDITORS-0}" _HI_DISABLE_ALIASES="${_HI_DISABLE_ALIASES-0}" _HI_DISABLE_OSC52="${_HI_DISABLE_OSC52-0}" _HI_OSC52="${_HI_OSC52-}" _HI_DISABLE_TMUX="${_HI_DISABLE_TMUX-0}" _HI_TMUXCONF="${_HI_TMUXCONF-}" _HI_CLEANUP="${_HI_CLEANUP-}" _HI_CONFIG_DIR="${_HI_CONFIG_DIR-}" _HI_ROOT="${_HI_ROOT-}"' 2>/dev/null || true
 
 # Resolved before any alias exists: once one is set, zsh/dash `command -v`
 # returns its definition and poisons later fallthrough chains.

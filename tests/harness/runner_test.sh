@@ -284,6 +284,29 @@ function test_summary_totals_sum_every_suites_cases() {
   printf '%s\n' "$_HI_RUN_OUT" | grep -qE 'TOTAL +2 suite\(s\) +9 +1 '
 }
 
+# --totals-file is what CI reads to keep README's tests badge honest, so the
+# four numbers have to be the table's own and in a fixed order.
+function test_totals_file_carries_the_summary_numbers() {
+  local out
+  _hi_counting_fixture six 6 1
+  _hi_counting_fixture four 4 0
+  out="$_HI_WORKDIR/totals.out"
+  _hi_run_runner $'six:six.sh\nfour:four.sh' --totals-file "$out"
+  [ -s "$out" ] || {
+    _hi_cecho " | --totals-file wrote nothing" "$RED"
+    return 1
+  }
+  # 9 passed, 1 failed, 0 skipped, 2 suites
+  [ "$(cat "$out")" = "9 1 0 2" ]
+}
+
+# without a path it must stay silent rather than write somewhere of its own
+function test_totals_file_is_written_only_when_asked() {
+  _hi_counting_fixture three 3 0
+  _hi_run_runner $'three:three.sh'
+  [[ "$_HI_RUN_OUT" != *"totals"* ]]
+}
+
 # suites that reported nothing must not drag the totals to "-" or crash the sum
 function test_summary_totals_ignore_suites_without_counts() {
   _hi_counting_fixture three 3 0
@@ -621,6 +644,8 @@ function run_runner_tests() {
   _hi_check "Totals sum every suite's cases" test_summary_totals_sum_every_suites_cases
   _hi_check "Totals sum the skip counts" test_summary_totals_sum_skip_counts
   _hi_check "Totals ignore suites without counts" test_summary_totals_ignore_suites_without_counts
+  _hi_check "--totals-file carries the summary numbers" test_totals_file_carries_the_summary_numbers
+  _hi_check "--totals-file only when asked" test_totals_file_is_written_only_when_asked
 
   _hi_h2 "Testing: skipped suites"
   _hi_check "Reported as SKIPPED, not PASS" test_a_skipping_suite_is_reported_as_skipped

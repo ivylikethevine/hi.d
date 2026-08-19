@@ -10,7 +10,9 @@ This is a hobby project.
 
 ---
 
-![CI (main)](https://github.com/ivylikethevine/hi.d/actions/workflows/ci.yml/badge.svg)
+[![tests](https://img.shields.io/badge/tests-842_passed-4c1)](https://github.com/ivylikethevine/hi.d/actions/workflows/ci.yml)
+[![macOS](https://img.shields.io/github/actions/workflow/status/ivylikethevine/hi.d/macos-e2e.yml?branch=main&label=macOS)](https://github.com/ivylikethevine/hi.d/actions/workflows/macos-e2e.yml)
+[![Windows](https://img.shields.io/github/actions/workflow/status/ivylikethevine/hi.d/windows-e2e.yml?branch=main&label=Windows)](https://github.com/ivylikethevine/hi.d/actions/workflows/windows-e2e.yml)
 [![Coverage](https://github.com/ivylikethevine/hi.d/actions/workflows/coverage.yml/badge.svg)](https://github.com/ivylikethevine/hi.d/actions/workflows/coverage.yml)
 ![ssh payload](https://img.shields.io/badge/ssh_payload-70KB_per_session-4c1)
 ![bash](https://img.shields.io/badge/bash-3.2%2B-4EAA25?logo=gnubash&logoColor=white)
@@ -171,7 +173,7 @@ that in place and copies nothing. `hi --doctor` prints the wire size and the unp
 - [sshrc](https://github.com/cdown/sshrc) - _from_ - (became `hi.sh`)
 - [sshm](https://github.com/Gu1llaum-3/sshm) - _with_ - (optional, but _highly_ recommended to configure `~/.ssh/config` hosttags)
 - [bat](https://github.com/sharkdp/bat) - _in mind_ - (essentially my reason to get the aliases.sh fallthrough logic to work as portably as possible)
-- [fish](https://github.com/fish-shell/fish) - _with_ - (my preferred shell because its defaults/built-ins are extremely easy to understand, but one that is not POSIX-compliant)
+- [fish](https://github.com/fish-shell/fish-shell) - _with_ - (my preferred shell because its defaults/built-ins are extremely easy to understand, but one that is not POSIX-compliant)
 
 ### Docker / Podman containers
 

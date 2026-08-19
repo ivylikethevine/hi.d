@@ -287,7 +287,10 @@ function _hi_par_wait() {
       _hi_note_failure "[$label] left no verdict"
     fi
     _HI_TOTAL=$((_HI_TOTAL + 1))
-    [ "$rc" -eq 0 ] || _HI_FAILED=$((_HI_FAILED + 1))
+    [ "$rc" -eq 0 ] || {
+      _HI_FAILED=$((_HI_FAILED + 1))
+      _hi_note_failure_unless_named "$label" "[$label] exited $rc before reporting a verdict"
+    }
     # shellcheck disable=SC2031 # this is the parent's copy, which is the point
     _HI_SKIPPED=$((${_HI_SKIPPED:-0} + skipped))
   done
@@ -649,6 +652,17 @@ function _hi_report_counts() {
 function _hi_note_failure() {
   [ -n "${_HI_FAILS_FILE:-}" ] || return 0
   printf '%s\n' "$1" >>"$_HI_FAILS_FILE"
+}
+
+# _hi_note_failure_unless_named <label> <text> - the parallel path's backstop. A
+# case that dies before _hi_case_result (a container that never started, say)
+# has named nothing, and the recap then says only "suite exited N with no
+# per-case detail". One that died after has already named itself, and must not
+# be listed twice - hence the check for its "[label]" prefix.
+function _hi_note_failure_unless_named() {
+  [ -n "${_HI_FAILS_FILE:-}" ] || return 0
+  grep -qF "[$1]" "$_HI_FAILS_FILE" 2>/dev/null && return 0
+  _hi_note_failure "$2"
 }
 
 # _hi_dump_log <message> <file> [color] - a failure line and the output that
@@ -1547,14 +1561,20 @@ function _hi_container_backend_test() {
 # together on a cluster that took 40s to exist) and none at all on nomad - whose
 # suite tracks its jobs in a shell array and therefore asks for _HI_PAR_WIDTH=1,
 # so this path stays one code path either way.
+# The pair's two images, named once: kube side-loads them into its cluster
+# before the cases run, and a preload that drifts from what the cases ask for is
+# a silent 20-second wait, not an error.
+_HI_PAIR_IMAGE_BASH="debian:bookworm-slim"
+_HI_PAIR_IMAGE_SH="alpine:3.20"
+
 function _hi_backend_pair_cases() {
   local label="$1" thing="$2"
 
   _hi_suite_begin
 
   _hi_par_begin "$label cases"
-  _hi_par_case bash _hi_run_case bash debian:bookworm-slim "$(_hi_probe_cmd "$_HI_TEST_MARKER" bash)"
-  _hi_par_case sh _hi_run_case sh alpine:3.20 "$(_hi_probe_cmd "$_HI_TEST_MARKER" fallback)"
+  _hi_par_case bash _hi_run_case bash "$_HI_PAIR_IMAGE_BASH" "$(_hi_probe_cmd "$_HI_TEST_MARKER" bash)"
+  _hi_par_case sh _hi_run_case sh "$_HI_PAIR_IMAGE_SH" "$(_hi_probe_cmd "$_HI_TEST_MARKER" fallback)"
   _hi_par_wait
 
   _hi_suite_end "" \

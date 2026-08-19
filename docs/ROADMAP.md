@@ -170,7 +170,7 @@ human steps and their tick conditions.
 
 ### CI runs to dispatch
 
-All three are written, committed, and dispatch-only. They need nothing but the repo pushed and Actions enabled — click Run workflow and read the result.
+Written, committed, and waiting on a real run. The two e2e workflows are no longer dispatch-only: `ci.yml` calls both on every push to `main`, once the ubuntu and macOS fast-suite jobs are green, so the next push to `main` runs them. Dispatch still works for running one on its own.
 
 - [ ] **macOS loopback e2e** (`macos-e2e.yml`) — CI's macos job runs only the
       fast suites, so the BSD userland (`sed -i ''`, `mktemp -t`, `base64 -D`,
@@ -179,7 +179,9 @@ All three are written, committed, and dispatch-only. They need nothing but the r
       and runs `hi localhost 'echo marker'` — the whole client-and-target BSD
       path in one go. Pty-wrapped, with a cleanup-trap assertion.
 
-  - **Ticks when:** its first green dispatch. Promote to every-PR only once it proves stable.
+  - **Ticks when:** its first green run. Shipped since: `ci.yml`'s `e2e-macos`
+    job calls it on every push to `main` behind both fast-suite jobs, and
+    README carries a macOS badge that reads "no status" until then.
 
 - [ ] **Windows target e2e** (`windows-e2e.yml`) — the README documents the
       Git Bash/WSL/PowerShell fallback ladder but no Windows job has ever run.
@@ -191,7 +193,9 @@ All three are written, committed, and dispatch-only. They need nothing but the r
       `.gitattributes` pins LF repo-wide, so the classic CRLF-checkout
       first-dispatch failure is off the risk list.
 
-  - **Ticks when:** its first green dispatch.
+  - **Ticks when:** its first green run. Shipped since: `ci.yml`'s `e2e-windows`
+    job calls it on every push to `main` behind both fast-suite jobs, and
+    README carries a Windows badge that reads "no status" until then.
 
 - [ ] **OpenSSF Scorecard** (`scorecard.yml`) — a public supply-chain score
       crediting work already done here (SHA pins, minimal token permissions,

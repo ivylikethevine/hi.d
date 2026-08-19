@@ -67,8 +67,11 @@ that residue is the only evidence of which step left it there.
 Do the two repo settings under [ROADMAP.md](ROADMAP.md)'s "GitHub repo
 settings" — the fork-PR approval and the `manual-dispatch` environment —
 _before_ pointing any of these variables at a self-hosted runner. Neither can
-be done from a workflow file, and the `environment:` declarations already in
-the dispatch-only workflows are inert until the second one exists.
+be done from a workflow file, and the `environment:` declarations in
+`release.yml` and `scorecard.yml` are inert until the second one exists. The
+two e2e workflows no longer carry one: `ci.yml` calls them on every push to
+`main`, where a required reviewer would stall the run rather than gate it — the
+`push`-only condition is what keeps a fork's pull request out of them.
 
 ## Contents
 

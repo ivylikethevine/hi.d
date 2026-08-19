@@ -31,6 +31,42 @@ function _hi_kube_cleanup() {
 
 function _hi_pod_running() { [ "$(kubectl get pod "$1" -o jsonpath='{.status.phase}' 2>/dev/null)" = Running ]; }
 
+# A kind node starts with an empty containerd, so --image-pull-policy=IfNotPresent
+# still pulls from the registry the first time a pod wants an image - and
+# debian:bookworm-slim did not finish inside the Running poll's budget on CI
+# while the 3MB alpine shape did. Pulling both up front moves that wait out of
+# the per-pod budget, which is the actual coupling: the poll below should be
+# waiting on the scheduler, never on a download.
+#
+# `crictl pull` in the node rather than `kind load docker-image` from the host:
+# kind's loader shells out to `ctr images import --all-platforms`, which fails
+# ("content digest ...: not found") wherever docker's image store holds a
+# multi-platform index without every platform's blobs - true of this dev box and
+# not something a test should be fragile about. crictl talks to the node's own
+# containerd and needs nothing from the host's docker at all.
+#
+# Best-effort throughout: a failure here is a slow pod, not a broken suite, and
+# the widened poll covers it.
+function _hi_kube_preload_images() {
+  local node image
+  local -a nodes=()
+  _hi_read_lines nodes < <(kind get nodes --name "$_HI_CLUSTER" 2>/dev/null)
+  [ "${#nodes[@]}" -gt 0 ] || {
+    _hi_cecho " | No nodes to preload, leaving the images to the pods" "$YELLOW"
+    return 0
+  }
+  for node in "${nodes[@]}"; do
+    for image in "$_HI_PAIR_IMAGE_BASH" "$_HI_PAIR_IMAGE_SH"; do
+      if docker exec "$node" crictl pull "$image" >>"$_HI_WORKDIR/preload.log" 2>&1; then
+        _hi_cecho " | Preloaded $image" "$GREEN"
+      else
+        _hi_cecho " | Could not preload $image, leaving it to the pod" "$YELLOW"
+      fi
+    done
+  done
+  return 0
+}
+
 function _hi_run_case() {
   local label="$1" image="$2" cmd="$3" timeout_s="${4:-30}"
   local name ok=0
@@ -45,8 +81,11 @@ function _hi_run_case() {
   fi
   _hi_cecho " | Pod: $name (image: $image)"
 
-  if ! _hi_poll_bool 80 0.25 _hi_pod_running "$name"; then
-    _hi_cecho " | Pod never reported Running" "$RED"
+  # 120s, not the 20s this used to allow: the preload makes Running arrive in a
+  # couple of seconds, and this is the budget for the run where it didn't work.
+  if ! _hi_poll_bool 240 0.5 _hi_pod_running "$name"; then
+    kubectl describe pod "$name" >"$_HI_WORKDIR/$label.describe.log" 2>&1 || true
+    _hi_dump_log "Pod never reported Running:" "$_HI_WORKDIR/$label.describe.log"
     kubectl delete pod "$name" --now >/dev/null 2>&1
     return 1
   fi
@@ -78,6 +117,8 @@ function run_kube_test() {
     _hi_stand_down "no default ServiceAccount" \
       "default ServiceAccount never showed up, skipping"
   fi
+
+  _hi_kube_preload_images
 
   _HI_TEST_MARKER="HI_KUBE_TEST_OK"
 

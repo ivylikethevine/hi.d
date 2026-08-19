@@ -67,6 +67,35 @@ raw)
   chmod +x "$_hi_tmp/$HI_TOOL"
   _hi_bin="$_hi_tmp/$HI_TOOL"
   ;;
+cmake)
+  # a source build, for a tool that ships no binary: kcov's releases carry
+  # only the tarball, and outside Debian's own archive the distro packages
+  # are a PPA away. Build deps come from apt because they are headers, not
+  # something to pin - the *version* is pinned, which is what the roster is
+  # for. Only the built binary is cached and installed, so the caller is the
+  # one that has to keep kcov's runtime libs (libdw1, libelf1, libcurl4,
+  # zlib1g, libstdc++6) around - see coverage.yml's apt step.
+  sudo apt-get update
+  sudo apt-get install -y --no-install-recommends \
+    build-essential cmake libcurl4-openssl-dev libdw-dev libelf-dev \
+    python3 zlib1g-dev
+  curl -sSfL -o "$_hi_tmp/archive" "$_hi_url"
+  tar -xzf "$_hi_tmp/archive" -C "$_hi_tmp"
+  _hi_src="$(find "$_hi_tmp" -mindepth 1 -maxdepth 1 -type d | head -1)"
+  [ -n "$_hi_src" ] || {
+    echo "setup-tool: no source directory inside $_hi_url" >&2
+    exit 1
+  }
+  cmake -S "$_hi_src" -B "$_hi_tmp/build" -DCMAKE_BUILD_TYPE=Release
+  cmake --build "$_hi_tmp/build" --parallel "$(nproc)"
+  # searched under build/ only - the source tree has its own files named
+  # after the tool, and the one wanted here is the one that was just linked
+  _hi_bin="$(find "$_hi_tmp/build" -type f -name "$HI_TOOL" -perm -u+x | head -1)"
+  [ -n "$_hi_bin" ] || {
+    echo "setup-tool: $HI_TOOL was not built by $_hi_url" >&2
+    exit 1
+  }
+  ;;
 tar.gz | tar.xz)
   curl -sSfL -o "$_hi_tmp/archive" "$_hi_url"
   # extract whole and then look, rather than naming a member: the layouts here

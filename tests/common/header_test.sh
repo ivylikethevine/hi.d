@@ -100,18 +100,27 @@ function test_marks_swap_to_ascii_with_the_set() {
   )
 }
 
-function test_timestamp_runs_and_has_two_cells() {
+function test_timestamp_runs_and_has_three_cells() {
   local out
   out="$(_HI_RELEASE="" timestamp)"
-  [ "$(grep -o '|' <<<"$out" | wc -l)" -eq 2 ]
+  [ "$(grep -o '|' <<<"$out" | wc -l)" -eq 3 ]
 }
 
-# a known version (a packager's stamp, or the resolved one the ssh preamble
-# exports into a session) earns a third cell; unset stays two, as above
-function test_timestamp_adds_a_version_cell_when_stamped() {
+# the version is the middle cell, between the two clocks, and is printed bare
+# - no "hi.d" in front of it. The palette is blanked for the row rather than
+# stripped after: the cells are `| `-joined and field 1 is the empty lead.
+function test_timestamp_puts_the_version_between_the_clocks() {
   local out
-  out="$(_HI_RELEASE=1.2.3 timestamp)"
-  [ "$(grep -o '|' <<<"$out" | wc -l)" -eq 3 ] && [[ "$out" == *"hi.d 1.2.3"* ]]
+  out="$(NC='' GREEN='' BRBLUE='' BRYELLOW='' _HI_RELEASE=1.2.3 timestamp)"
+  [ "$(cut -d'|' -f3 <<<"$out" | tr -d ' ')" = "1.2.3" ] && [[ "$out" != *"hi.d"* ]]
+}
+
+# ...and a shell with no stamp still gets one: this checkout answers with git
+# describe, and only a stampless, gitless install falls through to "unknown"
+function test_timestamp_version_falls_back_without_a_stamp() {
+  local out
+  out="$(NC='' GREEN='' BRBLUE='' BRYELLOW='' _HI_RELEASE="" timestamp)"
+  [ -n "$(cut -d'|' -f3 <<<"$out" | tr -d ' ')" ]
 }
 
 function test_system_info_includes_static_labels() {
@@ -436,8 +445,9 @@ function run_header_tests() {
   _hi_check "Branch spends tilde budget, not width" test_banner_branch_shrinks_padding
 
   _hi_h2 "Testing: timestamp / system_info / identity (smoke tests)"
-  _hi_check "Timestamp prints two cells" test_timestamp_runs_and_has_two_cells
-  _hi_check "A stamped version earns a third cell" test_timestamp_adds_a_version_cell_when_stamped
+  _hi_check "Timestamp prints three cells" test_timestamp_runs_and_has_three_cells
+  _hi_check "The version sits between the clocks" test_timestamp_puts_the_version_between_the_clocks
+  _hi_check "Without a stamp the version still resolves" test_timestamp_version_falls_back_without_a_stamp
   _hi_check "System_info includes its static labels" test_system_info_includes_static_labels
   _hi_check "Identity includes its static labels" test_identity_includes_static_labels
 

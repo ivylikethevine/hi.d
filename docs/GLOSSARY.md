@@ -172,9 +172,15 @@ argument: Linux caps a *single* argv entry at 128KB (`MAX_ARG_STRLEN`)
 however large `ARG_MAX` is, and the payload had grown within a few KB of it.
 stdin has no ceiling. It has to be two calls because the second one's stdin
 belongs to the interactive session - feed it a pipe and the remote shell
-reads EOF. The write doubles as the probe: a target where even `sh -c` won't
-run has no POSIX shell at all (stock Windows OpenSSH), which is what selects
-the PowerShell fallback.
+reads EOF. It goes over that pipe as the plain script and is `cat` into
+place: only the three streams *inside* it are armored, because only they are
+binary. Armoring the assembled script on top of them - which the argv era
+needed, one shell-safe token - spent a third of every session's bytes to
+re-encode text that was already ASCII. The write doubles as the probe: a
+target where `sh -c` won't run has no POSIX shell at all (stock Windows
+OpenSSH), and one without `base64` cannot unpack what the script carries;
+either way the session falls through to the PowerShell branch rather than
+half-landing.
 
 ## fallback rc
 

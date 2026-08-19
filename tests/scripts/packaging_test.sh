@@ -309,7 +309,7 @@ function test_tool_manifest_rows_are_wellformed() {
       continue
     }
     case "$kind" in
-    raw | tar.gz | tar.xz) ;;
+    raw | tar.gz | tar.xz | cmake) ;;
     *)
       _hi_cecho " | unknown kind '$kind' for $tool" "$RED"
       bad=1

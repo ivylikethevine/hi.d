@@ -12,12 +12,28 @@ function header_row() {
   printf '%b\n' "$out$NC"
 }
 
+# hi's own version for the header, resolved once per shell (the row is
+# printed twice a session, at connect and at disconnect). The stamp wins - a
+# packager wrote it, or the ssh preamble exported the client's answer - and a
+# checkout falls back to git describe, so every machine has one to show. Only
+# a stampless, gitless install is left with "unknown".
+function _hi_header_version() {
+  if [ -z "${_HI_HEADER_VERSION+x}" ]; then
+    _HI_HEADER_VERSION="${_HI_RELEASE:-}"
+    if [ -z "$_HI_HEADER_VERSION" ] && [ -d "$_HI_ROOT/.git" ]; then
+      _HI_HEADER_VERSION="$(git -C "$_HI_ROOT" describe --tags --always --dirty 2>/dev/null || true)"
+    fi
+    _HI_HEADER_VERSION="$(_hi_sanitize "${_HI_HEADER_VERSION:-unknown}")"
+  fi
+  printf '%s\n' "$_HI_HEADER_VERSION"
+}
+
+# UTC | version | local: the version sits between the two clocks, and carries
+# no "hi.d" of its own - the banner above it already says whose header this is
 function timestamp() {
-  local -a cells=("$BRBLUE$(date -u "$_HI_HUMAN_CENTRIC_DATE")  " "  $BRYELLOW$(date "$_HI_HUMAN_CENTRIC_DATE")")
-  # the version cell only when hi knows one (a stamp, or the preamble's
-  # export); a bare local shell keeps the two-cell row its tests pin
-  [ -n "${_HI_RELEASE:-}" ] && cells+=("${GREEN}hi.d $(_hi_sanitize "$_HI_RELEASE")")
-  header_row "${cells[@]}"
+  header_row "$BRBLUE$(date -u "$_HI_HUMAN_CENTRIC_DATE") " \
+    "$GREEN$(_hi_header_version)" \
+    " $BRYELLOW$(date "$_HI_HUMAN_CENTRIC_DATE")"
 }
 
 function system_info() {

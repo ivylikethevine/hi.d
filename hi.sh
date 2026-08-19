@@ -247,18 +247,20 @@ function _hi_armored_len() {
 
 # What a fresh session would put on the wire, without connecting (doctor.sh
 # asks); no overlay counted - which files ride is a question about a target.
-# Measured as *sent* (each stream armored, the total armored again) - `du`
-# over the source dirs overstated every session.
+# Measured as *sent* - each stream armored once, which is what the assembled
+# script carries; `du` over the source dirs overstated every session.
 function _hi_wire_estimate() {
-  local total=0 part
+  local total=0 bytes
   # $_HI_LAUNCHER, not $0 - reached by *sourcing*, where $0 is the sourcer;
-  # _say_hi keeps $0 because there it is the running, shipped copy
-  for part in "$($_HI_ARMOR <"$_HI_LAUNCHER")" "$(_hi_bootloader | $_HI_ARMOR)" \
-    "$(_hi_payload_tar | $_HI_ARMOR)"; do
-    total=$((total + ${#part}))
+  # _say_hi keeps $0 because there it is the running, shipped copy. Counted
+  # through _hi_armored_len rather than by armoring each stream into a
+  # variable: base64 of the whole payload, to measure it, is a fork and a
+  # 50KB copy the answer never needed.
+  for bytes in "$(wc -c <"$_HI_LAUNCHER")" "$(_hi_bootloader | wc -c)" \
+    "$(_hi_payload_tar | wc -c)"; do
+    total=$((total + $(_hi_armored_len "$bytes")))
   done
-  # the outer armor, which every one of these streams also passes through
-  _hi_human_bytes "$(_hi_armored_len "$total")"
+  _hi_human_bytes "$total"
 }
 
 function _hi_file_bytes() {
@@ -365,7 +367,7 @@ REMOTE
 # Connect, copy hi.d over, hand off to load.sh. Everything up to the bash
 # branch is plain POSIX under one `sh -c` (GLOSSARY: sh -c wrapping)
 function _say_hi() {
-  local size hi_esc nc_esc script middle b64 boot_tmp remote_root tmp_root ctl_path ec=0
+  local size hi_esc nc_esc script middle boot_tmp remote_root tmp_root ctl_path ec=0
   local launcher="" bootloader="" tree="" overlay_line=""
   local -a ctl_opts
 
@@ -409,8 +411,8 @@ REMOTE
       overlay_line="mkdir -p \"\$_HI_ROOT/config\"
 $(_hi_overlay_tar | _hi_armored_line '|' 'tar mxzf - -C "$_HI_ROOT/config"')"
     fi
-    # not known yet: everything above is armored again with the rest of the
-    # script, so the figure can only be measured once it is assembled
+    # not known yet: the figure counts the assembled script, and everything
+    # above is part of it, so it can only be measured once that exists
     size="$_HI_SIZE_TOKEN"
     middle="$(
       cat <<REMOTE
@@ -436,26 +438,29 @@ REMOTE
 $middle
 $(_hi_remote_suffix)"
 
-  # the connection's true byte count (armored twice, each armor 4/3)
+  # the connection's true byte count: the script goes over the wire as it
+  # stands, its three streams already armored one apiece
   # $_HI_SIZE_TOKEN holds a same-width place, honest to a few bytes
   if [ -z "$remote_root" ]; then
-    size="$(_hi_human_bytes "$(_hi_armored_len "${#script}")")"
+    size="$(_hi_human_bytes "${#script}")"
     script="${script//$_HI_SIZE_TOKEN/$size}"
   fi
 
-  # single-line armor portably: GNU spells it -w0, BSD doesn't wrap by
-  # default - piping through tr is the one shape that does both
-  b64="$(printf '%s' "$script" | base64 | tr -d '\n')"
   # -u: a name only, never a local file - the directory it names is created on
   # the *target* by the mkdir below (which fails loudly if the name is taken)
   boot_tmp="$(mktemp -u -t hi.boot.XXXXXX)"
 
   # The bootloader rides stdin of the first of two calls on one connection;
-  # the write doubles as the POSIX-shell probe that selects the PowerShell fallback
+  # the write doubles as the POSIX-shell probe that selects the PowerShell
+  # fallback, and `command -v base64` keeps a target that cannot decode the
+  # streams inside the script on that same fallback rather than half-landing.
+  # It travels as the plain script: stdin is a pipe, so it needs no armor of
+  # its own - only the three streams *inside* it do, and armoring the whole
+  # thing again cost a third of every session's bytes for nothing.
   # GLOSSARY: stdin transport - the argv cap, and why it must be two calls
   # shellcheck disable=SC2029 # $boot_tmp is ours to expand, into the target's shell
-  if printf '%s' "$b64" | ssh "${ctl_opts[@]}" "${SSHARGS[@]}" "$DOMAIN" \
-    "sh -c 'mkdir -m 700 $boot_tmp && $_HI_UNARMOR_RAW > $boot_tmp/bootloader'" 2>/dev/null; then
+  if printf '%s\n' "$script" | ssh "${ctl_opts[@]}" "${SSHARGS[@]}" "$DOMAIN" \
+    "sh -c 'command -v base64 >/dev/null 2>&1 && mkdir -m 700 $boot_tmp && cat > $boot_tmp/bootloader'" 2>/dev/null; then
     # shellcheck disable=SC2029
     ssh -t "${ctl_opts[@]}" "${SSHARGS[@]}" "$DOMAIN" \
       "sh $boot_tmp/bootloader; rm -rf $boot_tmp" || ec=$?

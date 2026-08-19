@@ -22,8 +22,20 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Install zsh, fish and kcov
-        run: sudo apt-get update && sudo apt-get install -y zsh fish kcov
+      # the libs after fish are kcov's runtime ones: setup-tool caches the
+      # built binary, so on a cache hit nothing else pulls them in
+      - name: Install zsh, fish and kcov's runtime libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y zsh fish libdw1 libelf1 libcurl4 zlib1g libstdc++6
+
+      # kcov is pinned and built from its GitHub source tarball like every
+      # other tool here: it publishes no binary asset, and it reaches Debian
+      # and Ubuntu only through a PPA - so `apt-get install kcov` is not a
+      # thing this runner (or a contributor's machine) can rely on.
+      - uses: ./.github/actions/setup-tool
+        with:
+          tool: kcov
 
       # the shellcheck suite runs under kcov too; same pinned binary as ci.yml
       - uses: ./.github/actions/setup-tool

@@ -61,7 +61,7 @@ export _HI_HOME
 source "$_HI_HOME/hi.d/common/core.sh"
 
 if ! command -v kcov >/dev/null 2>&1; then
-  _hi_cecho " | coverage: kcov not installed - skipping (it is a dev-only tool; see your package manager)" "$YELLOW"
+  _hi_cecho " | coverage: kcov not installed - skipping (a dev-only tool, and outside a PPA Debian/Ubuntu do not carry it: build it from github.com/SimonKagstrom/kcov, as CI does)" "$YELLOW"
   exit 0
 fi
 

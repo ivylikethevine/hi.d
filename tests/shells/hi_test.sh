@@ -751,14 +751,14 @@ function test_wire_size_is_not_the_disk_size() {
   [ -n "$wire" ] && [ "$wire" != "$disk" ]
 }
 
-# The guard with teeth. The script hi sends is armored twice - the tar and
-# hi.sh inside it, then the whole thing again - and until it moved to stdin it
-# travelled as one argv entry. It no longer does, but the number is worth
-# watching: it is also what every session pays in bandwidth.
+# The guard with teeth. The script hi sends carries the tar and hi.sh armored
+# one apiece (the whole thing used to be armored again on top, back when it
+# travelled as one argv entry - both of those are gone). The number is still
+# worth watching: it is what every session pays in bandwidth.
 function test_payload_stays_clear_of_the_arg_limit() {
   local bytes
-  bytes="$(_hi_armored_len "$(($(_hi_armored_len "$(wc -c <"$_HI_LAUNCHER")") + \
-  $(_hi_armored_len "$(_hi_payload_tar | wc -c)")))")"
+  bytes="$(($(_hi_armored_len "$(wc -c <"$_HI_LAUNCHER")") + \
+  $(_hi_armored_len "$(_hi_payload_tar | wc -c)")))"
   # 128KB (MAX_ARG_STRLEN) is where it used to break outright; 256KB is the
   # "this has doubled, come and look" line
   [ "$bytes" -lt 262144 ]

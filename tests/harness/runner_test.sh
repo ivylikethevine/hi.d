@@ -292,8 +292,6 @@ function test_require_run_is_listed_in_help() {
   "$_HI_TEST_RUN" --help | grep -q -- '--require-run'
 }
 
-# --- the host report ---------------------------------------------------------
-#
 # The block itself is test_lib.sh's, and lib_test.sh pins its contents; these
 # cases are only about the wiring - that it is off by default, that both the
 # flag and the env var reach it, and that a run prints it once rather than

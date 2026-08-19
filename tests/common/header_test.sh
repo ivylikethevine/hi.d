@@ -285,8 +285,6 @@ function test_hi_header_enabled_prints_banner() {
   [[ "$out" == *"Connected"* ]]
 }
 
-# --- the packages check -----------------------------------------------------
-
 # shellcheck disable=SC2209 # the literal command name "sh" is intentional, not a botched `sh` invocation
 _HI_REAL_CMD=sh
 _HI_FAKE_CMD=definitely-not-a-real-hi-test-command-xyz

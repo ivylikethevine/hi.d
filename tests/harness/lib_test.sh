@@ -335,8 +335,6 @@ function test_cleanup_sweeps_containers_then_networks() {
   _hi_before "$(cat "$log")" '^rm -f gone$' '^network rm alsogone$'
 }
 
-# --- _hi_par_case / _hi_par_wait ----------------------------------------------
-#
 # The counted-case contract, run in a background subshell. Everything here is
 # assertable without docker, which is the point: the suites that use it need a
 # container backend, and a harness bug there looks like a product bug.
@@ -522,8 +520,6 @@ function test_probe_cmd_fish_shapes_run_under_fish() {
     ! _hi_probe_says_ok ssh_fallback_fish "function hi_info; end; " /nonexistent/hi.d fish
 }
 
-# --- _hi_host_report ---------------------------------------------------------
-#
 # $_HI_ROOT is read at call time, so a case can point the tree check anywhere
 # from inside a subshell without disturbing this suite's own environment.
 

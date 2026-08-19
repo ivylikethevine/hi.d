@@ -11,8 +11,6 @@ source "${_HI_HOME:-$HOME}/hi.d/common/core.sh"
 # shellcheck source=../test_lib.sh
 source "$_HI_TEST_LIB"
 
-# --- _hi_use_ascii / _hi_choose_glyphs ---------------------------------------
-
 function test_use_ascii_in_a_c_locale() {
   (
     unset LC_ALL LC_CTYPE LANG _HI_ASCII
@@ -226,8 +224,6 @@ function test_resolve_color_falls_back_to_hash() {
   [ "$(_HI_COLORS="$colors" _hi_resolve_color username unknownxyz)" = "$(_hi_hash_color unknownxyz)" ]
 }
 
-# --- the settings overlay -----------------------------------------------------
-#
 # core.sh's preamble runs once per shell and is guarded by $_hi_core_loaded,
 # so there is no function to call: the case is a fresh bash sourcing core.sh
 # against a scratch $_HI_CONFIG_DIR whose settings.sh claims $_HI_PROBE.
@@ -240,8 +236,6 @@ function test_settings_sh_is_sourced() {
     bash -c 'source "$_HI_HOME/hi.d/common/core.sh"; printf "%s" "${_HI_PROBE:-unset}"')" = global ]
 }
 
-# --- the same primitives, in zsh ----------------------------------------------
-#
 # shells/zsh.zsh sources core.sh directly, so its functions run in zsh too - and
 # three zsh differences had each silently broken something: `${name:i:1}` is a
 # history modifier there, $BASH_REMATCH is never populated, and an unquoted
@@ -295,8 +289,6 @@ function test_zsh_rc_survives_ksharrays_being_on() {
     'setopt KSH_ARRAYS; source "$_HI_HOME/hi.d/shells/zsh.zsh"; print -n "$USER_COLOR"' 2>/dev/null)"
   [ -n "$out" ]
 }
-
-# --- _HI_SHELL_TABLE ---------------------------------------------------------
 
 # Every row has all six fields, both rc paths are absolute, and the flags
 # column names only mechanisms that exist. A row short a field silently

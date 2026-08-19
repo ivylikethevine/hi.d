@@ -223,8 +223,6 @@ function _hi_relay_case() {
   [ "$ok" -eq 1 ]
 }
 
-# --- the same relay, killed mid-session ---------------------------------------
-#
 # The clean case proves the traps fire when both shells are asked to leave.
 # This one proves they fire when nobody asks: the client and its mux master
 # are frozen and killed while both hops are live, and *neither* host may keep

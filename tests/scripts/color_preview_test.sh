@@ -61,8 +61,6 @@ EOF
   export _HI_LOCAL_HOSTNAME=localbox
 }
 
-# --- _hi_color_source: why a name resolves the way it does -------------------
-
 function test_source_reports_an_exact_hostname_override() {
   [ "$(_hi_color_source hostname pinned)" = "override:hostname" ]
 }
@@ -91,8 +89,6 @@ function test_source_never_reports_a_tag_for_a_username() {
   [[ "$(_hi_color_source username ops)" != tag:* ]]
 }
 
-# --- agreement with the live prompt -----------------------------------------
-
 # the preview exists to show what the prompt will do; if these two ever
 # disagree the table is confidently wrong, which is worse than no table
 function test_source_agrees_with_resolve_color_on_overrides() {
@@ -111,8 +107,6 @@ function test_default_source_still_resolves_to_a_palette_color() {
   [ "$(_hi_color_source hostname plain)" = default ] &&
     printf '%s\n' "${_HI_COLOR_NAMES[@]}" | grep -qxF "$color"
 }
-
-# --- the helpers that populate the tables -----------------------------------
 
 function test_known_users_includes_the_current_user() {
   _hi_known_users | grep -qxF "$(whoami)"
@@ -147,8 +141,6 @@ function test_preview_users_are_deduplicated() {
   [ "$(_hi_preview_users | sort | uniq -d | wc -l)" -eq 0 ]
 }
 
-# --- the box-drawing helpers ------------------------------------------------
-
 # each column is padded by one space either side, so a width of n renders n+2
 # dashes between the separators
 function test_hbar_sizes_each_column() {
@@ -165,8 +157,6 @@ function test_group_preview_width_sums_its_hosts() {
   local user_width=4
   [ "$(_hi_group_preview_width abc de)" = "$((4 + 1 + 3 + 4 + 1 + 2 + 2))" ]
 }
-
-# --- the whole thing actually runs ------------------------------------------
 
 # Running the real script can't reuse the exported fixtures above: paths.sh
 # re-exports $_HI_COLORS from $_HI_ROOT and $_HI_SSH_CONFIG from $HOME every

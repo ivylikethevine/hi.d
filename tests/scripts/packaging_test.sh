@@ -60,8 +60,6 @@ function _hi_staged_999() {
   printf '%s' "$out"
 }
 
-# --- nfpm.yaml vs install_tree ------------------------------------------------
-
 # Every `src:` in nfpm.yaml that reads out of dist/staging has to be something
 # install_tree actually produced, or the package silently ships without it.
 function test_nfpm_staging_sources_all_exist() {
@@ -144,8 +142,6 @@ function test_nfpm_declares_the_apk_signature() {
     grep -qF 'key_name: hi.d.rsa.pub' "$_HI_NFPM"
 }
 
-# --- the Homebrew formula vs _HI_PACKAGE_CONTENTS -----------------------------
-
 # The formula cannot call install.sh (install_tree hardcodes /usr/bin and
 # /etc/profile.d, neither of which exists in a brew prefix), so it repeats the
 # content list in Ruby. This is the assertion that keeps the copy honest.
@@ -185,8 +181,6 @@ function test_formula_caveats_use_no_link() {
   grep -qF 'install.sh --no-link' "$_HI_FORMULA"
 }
 
-# --- the PKGBUILDs ------------------------------------------------------------
-#
 # The needles below are makepkg's variables ($pkgdir, $srcdir, $pkgver) quoted
 # as literal text to grep a PKGBUILD for - expanding them here is exactly what
 # must not happen.
@@ -219,8 +213,6 @@ function test_git_pkgbuild_provides_and_conflicts() {
     grep -qF "conflicts=('hi.d')" "$_HI_PKGBUILD_GIT"
 }
 
-# --- versions agree across channels -------------------------------------------
-
 function test_pkgbuild_and_formula_agree_on_the_version() {
   local pkgver
   pkgver="$(sed -n 's/^pkgver=//p' "$_HI_PKGBUILD" | head -1)"
@@ -251,8 +243,6 @@ function test_srcinfo_depends_match_their_pkgbuild() {
     [ "$(_hi_pkgbuild_depends "$f")" = "$(_hi_srcinfo_depends "${f%PKGBUILD}.SRCINFO")" ] || return 1
   done
 }
-
-# --- the release workflow -----------------------------------------------------
 
 # The manual approval gate. `environment:` on the publishing job is what makes
 # GitHub hold it for a reviewer; losing that line silently turns a tag push into
@@ -349,8 +339,6 @@ function test_release_workflow_reads_the_artifact_list() {
   grep -qF 'dist/ARTIFACTS' "$_HI_RELEASE_WF"
 }
 
-# --- the scripts themselves ---------------------------------------------------
-
 # the version of record has to exist where mkpkg.sh reads it back from;
 # the actual plumbing is covered by test_package_sh_version_flag_wins
 function test_package_sh_reads_the_version_from_the_pkgbuild() {
@@ -361,8 +349,6 @@ function test_bump_check_rejects_a_version_the_manifests_do_not_carry() {
   ! "$_HI_PKG_DIR/bump.sh" --check 999.999.999 >/dev/null 2>&1
 }
 
-# --- bump.sh's write path, offline --------------------------------------------
-#
 # Fixture manifests (in packaging/'s own layout) plus a local tarball stand in
 # for the GitHub download; each case runs in a subshell so the fixture
 # _HI_PKG_DIR can't leak into the drift guards above.
@@ -481,8 +467,6 @@ function test_bump_rewrite_preserves_file_mode() {
   [ "$(ls -l "$f" | awk '{ print $1 }')" = "$before" ]
 }
 
-# --- the version stamp ----------------------------------------------------------
-#
 # Every channel stamps `^_HI_RELEASE=` into the hi.sh it installs, and the
 # version into the man page's .TH line, at build time - the stamp cannot live
 # in git because bump.sh only runs after the tag exists. All four now do it
@@ -541,8 +525,6 @@ function test_package_sh_stamps_the_staged_launcher() {
     grep -qF '_HI_RELEASE="9.9.9"' "$out/staging/usr/share/hi.d/hi.sh"
 }
 
-# --- the man-page stamp -------------------------------------------------------
-
 # through the same --stage-only run as the launcher's check: the staged gz
 # must open to a .TH carrying the asked-for version and a real date
 function test_package_sh_stamps_the_staged_man_page() {
@@ -583,8 +565,6 @@ function test_write_checksums_lists_the_artifacts() {
     <(grep -v '^SHA256SUMS$' "$d/ARTIFACTS" | sort)
 }
 
-# --- packaging/stamp.sh itself ------------------------------------------------
-#
 # The greps above prove every channel calls it; these prove what it does. A
 # fixture tree per case, since each one mutates it.
 
@@ -694,8 +674,6 @@ function test_stamp_skips_a_missing_man_page() {
   _hi_stamp --root "$d" --version 6.6.6 --date 2026-01-02 &&
     grep -qF '_HI_RELEASE="6.6.6"' "$d/usr/share/hi.d/hi.sh"
 }
-
-# --- mkpkg.sh, offline half ---------------------------------------------------
 
 function test_package_sh_stage_only_needs_no_nfpm() {
   local out="$_HI_WORKDIR/pkgdist"

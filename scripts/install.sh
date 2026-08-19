@@ -690,8 +690,6 @@ function link_hi_by_hand() {
   return 0
 }
 
-# --- uninstalling -----------------------------------------------------------
-
 # The other half of being install's inverse: drop the settings file it wrote.
 # Only settings.sh - the overlay's colors and packages are hand-written config,
 # not something this script produced, so they are left alone for the same reason

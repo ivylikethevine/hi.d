@@ -119,8 +119,6 @@ exit $fail
 EOF
 }
 
-# --- the overlay aliases.sh ---------------------------------------------------
-#
 # aliases.sh's last act is sourcing $_HI_CONFIG_DIR/aliases.sh when it exists:
 # additive, last-wins, silent when absent. One case per shell proves the
 # overlay's alias arrives AND its redefinition of a shipped alias wins; one

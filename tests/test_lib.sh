@@ -151,8 +151,6 @@ function _hi_check() {
   _hi_case _hi_assert "$@"
 }
 
-# --- running cases in parallel -------------------------------------------------
-#
 # The container suites are nearly the whole cost of a full run, and nearly all
 # of that is spent waiting on one container at a time while the machine idles.
 # Every case already builds its own container under its own name, so the
@@ -679,8 +677,6 @@ function _hi_require_backend() {
   _hi_stand_down "$1 unreachable" "$1 not reachable, skipping"
 }
 
-# --- the host report ---------------------------------------------------------
-#
 # When a suite fails on someone's machine and passes in CI (or the reverse),
 # the first three questions are always the same and none of them are in the
 # output: what bash is this, what userland, and is $_HI_HOME even pointing at
@@ -1258,8 +1254,6 @@ function _hi_sshd_container() {
   fi
 }
 
-# --- freezing a live session ---------------------------------------------------
-#
 # Proving a cleanup trap fires on a *dropped* link means killing the link from
 # outside, and doing that takes two SIGSTOPs: _say_hi multiplexes, so a
 # backgrounded ControlPersist master holds the socket beside the visible
@@ -1365,8 +1359,6 @@ function _hi_ssh_launch() {
   _HI_SSH_LAUNCH=(${_HI_PTY_WRAP[@]+"${_HI_PTY_WRAP[@]}"} "${_HI_SSH_LAUNCH_BARE[@]}")
 }
 
-# --- the shared container-backend case runners --------------------------------
-#
 # Top-level rather than nested in _hi_container_backend_test, so any suite that
 # boots a throwaway container around one case can use them. They read the
 # conventions the e2e suites already set: $_HI_BACKEND (the CLI to drive) and

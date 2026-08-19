@@ -96,8 +96,6 @@ function test_configure_files_grafts_fish_when_dir_exists() {
   grep -q '^source-for-fishconf$' "$_HI_FAKE_HOME/.config/fish/config.fish"
 }
 
-# --- the crash guard ----------------------------------------------------------
-#
 # clean_all cannot run after a hard kill, so configure_files wraps each graft
 # in a tree-exists guard (fish syntax for fish, sh's for the rest). The fixture
 # content is not a command, so a guard failing
@@ -206,8 +204,6 @@ function test_this_checkout_was_never_touched() {
   [ -f "$_HI_ROOT/load.sh" ] && [ -f "$_HI_ROOT/hi.sh" ] && [ -d "$_HI_ROOT/common" ]
 }
 
-# --- _hi_session_shell --------------------------------------------------------
-#
 # Which shell the session runs in - $_HI_SHELL_PREFERENCE is the whole rule, and
 # load.sh's own comment says why `login` leads its default.
 
@@ -267,8 +263,6 @@ function test_session_shell_never_picks_a_bash_less_tier() {
   [ "$(_hi_shell_answer "bash dash zsh" SHELL=/bin/dash)" = zsh ]
 }
 
-# --- _hi_tmux_wanted ----------------------------------------------------------
-#
 # The gate in front of `hi --tmux`. Every "no" here has to be a *loud* no that
 # still lets the session happen - refusing to connect because a host has no
 # tmux would be a worse answer than connecting without it.

@@ -23,7 +23,7 @@ if [[ "${_HI_DISABLE_PROMPT:-0}" != 1 ]] && ! _hi_wants_starship; then
     _hi_ps1_u="" _hi_ps1_h=""
     _hi_user_escape_var _hi_ps1_u
     _hi_host_escape_var _hi_ps1_h
-    HI_PS1=" ${debian_chroot:-}$_hi_ps1_u\u$(_hi_at_color)@$_hi_ps1_h\h$NC $BRBLUE\w$NC"
+    HI_PS1=" ${debian_chroot:-}\[$_hi_ps1_u\]\u\[$(_hi_at_color)\]@\[$_hi_ps1_h\]\h\[$NC\] \[$BRBLUE\]\w\[$NC\]"
     unset _hi_ps1_u _hi_ps1_h
   else
     HI_PS1=" ${debian_chroot:-}\u@\h:\w"
@@ -97,15 +97,34 @@ if [[ "${_HI_DISABLE_PROMPT:-0}" != 1 ]]; then
     # GLOSSARY: HI.32
     eval "$(starship init bash)"
   else
+    # Readline counts every character of $PS1 it was not told to ignore, so an
+    # unmarked color escape makes bash believe the line is wider than it prints
+    # - and past the real edge the typed line wraps back over the prompt. \[ \]
+    # says "no width" for the static half; the git segment reaches PS1 through
+    # a variable, expanded *after* bash decodes those escapes, so it carries
+    # the bytes they decode to instead: \001 ... \002.
+    function _hi_ps_mark() { # <var>
+      local s="${!1}" out="" esc
+      while [[ "$s" == *$'\e['* ]]; do
+        out+="${s%%$'\e['*}"
+        s="${s#*$'\e['}"
+        esc="${s%%m*}"
+        s="${s#*m}"
+        out+=$'\001\e['"$esc"m$'\002'
+      done
+      printf -v "$1" '%s' "$out$s"
+    }
     function ps1() {
       # git info through a reference, never expanded into PS1: expanding user
       # strings is the pw3nage class of bug (github.com/njhartwell/pw3nage)
+      _hi_git_prompt __powerline_git_info # out-var form: no $( ) fork per prompt
+      _hi_ps_mark __powerline_git_info
+      # shellcheck disable=SC2154 # assigned by the printf -v two lines up
       if shopt -q promptvars; then
-        _hi_git_prompt __powerline_git_info # out-var form: no $( ) fork per prompt
-        # shellcheck disable=SC2154 # assigned by the printf -v one line up
-        PS1="$HI_PS1\${__powerline_git_info}$NC $HI_PS1_END "
+        PS1="$HI_PS1\${__powerline_git_info}\[$NC\] $HI_PS1_END "
       else
-        PS1="$HI_PS1$(_hi_git_prompt)$NC $HI_PS1_END "
+        # no expansion happens without promptvars, so the value goes in as text
+        PS1="$HI_PS1$__powerline_git_info\[$NC\] $HI_PS1_END "
       fi
     }
     PROMPT_COMMAND="ps1${PROMPT_COMMAND:+; $PROMPT_COMMAND}"

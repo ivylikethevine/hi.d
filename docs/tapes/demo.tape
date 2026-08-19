@@ -10,10 +10,7 @@
 
 Output docs/demos/demo.gif
 
-Set FontSize 15
-Set Width 1100
-Set Height 620
-Set TypingSpeed 60ms
+Source docs/tapes/common.tape
 
 Require hi
 Require docker

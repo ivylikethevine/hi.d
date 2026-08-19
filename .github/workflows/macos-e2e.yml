@@ -50,6 +50,12 @@ jobs:
       - name: Say hi to ourselves
         run: |
           set -euo pipefail
+          # hi.sh reads its own tree as $_HI_HOME/hi.d and falls back to $HOME
+          # when the variable is unset - which on a runner is /Users/runner, not
+          # the checkout. The workspace *is* the hi.d directory, so _HI_HOME is
+          # its parent.
+          _HI_HOME="$(cd .. && pwd)"
+          export _HI_HOME
           out="$(python3 -c 'import pty, sys; sys.exit(pty.spawn(sys.argv[1:]))' \
             ./hi.sh -i "$HOME/.ssh/loop" -o StrictHostKeyChecking=no \
             -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \

@@ -49,10 +49,10 @@ source "$_HI_HOME/hi.d/common/core.sh"
 # checked where it is made.
 set -uo pipefail
 
-# Every tape's `Output docs/demos/<name>.gif` and every Hide block's
-# `docs/tapes/fixtures.sh up ...` is relative to wherever vhs was started, so
-# the render has to happen from the checkout root - not from wherever the caller
-# happened to be standing.
+# Every tape's `Output docs/demos/<name>.gif`, its `Source docs/tapes/common.tape`
+# and every Hide block's `docs/tapes/fixtures.sh up ...` is relative to wherever
+# vhs was started, so the render has to happen from the checkout root - not from
+# wherever the caller happened to be standing.
 cd "$_HI_ROOT"
 
 _HI_USAGE="Usage: generate.sh [-l|--list] [--head] [--keep] [--require-run] [--down] [name ...]"

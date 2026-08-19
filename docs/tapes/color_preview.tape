@@ -14,10 +14,9 @@
 
 Output docs/demos/color_preview.gif
 
-Set FontSize 15
-Set Width 1100
+Source docs/tapes/common.tape
+# taller than the shared default: the preview table needs the rows
 Set Height 700
-Set TypingSpeed 60ms
 
 Require hi
 

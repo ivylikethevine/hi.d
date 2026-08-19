@@ -3,6 +3,14 @@
 # Runs on the client - copies hi.d to the target and chainloads load.sh there.
 set -euo pipefail # must be disabled after our code (this file is part of the interactive shell - any error would close the session)
 
+# $_HI_HOME is the directory *containing* hi.d and defaults to $HOME. Checked
+# before the source, because bash's own "No such file or directory" names a
+# path nobody typed - which is what a checkout outside $HOME looks like the
+# moment the export is missing. No _hi_cecho: core.sh is the file that's gone.
+[ -r "${_HI_HOME:-$HOME}/hi.d/common/core.sh" ] || {
+  echo "hi: no hi.d at ${_HI_HOME:-$HOME}/hi.d - set _HI_HOME to the directory that holds it" >&2
+  exit 1
+}
 # shellcheck source=./common/core.sh
 source "${_HI_HOME:-$HOME}/hi.d/common/core.sh"
 

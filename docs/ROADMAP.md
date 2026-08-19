@@ -18,6 +18,7 @@ here: git history is the ledger, and this file is only what is left to do.
 - [In-repo code work](#in-repo-code-work)
   - [Release & packaging](#release--packaging)
   - [Tooling](#tooling)
+  - [Demos](#demos)
 - [Outside this repo](#outside-this-repo)
   - [Secrets & keys](#secrets--keys)
   - [Release channels](#release-channels)
@@ -105,6 +106,105 @@ here: git history is the ledger, and this file is only what is left to do.
     and `hi` there reuses it — asserted on the connect path, not on the session
     merely working, since copying the payload would produce a working session
     too.
+
+- [ ] **Retire the `~/hi.d` default** — every entry point resolves its tree
+      through `${_HI_HOME:-$HOME}/hi.d`: `../hi.sh`, `../common/core.sh`'s
+      `: "${_HI_HOME:=$HOME}"`, `../common/header.sh`, `../shells/bash.sh` and
+      `../shells/zsh.zsh`, the three previews under `../scripts/`, and every
+      suite through `../tests/test_lib.sh`. The default is a guess that is right
+      for a standard install and wrong everywhere else — and when it is wrong it
+      does not fail, it silently reads *another tree*. Both platform e2e jobs
+      spent their first real run sourcing `/Users/runner/hi.d/common/core.sh`
+      out of a runner home that has no hi.d in it, and this machine's login
+      profile exports an `_HI_HOME` aimed at an unrelated install.
+
+  - **Derive it, do not default it.** Two files already do: `../scripts/install.sh`
+    and `../tests/test_runner.sh` both resolve their own location and set
+    `_HI_HOME` from it. A file that can find itself has no business guessing
+    `$HOME`.
+  - **The one place a default is honest** is a shipped copy on a target, which
+    has no checkout to derive from — and even there the ssh preamble exports
+    `_HI_HOME` ahead of it (`../hi.sh`), so the fallback can be "say so and
+    stop" rather than `$HOME`.
+  - **Half of it is in already:** `../hi.sh` now tests the path before sourcing
+    it and answers `set _HI_HOME to the directory that holds it` instead of
+    letting bash report a file nobody named. That message is what the rest of
+    the tree owes too.
+  - **Ticks when:** no shipped file spells `:-$HOME` or `:=$HOME` next to
+    `/hi.d`, a checkout outside `$HOME` runs with `_HI_HOME` unset, and the lint
+    suite greps for the pattern the way it already greps for bash-4 constructs.
+
+- [ ] **A floor for the packages check** — `../misc/packages` ranks every entry
+      1–5 and `full_check` (`../common/header.sh`) gives each rank its own pair
+      of colors, hiding the "not installed" half from 4 down. What no setting
+      can do is show *less*: every rank that resolves gets printed, and the
+      header is the first thing a session puts on screen. A minimum-priority
+      setting — `_HI_PACKAGES_MIN_PRIORITY` in `settings.sh`, alongside the
+      other knobs — would let a host say "4 and up" and get a two-line header
+      instead of a paragraph.
+
+  - **One number, two consumers.** The check and `hi --packages-preview`
+    (`../scripts/packages_preview.sh`) read the same file and have to agree; the
+    preview's legend should name the ranks the floor is hiding rather than
+    quietly dropping their rows, the way it already explains a "hidden" cell.
+  - **Ticks when:** the setting exists, both consumers honor it,
+    `CONFIGURATION.md` documents it next to the other toggles, and a case pins
+    the boundary — a package exactly at the floor shows, one below it does not.
+
+### Demos
+
+- [ ] **A different hi configuration per demo** — all seven tapes render the
+      shipped defaults at the same 1100×620 with every feature on, so the set
+      sells one look rather than a configurable tool. Give each demo a
+      configuration of its own — a trimmed or disabled header, a narrower or
+      taller frame, individual `_HI_DISABLE_*` toggles, a different prompt end,
+      a colors overlay — and seven GIFs turn into seven answers to "what can I
+      change?".
+
+  - **Where it plugs in:** `client_rc` (`tapes/fixtures.sh`) writes the rc every
+    tape sources, which is where a per-demo toggle or overlay belongs; the
+    geometry now comes from `tapes/common.tape`, which a tape overrides with its
+    own `Set` lines after the `Source` — `tapes/color_preview.tape` already does
+    that for height.
+  - **Keep the pairs honest.** `demo.tape` and `docker.tape` share a target on
+    purpose (the README's top GIF must not drift from the one further down), so
+    vary the client configuration there, not the fixture.
+  - **Ticks when:** no two demos ship the same configuration, and the README
+    line under each GIF names the knob that demo is showing.
+
+- [ ] **A completion demo** — `hi <TAB>` is the feature nothing shows.
+      `../common/targets.sh` answers with ssh hosts *and* every running
+      container across docker, podman, nomad and kube, tagged by backend, and
+      fish renders that list with its description column — the one shell where
+      a still frame carries the whole idea. The fixture is the gap: every
+      backend has to be up at once, where `tapes/fixtures.sh` brings them up one
+      at a time.
+
+  - **Cheapest path to "one of everything":** compose the existing `up_*`
+    fixtures rather than writing a new one, and let the tape stand down the way
+    the others do when a backend is missing — a half-populated completion list
+    is a worse artifact than a skipped render.
+  - **Ticks when:** `demos/complete.gif` renders from a tape listed in
+    `_HI_GEN_TAPES` (`tapes/generate.sh`), with ssh hosts and all four container
+    backends in the same completion pane, and the README shows it.
+
+- [ ] **Render the demos in CI** —
+      [vhs-action](https://github.com/charmbracelet/vhs-action) installs vhs,
+      ttyd and ffmpeg on a runner, which is the whole toolchain
+      `tapes/generate.sh` shells out to. Today a tape that stopped rendering is
+      found by hand, months later, by whoever next runs the script; the GIFs are
+      committed artifacts and nothing re-renders them on a pull request.
+
+  - **Start where nothing is needed:** `tapes/color_preview.tape` wants no
+    backend at all and renders in seconds, so it can gate every PR touching
+    `docs/tapes/**` on a hosted runner. The docker-backed tapes belong on the
+    self-hosted box the e2e jobs already use.
+  - **Render, do not commit.** A GIF is reviewed by eye before it lands
+    (`tapes/generate.sh`'s header says so); CI's job is to prove the tape still
+    runs and to upload the result as an artifact, not to push a binary nobody
+    looked at.
+  - **Ticks when:** a workflow renders at least one tape on every PR that
+    touches `docs/tapes/**`, fails when vhs does, and attaches what it made.
 
 ## Outside this repo
 

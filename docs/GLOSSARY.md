@@ -251,13 +251,13 @@ exists. Its default tail is not a literal: `_hi_session_shell` walks
 `common/core.sh`'s `$_HI_SHELL_TREE` (`fish zsh bash mksh ksh dash ash sh`) and
 its allow-list `case` drops the tiers that need bash to be *missing* to be
 reachable, leaving `fish > zsh > bash`. `hi.sh`'s `$_HI_SHELL_LADDER` is that
-same tree with bash removed. One list, two consumers - they used to be two
-literals that disagreed about fish-vs-zsh and ksh-vs-mksh.
+same tree with bash removed. One list, two consumers - two literals would be
+free to disagree about fish-vs-zsh and ksh-vs-mksh.
 
-The default puts `login` first for a reason found by the framework matrix: the
-old ranking handed fish to anyone whose box had it, so a user whose login shell
-is zsh-with-oh-my-zsh never saw their own setup - hi's configs are grafted onto
-every rc file either way; the user's are not.
+The default puts `login` first for a reason found by the framework matrix: a
+ranking that leads with fish hands it to anyone whose box has it, so a user
+whose login shell is zsh-with-oh-my-zsh never sees their own setup - hi's
+configs are grafted onto every rc file either way; the user's are not.
 
 ## completion probe knobs
 

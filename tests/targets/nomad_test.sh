@@ -141,9 +141,9 @@ EOF
   _hi_pty_stdin force "no python3 to give the launcher its own pty - nomad alloc exec's attach may not get a real pty, results may be unreliable"
 
   # Serial on purpose, and said out loud by _hi_par_begin: two cases against a
-  # single-node dev agent were worth ~3s of a 348s run, and the ssh, framework
-  # and container suites are where the wall clock actually is. (Job teardown is
-  # no longer a reason - that moved to the ledger, which is subshell-safe.)
+  # single-node dev agent are worth ~3s of a 348s run, and the ssh, framework
+  # and container suites are where the wall clock actually is. Job teardown is
+  # not a constraint here: it goes through the ledger, which is subshell-safe.
   export _HI_PAR_WIDTH=1
   _hi_backend_pair_cases nomad "driver shape"
 }

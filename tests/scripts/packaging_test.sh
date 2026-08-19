@@ -192,10 +192,10 @@ function test_formula_caveats_use_no_link() {
 # must not happen.
 # shellcheck disable=SC2016
 
-# Both must drive install.sh rather than copying by hand: the artifact's starter
-# PKGBUILD copied `common shells misc load.sh hi.sh` inline and had already
-# drifted - it omits scripts/, without which a packaged install has no
-# hi_install for its users to run.
+# Both must drive install.sh rather than copying by hand: an inline
+# `common shells misc load.sh hi.sh` copy in a PKGBUILD is a second payload
+# list to keep in step, and one that omits scripts/ leaves a packaged install
+# with no hi_install for its users to run.
 function test_pkgbuilds_call_install_sh() {
   local f
   for f in "$_HI_PKGBUILD" "$_HI_PKGBUILD_GIT"; do
@@ -326,10 +326,10 @@ function test_tool_manifest_rows_are_wellformed() {
   [ "$bad" = 0 ]
 }
 
-# ...and every setup-tool call names a row. Nothing used to check that a
-# `uses: ./.github/actions/setup-<x>` path existed at all, so this is stricter
-# than the literal roster grep it replaces. It reads `tool:` lines out of the
-# workflows, so an unrelated future `tool:` input would be checked too - which
+# ...and every setup-tool call names a row. Stricter than a literal roster
+# grep: it also catches a `uses: ./.github/actions/setup-<x>` path that does
+# not exist at all. It reads `tool:` lines out of the workflows, so an
+# unrelated future `tool:` input would be checked too - which
 # fails loudly rather than silently, and is the right way round.
 function test_every_setup_tool_call_names_a_manifest_row() {
   [ -f "$_HI_TOOLS_TXT" ] || return 0
@@ -463,7 +463,7 @@ function test_bump_sha256_matches_a_known_vector() {
 # the two b2 implementations (coreutils b2sum, openssl fallback) must agree,
 # or a bump on a mac writes a sum makepkg then rejects. Guarded on b2sum at
 # the registration; openssl is bump.sh's optional mac fallback only - hi
-# itself no longer needs it anywhere (the wire armor is base64 now).
+# itself needs it nowhere, since the wire armor is base64.
 function test_bump_b2_fallback_agrees_with_b2sum() {
   local f="$_HI_WORKDIR/vector2"
   printf 'hello\n' >"$f"
@@ -663,8 +663,8 @@ function test_stamp_keeps_the_launcher_exec_bit() {
   [ "$before" = "$after" ]
 }
 
-# a renamed line used to make every channel's bare sed a silent no-op; this is
-# the case that turns it into a failed build instead
+# a renamed line makes every channel's bare sed a silent no-op; this is the
+# case that turns that into a failed build instead
 function test_stamp_fails_on_a_missing_release_line() {
   local d
   d="$(_hi_stamp_fixture)"

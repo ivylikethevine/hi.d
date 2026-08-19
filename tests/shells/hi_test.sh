@@ -185,10 +185,10 @@ function test_resolve_backend_follows_the_roster_order() {
 # The header's identity() row counts the same backends this roster dispatches
 # on, but it cannot read $_HI_BACKENDS - hi.sh is never sourced in a session,
 # and a shared roster would cost the ssh payload bytes for a list that changes
-# about once a year. So the drift is caught here instead of prevented there:
-# doctor's own copy of this chain had already gone stale once, and the header
-# is the copy a user sees on every single connect. Add a backend to the roster
-# and this goes red until common/header.sh's _hi_probe_launch counts it too.
+# about once a year. So the drift is caught here instead of prevented there -
+# the header is the copy a user sees on every single connect. Add a backend to
+# the roster and this goes red until common/header.sh's _hi_probe_launch
+# counts it too.
 function test_header_probes_every_backend_in_the_roster() {
   local row name launch
   launch="$(sed -n '/^function _hi_probe_launch()/,/^}/p' "$_HI_HEADER")"
@@ -296,7 +296,7 @@ function test_remote_suffix_fallbacks_are_interactive() {
 # every member (so a rename can't quietly ship an empty payload).
 function test_payload_ships_exactly_the_travelled_paths() {
   local m
-  [ "${_HI_PAYLOAD[*]}" = "common misc shells load.sh" ] || {
+  [ "${_HI_PAYLOAD[*]}" = "common misc shells load.sh hi.sh" ] || {
     _hi_cecho " | payload list changed: ${_HI_PAYLOAD[*]} - update this guard deliberately" "$RED"
     return 1
   }
@@ -637,10 +637,10 @@ function test_the_shell_tree_is_the_documented_order() {
 
 # --- the bash-less prompt -----------------------------------------------------
 #
-# sh/ash/dash/ksh sessions used to get aliases and the host's own prompt, which
-# on busybox is a bare "$". The line hi writes has to survive shells with no
-# readline and no command substitution in PS1, so it bakes everything in on the
-# client and leaves exactly one escape for the target to expand.
+# sh/ash/dash/ksh sessions get hi's prompt, not the host's own (on busybox a
+# bare "$"). The line hi writes has to survive shells with no readline and no
+# command substitution in PS1, so it bakes everything in on the client and
+# leaves exactly one escape for the target to expand.
 
 # one line, so one case reads all of it: the username resolved once by the rc
 # rather than per prompt, the host without its user@ part, a color from hi's own
@@ -748,7 +748,7 @@ function test_human_bytes_matches_du_shapes() {
 }
 
 # the reported number counts what is sent, not what is on disk: it must be
-# nowhere near `du` over the payload, which is what it used to be
+# nowhere near `du` over the payload
 function test_wire_size_is_not_the_disk_size() {
   local wire disk
   wire="$(_hi_wire_estimate)"
@@ -762,7 +762,7 @@ function test_wire_size_is_not_the_disk_size() {
 function test_payload_stays_clear_of_the_arg_limit() {
   local bytes
   bytes="$(_hi_wire_bytes)"
-  # 128KB (MAX_ARG_STRLEN) is where it used to break outright; 256KB is the
+  # 128KB (MAX_ARG_STRLEN) is where this breaks outright; 256KB is the
   # "this has doubled, come and look" line
   [ "$bytes" -lt 262144 ]
 }

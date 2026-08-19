@@ -249,10 +249,9 @@ function test_preview_reports_a_missing_packages_file() {
   [[ "$out" == *"No packages file"* ]]
 }
 
-# The same invariant color_preview_test.sh asserts, and now literally the same
-# code: test_lib.sh's _hi_table_is_rectangular. The two used to segment tables
-# differently - one on blank lines, one on `^[+|]` - so they were not actually
-# checking the same thing.
+# The same invariant color_preview_test.sh asserts, through literally the same
+# code: test_lib.sh's _hi_table_is_rectangular. Shared so the two cannot
+# segment tables differently and quietly check different things.
 function test_tables_are_rectangular() {
   _hi_table_is_rectangular "$_HI_PREVIEW_OUT"
 }

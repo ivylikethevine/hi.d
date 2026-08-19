@@ -43,9 +43,8 @@
 #
 # The topology below is still the correct one, and is kept for when the tool
 # works again: one kcov per suite with the suite script as the *top-level*
-# process, merged at the end. Wrapping test_runner.sh instead - which is what
-# this used to do - puts every suite in a child process and loses even the
-# load-time lines.
+# process, merged at the end. Wrapping test_runner.sh instead would put every
+# suite in a child process and lose even the load-time lines.
 # ---------------------------------------------------------------------------
 #
 # Lives in tests/ on purpose: tests/ ships in neither the ssh payload

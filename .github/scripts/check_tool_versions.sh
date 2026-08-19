@@ -7,9 +7,8 @@
 #
 #   .github/scripts/check_tool_versions.sh
 #
-# The roster is setup-tool's tools.txt, read here rather than copied: this
-# script used to name each action and scrape its pin back out of the YAML, so
-# a tool could be pinned and go unchecked. Updating is still a hand edit of
+# The roster is setup-tool's tools.txt, read here rather than copied, so a
+# tool cannot be pinned and go unchecked. Updating is still a hand edit of
 # tools.txt; this only makes the drift visible instead of remembered.
 set -euo pipefail
 

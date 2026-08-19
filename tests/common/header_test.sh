@@ -55,8 +55,8 @@ function test_banner_prefix_shrinks_padding() {
   [ "${#prefixed}" -lt "${#plain}" ]
 }
 
-# ...and the floor itself, which the test above used to reach by accident on a
-# long-hostname machine. Here it is on purpose, with the hostname pinned long.
+# ...and the floor itself, reached on purpose with the hostname pinned long
+# rather than by accident on a machine that happens to have a long one.
 function test_banner_floors_padding_on_a_long_hostname() {
   local out _HI_HOSTNAME_CACHE
   printf -v _HI_HOSTNAME_CACHE 'h%.0s' {1..60}

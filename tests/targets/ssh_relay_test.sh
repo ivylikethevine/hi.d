@@ -3,12 +3,10 @@
 # throwaway sshd container (B, which does not), and then *from inside that
 # session* on to a second one (C). What it establishes:
 #
-#   - the relay works from a **disposable** session at all. hi.sh is not in
-#     $_HI_PAYLOAD, which reads like "a shipped session has no launcher to
-#     relay with" - but the payload is only the tar. _say_hi armors hi.sh as
-#     its own stream and writes it to "$_HI_ROOT/hi.sh" on the target (the
-#     container path does the same with `cat > $root/hi.d/hi.sh`), so every
-#     bash-capable session has a launcher and the `hi` alias paths.sh defines
+#   - the relay works from a **disposable** session at all. hi.sh rides the
+#     payload tar (it is in $_HI_PAYLOAD), so it is unpacked to
+#     "$_HI_ROOT/hi.sh" with its executable mode on both transports, and every
+#     bash-capable session has a launcher - the `hi` alias paths.sh defines
 #     points at a real file. The one tier that does not is the container
 #     transport's bash-less fallback, which ships aliases.sh alone and never
 #     sources paths.sh - there `hi` is simply undefined, not broken.

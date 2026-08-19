@@ -162,9 +162,9 @@ function _hi_print_hosts_table() {
   local tag has_usertag
   local user_width=0 pw pad_preview local_hostname
   local preview_users=() group_order=() group_names=() item_lines=()
-  # Five *parallel* indexed arrays sharing one index, rather than the four
-  # associative arrays this used to key by $key: `local -A` is bash 4 and macOS
-  # ships bash 3.2, where the declaration alone is a fatal "invalid option".
+  # Five *parallel* indexed arrays sharing one index, rather than associative
+  # arrays keyed by $key: `local -A` is bash 4 and macOS ships bash 3.2, where
+  # the declaration alone is a fatal "invalid option".
   # group_order holds the keys, so it doubles as the lookup table below.
   local group_hosts=() group_source=() group_color=() group_tag=()
   local gidx localhostname_color=""

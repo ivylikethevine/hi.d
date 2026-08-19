@@ -11,8 +11,10 @@ _HI_RELEASE="${_HI_RELEASE:-}"
 # The synopsis, kept identical to docs/hi.1's .SH SYNOPSIS
 _HI_USAGE="Usage: hi [ssh-options] <target> [command ...]"
 
-# What ships to a target - an allow list instead of a deny list
-_HI_PAYLOAD=(common misc shells load.sh)
+# What ships to a target - an allow list instead of a deny list. hi.sh is in it
+# so a disposable session has a launcher to relay onward with; carrying it in
+# the gzipped tar costs ~14KB of wire, against ~41KB armored on its own.
+_HI_PAYLOAD=(common misc shells load.sh hi.sh)
 
 # The user's config overlay, by the names it lands under in the target's
 # config/ - a second stream, since it lives outside the tree. It gets a
@@ -188,8 +190,8 @@ function _hi_fallback_rc() {
   local t aliases_dir=""
   [ "${1:-}" = --aliases-only ] && aliases_dir="$2"
   printf 'export _HI_REMOTE_SESSION=1\n'
-  # core.sh's _HI_TOGGLES, so a new toggle can't be missed here (unset under
-  # `set -u` on a bash-less target was exactly that failure)
+  # core.sh's _HI_TOGGLES, so a new toggle can't be missed here: an unset
+  # toggle under `set -u` breaks a bash-less target outright
   for t in "${_HI_TOGGLES[@]}"; do
     [ "$t" = _HI_REMOTE_SESSION ] || printf 'export %s=0\n' "$t"
   done
@@ -247,16 +249,14 @@ function _hi_size() {
 # README badge both quote it); no overlay counted - which files ride is a
 # question about a target. It assembles the real script through the same
 # _preamble/_middle/_suffix _say_hi uses rather than summing the armored
-# streams: summing omitted the boilerplate they are wrapped in and read ~6KB
+# streams: summing skips the boilerplate they are wrapped in and reads ~6KB
 # low. A badge has to show the number the user sees, so this pays one base64.
 function _hi_wire_bytes() {
-  local hi_esc="" nc_esc="" overlay_line="" launcher bootloader tree script
+  local hi_esc="" nc_esc="" overlay_line="" bootloader tree script
   local size="$_HI_SIZE_TOKEN"
   # the token stands in exactly as in _say_hi, so this counts what _say_hi
   # counts before it substitutes the figure back in
   local DOMAIN="${DOMAIN:-target}"
-  # $_HI_LAUNCHER, not $0: reached by *sourcing*, where $0 is the sourcer
-  launcher="$($_HI_ARMOR <"$_HI_LAUNCHER")"
   bootloader="$(_hi_bootloader | $_HI_ARMOR)"
   tree="$(_hi_payload_tar | $_HI_ARMOR)"
   script="$(_hi_remote_preamble)
@@ -382,9 +382,9 @@ function _hi_remote_suffix() {
 REMOTE
 }
 
-# The disposable-tree half of the script: unpack the three armored streams into
-# a fresh /tmp root. Reads $hi_esc/$nc_esc/$size and the three stream variables
-# from its caller, as _hi_remote_suffix reads $hi_esc/$nc_esc, so _say_hi and
+# The disposable-tree half of the script: unpack the armored streams into a
+# fresh /tmp root. Reads $hi_esc/$nc_esc/$size and the stream variables from
+# its caller, as _hi_remote_suffix reads $hi_esc/$nc_esc, so _say_hi and
 # _hi_wire_estimate assemble one shape rather than two kept in step. (The
 # permanent-install branch stays inline in _say_hi; nothing else builds it.)
 # shellcheck disable=SC2016 # the destinations are the target's to expand
@@ -398,8 +398,6 @@ function _hi_remote_middle() {
       trap 'rm -rf \$_HI_CLEANUP' exit
       _hi_rc_dir="\$_HI_ROOT"
       printf '%s %s%s' "$hi_esc" "$nc_esc" "$size"
-      echo "$launcher" | $_HI_UNARMOR > "\$_HI_ROOT/hi.sh"
-      chmod +x "\$_HI_ROOT/hi.sh"
       echo "$bootloader" | $_HI_UNARMOR > "\$_hi_rc_dir/hi.bashrc"
       echo "$tree" | $_HI_UNARMOR | tar mxzf - -C "\$_HI_HOME"
       $overlay_line
@@ -411,7 +409,7 @@ REMOTE
 # branch is plain POSIX under one `sh -c` (GLOSSARY: sh -c wrapping)
 function _say_hi() {
   local size hi_esc nc_esc script middle boot_tmp remote_root tmp_root ctl_path ec=0
-  local launcher="" bootloader="" tree="" overlay_line=""
+  local bootloader="" tree="" overlay_line=""
   local -a ctl_opts
 
   # only this path armors (containers stream via their CLI); a target with no
@@ -442,7 +440,6 @@ function _say_hi() {
 REMOTE
     )"
   else
-    launcher="$($_HI_ARMOR <"$0")"
     bootloader="$(_hi_bootloader | $_HI_ARMOR)"
     tree="$(_hi_payload_tar | $_HI_ARMOR)"
     # second, tiny stream: the overlay lives outside the tree, so it cannot
@@ -612,7 +609,7 @@ function _say_hi_container() {
     _hi_cecho " failed to copy your hi.d config overlay into [$DOMAIN], using defaults" "$YELLOW"
   fi
 
-  "${cp[@]}" sh -c "cat > '$root/hi.d/hi.sh' && chmod +x '$root/hi.d/hi.sh'" <"$0"
+  # hi.sh rides the payload tar unpacked above, mode and all - no separate copy
   _hi_bootloader | "${cp[@]}" sh -c "cat > '$root/hi.d/hi.bashrc'"
 
   # _HI_CLEANUP marks the tree disposable for load.sh's clean_all; the
@@ -724,8 +721,9 @@ set +euo pipefail # the connection paths below run against unknown hosts, where 
 # hi's own flags, dispatched on $1 alone: _hi_parse hands every other -flag to
 # ssh, so anything hi answers itself has to be caught first.
 case "${1:-}" in
-# caught before the ssh pass-through, which once answered with ssh's usage
-# block. A bare `hi` still execs ssh, so `hi -V` behaves as it does there.
+# caught before the ssh pass-through, so this answers for hi rather than
+# handing back ssh's usage block. A bare `hi` still execs ssh, so `hi -V` and
+# friends behave as they do there.
 -h | --help)
   cat <<EOF
 $_HI_USAGE

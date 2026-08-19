@@ -110,9 +110,11 @@ function bench_targets_warm() {
 # The wire budget: the payload built exactly the way hi.sh builds it, against
 # a byte ceiling. Catches the payload quietly growing (a new file sneaking
 # into $_HI_PAYLOAD's directories, comments ballooning) long before anyone
-# notices a slow connect.
+# notices a slow connect. This budget and the wire figure the badge tracks move
+# independently - the launcher rides *inside* this tar, so it counts here and
+# not as a stream of its own. See CLAUDE.md.
 function bench_payload_size() {
-  local bytes budget=49152
+  local bytes budget=65536
   set -- # hi.sh reads "$@"; make sure it sees none (same as hi_test.sh)
   # shellcheck source=../../hi.sh
   source "$_HI_LAUNCHER"

@@ -83,8 +83,8 @@ function _hi_starship_stub_dir() {
 # One case for all three shells: the per-shell rc, prompt-print incantation
 # and expected shape live in the case's own table. Extra NAME=VALUE arguments
 # ride _hi_rc_shell (env applies the last assignment, so the prepended-PATH
-# override wins over the baseline), keeping the five hand-copied `env -i`
-# blocks that used to live here down to one.
+# override wins over the baseline), so there is one `env -i` block here rather
+# than one per case.
 function test_defers_to_starship_when_asked() {
   local shell="$1" script want out
   case "$shell" in

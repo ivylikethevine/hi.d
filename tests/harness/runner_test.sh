@@ -407,11 +407,10 @@ function test_a_green_run_has_no_recap() {
   [[ "$_HI_RUN_OUT" != *"Failing cases"* ]]
 }
 
-# The shipped table, straight from --list: "<group> <name>" per suite. This
-# used to be a hardcoded name list here plus a `sed` over the runner's own
-# error message - parsing a UI string as an API. The hardcoded copy had already
-# drifted: paths, color_preview and kube were in the table and not in the list,
-# so the test meant to catch drift was silently ignoring three suites.
+# The shipped table, straight from --list: "<group> <name>" per suite. Read
+# from --list rather than hardcoded here and scraped out of the runner's error
+# message: a copy of the roster in the drift test is a copy that can drift, and
+# a UI string is not an API.
 function _hi_runner_list() {
   "$_HI_TEST_RUN" --list 2>/dev/null
 }
@@ -456,9 +455,9 @@ function test_list_paths_matches_list() {
 }
 
 # Every suite has to be in a group CI actually runs, or it never runs on a push
-# and nothing says so - which is what happened to the `hi` suite. CI invokes
-# groups by name now (see ci.yml's `--group fast`/`e2e`/`backends`), so this
-# checks the workflow runs every group the table uses rather than every suite.
+# and nothing says so. CI invokes groups by name (see ci.yml's `--group fast`/
+# `e2e`/`backends`), so this checks the workflow runs every group the table
+# uses rather than every suite.
 function test_ci_runs_every_group_in_the_table() {
   local workflow="$_HI_ROOT/.github/workflows/ci.yml" group name missing=""
   local -a groups=()

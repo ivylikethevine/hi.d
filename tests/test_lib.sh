@@ -24,15 +24,14 @@ source "${_HI_HOME:-$HOME}/hi.d/common/core.sh"
 # has to take away again: containers, docker networks, and processes a case
 # SIGSTOPped. Both are set up by _hi_workdir and consumed by _hi_test_cleanup.
 #
-# The ledger is a *file* rather than the array it used to be, for two reasons
-# that both cost real containers on a real machine. A case may run in a
-# background subshell (see _hi_par_case): an array append inside one dies with
-# the subshell, so the container it started was never registered and leaked the
-# first time anything crashed. And a file can be written *before* the thing
-# exists - the window between `docker run` returning and the name being recorded
-# is exactly where a ^C leaks one, so every writer below registers first and
-# starts second. Removing something twice is a no-op; removing something that
-# never started is a no-op too. Missing one is not.
+# The ledger is a *file* and not an array, for two reasons that both cost real
+# containers on a real machine. A case may run in a background subshell (see
+# _hi_par_case), where an array append dies with the subshell and the container
+# it started is never registered. And a file can be written *before* the thing
+# exists - the window between `docker run` returning and the name being
+# recorded is exactly where a ^C leaks one, so every writer below registers
+# first and starts second. Removing something twice is a no-op; removing
+# something that never started is a no-op too. Missing one is not.
 _HI_WORKDIR=""
 _HI_EXTRA_CLEANUP=""
 _HI_LEDGER=""
@@ -348,9 +347,9 @@ function _hi_strip_ansi() {
 }
 
 # _hi_table_is_rectangular <text> - every line of every boxed table in <text>
-# is the same printed width. Both preview suites assert this and had drifted
-# into segmenting tables differently; the rule lives here now. A table is a run
-# of adjacent lines starting with `+` or `|`, so blank lines and prose between
+# is the same printed width. Both preview suites assert it through this one
+# function, so they cannot segment tables differently. A table is a run of
+# adjacent lines starting with `+` or `|`, so blank lines and prose between
 # two tables separate them without being measured.
 function _hi_table_is_rectangular() {
   local line stripped width=0 len seen=0
@@ -661,8 +660,8 @@ function _hi_suite_end() {
 # _hi_stand_down <reason> [message] - the whole suite stops here, honestly:
 # yellow note, SKIP reported to the runner, exit 0. _hi_require covers
 # requirements known at startup; this is also for *runtime* failures (an image
-# that didn't build, a cluster that never came up) which previously exited 0
-# unreported and painted the suite green.
+# that didn't build, a cluster that never came up), which must report a skip
+# rather than exiting 0 unreported and painting the suite green.
 function _hi_stand_down() {
   _hi_cecho "${2:-$1, skipping}" "$YELLOW"
   _hi_report_skip "$1"
@@ -1002,9 +1001,9 @@ function _hi_wait_pid() {
 }
 
 # _hi_timed_out <label> <timeout_s> [hook] - _hi_wait_pid's timeout callback,
-# reached through its "$@". One top-level function, since the two case runners
-# below each used to define a *global* `_hi_on_timeout` and the second silently
-# redefined the first.
+# reached through its "$@". One top-level function: a per-runner
+# `_hi_on_timeout` would be global anyway, and the second definition would
+# silently redefine the first.
 # shellcheck disable=SC2329
 function _hi_timed_out() {
   _hi_h3 " | [$1] -- TIMED OUT after ${2}s, killing" "$RED"
@@ -1242,7 +1241,7 @@ function _hi_sshd_container() {
   shift 2
 
   # registered *before* the run, not after: the container exists the moment
-  # docker returns, and a ^C in that window used to leak it (see the ledger)
+  # docker returns, and a ^C in that window leaks it (see the ledger)
   _hi_track_container "$name"
   if ! docker run -d --rm --name "$name" -p 127.0.0.1::22 -e "PUBKEY=$_HI_PUBKEY" "$@" "$image" \
     >/dev/null 2>"$_HI_WORKDIR/$name.log"; then
@@ -1498,8 +1497,8 @@ function _hi_container_backend_test() {
 
   # $$-suffixed like the container names: without it a second run of this
   # suite on the same host removes the images the first is still running from.
-  # The list comes from the build loop rather than being spelled again - the
-  # hand-written copy had already gone stale and was leaking the mksh image.
+  # The list comes from the build loop rather than being spelled again, so a
+  # shell added there cannot be left behind here.
   "$backend" image rm -f "${built_images[@]}" >/dev/null 2>&1 || true
 
   _hi_suite_end "$backend" \

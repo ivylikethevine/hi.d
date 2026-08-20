@@ -2,16 +2,23 @@
 # Shared plumbing for packaging/'s entry points (bump.sh, mkpkg.sh): locate
 # the tree, source core.sh, and hold the primitives they share. scripts/install.sh keeps its own locator and _hi_write_back
 # on purpose - it ships in packages *without* packaging/, so it cannot source
-# this file; that boundary-forced copy is documented there.
+# this file; that boundary-forced copy is documented there, as is hi.sh's - the
+# third copy, for the same reason.
 
 # Locate hi.d relative to the script that sourced this file, resolving
 # symlinks - BASH_SOURCE[1] is that script, and packaging/ is one level down
 # from the tree root, so the home is its ../../.
+# The same walk as hi.sh's and scripts/install.sh's: fix one, fix all three.
 _HI_SELF="${BASH_SOURCE[1]}"
 while [ -L "$_HI_SELF" ]; do
-  _HI_SELF_DIR="$(cd -P "$(dirname "$_HI_SELF")" && pwd)"
-  _HI_SELF="$(readlink "$_HI_SELF")"
-  [[ $_HI_SELF == /* ]] || _HI_SELF="$_HI_SELF_DIR/$_HI_SELF"
+  _HI_SELF_LINK="$(readlink "$_HI_SELF")"
+  case "$_HI_SELF_LINK" in
+  /*) _HI_SELF="$_HI_SELF_LINK" ;;
+  *) case "$_HI_SELF" in
+    */*) _HI_SELF="${_HI_SELF%/*}/$_HI_SELF_LINK" ;;
+    *) _HI_SELF="$_HI_SELF_LINK" ;;
+    esac ;;
+  esac
 done
 _HI_HOME="$(cd -P "$(dirname "$_HI_SELF")/../.." && pwd)"
 export _HI_HOME

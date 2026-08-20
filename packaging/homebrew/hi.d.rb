@@ -58,9 +58,11 @@ class HiD < Formula
            "--man", buildpath/"docs/hi.1"
     man1.install "docs/hi.1"
 
-    # A wrapper rather than bin.install_symlink: hi.sh sources
-    # "${_HI_HOME:-$HOME}/hi.d/common/core.sh" and never locates itself, so a
-    # bare symlink on PATH would look for the tree in $HOME and find nothing.
+    # A wrapper rather than bin.install_symlink. Not because hi.sh needs it to
+    # find itself - it walks the symlink and would resolve the keg fine
+    # (GLOSSARY: HI.33) - but because the `export` puts _HI_HOME in the
+    # environment the session inherits. That is the job install.sh's rc line
+    # does on every other channel, and a formula does not write rc files.
     (bin/"hi").write <<~SH
       #!/bin/sh
       export _HI_HOME="#{libexec}"

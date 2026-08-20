@@ -5,9 +5,12 @@
 # check itself as it will actually print. Run via `hi --packages-preview`.
 set -euo pipefail
 
-: "${_HI_HOME:=$(cd -P "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
+# core.sh through this file's own path; it derives the tree. GLOSSARY: HI.33
+_hi_d="${BASH_SOURCE[0]}"
+case "$_hi_d" in */*) _hi_d="${_hi_d%/*}" ;; *) _hi_d="." ;; esac
 # shellcheck source=../common/core.sh
-source "$_HI_HOME/hi.d/common/core.sh"
+source "$_hi_d/../common/core.sh"
+unset _hi_d
 # The renderer this previews, reused rather than reimplemented - check_line is
 # what paints every row below, so the preview cannot drift from the header.
 # Sourcing header.sh only defines functions.

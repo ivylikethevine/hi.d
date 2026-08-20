@@ -7,15 +7,24 @@ set -euo pipefail # must be disabled after our code (this file is part of the in
 # than guessed. The symlink walk is what makes that work from $_HI_LINK:
 # /usr/bin/hi points at <prefix>/hi.d/hi.sh, and the unresolved path answers
 # /usr. GLOSSARY: HI.33
+#
+# The same walk as scripts/install.sh's and packaging/lib.sh's - each must
+# resolve itself before it can source anything, so fix one, fix all three. The
+# base for a relative target is lexical: the final `cd -P` collapses it anyway.
 if [ -z "${_HI_HOME:-}" ]; then
   _hi_self="${BASH_SOURCE[0]}"
   while [ -L "$_hi_self" ]; do
-    _hi_self_dir="$(cd -P "$(dirname "$_hi_self")" && pwd)"
-    _hi_self="$(readlink "$_hi_self")"
-    [[ $_hi_self == /* ]] || _hi_self="$_hi_self_dir/$_hi_self"
+    _hi_link="$(readlink "$_hi_self")"
+    case "$_hi_link" in
+    /*) _hi_self="$_hi_link" ;;
+    *) case "$_hi_self" in
+      */*) _hi_self="${_hi_self%/*}/$_hi_link" ;;
+      *) _hi_self="$_hi_link" ;;
+      esac ;;
+    esac
   done
   _HI_HOME="$(cd -P "$(dirname "$_hi_self")/.." && pwd)"
-  unset _hi_self _hi_self_dir
+  unset _hi_self _hi_link
 fi
 export _HI_HOME
 # Checked before the source, because bash's own "No such file or directory"
@@ -187,12 +196,14 @@ function _hi_ctl_close() {
 # login rc files, read as *files* (`sh -c` over ssh sources none of them),
 # then $HOME/hi.d. Its own function so a suite can run it without an ssh hop.
 # GLOSSARY: HI.33 - the candidate order, the two seds, and what `--tmux` gets
-# out of it
+# out of it. The unwrapping sed's `-e` order matters: they run in sequence over
+# one pattern space, so the comment strip goes first, addressed to unquoted
+# lines - after unquoting it would eat a `#` from inside the quotes.
 function _hi_remote_root_probe() {
   cat <<'PROBE'
 _c=$(for _f in "$HOME/.bashrc" "$HOME/.zshrc" "$HOME/.config/fish/config.fish" /etc/profile.d/hi.d.sh; do
   [ -f "$_f" ] && sed -n -e 's/^[[:space:]]*export  *_HI_HOME=//p' -e 's/^[[:space:]]*set -gx  *_HI_HOME  *//p' "$_f"
-done | sed -e 's/^"\([^"]*\)".*$/\1/' -e 's/[[:space:]]*#.*$//' -e 's/[[:space:]]*$//')
+done | sed -e '/^"/!s/[[:space:]]*#.*$//' -e 's/^"\([^"]*\)".*$/\1/' -e 's/[[:space:]]*$//')
 IFS='
 '
 for _h in $_c "$HOME"; do

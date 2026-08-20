@@ -116,11 +116,17 @@ if [ -n "$_HI_PREFIX" ] || [ -n "${DESTDIR:-}" ]; then _HI_PACKAGING=1; fi
 
 # Locate hi.d relative to this script (resolving symlinks) - hi.d's parent
 # directory is always the install dir, since this installs in place.
+# The same walk as hi.sh's and packaging/lib.sh's: fix one, fix all three.
 _HI_SELF="${BASH_SOURCE[0]}"
 while [ -L "$_HI_SELF" ]; do
-  _HI_SELF_DIR="$(cd -P "$(dirname "$_HI_SELF")" && pwd)"
-  _HI_SELF="$(readlink "$_HI_SELF")"
-  [[ $_HI_SELF == /* ]] || _HI_SELF="$_HI_SELF_DIR/$_HI_SELF"
+  _HI_SELF_LINK="$(readlink "$_HI_SELF")"
+  case "$_HI_SELF_LINK" in
+  /*) _HI_SELF="$_HI_SELF_LINK" ;;
+  *) case "$_HI_SELF" in
+    */*) _HI_SELF="${_HI_SELF%/*}/$_HI_SELF_LINK" ;;
+    *) _HI_SELF="$_HI_SELF_LINK" ;;
+    esac ;;
+  esac
 done
 _HI_HOME="$(cd -P "$(dirname "$_HI_SELF")/../.." && pwd)"
 export _HI_HOME

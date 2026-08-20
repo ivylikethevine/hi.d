@@ -14,11 +14,9 @@
 # shellcheck disable=SC2329,SC2030,SC2031
 set -euo pipefail
 
-: "${_HI_HOME:=$(cd -P "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)}"
-# shellcheck source=../../common/core.sh
-source "$_HI_HOME/hi.d/common/core.sh"
+# test_lib.sh sources core.sh itself; $_HI_TEST_LIB wins under the runner
 # shellcheck source=../test_lib.sh
-source "$_HI_TEST_LIB"
+source "${_HI_TEST_LIB:-${BASH_SOURCE[0]%/*}/../test_lib.sh}"
 
 # runs "$@" with the counters sandboxed, so a case can call _hi_case/
 # _hi_suite_begin freely without corrupting this suite's own tally

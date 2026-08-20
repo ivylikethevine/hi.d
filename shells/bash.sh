@@ -2,6 +2,10 @@
 # set -euo pipefail # cannot be enabled: an interactive shell would exit on the first error
 
 # === start required configuration ===
+# Through $_HI_HOME, not this file's own path: load.sh grafts this file's *text*
+# into someone else's rc (GLOSSARY: HI.24), where $BASH_SOURCE is that rc. The
+# derivation is for a hand-written `source`; a graft and install.sh's rc line
+# both set $_HI_HOME first. GLOSSARY: HI.33
 : "${_HI_HOME:=$(cd -P "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 # shellcheck source=../common/core.sh
 source "$_HI_HOME/hi.d/common/core.sh"

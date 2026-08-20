@@ -88,10 +88,12 @@ two e2e workflows no longer carry one: `ci.yml` calls them on every push to
 
 ## The one idea
 
-`hi.sh` does not locate itself. It sources `${_HI_HOME:-$HOME}/hi.d/common/core.sh`, and everything else
-resolves against `$_HI_ROOT="$_HI_HOME/hi.d"`. So every channel has to do two things: put the tree in a
-directory literally named `hi.d`, and make sure `_HI_HOME` names that directory's **parent** before any
-shell sources anything.
+`hi.sh` locates itself - it walks `$0` through any symlinks and takes the tree from where it lands, so
+`/usr/bin/hi` pointing into a package prefix resolves correctly on its own (GLOSSARY: HI.33). Everything
+then resolves against `$_HI_ROOT="$_HI_HOME/hi.d"`. What a channel still owes is the layout and the
+handoff: put the tree in a directory literally named `hi.d`, and make sure `_HI_HOME` names that
+directory's **parent** in the environment, because a *new* process with no tree to derive from - a login
+shell, tmux's `update-environment`, another machine's `hi` probing this one - has nothing else to read.
 
 | channel            | tree                 | how `_HI_HOME` gets set                                    |
 | ------------------ | -------------------- | ---------------------------------------------------------- |

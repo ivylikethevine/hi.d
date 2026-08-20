@@ -5,11 +5,9 @@
 # shellcheck disable=SC2329
 set -euo pipefail
 
-: "${_HI_HOME:=$(cd -P "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)}"
-# shellcheck source=../../common/core.sh
-source "$_HI_HOME/hi.d/common/core.sh"
+# test_lib.sh sources core.sh itself; $_HI_TEST_LIB wins under the runner
 # shellcheck source=../test_lib.sh
-source "$_HI_TEST_LIB"
+source "${_HI_TEST_LIB:-${BASH_SOURCE[0]%/*}/../test_lib.sh}"
 
 # _hi_fixture <name> <exit> [counts-line] - a stand-in suite: announces itself
 # as "ran:<name>", optionally writes <counts-line> to $_HI_COUNTS_FILE the way

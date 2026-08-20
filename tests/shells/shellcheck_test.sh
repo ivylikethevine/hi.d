@@ -8,11 +8,9 @@
 # not): shfmt as a formatting gate, and checkbashisms over the #!/bin/sh files.
 set -euo pipefail
 
-: "${_HI_HOME:=$(cd -P "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)}"
-# shellcheck source=../../common/core.sh
-source "$_HI_HOME/hi.d/common/core.sh"
+# test_lib.sh sources core.sh itself; $_HI_TEST_LIB wins under the runner
 # shellcheck source=../test_lib.sh
-source "$_HI_TEST_LIB"
+source "${_HI_TEST_LIB:-${BASH_SOURCE[0]%/*}/../test_lib.sh}"
 
 # "<file>:<shell>:<flag...>", one per file/shell pair shellcheck's own reading
 # doesn't cover. Skipped with a warning when that shell isn't installed: these
@@ -103,9 +101,18 @@ _HI_HOME_LINT=(
 # name: a table added below has to be blanked too, and finding out that it
 # wasn't means reading a report of this file against itself.
 function _hi_lint_source_lines() {
-  awk '/^_HI_[A-Z0-9]*_LINT=\(/ { inside = 1 }
+  awk '/^_HI_[A-Z0-9_]*_LINT=\(/ { inside = 1 }
        inside { print ""; if (/^\)/) inside = 0; next }
        { print }' "$1"
+}
+
+# _hi_lint_find <find-name-expr...> - the files a lint sweeps. The exclusions
+# live here, not at each caller: packaging/mkpkg.sh stages a *copy* of the tree
+# under dist/, so a run after a local package build would lint everything twice
+# and report against paths that are not the source. .claude/ is agent scratch.
+function _hi_lint_find() {
+  find "$_HI_ROOT" \( "$@" \) -not -path '*/.git/*' \
+    -not -path "$_HI_ROOT/dist/*" -not -path "$_HI_ROOT/.claude/*" | sort
 }
 
 # _hi_lint_blanks <dir> <file...> - the blanked mirror of <file...> under
@@ -159,19 +166,23 @@ function lint_bash32() {
   _hi_lint_table "$blanks" "bash-4 construct" "${_HI_BASH32_LINT[@]}"
 }
 
-# The same sweep for a $HOME-shaped tree default, over a wider file list: the
-# two files that most want this check - shells/zsh.zsh and shells/config.fish -
-# are not *.sh and so are invisible to the list above. Every file that needs
-# the tree can derive it from its own path (GLOSSARY: HI.33); guessing $HOME
-# does not fail when it is wrong, it silently reads *another tree*, which is
-# how both platform e2e jobs spent their first run sourcing a hi.d that was
-# never there.
+# The same sweep for a $HOME-shaped tree default, over a wider file list. Every
+# file that needs the tree can derive it from its own path (GLOSSARY: HI.33);
+# guessing $HOME does not fail when it is wrong, it silently reads *another
+# tree*, which is how both platform e2e jobs spent their first run sourcing a
+# hi.d that was never there.
+#
+# Wider than the shellcheck list, which is *.sh only: zsh.zsh and config.fish
+# are the files that most want this, and .md carries the rule as documentation
+# - docs/PACKAGING.md taught the retired default, which is what a packager
+# reads. Not .rb: _hi_lint_table drops comments, and the formula's only
+# occurrence is one, so it would buy a file list and no coverage.
 function lint_home_default() {
   local blanks="$_HI_WORKDIR/homedefault"
   local files
   _hi_h2 "Checking for a \$HOME default for the hi.d tree"
-  _hi_read_lines files < <(find "$_HI_ROOT" \( -name '*.sh' -o -name '*.zsh' -o -name '*.fish' \) \
-    -not -path '*/.git/*' -not -path "$_HI_ROOT/dist/*" | sort)
+  _hi_read_lines files < <(_hi_lint_find -name '*.sh' -o -name '*.zsh' \
+    -o -name '*.fish' -o -name '*.md')
   _hi_lint_blanks "$blanks" "${files[@]}"
   _hi_lint_table "$blanks" "tree default" "${_HI_HOME_LINT[@]}"
 }
@@ -367,12 +378,9 @@ function run_shellcheck() {
     exit 1
   fi
 
-  # dist/ alongside .git: packaging/mkpkg.sh stages a *copy* of the tree
-  # there, so a run after a local package build would lint every file twice -
-  # inflating the count and reporting each finding against a path that is not
-  # the source of it.
-  _hi_read_lines _HI_SH_FILES < <(find "$_HI_ROOT" -name '*.sh' \
-    -not -path '*/.git/*' -not -path "$_HI_ROOT/dist/*" | sort)
+  # the .git/dist exclusions and why they are there live on _hi_lint_find,
+  # which lint_home_default reads through too
+  _hi_read_lines _HI_SH_FILES < <(_hi_lint_find -name '*.sh')
   _HI_LINT_TOTAL="${#_HI_SH_FILES[@]}"
   _HI_SKIPPED=0
 

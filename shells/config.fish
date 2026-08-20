@@ -2,8 +2,11 @@
 
 # === start required configuration ===
 # The tree from this file's own path, and only when unset. GLOSSARY: HI.33
+# Through `sh`, not fish's `cd`/`pwd`: a builtin-only command substitution runs
+# in the *current* process (so a bare `cd` moves the caller's cwd), and fish's
+# `pwd` is logical where every other dialect here is physical.
 if not set -q _HI_HOME
-    set -gx _HI_HOME (cd (status dirname)/../..; and pwd)
+  set -gx _HI_HOME (command sh -c 'cd -P "$1/../.." && pwd' sh (status dirname))
 end
 # GLOSSARY: HI.07 - defaulted, never assigned, so bare reads are
 # safe and settings.sh still overrides. Mirrors core.sh's _HI_TOGGLES.

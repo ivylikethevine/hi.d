@@ -16,11 +16,9 @@
 # shellcheck disable=SC2329,SC2317,SC2016
 set -euo pipefail
 
-: "${_HI_HOME:=$(cd -P "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)}"
-# shellcheck source=../../common/core.sh
-source "$_HI_HOME/hi.d/common/core.sh"
+# test_lib.sh sources core.sh itself; $_HI_TEST_LIB wins under the runner
 # shellcheck source=../test_lib.sh
-source "$_HI_TEST_LIB"
+source "${_HI_TEST_LIB:-${BASH_SOURCE[0]%/*}/../test_lib.sh}"
 # shellcheck source=../../hi.sh
 source "$_HI_LAUNCHER"
 
@@ -325,12 +323,54 @@ function test_remote_probe_reads_the_packaging_profile_snippet() {
   [[ "$(_hi_remote_root_probe)" == */etc/profile.d/hi.d.sh* ]]
 }
 
+# The cases above retype install.sh's format. This one has install.sh write the
+# rc itself, so a change to tmpdir_line's quoting or config_shell's padding
+# turns this red instead of silently blinding the probe on every real target.
+function test_remote_probe_reads_what_install_sh_actually_wrote() {
+  local home
+  home="$(_hi_probe_home probe_real opt/nested)"
+  # a real bash, not a subshell: sourcing install.sh here would land its
+  # functions in this suite's shell. tmpdir_line's $2 names the tree, the same
+  # override packaging mode uses - install.sh derives its own $_HI_HOME.
+  bash -c '
+    _i="$1" _h="$2"
+    set -- # install.sh reads "$@" for its own args
+    source "$_i"
+    config_shell bashrc "$_h/.bashrc" "$(tmpdir_line sh "$_h/opt/nested")"
+  ' bash "$_HI_INSTALL" "$home" >/dev/null 2>&1
+  [ "$(_hi_probe_answer "$home")" = "$home/opt/nested/hi.d" ]
+}
+
+# The probe restates the rc roster core.sh single-homes as _HI_SHELL_TABLE.
+# Every shell install.sh writes a tree line for has to be a candidate here, or
+# a target running that shell goes invisible and gets the payload copied over
+# a curated tree.
+function test_remote_probe_covers_every_rc_in_the_roster() {
+  local probe rel _shell _label _tree_rc _home_rc _rest
+  probe="$(_hi_remote_root_probe)"
+  while IFS='|' read -r _shell _label _tree_rc _home_rc _rest; do
+    rel="${_home_rc#"$HOME/"}"
+    case "$probe" in *"$rel"*) ;; *) return 1 ;; esac
+  done < <(_hi_shell_rows local)
+}
+
 # an install path with a space in it survives the candidate list
 function test_remote_probe_handles_a_path_with_a_space() {
   local home
   home="$(_hi_probe_home probe_space "opt/my trees")"
   printf 'export _HI_HOME="%s/opt/my trees"\n' "$home" >"$home/.bashrc"
   [ "$(_hi_probe_answer "$home")" = "$home/opt/my trees/hi.d" ]
+}
+
+# and one with a `#` in it: the value is quoted, so the marker strip must not
+# treat the first `#` on the line as the start of the comment. This is the case
+# the unwrapping sed's expression *order* exists for - reversed, it answers
+# "$home/opt/hash" and the probe silently falls back to $HOME/hi.d.
+function test_remote_probe_handles_a_path_with_a_hash() {
+  local home
+  home="$(_hi_probe_home probe_hash "opt/hash#tree")"
+  printf '%-45s %s\n' "export _HI_HOME=\"$home/opt/hash#tree\"" "$_HI_MARKER" >"$home/.bashrc"
+  [ "$(_hi_probe_answer "$home")" = "$home/opt/hash#tree/hi.d" ]
 }
 
 function test_bootloader_calls_load_for_a_session() {
@@ -1131,7 +1171,10 @@ function run_hi_tests() {
   _hi_check "Skips a stale export with no tree on it" test_remote_probe_skips_a_path_with_no_tree_on_it
   _hi_check "Silent when nothing is installed" test_remote_probe_is_silent_with_no_tree_at_all
   _hi_check "Looks in the packaging profile snippet" test_remote_probe_reads_the_packaging_profile_snippet
+  _hi_check "Reads what install.sh actually wrote" test_remote_probe_reads_what_install_sh_actually_wrote
+  _hi_check "Covers every rc in the shell roster" test_remote_probe_covers_every_rc_in_the_roster
   _hi_check "Handles a path with a space in it" test_remote_probe_handles_a_path_with_a_space
+  _hi_check "Handles a path with a # in it" test_remote_probe_handles_a_path_with_a_hash
 
   _hi_h2 "Testing: remote shell handoff"
   _hi_check "The bash handoff is explicitly interactive" test_remote_suffix_forces_an_interactive_bash

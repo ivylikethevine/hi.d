@@ -34,27 +34,20 @@
 # shellcheck disable=SC2016
 set -euo pipefail
 
-: "${_HI_HOME:=$(cd -P "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)}"
-# shellcheck source=../../common/core.sh
-source "$_HI_HOME/hi.d/common/core.sh"
+# test_lib.sh sources core.sh itself; $_HI_TEST_LIB wins under the runner
 # shellcheck source=../test_lib.sh
-source "$_HI_TEST_LIB"
+source "${_HI_TEST_LIB:-${BASH_SOURCE[0]%/*}/../test_lib.sh}"
 
-# What a tree has to hold for install.sh to run and for `hi --doctor` to
-# answer: the shipped payload, plus scripts/ (install.sh, doctor.sh, table.sh),
-# which no target ever gets and which every one of these cases needs.
-_HI_LOC_DIRS=(common misc shells scripts)
-_HI_LOC_FILES=(hi.sh load.sh)
+# What a tree needs for install.sh to run and `hi --doctor` to answer: the
+# shipped payload (mirrors install.sh's _HI_PACKAGE_CONTENTS) plus scripts/.
+# Not the whole checkout - .git is the expensive half and nothing reads it.
+_HI_LOC_ITEMS=(common misc shells scripts hi.sh load.sh)
 
-# _hi_loc_tree <parent> - a hi.d under <parent>, printed. cp -R of four
-# directories rather than the whole checkout: .git is the expensive half and
-# nothing here reads it (doctor.sh reports "no .git", which is a fine answer).
+# _hi_loc_tree <name> - a hi.d under $_HI_WORKDIR/<name>, printed.
+# _hi_scratch_tree copies and prints the parent; this adds an executable hi.sh.
 function _hi_loc_tree() {
-  local root="$1/hi.d" item
-  mkdir -p "$root"
-  for item in "${_HI_LOC_DIRS[@]}" "${_HI_LOC_FILES[@]}"; do
-    cp -R "$_HI_ROOT/$item" "$root/"
-  done
+  local root
+  root="$(_hi_scratch_tree "$1" "${_HI_LOC_ITEMS[@]}")/hi.d"
   chmod +x "$root/hi.sh"
   printf '%s' "$root"
 }
@@ -70,19 +63,21 @@ _HI_LOC_ROOT=""
 function _hi_loc_install() {
   _HI_LOC_HOME="$_HI_WORKDIR/home"
   _HI_LOC_PARENT="$_HI_LOC_HOME/opt/nested"
-  mkdir -p "$_HI_LOC_PARENT"
-  _HI_LOC_ROOT="$(_hi_loc_tree "$_HI_LOC_PARENT")"
-  _hi_loc_env "$_HI_LOC_ROOT/scripts/install.sh" --no-link -y >"$_HI_WORKDIR/install.log" 2>&1
+  _HI_LOC_ROOT="$(_hi_loc_tree home/opt/nested)"
+  _hi_loc_env "$_HI_LOC_HOME" "$_HI_LOC_ROOT/scripts/install.sh" --no-link -y \
+    >"$_HI_WORKDIR/install.log" 2>&1
 }
 
-# The controlled environment every child here runs in. `env -i` and then only
-# what a login shell genuinely has: no _HI_HOME, and no _HI_CONFIG_DIR either -
-# test_lib.sh exports one for the whole suite, and inheriting it would put this
-# install's settings in another suite's overlay. $SHELL is set because
-# install.sh reports `${SHELL##*/}` under `set -u`.
+# _hi_loc_env <home> <cmd...> - `env -i` plus only what a login shell has: no
+# _HI_HOME (passing it would answer the question the suite asks) and no
+# _HI_CONFIG_DIR (test_lib.sh's would put this install's settings in another
+# suite's overlay). $SHELL because install.sh reports `${SHELL##*/}` under
+# `set -u`. <home> is a parameter: the suite runs children against two.
 function _hi_loc_env() {
-  env -i HOME="$_HI_LOC_HOME" PATH="$PATH" TERM="${TERM:-xterm-256color}" \
-    SHELL=/bin/bash XDG_CONFIG_HOME="$_HI_LOC_HOME/.config" "$@"
+  local home="$1"
+  shift
+  env -i HOME="$home" PATH="$PATH" TERM="${TERM:-xterm-256color}" \
+    SHELL=/bin/bash XDG_CONFIG_HOME="$home/.config" "$@"
 }
 
 # _hi_loc_shell <shell> <script> - <script> in a fresh interactive <shell>,
@@ -90,7 +85,7 @@ function _hi_loc_env() {
 # only: an interactive shell with no tty is entitled to complain on stderr, and
 # the assertions are about what hi produced.
 function _hi_loc_shell() {
-  _hi_loc_env "$1" -i -c "$2" </dev/null 2>/dev/null
+  _hi_loc_env "$_HI_LOC_HOME" "$1" -i -c "$2" </dev/null 2>/dev/null
 }
 
 # --- the rc wiring --------------------------------------------------------
@@ -127,10 +122,7 @@ function test_fish_resolves_the_nested_tree() {
 # sh has no rc of its own to wire up - it reaches paths.sh directly, told where
 # the tree is, which is the shape hi.sh's bash-less fallback rc builds
 function test_sh_sources_paths_from_the_nested_tree() {
-  local out
-  out="$(env -i HOME="$_HI_LOC_HOME" PATH="$PATH" _HI_HOME="$_HI_LOC_PARENT" \
-    sh -c ". \"\$_HI_HOME/hi.d/common/paths.sh\"; printf %s \"\$_HI_ROOT\"" 2>/dev/null)"
-  [ "$out" = "$_HI_LOC_ROOT" ]
+  [ "$(_hi_loc_sh 'printf %s "$_HI_ROOT"')" = "$_HI_LOC_ROOT" ]
 }
 
 # --- prompt, header, doctor ----------------------------------------------
@@ -174,30 +166,19 @@ function test_fish_renders_the_header() {
 # the alias and doctor.sh all have to have resolved into the nested tree, and
 # doctor's first row is the tree itself
 function _hi_loc_doctor_names_the_tree() {
-  local out
-  out="$(_hi_loc_shell "$1" "$2")"
-  [[ "$(_hi_strip_ansi "$out")" == *"$_HI_LOC_ROOT"* ]]
+  [[ "$(_hi_strip_ansi "$(_hi_loc_shell "$1" 'hi --doctor')")" == *"$_HI_LOC_ROOT"* ]]
 }
 
-function test_bash_doctor_names_the_nested_tree() {
-  _hi_loc_doctor_names_the_tree bash 'hi --doctor'
-}
-
-function test_zsh_doctor_names_the_nested_tree() {
-  _hi_loc_doctor_names_the_tree zsh 'hi --doctor'
-}
-
-function test_fish_doctor_names_the_nested_tree() {
-  _hi_loc_doctor_names_the_tree fish 'hi --doctor'
-}
+function test_bash_doctor_names_the_nested_tree() { _hi_loc_doctor_names_the_tree bash; }
+function test_zsh_doctor_names_the_nested_tree() { _hi_loc_doctor_names_the_tree zsh; }
+function test_fish_doctor_names_the_nested_tree() { _hi_loc_doctor_names_the_tree fish; }
 
 # sh's arm of the same two. It has no prompt of its own to check - hi styles a
 # POSIX prompt only on a *target*, out of hi.sh's fallback rc - but the header
 # and the launcher are both reachable from it once paths.sh has resolved, and
 # both have to land in the nested tree rather than beside $HOME.
 function _hi_loc_sh() {
-  env -i HOME="$_HI_LOC_HOME" PATH="$PATH" TERM="${TERM:-xterm-256color}" \
-    _HI_HOME="$_HI_LOC_PARENT" XDG_CONFIG_HOME="$_HI_LOC_HOME/.config" \
+  _hi_loc_env "$_HI_LOC_HOME" env _HI_HOME="$_HI_LOC_PARENT" \
     sh -c ". \"\$_HI_HOME/hi.d/common/paths.sh\"; $1" 2>/dev/null
 }
 
@@ -220,8 +201,7 @@ function test_sh_doctor_names_the_nested_tree() {
 _HI_LOC_OUT_ROOT=""
 
 function _hi_loc_outside_env() {
-  env -i HOME="$_HI_WORKDIR/elsewhere" PATH="$PATH" TERM="${TERM:-xterm-256color}" \
-    XDG_CONFIG_HOME="$_HI_WORKDIR/elsewhere/.config" "$@"
+  _hi_loc_env "$_HI_WORKDIR/elsewhere" "$@"
 }
 
 function _hi_loc_outside_resolves() {
@@ -274,7 +254,7 @@ function test_a_missing_tree_is_named_and_refused() {
 # --uninstall takes its own line back out of all three rc files, wherever the
 # tree is - the half that would rot if only the install were tested
 function test_uninstall_removes_the_tree_line() {
-  _hi_loc_env "$_HI_LOC_ROOT/scripts/install.sh" --uninstall >/dev/null 2>&1
+  _hi_loc_env "$_HI_LOC_HOME" "$_HI_LOC_ROOT/scripts/install.sh" --uninstall >/dev/null 2>&1
   ! grep -qF "$_HI_LOC_PARENT" "$_HI_LOC_HOME/.bashrc" &&
     ! grep -qF "$_HI_LOC_PARENT" "$_HI_LOC_HOME/.zshrc" &&
     ! grep -qF "$_HI_LOC_PARENT" "$_HI_LOC_HOME/.config/fish/config.fish"
@@ -289,7 +269,7 @@ function run_install_location_tests() {
   _hi_cecho " | \$HOME: $_HI_LOC_HOME" "$BLUE"
 
   mkdir -p "$_HI_WORKDIR/elsewhere"
-  _HI_LOC_OUT_ROOT="$(_hi_loc_tree "$_HI_WORKDIR/outside")"
+  _HI_LOC_OUT_ROOT="$(_hi_loc_tree outside)"
 
   _hi_suite_begin
 
@@ -299,34 +279,43 @@ function run_install_location_tests() {
   _hi_check "config.fish names the tree" test_fish_config_states_the_tree
   _hi_check "The tree itself was not written to" test_the_install_wrote_nothing_into_the_tree
 
+  # Read-only from here to the uninstall, so it runs in parallel: five
+  # `hi --doctor` runs at ~350ms each were most of this suite's wall clock.
   _hi_h2 "Testing: a fresh shell finds the nested tree"
-  _hi_check "bash" test_bash_resolves_the_nested_tree
-  _hi_check_requires zsh "zsh" test_zsh_resolves_the_nested_tree
-  _hi_check_requires fish "fish" test_fish_resolves_the_nested_tree
-  _hi_check "sh, through common/paths.sh" test_sh_sources_paths_from_the_nested_tree
+  _hi_par_begin cases
+  _hi_par_check "bash" test_bash_resolves_the_nested_tree
+  _hi_par_check_requires zsh "zsh" test_zsh_resolves_the_nested_tree
+  _hi_par_check_requires fish "fish" test_fish_resolves_the_nested_tree
+  _hi_par_check "sh, through common/paths.sh" test_sh_sources_paths_from_the_nested_tree
+  _hi_par_wait
 
   _hi_h2 "Testing: prompt, header and hi --doctor out of it"
-  _hi_check "bash has hi's prompt" test_bash_has_his_prompt
-  _hi_check_requires zsh "zsh has hi's prompt" test_zsh_has_his_prompt
-  _hi_check_requires fish "fish has hi's prompt" test_fish_has_his_prompt
-  _hi_check "bash renders the header" test_bash_renders_the_header
-  _hi_check_requires zsh "zsh renders the header" test_zsh_renders_the_header
-  _hi_check_requires fish "fish renders the header" test_fish_renders_the_header
-  _hi_check "bash: hi --doctor names the tree" test_bash_doctor_names_the_nested_tree
-  _hi_check_requires zsh "zsh: hi --doctor names the tree" test_zsh_doctor_names_the_nested_tree
-  _hi_check_requires fish "fish: hi --doctor names the tree" test_fish_doctor_names_the_nested_tree
-  _hi_check "sh renders the header" test_sh_renders_the_header
-  _hi_check "sh: hi --doctor names the tree" test_sh_doctor_names_the_nested_tree
+  _hi_par_begin cases
+  _hi_par_check "bash has hi's prompt" test_bash_has_his_prompt
+  _hi_par_check_requires zsh "zsh has hi's prompt" test_zsh_has_his_prompt
+  _hi_par_check_requires fish "fish has hi's prompt" test_fish_has_his_prompt
+  _hi_par_check "bash renders the header" test_bash_renders_the_header
+  _hi_par_check_requires zsh "zsh renders the header" test_zsh_renders_the_header
+  _hi_par_check_requires fish "fish renders the header" test_fish_renders_the_header
+  _hi_par_check "bash: hi --doctor names the tree" test_bash_doctor_names_the_nested_tree
+  _hi_par_check_requires zsh "zsh: hi --doctor names the tree" test_zsh_doctor_names_the_nested_tree
+  _hi_par_check_requires fish "fish: hi --doctor names the tree" test_fish_doctor_names_the_nested_tree
+  _hi_par_check "sh renders the header" test_sh_renders_the_header
+  _hi_par_check "sh: hi --doctor names the tree" test_sh_doctor_names_the_nested_tree
+  _hi_par_wait
 
   _hi_h2 "Testing: a tree outside \$HOME, with \$_HI_HOME unset"
-  _hi_check "bash.sh derives it" test_outside_bash_derives_the_tree
-  _hi_check_requires zsh "zsh.zsh derives it" test_outside_zsh_derives_the_tree
-  _hi_check_requires fish "config.fish derives it" test_outside_fish_derives_the_tree
-  _hi_check "core.sh derives it" test_outside_core_derives_the_tree
-  _hi_check "hi.sh runs from it" test_outside_launcher_runs
-  _hi_check "hi.sh runs through a symlink onto it" test_outside_launcher_runs_through_a_symlink
-  _hi_check "A missing tree is named and refused" test_a_missing_tree_is_named_and_refused
+  _hi_par_begin cases
+  _hi_par_check "bash.sh derives it" test_outside_bash_derives_the_tree
+  _hi_par_check_requires zsh "zsh.zsh derives it" test_outside_zsh_derives_the_tree
+  _hi_par_check_requires fish "config.fish derives it" test_outside_fish_derives_the_tree
+  _hi_par_check "core.sh derives it" test_outside_core_derives_the_tree
+  _hi_par_check "hi.sh runs from it" test_outside_launcher_runs
+  _hi_par_check "hi.sh runs through a symlink onto it" test_outside_launcher_runs_through_a_symlink
+  _hi_par_check "A missing tree is named and refused" test_a_missing_tree_is_named_and_refused
+  _hi_par_wait
 
+  # serial, and last: it rewrites the rc files every case above reads
   _hi_h2 "Testing: install.sh --uninstall"
   _hi_check "Takes the tree line back out" test_uninstall_removes_the_tree_line
 

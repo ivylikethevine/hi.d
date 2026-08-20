@@ -383,12 +383,19 @@ Each dialect asks the question its own way, and each asks it only when
 `load.sh`, the rc line `scripts/install.sh` writes) still wins and costs no
 fork:
 
+Only a handful of files ask. `common/core.sh` owns the answer; everything that
+merely *needs* the tree reaches core.sh through its own path rather than
+hand-counting a depth from `$_HI_HOME`, so `common/header.sh`, `scripts/` and
+the test suites carry no derivation at all.
+
 | where | how |
 | --- | --- |
-| bash (`common/core.sh`, `common/header.sh`, `shells/bash.sh`, `scripts/`, `tests/`) | `${BASH_SOURCE[0]}`, then `cd -P .. && pwd` |
-| `hi.sh` | the same, behind a `readlink` walk - `$_HI_LINK` is `/usr/bin/hi`, and the unresolved path answers `/usr` |
+| `common/core.sh` | `${BASH_SOURCE[0]}`, then `cd -P ../.. && pwd`. The one that answers for every file sourced through it |
+| `hi.sh`, `scripts/install.sh`, `packaging/lib.sh` | the same, behind a `readlink` walk - `$_HI_LINK` is `/usr/bin/hi`, and the unresolved path answers `/usr`. Three copies, because each must resolve itself before it can source anything |
+| `load.sh`, `tests/test_runner.sh` | `${BASH_SOURCE[0]}` - entry points that *export* for children |
 | zsh (`shells/zsh.zsh`, and `common/core.sh` reached through it) | `${(%):-%x}` with zsh's `:A:h` modifiers; zsh has no `$BASH_SOURCE`, and bash cannot parse `%x`, so core.sh's arm is `eval`'d |
-| fish (`shells/config.fish`) | `(cd (status dirname)/../..; and pwd)` |
+| fish (`shells/config.fish`) | `sh -c 'cd -P "$1/../.." && pwd'`. Not fish's own `cd`/`pwd`: a builtin-only command substitution runs in the *current* process, so it would move the caller's cwd, and fish's `pwd` is logical where every other dialect here is physical |
+| `shells/bash.sh` | `$_HI_HOME`, not its own path - the one file that cannot self-locate, because `load.sh` grafts its *text* into someone else's rc (HI.24), where `$BASH_SOURCE` is that rc |
 
 `common/core.sh`'s zsh arm is `eval`'d for one reason: bash reads `${(%):-%x}`
 as a bad substitution, and the file has to *parse* in both shells whichever
@@ -417,6 +424,11 @@ a target hi has to answer on; and a second `sed` unwraps the value, because
 `config_shell` writes the path quoted *and* pads a `# added by hi during
 install` marker onto every line it owns. A quoted value is taken as-is (a `#`
 inside it survives) and only an unquoted one has a trailing comment stripped.
+That second `sed`'s expressions are **ordered**, and the order is the whole
+trick: `-e` expressions run in sequence over a single pattern space, so
+stripping the comment after unquoting would strip from a `#` that was inside
+the quotes. The comment strip therefore runs first, addressed to lines that do
+*not* begin with a quote (`/^"/!`), and the unquoting runs second.
 `IFS` is a newline for the candidate loop, so an install directory with a
 space in it is still one candidate.
 
@@ -426,4 +438,5 @@ wrapped in a guard that requires `$_HI_HOME` to be set - in a session it always
 is, and outside one there is no tree to source.
 
 `tests/shells/shellcheck_test.sh`'s `lint_home_default` greps the tree for the
-retired spellings, the way it already greps for bash-4 constructs.
+retired spellings, the way it already greps for bash-4 constructs - over
+`.md` too, since docs teaching the old rule are what a packager reads.

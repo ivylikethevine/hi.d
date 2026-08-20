@@ -16,9 +16,12 @@ set -euo pipefail
 export XDG_CONFIG_HOME="${TMPDIR:-/tmp}/hi.testcfg.$$"
 export _HI_CONFIG_DIR="$XDG_CONFIG_HOME/hi.d"
 
-: "${_HI_HOME:=$(cd -P "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
+# The one place the test side resolves a tree. GLOSSARY: HI.33
+_hi_d="${BASH_SOURCE[0]}"
+case "$_hi_d" in */*) _hi_d="${_hi_d%/*}" ;; *) _hi_d="." ;; esac
 # shellcheck source=../common/core.sh
-source "$_HI_HOME/hi.d/common/core.sh"
+source "$_hi_d/../common/core.sh"
+unset _hi_d
 
 # Scratch dir every suite works in, plus the ledger of everything its exit trap
 # has to take away again: containers, docker networks, and processes a case
@@ -42,8 +45,12 @@ _HI_LEDGER=""
 # agent, deleting a kind cluster, ...) run before the generic teardown.
 # _hi_on_exit installs a *single* trap rather than appending to one, so
 # everything that has to happen on the way out goes through here.
+#
+# Resolved with `cd -P`: the product derives its tree physically (GLOSSARY:
+# HI.33), so a $TMPDIR holding a symlink - macOS's /var - would leave a suite
+# comparing two spellings of one directory.
 function _hi_workdir() {
-  _HI_WORKDIR="$(mktemp -d -t "hi.$1.XXXXXX")"
+  _HI_WORKDIR="$(cd -P "$(mktemp -d -t "hi.$1.XXXXXX")" && pwd)"
   _HI_EXTRA_CLEANUP="${2:-}"
   _HI_LEDGER="$_HI_WORKDIR/.ledger"
   : >"$_HI_LEDGER"
@@ -269,6 +276,28 @@ function _hi_par_case() {
   _HI_PAR_RUNNING+=("$!")
   _HI_PAR_PIDS+=("$!")
   return 0
+}
+
+# _hi_par_check / _hi_par_check_requires - _hi_check's parallel twins. The
+# reporting runs in the subshell; _hi_par_wait does the counting.
+function _hi_par_check() {
+  _hi_par_case "$1" _hi_assert "$@"
+}
+
+function _hi_par_check_requires() {
+  local bin="$1"
+  shift
+  _hi_par_case "$1" _hi_par_requires_body "$bin" "$@"
+}
+
+function _hi_par_requires_body() {
+  local bin="$1"
+  shift
+  if command -v "$bin" >/dev/null 2>&1; then
+    _hi_assert "$@"
+  else
+    _hi_skip "$1" "no $bin"
+  fi
 }
 
 # Waits out the batch, then replays and tallies it in submission order.

@@ -16,10 +16,9 @@ user's shell any more:
 - `~/projects/claude/say-hi` — **this dev checkout**, deliberately not
   installed, so work here never runs in the user's live shell.
 - `~/projects/say-hi` — the user's real install, moved there from the old
-  `~/hi.d`. Never inspect or touch it, even if it looks dirty. As of the
-  rename it holds *pre-rename code under the new directory name* (its
-  `paths.sh` still resolves `$_HI_HOME/hi.d`), so it cannot load at all until
-  `rename-say-hi` lands on `main` and it pulls.
+  `~/hi.d`. Never inspect or touch it, even if it looks dirty. The rename has
+  landed on `main`, so it is a `git pull` away from being current — whether it
+  has pulled is not this checkout's business either way.
 
 The hazard is no longer a login profile: the rc wiring was removed on purpose,
 and nothing on disk exports `_HI_*` any more — not `.bashrc`, `.zshrc`,

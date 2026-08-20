@@ -49,29 +49,21 @@ here: git history is the ledger, and this file is only what is left to do.
     entry or file that satisfies it, and the two _Blocked on: v1_ entries point
     at this one instead of at a version number.
 
-- [ ] **Finish the `hi.d` → `say-hi` rename** — _the whole code half has
+- [ ] **Finish the `hi.d` → `say-hi` rename** — _everything but the GIFs has
       shipped._ The tree resolves as `$_HI_HOME/say-hi`, the config overlay is
       `~/.config/say-hi`, all four packages are named `say-hi`, the profile hook
       is `/etc/profile.d/say-hi.sh` and the apk key is
       `packaging/apk/say-hi.rsa.pub`. The old name is accepted nowhere — the
       probe fallback, the overlay fallback and `overlay_migrate` are all out.
-      What is left is three steps no file here can perform; **ticks when all
-      three are done.**
+      The GitHub repo is renamed, and the AUR had nothing to rename. One step is
+      left, and it is the one no file here can perform; **ticks when it is
+      done.**
 
-  - **Rename the GitHub repo** to `say-hi` (Settings → General → Repository
-    name). Every manifest and doc already points at
-    `github.com/ivylikethevine/say-hi`, so **they are wrong until this is
-    done** — GitHub redirects the old URL, which is what keeps that survivable
-    rather than urgent. Afterwards, `git remote set-url origin` in every
-    checkout.
   - **Re-render the seven demo GIFs** in `docs/demos/` — they show `~/hi.d` on
     screen, and `docs/tapes/generate.sh` refuses to run unless the checkout is
     named `say-hi`. Needs docker and a clean tree; its own commit, since it is
     seven binary files.
-  - **Rename the AUR repos** if either was created before this landed:
-    `ssh://aur@aur.archlinux.org/say-hi.git` and `say-hi-git`. The AUR has no
-    rename — it is a new repo and a deletion request for the old one, so do it
-    before the first push if at all possible.
+
 - [ ] **Source tarball under the provenance chain** — _Blocked on **Say what
       v1.0.0 means**, above._ Both
       manifests checksum GitHub's auto-generated `/archive/` tarball, the one

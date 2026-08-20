@@ -64,8 +64,30 @@ function _hi_loc_install() {
   _HI_LOC_HOME="$_HI_WORKDIR/home"
   _HI_LOC_PARENT="$_HI_LOC_HOME/opt/nested"
   _HI_LOC_ROOT="$(_hi_loc_tree home/opt/nested)"
+  _hi_loc_quiet_home "$_HI_LOC_HOME"
   _hi_loc_env "$_HI_LOC_HOME" "$_HI_LOC_ROOT/scripts/install.sh" --no-link -y \
     >"$_HI_WORKDIR/install.log" 2>&1
+}
+
+# _hi_loc_quiet_home <home> - the fabricated $HOME, with the host's own login
+# chatter turned off. Debian and Ubuntu's /etc/bash.bashrc greets an
+# interactive shell whose $HOME has neither marker with "To run a command as
+# administrator (user "root"), use "sudo <command>"" - on **stdout**, where the
+# cases below read the value they are asserting on. Every condition for it is
+# met here by construction: the fixture builds a fresh $HOME each run, so
+# neither marker can exist, and a runner account is routinely in the `sudo`
+# group. It is bash-only and interactive-only, which is why exactly one case
+# saw it (zsh, fish and the `sh` arm never read that file, and the substring
+# assertions elsewhere in this suite tolerated the extra lines).
+#
+# .hushlogin rather than .sudo_as_admin_successful: it is the general "this
+# shell is not a login greeting" marker, so it covers the next distro that
+# decides to say hello on stdout too. The assertion stays exact on purpose -
+# hi's own rc printing to stdout is a real bug, and this keeps that detectable
+# instead of loosening the compare to hide the host underneath it.
+function _hi_loc_quiet_home() {
+  mkdir -p "$1"
+  : >"$1/.hushlogin"
 }
 
 # _hi_loc_env <home> <cmd...> - `env -i` plus only what a login shell has: no
@@ -276,7 +298,7 @@ function run_install_location_tests() {
   _hi_cecho " | tree:  $_HI_LOC_ROOT" "$BLUE"
   _hi_cecho " | \$HOME: $_HI_LOC_HOME" "$BLUE"
 
-  mkdir -p "$_HI_WORKDIR/elsewhere"
+  _hi_loc_quiet_home "$_HI_WORKDIR/elsewhere"
   _HI_LOC_OUT_ROOT="$(_hi_loc_tree outside)"
 
   _hi_suite_begin

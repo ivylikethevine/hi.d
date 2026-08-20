@@ -45,11 +45,11 @@ jobs:
         with:
           tool: kcov
 
-      # the shellcheck suite runs under kcov too; same pinned binary as ci.yml
-      - uses: ./.github/actions/setup-tool
-        with:
-          tool: shellcheck
-
+      # No shellcheck/shfmt/checkbashisms here on purpose: tests/coverage.sh
+      # drops the `shellcheck` suite from the sweep (it is a linter run over
+      # the tree, not a path through hi's bash), so nothing left in the group
+      # invokes them. The host report names them and prints "(absent)", which
+      # is not a failure.
       - name: Run the fast suites under kcov
         run: tests/coverage.sh coverage-report
 

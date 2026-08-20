@@ -8,7 +8,8 @@
 #   outdir       where kcov writes its report (default: $TMPDIR/hi.d-coverage)
 #   runner args  passed straight to test_runner.sh (default: --group fast -
 #                the e2e groups need real backends and add little coverage of
-#                the client-side scripts)
+#                the client-side scripts). The `shellcheck` suite is dropped
+#                from whatever this selects; see $_HI_COV_SKIP below.
 #
 # ---------------------------------------------------------------------------
 # READ THIS BEFORE BELIEVING A NUMBER THIS PRINTS
@@ -76,13 +77,34 @@ mkdir -p "$_HI_COV_DIR/parts"
 # here - the same reason .github/workflows/ci.yml stopped spelling the suites
 # out. `--list-paths` exists for this caller: kcov has to launch the suite
 # script itself, so the name alone is not enough.
+# `shellcheck` is dropped from whatever the selection resolves to. It is a
+# linter sweep, not a code path: it shells out to shellcheck, shfmt and
+# checkbashisms over every file in the tree and runs almost none of hi's own
+# bash, so it traces nothing this report is asking about - while being the
+# slowest suite in the group by an order of magnitude, and slower again under
+# kcov's DEBUG trap. Excluded by name, so naming it explicitly does not sneak
+# it back in and so the rest of --group fast is untouched.
+_HI_COV_SKIP="shellcheck"
+
 declare -a _HI_NAMES=()
 declare -a _HI_PATHS=()
+_HI_COV_DROPPED=""
 while read -r _hi_group _hi_name _hi_path; do
   [ -n "${_hi_path:-}" ] || continue
+  case " $_HI_COV_SKIP " in
+  *" $_hi_name "*)
+    _HI_COV_DROPPED="$_HI_COV_DROPPED $_hi_name"
+    continue
+    ;;
+  esac
   _HI_NAMES+=("$_hi_name")
   _HI_PATHS+=("$_hi_path")
 done < <("$_HI_RUNNER" "$@" --list-paths)
+
+# said out loud rather than quietly narrowed: a report that covered less than
+# it was asked for should say which suite it left out
+[ -z "$_HI_COV_DROPPED" ] ||
+  _hi_cecho " | coverage: not tracing$_HI_COV_DROPPED (a linter sweep - it runs external tools, not hi's bash)" "$YELLOW"
 
 if [ "${#_HI_PATHS[@]}" -eq 0 ]; then
   _hi_cecho " | coverage: no suites selected by: $*" "$RED" >&2

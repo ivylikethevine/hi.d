@@ -14,7 +14,7 @@ This is a hobby project.
 [![Linux](https://img.shields.io/github/actions/workflow/status/ivylikethevine/say-hi/ci.yml?branch=main&label=Linux)](https://github.com/ivylikethevine/say-hi/actions/workflows/ci.yml)
 [![macOS](https://img.shields.io/github/actions/workflow/status/ivylikethevine/say-hi/macos-e2e.yml?branch=main&label=macOS)](https://github.com/ivylikethevine/say-hi/actions/workflows/macos-e2e.yml)
 [![Windows](https://img.shields.io/github/actions/workflow/status/ivylikethevine/say-hi/windows-e2e.yml?branch=main&label=Windows)](https://github.com/ivylikethevine/say-hi/actions/workflows/windows-e2e.yml)
-![ssh payload](https://img.shields.io/badge/ssh_payload-79KB_per_session-4c1)
+![ssh payload](https://img.shields.io/badge/ssh_payload-78KB_per_session-4c1)
 [![package](https://img.shields.io/endpoint?url=https%3A%2F%2Fivylikethevine.github.io%2Fsay-hi%2Fbadges%2Fpackage.json)](https://github.com/ivylikethevine/say-hi/releases)
 [![kcov](https://img.shields.io/endpoint?url=https%3A%2F%2Fivylikethevine.github.io%2Fsay-hi%2Fbadges%2Fcoverage.json)](docs/TESTING.md#coverage-and-profiling)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/ivylikethevine/say-hi/badge)](https://scorecard.dev/viewer/?uri=github.com/ivylikethevine/say-hi)
@@ -187,8 +187,7 @@ has, with the aliases loaded, rather than the full `load.sh`. For ssh targets hi
 connection so it costs no extra authentication, whether a permanent say-hi is already there; if so it uses
 that in place and copies nothing. It does not assume `~/say-hi`: the check reads the `_HI_HOME` line
 `install.sh` wrote into that target's login rc files (or `/etc/profile.d` for a packaged install) and falls
-back to the home directory, so a tree installed anywhere is still found and reused. Each candidate is tried
-under both `say-hi` and the old `hi.d` name, so a target installed before the rename is still recognised.
+back to the home directory, so a tree installed anywhere is still found and reused.
 `hi --doctor` prints the wire size and the unpacked size, labeled.
 
 **_IMPORTANT: Local-only changes MUST stay in `~/.bashrc`, `~/.zshrc`, `~/.config/fish/config.fish`, etc. - anything in `${XDG_CONFIG_HOME:-$HOME/.config}/say-hi/` is copied to every host you say `hi` to._**

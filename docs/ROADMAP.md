@@ -49,16 +49,14 @@ here: git history is the ledger, and this file is only what is left to do.
     entry or file that satisfies it, and the two _Blocked on: v1_ entries point
     at this one instead of at a version number.
 
-- [ ] **Finish the `hi.d` → `say-hi` rename** — _the in-repo half has shipped._
-      The tree resolves as `$_HI_HOME/say-hi`, the config overlay defaults to
+- [ ] **Finish the `hi.d` → `say-hi` rename** — _the whole code half has
+      shipped._ The tree resolves as `$_HI_HOME/say-hi`, the config overlay is
       `~/.config/say-hi`, all four packages are named `say-hi`, the profile hook
       is `/etc/profile.d/say-hi.sh` and the apk key is
-      `packaging/apk/say-hi.rsa.pub`. Both old names are still accepted:
-      `hi.sh`'s permanent-install probe tries `say-hi` then `hi.d` under every
-      candidate home, and `common/core.sh` reads an unmigrated
-      `~/.config/hi.d` where it lies (`scripts/install.sh`'s `overlay_migrate`
-      offers to move it, and `hi --doctor` flags both cases). What is left is
-      three steps no file here can perform.
+      `packaging/apk/say-hi.rsa.pub`. The old name is accepted nowhere — the
+      probe fallback, the overlay fallback and `overlay_migrate` are all out.
+      What is left is three steps no file here can perform; **ticks when all
+      three are done.**
 
   - **Rename the GitHub repo** to `say-hi` (Settings → General → Repository
     name). Every manifest and doc already points at
@@ -74,10 +72,6 @@ here: git history is the ledger, and this file is only what is left to do.
     `ssh://aur@aur.archlinux.org/say-hi.git` and `say-hi-git`. The AUR has no
     rename — it is a new repo and a deletion request for the old one, so do it
     before the first push if at all possible.
-  - **When the fallbacks come out.** They are a migration aid, not a feature,
-    and they are the only places the old name survives on purpose. Drop both a
-    release or two after v1, together with this entry.
-
 - [ ] **Source tarball under the provenance chain** — _Blocked on **Say what
       v1.0.0 means**, above._ Both
       manifests checksum GitHub's auto-generated `/archive/` tarball, the one

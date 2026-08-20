@@ -35,21 +35,9 @@ if [ -z "${_hi_core_loaded:-}" ]; then
   done
   unset _hi_t
   # The overlay's home; an already-set value wins, which is how hi.sh points a
-  # target at its shipped copy. Two names for the same reason hi.sh's remote
-  # probe carries two: the tree was renamed hi.d -> say-hi, and an overlay is
-  # the user's own data - settings, colors, a git history they may have pushed
-  # somewhere - so an unmigrated ~/.config/hi.d keeps being read where it lies
-  # rather than being silently ignored in favour of an empty new directory.
-  # New name first, and it is what a fresh install creates; `hi --install`
-  # offers to move an old one over (scripts/install.sh's overlay_migrate).
+  # target at its shipped copy.
   if [ -z "${_HI_CONFIG_DIR:-}" ]; then
-    _hi_cfg_base="${XDG_CONFIG_HOME:-$HOME/.config}"
-    if [ ! -d "$_hi_cfg_base/say-hi" ] && [ -d "$_hi_cfg_base/hi.d" ]; then
-      _HI_CONFIG_DIR="$_hi_cfg_base/hi.d"
-    else
-      _HI_CONFIG_DIR="$_hi_cfg_base/say-hi"
-    fi
-    unset _hi_cfg_base
+    _HI_CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/say-hi"
   fi
   export _HI_CONFIG_DIR
   # settings ahead of paths.sh, whose gate reads them - hence the spelled path

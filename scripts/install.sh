@@ -522,56 +522,6 @@ function config_prompt_ends() {
 # rather than an anonymous fragment. Any other shebang is replaced rather than
 # left alongside: dash and fish both source this, so sh is the only correct one.
 # config_shell rewrites only its own marker-tagged block, so this line stays.
-# The hi.d -> say-hi rename left existing overlays under the old name. Nothing
-# is broken by leaving one there - common/core.sh resolves $_HI_CONFIG_DIR to
-# an unmigrated ~/.config/hi.d and reads it where it lies - so this is an offer
-# to tidy, not a repair, and declining costs the user nothing.
-#
-# A move, never a merge or a copy: the overlay may be a git repo (overlay_init)
-# with a remote the user pushes to, and `mv` carries the .git with it in one
-# rename. Two overlays at once means they started a new one by hand, and
-# choosing a winner for them is not this script's call.
-function overlay_migrate() {
-  local base old new reply=""
-  base="${XDG_CONFIG_HOME:-$HOME/.config}"
-  old="$base/hi.d"
-  new="$base/say-hi"
-  # only when the old name is the one actually in use: an explicit
-  # $_HI_CONFIG_DIR (hi.sh points targets at a shipped copy) is not ours to move
-  [ -d "$old" ] && [ "$_HI_CONFIG_DIR" = "$old" ] || return 0
-  _hi_h2 "Checking the config overlay"
-  # core.sh only picks the old name when the new one is absent, so this is a
-  # race, not a state - but `mv` onto an existing directory moves *into* it
-  [ -e "$new" ] && {
-    _hi_cecho " both $old and $new exist - leaving both alone" "$YELLOW"
-    return 0
-  }
-  _hi_cecho " your overlay is at $old, under the old tree name" "$YELLOW"
-  if [ "$_HI_ASSUME_YES" != 1 ]; then
-    if [ ! -t 0 ]; then
-      _hi_cecho " leaving it there - it is still read. Re-run with --yes to move it to $new" "$BLUE"
-      return 0
-    fi
-    read -r -p " Move it to $new? [Y/n] " reply || reply=""
-    [ -z "$reply" ] && reply=y
-    [[ "$reply" =~ ^[Yy] ]] || {
-      _hi_cecho " leaving it at $old - it is still read" "$BLUE"
-      return 0
-    }
-  fi
-  mv "$old" "$new" || {
-    _hi_cecho " could not move $old - leaving it there, it is still read" "$RED"
-    return 0
-  }
-  # everything paths.sh derived from the old value is now stale; it is plain
-  # exports, so re-sourcing it is how the rest of this run sees the new home
-  _HI_CONFIG_DIR="$new"
-  export _HI_CONFIG_DIR
-  # shellcheck source=../common/paths.sh
-  source "$_HI_ROOT/common/paths.sh"
-  _hi_cecho " moved your overlay to $new :)" "$GREEN"
-}
-
 # `hi --overlay-init` - version the overlay where it lives. A repo *in*
 # $_HI_CONFIG_DIR versions exactly the files that are the user's, and dodges
 # the checkout's own .git (hi --update reads $_HI_ROOT/.git as "this is a
@@ -904,7 +854,6 @@ fi
 
 # Ahead of everything that reads or writes the overlay, and after the modes
 # that must not touch a user's home (packaging, uninstall) have already exited.
-overlay_migrate
 
 if [ -n "$_HI_OVERLAY_INIT" ]; then
   overlay_init

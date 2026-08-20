@@ -13,14 +13,6 @@ overridden keeps tracking the default the tree ships, so `hi --update` still del
 | `~/.config/say-hi/tmux.conf`   | `misc/tmux.conf` | your tmux config                                                                                                                      |
 | `~/.config/say-hi/aliases.sh`  | -                | your own aliases, sourced **after** `misc/aliases.sh` and `misc/personal.sh` so yours win - additive, never a replacement, and in the same POSIX+fish subset |
 
-**Coming from `hi.d`?** The tree used to be called `hi.d`, and so did this
-directory. An existing `~/.config/hi.d` is still read exactly where it is - hi
-prefers `~/.config/say-hi` and falls back to the old name when only that one
-exists, so nothing breaks by ignoring the rename. `hi --install` offers to move
-it across once (a `mv`, so a `hi --overlay-init` git history comes with it), and
-`hi --doctor` says which one it is reading. The fallback is a migration aid and
-will be dropped a release or two after v1.
-
 This is what keeps configuring say-hi from dirtying the checkout (so `hi --update`'s `git pull` keeps applying
 cleanly), and why the tree never has to be writable at all - it can be root-owned, installed by a package
 manager. All of it rides along to every host you say `hi` to, in its own small archive.

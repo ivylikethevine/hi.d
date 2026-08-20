@@ -29,29 +29,18 @@ source "$_HI_LAUNCHER"
 # scripts/install.sh wrote into a login rc - which is why each fixture writes
 # one rather than relying on the tree being findable.
 
-# _hi_probe_home <name> <tree-parent-relative-path> [tree-name] - a fake $HOME
-# under $_HI_WORKDIR/<name> holding a tree at <path>/<tree-name>, printed. No rc
-# line: the cases that want one add it themselves, so "an installed tree nothing
-# points at" stays a shape the suite can build. <tree-name> defaults to say-hi
-# and is `hi.d` for the cases covering targets installed before the rename.
+# _hi_probe_home <name> <tree-parent-relative-path> - a fake $HOME under
+# $_HI_WORKDIR/<name> holding a tree at <path>/say-hi, printed. No rc line: the
+# cases that want one add it themselves, so "an installed tree nothing points
+# at" stays a shape the suite can build.
 function _hi_probe_home() {
-  local home="$_HI_WORKDIR/$1" tree="$_HI_WORKDIR/$1/${2#/}" name="${3:-say-hi}"
+  local home="$_HI_WORKDIR/$1" tree="$_HI_WORKDIR/$1/${2#/}" name="say-hi"
   rm -rf "$home"
   mkdir -p "$tree/$name/common" "$home/.config/fish"
   : >"$tree/$name/hi.sh"
   chmod +x "$tree/$name/hi.sh"
   : >"$tree/$name/common/paths.sh"
   printf '%s' "$home"
-}
-
-# _hi_probe_add_tree <home> <tree-parent-relative-path> <tree-name> - a second
-# tree beside one _hi_probe_home already built, for the both-names cases
-function _hi_probe_add_tree() {
-  local tree="$1/${2#/}" name="$3"
-  mkdir -p "$tree/$name/common"
-  : >"$tree/$name/hi.sh"
-  chmod +x "$tree/$name/hi.sh"
-  : >"$tree/$name/common/paths.sh"
 }
 
 # what a target would answer, run through a real sh
@@ -112,40 +101,6 @@ function test_remote_probe_is_silent_with_no_tree_at_all() {
   rm -rf "$home"
   mkdir -p "$home"
   [ -z "$(_hi_probe_answer "$home")" ]
-}
-
-# --- the hi.d fallback -------------------------------------------------------
-#
-# The tree was renamed hi.d -> say-hi and the probe reads what a *target* wrote,
-# so it accepts both names. These are the cases that keep that true: dropping
-# the old name would turn every un-updated permanent install into a disposable
-# copy, which is silent - the session still works, it just stops being the
-# target's own tree and starts costing a payload.
-
-function test_remote_probe_finds_an_old_named_tree() {
-  local home
-  home="$(_hi_probe_home probe_old . hi.d)"
-  [ "$(_hi_probe_answer "$home")" = "$home/hi.d" ]
-}
-
-function test_remote_probe_finds_an_old_named_tree_from_bashrc() {
-  local home
-  home="$(_hi_probe_home probe_old_nested opt/nested hi.d)"
-  printf '%-45s %s\n' "export _HI_HOME=\"$home/opt/nested\"" "$_HI_MARKER" >"$home/.bashrc"
-  [ "$(_hi_probe_answer "$home")" = "$home/opt/nested/hi.d" ]
-}
-
-# a half-finished migration: the renamed tree is the one being kept, so it wins
-function test_remote_probe_prefers_the_new_name_when_both_exist() {
-  local home
-  home="$(_hi_probe_home probe_both .)"
-  _hi_probe_add_tree "$home" . hi.d
-  [ "$(_hi_probe_answer "$home")" = "$home/say-hi" ]
-}
-
-# the packaged install's snippet is named after the tree too, so both are read
-function test_remote_probe_reads_the_old_packaging_profile_snippet() {
-  [[ "$(_hi_remote_root_probe)" == */etc/profile.d/hi.d.sh* ]]
 }
 
 # The line install.sh actually writes, marker and padding included - the probe
@@ -398,10 +353,6 @@ function run_hi_remote_tests() {
   _hi_check "Skips a stale export with no tree on it" test_remote_probe_skips_a_path_with_no_tree_on_it
   _hi_check "Silent when nothing is installed" test_remote_probe_is_silent_with_no_tree_at_all
   _hi_check "Looks in the packaging profile snippet" test_remote_probe_reads_the_packaging_profile_snippet
-  _hi_check "Finds a tree still named hi.d" test_remote_probe_finds_an_old_named_tree
-  _hi_check "Finds a nested hi.d named by .bashrc" test_remote_probe_finds_an_old_named_tree_from_bashrc
-  _hi_check "Prefers say-hi when both names exist" test_remote_probe_prefers_the_new_name_when_both_exist
-  _hi_check "Reads the old packaging profile snippet" test_remote_probe_reads_the_old_packaging_profile_snippet
   _hi_check "Reads what install.sh actually wrote" test_remote_probe_reads_what_install_sh_actually_wrote
   _hi_check "Covers every rc in the shell roster" test_remote_probe_covers_every_rc_in_the_roster
   _hi_check "Handles a path with a space in it" test_remote_probe_handles_a_path_with_a_space

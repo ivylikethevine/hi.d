@@ -434,12 +434,7 @@ checkout to derive from - `_hi_remote_root`'s probe asks in this order:
    neither a login nor an interactive shell and sources none of them.
 2. `$HOME`.
 
-Each candidate is then tried under **both** tree names, `say-hi` first and
-`hi.d` second. That is the one place the pre-rename name is still load-bearing
-rather than historical: the probe reads what a _target_ wrote, and a target
-nobody has updated still has `~/hi.d` and an rc line naming it. `/etc/profile.d`
-is read under both names for the same reason. Dropping the old name is a
-migration decision, not a cleanup - `docs/ROADMAP.md` holds it.
+Each candidate is then tried as `<home>/say-hi`.
 
 The first is the point. A curated tree is exactly the one most likely to live
 somewhere else, and a probe that only knew `$HOME/say-hi` made those targets

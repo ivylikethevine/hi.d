@@ -162,7 +162,8 @@ Every username and hostname gets a color deterministically derived from its name
 1. `hi.sh` runs on the client, tars `hi.d/` and sends it to the target, which unpacks it into a `/tmp`
    directory. `$_HI_PAYLOAD` at the top of `hi.sh` is the authoritative allow list - no `.git`, `scripts/`,
    `tests/`, `docs/` or CI. Your overlay (see [Configuration](#configuration)) follows in a second, much
-   smaller archive, landing in a `config/` of its own so your `aliases.sh` stays additive.
+   smaller archive, landing in a `config/` of its own so your `aliases.sh` stays additive. A target that
+   already has its own `hi.d` gets neither: hi loads that tree in place and it reads its own overlay.
 2. Both are base64-armored into one script and written over the **stdin** of an ssh connection the session
    then reuses - not argv, which Linux caps at 128KB however big `ARG_MAX` says it is. That script is what
    `hi` prints the size of on connect, and what the payload badge measures.

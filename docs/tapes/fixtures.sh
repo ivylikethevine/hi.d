@@ -21,8 +21,21 @@ function demo_keypair() {
 
 function demo_sshd_image() {
   # the image is tests/dockerfiles/demo-sshd.Dockerfile; what this function
-  # assembles is its build context - the entrypoint below, and the clean
-  # checkout further down
+  # assembles is its build context - the entrypoint below, the box's own hi
+  # settings, and the clean checkout further down
+
+  # The ssh demo's configuration, and the only one that lives on the target.
+  # hi.sh's permanent-install branch (_say_hi, the $remote_root arm) sets
+  # $_HI_HOME and $_HI_ROOT and stops, leaving core.sh to default
+  # $_HI_CONFIG_DIR to the box's own ~/.config/hi.d - no overlay ships, which
+  # is the point of a permanent install. So this rides in the image, where the
+  # rest of the box's identity already is, and `docker run hi-demo-sshd` alone
+  # is the demo's box rather than one that still needs configuring.
+  demo_settings "$_HI_DEMO_DIR/ssh-target-settings.sh" <<'EOF'
+export _HI_HEADER_TIMESTAMP='0'
+export _HI_HEADER_SYSINFO='0'
+EOF
+
   cat >"$_HI_DEMO_DIR/entrypoint.sh" <<'EOF'
 #!/bin/bash
 set -eu
@@ -78,29 +91,12 @@ Host hi-demo-box
   LogLevel ERROR
 EOF
   # wait for sshd to answer before the tape types anything
-  local ready=0
   for _ in $(seq 1 30); do
-    if ssh -F "$_HI_DEMO_DIR/ssh_config" hi-demo-box true 2>/dev/null; then
-      ready=1
-      break
-    fi
+    ssh -F "$_HI_DEMO_DIR/ssh_config" hi-demo-box true 2>/dev/null && return 0
     sleep 1
   done
-  if [ "$ready" != 1 ]; then
-    echo "sshd never answered on port $port" >&2
-    return 1
-  fi
-  # This demo's configuration, and the only one that has to live on the target.
-  # hi.sh's permanent-install branch (_say_hi, the $remote_root arm) points
-  # $_HI_HOME and $_HI_ROOT at the box's own tree and ships no overlay at all -
-  # deliberately, since a machine with its own hi.d has its own settings too.
-  # So a settings.sh written client-side here would have no effect whatsoever,
-  # and the honest way to show a knob on this demo is to configure the box.
-  docker exec -u hitest hi-demo-ssh sh -c 'mkdir -p "$HOME/.config/hi.d" && printf "%s\n" \
-    "#!/bin/sh" \
-    "# written by docs/tapes/fixtures.sh for the ssh demo only" \
-    "export _HI_HEADER_TIMESTAMP='"'"'0'"'"'" \
-    "export _HI_HEADER_SYSINFO='"'"'0'"'"'" >"$HOME/.config/hi.d/settings.sh"'
+  echo "sshd never answered on port $port" >&2
+  return 1
 }
 
 # a bare shell-only image per flavor, the docker/podman e2e shape. <hostname>
@@ -210,35 +206,47 @@ function up_kube() {
 # line and `export NAME='value'` lines, nothing else - fish sources this file
 # too, and doctor.sh fails a settings.sh that only parses as sh.
 #
-# Body on stdin. No call at all is itself a configuration: demo.tape ships the
-# stock defaults on purpose, as the one shot that shows everything on.
-function demo_settings() {
-  mkdir -p "$_HI_DEMO_DIR/config"
+# Body on stdin, destination optional - the ssh demo's copy is baked into its
+# image instead of the client's overlay dir, and this is the only writer of the
+# format either way. No call at all is itself a configuration: demo.tape ships
+# the stock defaults on purpose, as the one shot that shows everything on.
+function demo_settings() { # [outfile] - body on stdin
+  local out="${1:-$_HI_DEMO_DIR/config/settings.sh}"
+  mkdir -p "$(dirname "$out")"
   {
     printf '#!/bin/sh\n'
     printf '# written by docs/tapes/fixtures.sh for this demo only\n'
     cat
-  } >"$_HI_DEMO_DIR/config/settings.sh"
+  } >"$out"
 }
 
-function client_rc() { # <shell> <user> <hostname> [overlay-dir]
-  local shell="$1" user="$2" host="$3" config="${4:-$_HI_DEMO_DIR/config}" home
+# The rc template's substitutions, in one place rather than once per shell: the
+# three rc *bodies* below differ for real, the sed line never did. Reads
+# client_rc's locals, so it lives with it and nowhere else.
+function rc_sed() { # <outfile> - body on stdin
+  sed -e "s/@USER@/$user/g" -e "s/@HOST@/$host/g" \
+    -e "s#@HOME@#$home#g" -e "s#@ROOT@#$_HI_ROOT#g" \
+    -e "s#@CONFIG@#$_HI_DEMO_DIR/config#g" >"$1"
+}
+
+function client_rc() { # <shell> <user> <hostname>
+  local shell="$1" user="$2" host="$3" home
   home="$(dirname "$_HI_ROOT")"
-  # Every up:* calls this before its demo_settings, so this is the one place
+  # Every up:* calls this before writing its overlay, so this is the one place
   # that can guarantee a demo gets its own configuration and no one else's.
   # Without it a render of demo.tape straight after docker.tape would inherit
-  # docker's overlay from /tmp and quietly stop being the defaults shot.
+  # docker's overlay from /tmp and quietly stop being the defaults shot. The
+  # whole directory, not just settings.sh: `colors` is an overlay file too and
+  # would leak the same way.
+  rm -rf "$_HI_DEMO_DIR/config"
   mkdir -p "$_HI_DEMO_DIR/config"
-  rm -f "$_HI_DEMO_DIR/config/settings.sh"
   # $_HI_HOME/$_HI_ROOT are baked in rather than inherited: vhs starts a bare
   # shell, and on a machine where /usr/bin/hi points at some other install (or
   # a login profile exports its own $_HI_HOME) an inherited one renders the
   # wrong tree - silently, and the GIF is the only place it would show.
   case "$shell" in
   bash)
-    sed -e "s/@USER@/$user/g" -e "s/@HOST@/$host/g" \
-      -e "s#@HOME@#$home#g" -e "s#@ROOT@#$_HI_ROOT#g" \
-      -e "s#@CONFIG@#$config#g" >"$_HI_DEMO_DIR/clientrc.bash" <<'EOF'
+    rc_sed "$_HI_DEMO_DIR/clientrc.bash" <<'EOF'
 export _HI_HOME='@HOME@' _HI_ROOT='@ROOT@'
 export _HI_WHOAMI_CACHE='@USER@' _HI_HOSTNAME_CACHE='@HOST@'
 # Unconditional, and it has to be: generate.sh sources common/core.sh, which
@@ -256,15 +264,10 @@ PROMPT_COMMAND=_hi_demo_ps1
 EOF
     ;;
   zsh)
-    sed -e "s/@USER@/$user/g" -e "s/@HOST@/$host/g" \
-      -e "s#@HOME@#$home#g" -e "s#@ROOT@#$_HI_ROOT#g" \
-      -e "s#@CONFIG@#$config#g" >"$_HI_DEMO_DIR/clientrc.zsh" <<'EOF'
+    rc_sed "$_HI_DEMO_DIR/clientrc.zsh" <<'EOF'
 export _HI_HOME='@HOME@' _HI_ROOT='@ROOT@'
 export _HI_WHOAMI_CACHE='@USER@' _HI_HOSTNAME_CACHE='@HOST@'
-# Unconditional, and it has to be: generate.sh sources common/core.sh, which
-# exports $_HI_CONFIG_DIR, and vhs hands that environment straight to this
-# shell - so anything conditional here would read the renderer's own overlay
-# and silently drop this demo's. Ahead of the rc, which is what sources it.
+# unconditional, for the reason the bash rc spells out
 export _HI_CONFIG_DIR='@CONFIG@'
 source "$_HI_ROOT/shells/zsh.zsh"
 # %n reads $USERNAME, which zsh will not let a script reassign, so both escapes
@@ -275,9 +278,7 @@ PS1="${PS1//\%m/@HOST@}"
 EOF
     ;;
   fish)
-    sed -e "s/@USER@/$user/g" -e "s/@HOST@/$host/g" \
-      -e "s#@HOME@#$home#g" -e "s#@ROOT@#$_HI_ROOT#g" \
-      -e "s#@CONFIG@#$config#g" >"$_HI_DEMO_DIR/clientrc.fish" <<'EOF'
+    rc_sed "$_HI_DEMO_DIR/clientrc.fish" <<'EOF'
 set -gx _HI_HOME '@HOME@'
 set -gx _HI_ROOT '@ROOT@'
 set -gx _HI_WHOAMI_CACHE '@USER@'
@@ -296,13 +297,15 @@ EOF
 
 # The color-preview demo needs no backend at all - just an ssh config with
 # enough shape to be worth previewing, and a colors overlay pinning a few of
-# them. Both live in a throwaway $HOME the tape points at, because that is the
-# lever that works: common/paths.sh assigns $_HI_SSH_CONFIG from $HOME every
-# time it is sourced, so exporting that one is undone before the preview reads
-# it. Getting this right is not neatness: reading the renderer's real
-# ~/.ssh/config would put their hostnames into a committed GIF.
+# them. The two land in different places because they are found in different
+# ways: paths.sh:53 assigns $_HI_SSH_CONFIG from $HOME every time it is
+# sourced, so that one needs a throwaway $HOME the tape exports, while
+# paths.sh:30 reads `colors` out of $_HI_CONFIG_DIR - which is the same overlay
+# dir every other demo writes its settings.sh into. Getting the first one right
+# is not neatness: reading the renderer's real ~/.ssh/config would put their
+# hostnames into a committed GIF.
 function up_colors() {
-  mkdir -p "$_HI_DEMO_DIR/home/.ssh" "$_HI_DEMO_DIR/home/.config/hi.d"
+  mkdir -p "$_HI_DEMO_DIR/home/.ssh"
   cat >"$_HI_DEMO_DIR/home/.ssh/config" <<'EOF'
 # Tags: prod
 Host db-prod web-prod
@@ -322,7 +325,7 @@ Host build-box
 Host bastion
   User root
 EOF
-  cat >"$_HI_DEMO_DIR/home/.config/hi.d/colors" <<'EOF'
+  cat >"$_HI_DEMO_DIR/config/colors" <<'EOF'
 # pins beat the name hash; everything unpinned still resolves on its own
 username,root,red
 hostname,bastion,yellow
@@ -352,9 +355,9 @@ case "${1:-}:${2:-}" in
 # cache-1 too (the same box, reached two ways), while the rest say hi somewhere
 # they are not.
 up:ssh)
-  # No demo_settings: this demo's trimmed header (_HI_HEADER_TIMESTAMP=0 and
-  # _HI_HEADER_SYSINFO=0) is written *on the box* by up_ssh, which is where a
-  # permanent install reads its config from. See the comment there.
+  # No demo_settings here: this demo's trimmed header is baked into the box's
+  # own image, because a permanent install reads its own config and never the
+  # client's overlay. demo_sshd_image says why.
   client_rc bash ivy workshop
   up_ssh
   ;;
@@ -406,10 +409,10 @@ EOF
   up_kube
   ;;
 up:colors)
-  # the one demo whose overlay is not $_HI_DEMO_DIR/config: its configuration is
-  # the colors file up_colors writes into a throwaway $HOME, and the tape still
-  # exports that $HOME itself because paths.sh derives the ssh config from it
-  client_rc bash ivy workshop "$_HI_DEMO_DIR/home/.config/hi.d"
+  # no settings.sh: this demo's configuration is the `colors` overlay up_colors
+  # writes, into the same dir every other demo uses. The tape exports a
+  # throwaway $HOME as well, for the ssh config the preview reads.
+  client_rc bash ivy workshop
   up_colors
   ;;
 up:demo)

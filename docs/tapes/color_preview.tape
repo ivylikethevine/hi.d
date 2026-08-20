@@ -2,18 +2,18 @@
 # colors they actually render in. Render with `vhs docs/tapes/color_preview.tape`
 # from the repo root, with hi on PATH. Manual artifact, reviewed by eye.
 #
-# Its configuration: the colors overlay itself, in a throwaway $HOME - the one
-# demo whose whole subject is a config file rather than a session.
+# Its configuration: a `colors` overlay rather than a settings.sh - the one demo
+# whose whole subject is a config file rather than a session. It lives in the
+# same overlay dir every other demo uses, and the clientrc fixtures.sh writes
+# already points $_HI_CONFIG_DIR there, so nothing below has to.
 #
 # The only tape that needs no backend at all - the preview reads files, not
 # targets, so there is nothing to start and nothing to tear down.
 #
-# docs/tapes/fixtures.sh writes a throwaway $HOME holding the ssh config and the
-# colors overlay. $HOME is exported below because common/paths.sh derives the ssh
-# config from it every time it is sourced; $_HI_CONFIG_DIR is not, because the
-# clientrc fixtures.sh writes already points there. This is not neatness:
-# reading the renderer's own ~/.ssh/config would put their hostnames into a
-# committed GIF.
+# $HOME is exported below, and only $HOME: common/paths.sh derives the ssh
+# config from it every time it is sourced, so a throwaway one is the only way to
+# put demo hostnames in front of the preview. That is not neatness - reading the
+# renderer's own ~/.ssh/config would put their hostnames into a committed GIF.
 
 Output docs/demos/color_preview.gif
 

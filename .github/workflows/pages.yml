@@ -135,6 +135,12 @@ jobs:
           TOTALS: ${{ runner.temp }}/totals/totals
         run: |
           set -euo pipefail
+          # jekyll-build-pages is a *container* action - it runs as root inside
+          # docker, so _site comes back root-owned while this step runs as the
+          # runner user, and a plain mkdir under it is denied. Same ownership
+          # seam the workspace-reclaim step above exists for, reached a
+          # different way, so it gets the same one-line answer.
+          sudo chown -R "$(id -u):$(id -g)" _site
           mkdir -p _site/badges
           passed=""
           # four fields: passed failed skipped selected (tests/test_runner.sh).

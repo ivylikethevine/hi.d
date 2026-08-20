@@ -463,7 +463,7 @@ _hi_cecho "$(_hi_summary_row TOTAL "${#_HI_SELECTED[@]} suite(s)" \
   "$_HI_CASES_PASSED" "$_HI_CASES_FAILED" "$_HI_CASES_SKIPPED" "$_HI_TOTAL_DUR")" "$BRBLUE"
 
 # the same four numbers, for a caller that has to act on them rather than read
-# them - CI compares the pass count with README's tests badge
+# them - pages.yml publishes the pass count as README's tests badge
 [ -n "$_HI_TOTALS_FILE" ] && printf '%s %s %s %s\n' \
   "$_HI_CASES_PASSED" "$_HI_CASES_FAILED" "$_HI_CASES_SKIPPED" "${#_HI_SELECTED[@]}" \
   >"$_HI_TOTALS_FILE"

@@ -11,8 +11,9 @@ set -euo pipefail
 # set so a runner without a UTF-8 locale doesn't get the ASCII fallback
 # (chosen after core.sh is sourced, below)
 
+: "${_HI_HOME:=$(cd -P "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)}"
 # shellcheck source=../../common/core.sh
-source "${_HI_HOME:-$HOME}/hi.d/common/core.sh"
+source "$_HI_HOME/hi.d/common/core.sh"
 # shellcheck source=../test_lib.sh
 source "$_HI_TEST_LIB"
 # shellcheck source=../../common/git_prompt.sh

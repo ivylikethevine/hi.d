@@ -4,7 +4,9 @@
 # armor and quoting survive whatever shell sshd hands the command to. The
 # images cover: bash/dash/zsh/fish logins; bash 3.2 (what macOS ships, and what
 # keeps hi free of bash-4 builtins); a pre-installed hi.d, to prove _say_hi
-# loads it in place rather than shipping a tree; bash-less alpine with only zsh
+# loads it in place rather than shipping a tree, and the same install at a
+# non-default path, which only _hi_remote_root's rc-reading probe can find;
+# bash-less alpine with only zsh
 # with only fish, and with only mksh, for the fallback tiers the plain alpine
 # image never reaches; and that same install plus tmux, for --tmux. The debian base comes
 # from test_lib.sh's _hi_sshd_image, shared with ssh_disconnect_test.sh.
@@ -13,8 +15,9 @@
 # shellcheck disable=SC2329
 set -euo pipefail
 
+: "${_HI_HOME:=$(cd -P "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)}"
 # shellcheck source=../../common/core.sh
-source "${_HI_HOME:-$HOME}/hi.d/common/core.sh"
+source "$_HI_HOME/hi.d/common/core.sh"
 # shellcheck source=../test_lib.sh
 source "$_HI_TEST_LIB"
 
@@ -320,6 +323,15 @@ function run_ssh_tests() {
       -f "$(_hi_dockerfile installed)" "$_HI_ROOT" && _HI_INSTALLED_OK=1
   fi
 
+  # The same tree, installed away from ~/hi.d - the shape _hi_remote_root's
+  # probe exists for. Same build context (the repo) as the image above.
+  _HI_NESTED_OK=0
+  if [ "$_HI_DEBIAN_OK" -eq 1 ]; then
+    _hi_build_image debian-nested "hi-sshtest-debian-nested-$$" "the non-default install path case" \
+      --build-arg "BASE=$_HI_SSHD_IMAGE" \
+      -f "$(_hi_dockerfile installed-nested)" "$_HI_ROOT" && _HI_NESTED_OK=1
+  fi
+
   # the same permanent install, plus tmux, for the --tmux case below
   _HI_TMUX_OK=0
   if [ "$_HI_INSTALLED_OK" -eq 1 ]; then
@@ -426,6 +438,25 @@ function run_ssh_tests() {
       "$(_hi_probe_cmd "$_HI_TEST_MARKER" installed)"
   fi
 
+  # A permanent hi.d that is not at ~/hi.d. Asserted on the *connect path*
+  # twice over, because a session that merely works proves nothing here - hi
+  # copying its payload over would produce one too: $_HI_ROOT has to be the
+  # nested tree, and the transcript has to carry the connect prefix _say_hi
+  # only prints when _hi_remote_root answered. The post-check pins the other
+  # half: nothing was written to ~/hi.d, so the answer came from install.sh's
+  # rc line rather than from a tree that happened to be at the default path.
+  if [ "$_HI_NESTED_OK" -eq 1 ]; then
+    _hi_par_case installed-nested _hi_run_case installed-nested "hi-sshtest-debian-nested-$$" /bin/bash \
+      "$(_hi_probe_cmd "$_HI_TEST_MARKER" installed_nested)" \
+      'test -f /home/hitest/opt/nested/hi.d/.installed_sentinel && ! test -e /home/hitest/hi.d' \
+      'local hi.d install'
+    # and behind a fish login shell, which is where the probe is reached by a
+    # shell that parses none of it - the same trap the installed-fish case
+    # below catches for the default path
+    _hi_par_case installed-nested-fish _hi_run_case installed-nested-fish "hi-sshtest-debian-nested-$$" /usr/bin/fish \
+      "$(_hi_probe_cmd "$_HI_TEST_MARKER" installed_nested)" "" 'local hi.d install'
+  fi
+
   if [ "$_HI_TMUX_OK" -eq 1 ]; then
     if [ "${#_HI_PTY_FORCED[@]}" -eq 0 ]; then
       _hi_skip "[tmux]" "no python3 to drive an interactive pty"
@@ -462,7 +493,8 @@ function run_ssh_tests() {
   # the alpine tags come from the build loop above, so a variant added there
   # is cleaned up without a second list to remember
   docker image rm -f "${_HI_SSH_IMAGES[@]}" \
-    "hi-sshtest-bash32-$$" "hi-sshtest-debian-installed-$$" "hi-sshtest-debian-tmux-$$" >/dev/null 2>&1 || true
+    "hi-sshtest-bash32-$$" "hi-sshtest-debian-installed-$$" "hi-sshtest-debian-nested-$$" \
+    "hi-sshtest-debian-tmux-$$" >/dev/null 2>&1 || true
 
   _hi_suite_end "" \
     "hi's ssh path survived every login shell tested ($_HI_TOTAL cases)" \

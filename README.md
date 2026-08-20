@@ -10,12 +10,12 @@ This is a hobby project.
 
 ---
 
-[![tests](https://img.shields.io/badge/tests-842_passed-4c1)](https://github.com/ivylikethevine/hi.d/actions/workflows/ci.yml)
+[![tests](https://img.shields.io/badge/tests-887_passed-4c1)](https://github.com/ivylikethevine/hi.d/actions/workflows/ci.yml)
 [![Linux](https://img.shields.io/github/actions/workflow/status/ivylikethevine/hi.d/ci.yml?branch=main&label=Linux)](https://github.com/ivylikethevine/hi.d/actions/workflows/ci.yml)
 [![macOS](https://img.shields.io/github/actions/workflow/status/ivylikethevine/hi.d/macos-e2e.yml?branch=main&label=macOS)](https://github.com/ivylikethevine/hi.d/actions/workflows/macos-e2e.yml)
 [![Windows](https://img.shields.io/github/actions/workflow/status/ivylikethevine/hi.d/windows-e2e.yml?branch=main&label=Windows)](https://github.com/ivylikethevine/hi.d/actions/workflows/windows-e2e.yml)
 [![Coverage](https://github.com/ivylikethevine/hi.d/actions/workflows/coverage.yml/badge.svg)](https://github.com/ivylikethevine/hi.d/actions/workflows/coverage.yml)
-![ssh payload](https://img.shields.io/badge/ssh_payload-70KB_per_session-4c1)
+![ssh payload](https://img.shields.io/badge/ssh_payload-73KB_per_session-4c1)
 ![bash](https://img.shields.io/badge/bash-3.2%2B-4EAA25?logo=gnubash&logoColor=white)
 ![license](https://img.shields.io/badge/license-MIT-blue)
 
@@ -162,8 +162,11 @@ Every username and hostname gets a color deterministically derived from its name
 
 The bootstrap is plain POSIX `sh`, so a target with no `bash` still gets a session - the best plain shell it
 has, with the aliases loaded, rather than the full `load.sh`. For ssh targets hi first checks, over the same
-connection so it costs no extra authentication, whether a permanent `~/hi.d` is already there; if so it uses
-that in place and copies nothing. `hi --doctor` prints the wire size and the unpacked size, labeled.
+connection so it costs no extra authentication, whether a permanent hi.d is already there; if so it uses
+that in place and copies nothing. It does not assume `~/hi.d`: the check reads the `_HI_HOME` line
+`install.sh` wrote into that target's login rc files (or `/etc/profile.d` for a packaged install) and falls
+back to `~/hi.d`, so a tree installed anywhere is still found and reused. `hi --doctor` prints the wire size
+and the unpacked size, labeled.
 
 **_IMPORTANT: Local-only changes MUST stay in `~/.bashrc`, `~/.zshrc`, `~/.config/fish/config.fish`, etc. - anything in `${XDG_CONFIG_HOME:-$HOME/.config}/hi.d/` is copied to every host you say `hi` to._**
 

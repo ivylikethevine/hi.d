@@ -16,8 +16,9 @@
 # shellcheck disable=SC2329,SC2016
 set -euo pipefail
 
+: "${_HI_HOME:=$(cd -P "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)}"
 # shellcheck source=../../common/core.sh
-source "${_HI_HOME:-$HOME}/hi.d/common/core.sh"
+source "$_HI_HOME/hi.d/common/core.sh"
 # shellcheck source=../test_lib.sh
 source "$_HI_TEST_LIB"
 
@@ -111,6 +112,10 @@ function test_dead_graft_is_silent_in_bash() {
   [[ "$out" == *probe-ok* ]] && ! grep -qE "$_HI_SHELL_ERROR_RE" <<<"$out"
 }
 
+# $_HI_HOME is what the guard asks for - it never falls back to $HOME, since a
+# guessed tree is how a session ends up reading someone else's (GLOSSARY:
+# HI.33). In a real session hi.sh's preamble has exported it, which is what
+# this passes.
 function test_live_graft_still_runs_in_bash() {
   local out
   _hi_fake_rcs livegraft
@@ -118,9 +123,26 @@ function test_live_graft_still_runs_in_bash() {
   : >"$_HI_FAKE_HOME/hi.d/common/core.sh"
   printf 'echo graft-ran\n' >"$_HI_FAKE_HOME/src.bashrc"
   configure_files
-  out="$(env -i HOME="$_HI_FAKE_HOME" TERM=dumb PATH="$PATH" \
+  out="$(env -i HOME="$_HI_FAKE_HOME" TERM=dumb PATH="$PATH" _HI_HOME="$_HI_FAKE_HOME" \
     bash --rcfile "$_HI_FAKE_HOME/.bashrc" -ic 'true' 2>&1)"
   [[ "$out" == *graft-ran* ]]
+}
+
+# The bystander HI.24 names: a shell opened mid-session with none of the
+# session's env. The tree is right there at $HOME/hi.d and the graft still has
+# to stay out of it - that shell was never given a tree, and picking one for it
+# is the guess this guard exists to refuse.
+function test_live_graft_is_silent_without_a_tree_in_the_env() {
+  local out
+  _hi_fake_rcs bystander
+  mkdir -p "$_HI_FAKE_HOME/hi.d/common"
+  : >"$_HI_FAKE_HOME/hi.d/common/core.sh"
+  printf 'echo graft-ran\n' >"$_HI_FAKE_HOME/src.bashrc"
+  configure_files
+  out="$(env -i HOME="$_HI_FAKE_HOME" TERM=dumb PATH="$PATH" \
+    bash --rcfile "$_HI_FAKE_HOME/.bashrc" -ic 'echo probe-ok' 2>&1)"
+  [[ "$out" == *probe-ok* ]] && [[ "$out" != *graft-ran* ]] &&
+    ! grep -qE "$_HI_SHELL_ERROR_RE" <<<"$out"
 }
 
 function test_dead_graft_is_silent_in_fish() {
@@ -316,6 +338,7 @@ function run_load_tests() {
   _hi_h2 "Testing: the crash guard"
   _hi_check "A dead graft is silent in bash" test_dead_graft_is_silent_in_bash
   _hi_check "A live tree still runs the graft" test_live_graft_still_runs_in_bash
+  _hi_check "A bystander shell with no tree in its env is left alone" test_live_graft_is_silent_without_a_tree_in_the_env
   _hi_check_requires fish "A dead graft is silent in fish" test_dead_graft_is_silent_in_fish
 
   _hi_h2 "Testing: clean_all"

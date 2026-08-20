@@ -26,8 +26,9 @@ set -euo pipefail
 # "reached via hi" from "the machine hi.d lives on"
 export _HI_REMOTE_SESSION=1
 
+: "${_HI_HOME:=$(cd -P "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 # shellcheck source=./common/core.sh
-source "${_HI_HOME:-$HOME}/hi.d/common/core.sh"
+source "$_HI_HOME/hi.d/common/core.sh"
 # shellcheck source=./common/header.sh
 source "$_HI_HEADER"
 
@@ -63,11 +64,11 @@ function configure_files() {
     # shellcheck disable=SC2016 # single quotes are the point: the guard expands at shell start, not graft time
     case "$shell" in
     fish)
-      open='set -l _hi_tree $HOME'$'\n''test -n "$_HI_HOME"; and set _hi_tree $_HI_HOME'$'\n''if test -f $_hi_tree/hi.d/common/core.sh'
+      open='if set -q _HI_HOME; and test -f $_HI_HOME/hi.d/common/core.sh'
       body="$open"$'\n'"$(<"$src")"$'\n'"end"
       ;;
     *)
-      open='if [ -f "${_HI_HOME:-$HOME}/hi.d/common/core.sh" ]; then'
+      open='if [ -f "${_HI_HOME:-}/hi.d/common/core.sh" ]; then'
       body="$open"$'\n'"$(<"$src")"$'\n'"fi"
       ;;
     esac

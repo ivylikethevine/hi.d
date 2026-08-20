@@ -4,8 +4,9 @@
 # misc/colors. Run via `hi --color-preview`.
 set -euo pipefail
 
+: "${_HI_HOME:=$(cd -P "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 # shellcheck source=../common/core.sh
-source "${_HI_HOME:-$HOME}/hi.d/common/core.sh"
+source "$_HI_HOME/hi.d/common/core.sh"
 # shellcheck source=./table.sh
 source "$_HI_ROOT/scripts/table.sh"
 

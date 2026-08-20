@@ -3,16 +3,30 @@
 # Runs on the client - copies hi.d to the target and chainloads load.sh there.
 set -euo pipefail # must be disabled after our code (this file is part of the interactive shell - any error would close the session)
 
-# $_HI_HOME is the directory *containing* hi.d and defaults to $HOME. Checked
-# before the source, because bash's own "No such file or directory" names a
-# path nobody typed - which is what a checkout outside $HOME looks like the
-# moment the export is missing. No _hi_cecho: core.sh is the file that's gone.
-[ -r "${_HI_HOME:-$HOME}/hi.d/common/core.sh" ] || {
-  echo "hi: no hi.d at ${_HI_HOME:-$HOME}/hi.d - set _HI_HOME to the directory that holds it" >&2
+# $_HI_HOME is the directory *containing* hi.d, derived from this script rather
+# than guessed. The symlink walk is what makes that work from $_HI_LINK:
+# /usr/bin/hi points at <prefix>/hi.d/hi.sh, and the unresolved path answers
+# /usr. GLOSSARY: HI.33
+if [ -z "${_HI_HOME:-}" ]; then
+  _hi_self="${BASH_SOURCE[0]}"
+  while [ -L "$_hi_self" ]; do
+    _hi_self_dir="$(cd -P "$(dirname "$_hi_self")" && pwd)"
+    _hi_self="$(readlink "$_hi_self")"
+    [[ $_hi_self == /* ]] || _hi_self="$_hi_self_dir/$_hi_self"
+  done
+  _HI_HOME="$(cd -P "$(dirname "$_hi_self")/.." && pwd)"
+  unset _hi_self _hi_self_dir
+fi
+export _HI_HOME
+# Checked before the source, because bash's own "No such file or directory"
+# names a path nobody typed - which is what a tree that is not laid out as
+# $_HI_HOME/hi.d looks like. No _hi_cecho: core.sh is the file that's gone.
+[ -r "$_HI_HOME/hi.d/common/core.sh" ] || {
+  echo "hi: no hi.d at $_HI_HOME/hi.d - set _HI_HOME to the directory that holds it" >&2
   exit 1
 }
 # shellcheck source=./common/core.sh
-source "${_HI_HOME:-$HOME}/hi.d/common/core.sh"
+source "$_HI_HOME/hi.d/common/core.sh"
 
 _HI_RELEASE="${_HI_RELEASE:-}"
 
@@ -168,11 +182,32 @@ function _hi_ctl_close() {
   rm -f "$ctl_path" 2>/dev/null || true
 }
 
+# The sh script _hi_remote_root runs on the target: the path of a permanent
+# hi.d there, or nothing. Candidates come from what install.sh wrote into the
+# login rc files, read as *files* (`sh -c` over ssh sources none of them),
+# then $HOME/hi.d. Its own function so a suite can run it without an ssh hop.
+# GLOSSARY: HI.33 - the candidate order, the two seds, and what `--tmux` gets
+# out of it
+function _hi_remote_root_probe() {
+  cat <<'PROBE'
+_c=$(for _f in "$HOME/.bashrc" "$HOME/.zshrc" "$HOME/.config/fish/config.fish" /etc/profile.d/hi.d.sh; do
+  [ -f "$_f" ] && sed -n -e 's/^[[:space:]]*export  *_HI_HOME=//p' -e 's/^[[:space:]]*set -gx  *_HI_HOME  *//p' "$_f"
+done | sed -e 's/^"\([^"]*\)".*$/\1/' -e 's/[[:space:]]*#.*$//' -e 's/[[:space:]]*$//')
+IFS='
+'
+for _h in $_c "$HOME"; do
+  [ -n "$_h" ] && [ -x "$_h/hi.d/hi.sh" ] && [ -f "$_h/hi.d/common/paths.sh" ] && {
+    printf "%s" "$_h/hi.d"
+    exit 0
+  }
+done
+PROBE
+}
+
 # Prints the path of a permanent hi.d on $DOMAIN, if any
-# shellcheck disable=SC2016 # the probe's variables are the target's to expand
 function _hi_remote_root() {
   local out
-  out="$(_hi_ssh_sh '_r="$HOME/hi.d"; [ -x "$_r/hi.sh" ] && [ -f "$_r/common/paths.sh" ] && printf "%s" "$_r"' \
+  out="$(_hi_ssh_sh "$(_hi_remote_root_probe)" \
     "$@" -o ConnectTimeout=5 2>/dev/null)" || out=""
   printf '%s' "$out"
 }

@@ -16,8 +16,9 @@
 # shellcheck disable=SC2329,SC2317,SC2016
 set -euo pipefail
 
+: "${_HI_HOME:=$(cd -P "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)}"
 # shellcheck source=../../common/core.sh
-source "${_HI_HOME:-$HOME}/hi.d/common/core.sh"
+source "$_HI_HOME/hi.d/common/core.sh"
 # shellcheck source=../test_lib.sh
 source "$_HI_TEST_LIB"
 # shellcheck source=../../hi.sh
@@ -218,6 +219,120 @@ function test_resolve_backend_prints_nothing_without_any_cli() {
 }
 
 # an interactive session chainloads load.sh then calls load()
+# --- _hi_remote_root's probe -------------------------------------------------
+#
+# The probe runs on the *target*, under whatever `sh` is there, so these cases
+# run it the same way: a real `sh -c` against a fake $HOME rather than the
+# bash this suite is written in. What it has to answer is where a permanent
+# hi.d is, and the only durable statement of that is the line
+# scripts/install.sh wrote into a login rc - which is why each fixture writes
+# one rather than relying on the tree being findable.
+
+# _hi_probe_home <name> <tree-parent-relative-path> - a fake $HOME under
+# $_HI_WORKDIR/<name> holding a hi.d at <path>/hi.d, printed. No rc line: the
+# cases that want one add it themselves, so "an installed tree nothing points
+# at" stays a shape the suite can build.
+function _hi_probe_home() {
+  local home="$_HI_WORKDIR/$1" tree="$_HI_WORKDIR/$1/${2#/}"
+  rm -rf "$home"
+  mkdir -p "$tree/hi.d/common" "$home/.config/fish"
+  : >"$tree/hi.d/hi.sh"
+  chmod +x "$tree/hi.d/hi.sh"
+  : >"$tree/hi.d/common/paths.sh"
+  printf '%s' "$home"
+}
+
+# what a target would answer, run through a real sh
+function _hi_probe_answer() {
+  HOME="$1" sh -c "$(_hi_remote_root_probe)"
+}
+
+function test_remote_probe_finds_the_default_tree() {
+  local home
+  home="$(_hi_probe_home probe_default .)"
+  [ "$(_hi_probe_answer "$home")" = "$home/hi.d" ]
+}
+
+# the whole point: a curated tree somewhere else, named by the export
+# install.sh put in .bashrc, is found rather than copied over
+function test_remote_probe_finds_a_nested_tree_from_bashrc() {
+  local home
+  home="$(_hi_probe_home probe_bashrc opt/nested)"
+  printf 'export _HI_HOME="%s/opt/nested"\n' "$home" >"$home/.bashrc"
+  [ "$(_hi_probe_answer "$home")" = "$home/opt/nested/hi.d" ]
+}
+
+function test_remote_probe_reads_the_fish_dialect() {
+  local home
+  home="$(_hi_probe_home probe_fish opt/nested)"
+  printf 'set -gx _HI_HOME "%s/opt/nested"\n' "$home" >"$home/.config/fish/config.fish"
+  [ "$(_hi_probe_answer "$home")" = "$home/opt/nested/hi.d" ]
+}
+
+function test_remote_probe_reads_the_zsh_rc() {
+  local home
+  home="$(_hi_probe_home probe_zsh opt/nested)"
+  printf 'export _HI_HOME="%s/opt/nested"\n' "$home" >"$home/.zshrc"
+  [ "$(_hi_probe_answer "$home")" = "$home/opt/nested/hi.d" ]
+}
+
+# $HOME/hi.d stays the fallback, so a target that says nothing still resolves
+function test_remote_probe_falls_back_to_home_when_the_rc_says_nothing() {
+  local home
+  home="$(_hi_probe_home probe_fallback .)"
+  printf 'export PATH="$PATH:/nowhere"\n' >"$home/.bashrc"
+  [ "$(_hi_probe_answer "$home")" = "$home/hi.d" ]
+}
+
+# a stale export outliving the tree it named must not be the answer, and must
+# not stop the fallback from being one
+function test_remote_probe_skips_a_path_with_no_tree_on_it() {
+  local home
+  home="$(_hi_probe_home probe_stale .)"
+  printf 'export _HI_HOME="%s/gone"\n' "$home" >"$home/.bashrc"
+  [ "$(_hi_probe_answer "$home")" = "$home/hi.d" ]
+}
+
+# nothing installed anywhere is an empty answer, which is what sends hi down
+# the payload path
+function test_remote_probe_is_silent_with_no_tree_at_all() {
+  local home="$_HI_WORKDIR/probe_none"
+  rm -rf "$home"
+  mkdir -p "$home"
+  [ -z "$(_hi_probe_answer "$home")" ]
+}
+
+# The line install.sh actually writes, marker and padding included - the probe
+# reads real rc files, so the shape config_shell pads onto them is the shape
+# that has to parse. A hand-written unquoted export works too.
+function test_remote_probe_reads_the_marker_padded_line() {
+  local home
+  home="$(_hi_probe_home probe_marker opt/nested)"
+  printf '%-45s %s\n' "export _HI_HOME=\"$home/opt/nested\"" "$_HI_MARKER" >"$home/.bashrc"
+  [ "$(_hi_probe_answer "$home")" = "$home/opt/nested/hi.d" ]
+}
+
+function test_remote_probe_reads_an_unquoted_export() {
+  local home
+  home="$(_hi_probe_home probe_unquoted opt/nested)"
+  printf 'export _HI_HOME=%s/opt/nested\n' "$home" >"$home/.bashrc"
+  [ "$(_hi_probe_answer "$home")" = "$home/opt/nested/hi.d" ]
+}
+
+# a packaged install writes no rc line anywhere - /etc/profile.d is the only
+# place it can say where the tree went, so the probe reads that too
+function test_remote_probe_reads_the_packaging_profile_snippet() {
+  [[ "$(_hi_remote_root_probe)" == */etc/profile.d/hi.d.sh* ]]
+}
+
+# an install path with a space in it survives the candidate list
+function test_remote_probe_handles_a_path_with_a_space() {
+  local home
+  home="$(_hi_probe_home probe_space "opt/my trees")"
+  printf 'export _HI_HOME="%s/opt/my trees"\n' "$home" >"$home/.bashrc"
+  [ "$(_hi_probe_answer "$home")" = "$home/opt/my trees/hi.d" ]
+}
+
 function test_bootloader_calls_load_for_a_session() {
   local out
   out="$(CMDARG="" _hi_bootloader)"
@@ -1004,6 +1119,19 @@ function run_hi_tests() {
   _hi_check "Fallback rc appends the command" test_fallback_rc_appends_the_command
   _hi_check "Fallback rc sources settings before paths" test_fallback_rc_sources_settings_before_paths
   _hi_check "Fallback rc points at the overlay config dir" test_fallback_rc_points_config_dir_at_the_overlay
+
+  _hi_h2 "Testing: _hi_remote_root's target-side probe"
+  _hi_check "Finds a tree at the default \$HOME/hi.d" test_remote_probe_finds_the_default_tree
+  _hi_check "Finds a nested tree named by .bashrc" test_remote_probe_finds_a_nested_tree_from_bashrc
+  _hi_check "Reads fish's set -gx dialect" test_remote_probe_reads_the_fish_dialect
+  _hi_check "Reads .zshrc too" test_remote_probe_reads_the_zsh_rc
+  _hi_check "Falls back to \$HOME when nothing says" test_remote_probe_falls_back_to_home_when_the_rc_says_nothing
+  _hi_check "Reads install.sh's marker-padded line" test_remote_probe_reads_the_marker_padded_line
+  _hi_check "Reads a hand-written unquoted export" test_remote_probe_reads_an_unquoted_export
+  _hi_check "Skips a stale export with no tree on it" test_remote_probe_skips_a_path_with_no_tree_on_it
+  _hi_check "Silent when nothing is installed" test_remote_probe_is_silent_with_no_tree_at_all
+  _hi_check "Looks in the packaging profile snippet" test_remote_probe_reads_the_packaging_profile_snippet
+  _hi_check "Handles a path with a space in it" test_remote_probe_handles_a_path_with_a_space
 
   _hi_h2 "Testing: remote shell handoff"
   _hi_check "The bash handoff is explicitly interactive" test_remote_suffix_forces_an_interactive_bash

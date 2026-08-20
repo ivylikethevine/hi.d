@@ -5,8 +5,9 @@
 # check itself as it will actually print. Run via `hi --packages-preview`.
 set -euo pipefail
 
+: "${_HI_HOME:=$(cd -P "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 # shellcheck source=../common/core.sh
-source "${_HI_HOME:-$HOME}/hi.d/common/core.sh"
+source "$_HI_HOME/hi.d/common/core.sh"
 # The renderer this previews, reused rather than reimplemented - check_line is
 # what paints every row below, so the preview cannot drift from the header.
 # Sourcing header.sh only defines functions.

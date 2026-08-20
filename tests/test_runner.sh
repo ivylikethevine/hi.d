@@ -44,6 +44,7 @@ if ! declare -p _HI_TESTS >/dev/null 2>&1; then
     "fast:tmux:shells/tmux_test.sh"
     "fast:shellcheck:shells/shellcheck_test.sh"
     "fast:install:scripts/install_test.sh"
+    "fast:install_location:scripts/install_location_test.sh"
     "fast:packaging:scripts/packaging_test.sh"
     "fast:hi:shells/hi_test.sh"
     "fast:header:common/header_test.sh"

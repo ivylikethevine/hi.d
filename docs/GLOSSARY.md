@@ -50,6 +50,7 @@ file doesn't define. This file never ships (the payload is `$_HI_PAYLOAD` in
 - [HI.30 indirect invocation](#hi30-indirect-invocation)
 - [HI.31 porcelain branch.oid](#hi31-porcelain-branchoid)
 - [HI.32 starship deference](#hi32-starship-deference)
+- [HI.33 derived tree location](#hi33-derived-tree-location)
 
 ## HI.01 empty-array guard
 
@@ -279,7 +280,8 @@ points at is gone - otherwise every shell the user opens from then on errors
 at its first source line, and in a container sharing `$HOME` (distrobox) that
 is the *host's* rc file. The guard re-resolves at shell start, exactly as the
 graft's own paths do, so it also silences a bystander shell opened
-mid-session with none of the session's env.
+mid-session with none of the session's env - it asks for `$_HI_HOME` and
+stops when there is none, rather than falling back to `$HOME` (HI.33).
 
 ## HI.25 session-shell ranking
 
@@ -366,3 +368,62 @@ the target has it, keeping hi's header and aliases. `common/core.sh`'s
 `shells/bash.sh` and `shells/zsh.zsh` each `eval` their own `starship init`
 behind it and skip building hi's PS1. Absent starship, the setting is ignored
 silently.
+
+## HI.33 derived tree location
+
+`$_HI_HOME` is the directory *containing* `hi.d`, and every file that needs the
+tree derives it from its own path rather than defaulting to `$HOME`. The
+default was a guess that is right for a standard install and wrong everywhere
+else - and when it was wrong it did not fail, it silently read *another tree*.
+Both platform e2e jobs spent their first real run sourcing a
+`/Users/runner/hi.d` that was never there.
+
+Each dialect asks the question its own way, and each asks it only when
+`$_HI_HOME` is unset, so an outer layer's export (`hi.sh`'s ssh preamble,
+`load.sh`, the rc line `scripts/install.sh` writes) still wins and costs no
+fork:
+
+| where | how |
+| --- | --- |
+| bash (`common/core.sh`, `common/header.sh`, `shells/bash.sh`, `scripts/`, `tests/`) | `${BASH_SOURCE[0]}`, then `cd -P .. && pwd` |
+| `hi.sh` | the same, behind a `readlink` walk - `$_HI_LINK` is `/usr/bin/hi`, and the unresolved path answers `/usr` |
+| zsh (`shells/zsh.zsh`, and `common/core.sh` reached through it) | `${(%):-%x}` with zsh's `:A:h` modifiers; zsh has no `$BASH_SOURCE`, and bash cannot parse `%x`, so core.sh's arm is `eval`'d |
+| fish (`shells/config.fish`) | `(cd (status dirname)/../..; and pwd)` |
+
+`common/core.sh`'s zsh arm is `eval`'d for one reason: bash reads `${(%):-%x}`
+as a bad substitution, and the file has to *parse* in both shells whichever
+one is running it.
+
+Two places keep a fallback, and both say so out loud rather than guessing.
+`hi.sh` prints `set _HI_HOME to the directory that holds it` and exits when the
+derived path holds no tree. And on a *target* - the one machine with no
+checkout to derive from - `_hi_remote_root`'s probe asks in this order:
+
+1. `export _HI_HOME=` / `set -gx _HI_HOME` in `~/.bashrc`, `~/.zshrc`,
+   `~/.config/fish/config.fish`, and `/etc/profile.d/hi.d.sh` for a packaged
+   install. Read as *files*: the probe runs under `sh -c` over ssh, which is
+   neither a login nor an interactive shell and sources none of them.
+2. `$HOME/hi.d`.
+
+The first is the point. A curated tree is exactly the one most likely to live
+somewhere else, and a probe that only knew `$HOME/hi.d` made those targets
+invisible - hi copied its payload over a checkout already sitting there, the
+slow path, silently. `--tmux` rides on the same answer, since `load.sh` refuses
+it on a disposable tree.
+
+Two details in that probe. Its `sed` uses separate `-e` expressions rather than
+one with `\(a\|b\)`, because BRE alternation is a GNU extension and BSD sed is
+a target hi has to answer on; and a second `sed` unwraps the value, because
+`config_shell` writes the path quoted *and* pads a `# added by hi during
+install` marker onto every line it owns. A quoted value is taken as-is (a `#`
+inside it survives) and only an unquoted one has a trailing comment stripped.
+`IFS` is a newline for the candidate loop, so an install directory with a
+space in it is still one candidate.
+
+The rc grafts (HI.24) are the one shape that cannot derive: `load.sh` inlines
+hi's rc *into someone else's rc*, where `$BASH_SOURCE` is that rc. They are
+wrapped in a guard that requires `$_HI_HOME` to be set - in a session it always
+is, and outside one there is no tree to source.
+
+`tests/shells/shellcheck_test.sh`'s `lint_home_default` greps the tree for the
+retired spellings, the way it already greps for bash-4 constructs.

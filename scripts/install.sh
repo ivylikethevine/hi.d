@@ -208,13 +208,16 @@ function strip_marker() {
   config_shell "$name" "$target"
 }
 
-# Only emit an _HI_HOME export when hi.d isn't at $HOME/hi.d; every consumer
-# already defaults it to $HOME. $2 overrides which home is meant, for the
-# /etc/profile.d snippet packaging mode writes - there the answer is the
-# package's prefix, not where this script happens to be running from.
+# The rc line that states where hi.d is. Written for every install, not only
+# for one outside $HOME - "$HOME is a safe default" was the half of that rule
+# GLOSSARY: HI.33 retired. It is now the one place a *new* process can read the
+# answer without a tree to derive it from: a login shell, tmux's
+# update-environment, hi.sh's _hi_remote_root probing this machine from another
+# one. $2 overrides which home is meant, for the /etc/profile.d snippet
+# packaging mode writes: there the answer is the package's prefix, not where
+# this script happens to be running from.
 function tmpdir_line() {
   local home="${2:-$_HI_HOME}"
-  [ "$home" = "$HOME" ] && return 0
   case "$1" in
   fish) printf 'set -gx _HI_HOME "%s"' "$home" ;;
   *) printf 'export _HI_HOME="%s"' "$home" ;;
@@ -788,16 +791,14 @@ function install_tree() {
     _hi_cecho " $mandir/hi.1.gz :)" "$GREEN"
   fi
 
-  # Every shell needs $_HI_HOME before it sources anything, and a package can't
-  # rewrite the user's rc files to say so - this is the one place it can put it
-  # that every login shell reads. Empty (and skipped) for a $HOME prefix, which
-  # is the one case every consumer already defaults correctly.
+  # A package can't rewrite the user's rc files to say where it put the tree,
+  # and this is the one place it can put it that every login shell reads. The
+  # prefix, not $_HI_HOME: the tree this script is running from is the build
+  # checkout, and the line has to name where the package lands.
   line="$(tmpdir_line sh "$_HI_PREFIX")"
-  if [ -n "$line" ]; then
-    mkdir -p "$(dirname "$profile")"
-    printf '#!/bin/sh\n# added by hi.d during packaging\n%s\n' "$line" >"$profile"
-    _hi_cecho " $profile :)" "$GREEN"
-  fi
+  mkdir -p "$(dirname "$profile")"
+  printf '#!/bin/sh\n# added by hi.d during packaging\n%s\n' "$line" >"$profile"
+  _hi_cecho " $profile :)" "$GREEN"
 }
 
 # lets tests/scripts/install_test.sh `source` this file to reach the functions above

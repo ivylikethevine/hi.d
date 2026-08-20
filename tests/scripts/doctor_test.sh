@@ -10,8 +10,9 @@
 # shellcheck disable=SC2329,SC2317
 set -euo pipefail
 
+: "${_HI_HOME:=$(cd -P "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)}"
 # shellcheck source=../../common/core.sh
-source "${_HI_HOME:-$HOME}/hi.d/common/core.sh"
+source "$_HI_HOME/hi.d/common/core.sh"
 # shellcheck source=../test_lib.sh
 source "$_HI_TEST_LIB"
 # doctor's own hatch stops it before it reports anything; sourcing hands over
@@ -39,14 +40,16 @@ function _hi_doctor_shims() {
     printf '#!/bin/sh\nexit 1\n' >"$dir/podman"
 
     # connect ok; -O teardown ok; the install probe answers per $HI_FAKE_ROOT;
-    # the tool-inventory loop answers per $HI_FAKE_TOOLS
+    # the tool-inventory loop answers per $HI_FAKE_TOOLS. Each is matched on a
+    # string only that one script contains - /etc/profile.d/hi.d.sh is in
+    # hi.sh's _hi_remote_root_probe and nowhere else it could be confused with.
     cat >"$dir/ssh" <<'EOF'
 #!/bin/sh
 for a in "$@"; do
   [ "$a" = -O ] && exit 0
   [ "$a" = true ] && exit 0
   case "$a" in
-  *'_r="$HOME/hi.d"'*) printf '%s' "${HI_FAKE_ROOT:-}"; exit 0 ;;
+  */etc/profile.d/hi.d.sh*) printf '%s' "${HI_FAKE_ROOT:-}"; exit 0 ;;
   *'for c in base64'*) printf '%s' "${HI_FAKE_TOOLS:-}"; exit 0 ;;
   esac
 done

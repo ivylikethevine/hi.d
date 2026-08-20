@@ -7,8 +7,23 @@ set -euo pipefail # off again at the end: an error must not close an interactive
 if [ -z "${_hi_core_loaded:-}" ]; then
   _hi_core_loaded=1
 
-  # `:=` only when unset, so an outer layer's export (hi.sh, load.sh) survives
-  : "${_HI_HOME:=$HOME}"
+  # Where the tree is, from this file's own path rather than guessed. Only when
+  # unset, so an outer export (hi.sh, load.sh, install.sh's rc line) survives
+  # and costs no fork. GLOSSARY: HI.33 - why not $HOME, and why zsh's arm is
+  # eval'd
+  if [ -z "${_HI_HOME:-}" ]; then
+    if [ -n "${ZSH_VERSION:-}" ]; then
+      eval '_hi_self=${(%):-%x}'
+    else
+      _hi_self="${BASH_SOURCE[0]}"
+    fi
+    case "$_hi_self" in
+    */*) _hi_self="${_hi_self%/*}" ;;
+    *) _hi_self="." ;;
+    esac
+    _HI_HOME="$(cd -P "$_hi_self/../.." && pwd)"
+    unset _hi_self
+  fi
   export _HI_HOME
   # GLOSSARY: HI.07 + HI.04. List shared with
   # _hi_fallback_rc; config.fish keeps its own copy.

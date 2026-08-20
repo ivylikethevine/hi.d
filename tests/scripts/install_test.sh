@@ -8,8 +8,9 @@
 # shellcheck disable=SC2329
 set -euo pipefail
 
+: "${_HI_HOME:=$(cd -P "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)}"
 # shellcheck source=../../common/core.sh
-source "${_HI_HOME:-$HOME}/hi.d/common/core.sh"
+source "$_HI_HOME/hi.d/common/core.sh"
 # shellcheck source=../test_lib.sh
 source "$_HI_TEST_LIB"
 
@@ -307,10 +308,13 @@ function test_setting_enabled_respects_custom_off_value() {
   ! setting_enabled _HI_HEADER_TIMESTAMP "$target" 0
 }
 
-function test_tmpdir_line_empty_when_home_matches() {
+# Written even for a tree at the default location: nothing defaults to $HOME
+# any more, and a new process with no tree to derive from reads this line or
+# nothing at all (GLOSSARY: HI.33)
+function test_tmpdir_line_states_the_tree_even_at_home() {
   local out
   out="$(_HI_HOME="$HOME" tmpdir_line sh)"
-  [ -z "$out" ]
+  [ "$out" = "export _HI_HOME=\"$HOME\"" ]
 }
 
 function test_tmpdir_line_posix_variant() {
@@ -761,7 +765,7 @@ function run_install_tests() {
   _hi_check "Respects a custom off value" test_setting_enabled_respects_custom_off_value
 
   _hi_h2 "Testing: tmpdir_line"
-  _hi_check "Empty when _HI_HOME == HOME" test_tmpdir_line_empty_when_home_matches
+  _hi_check "States the tree even at \$HOME" test_tmpdir_line_states_the_tree_even_at_home
   _hi_check "Posix export line" test_tmpdir_line_posix_variant
   _hi_check "Fish set -gx line" test_tmpdir_line_fish_variant
 

@@ -95,7 +95,15 @@ jobs:
       # above it, and a hand-written number goes stale. This is the ubuntu count
       # on purpose: macOS legitimately skips a handful of cases and lints fewer
       # files, so there is no single figure both jobs could carry.
+      #
+      # Advisory, not a gate: the number is documentation, and a PR that adds a
+      # test is not broken for having a stale badge - failing the run there
+      # told contributors their change was wrong when the only thing wrong was
+      # a README line. The annotation names the number to write instead, so the
+      # nudge is still there; `continue-on-error` covers the rest of the step
+      # too, so a missing totals file is advisory rather than a red run.
       - name: The tests badge still matches
+        continue-on-error: true
         env:
           TOTALS: ${{ runner.temp }}/totals
         run: |
@@ -103,12 +111,12 @@ jobs:
           read -r passed _ _ _ <"$TOTALS"
           badge="$(sed -n 's/.*badge\/tests-\([0-9]*\)_passed.*/\1/p' README.md | head -1)"
           if [ -z "$badge" ]; then
-            echo "::error::README.md has no tests-<n>_passed badge to check"
-            exit 1
+            echo "::warning::README.md has no tests-<n>_passed badge to check"
+            exit 0
           fi
           if [ "$badge" != "$passed" ]; then
-            echo "::error::README tests badge says $badge, the fast group passed $passed"
-            exit 1
+            echo "::warning::README tests badge says $badge, the fast group passed $passed - update the badge to tests-${passed}_passed"
+            exit 0
           fi
           echo "tests badge agrees with the run: $passed passed"
 

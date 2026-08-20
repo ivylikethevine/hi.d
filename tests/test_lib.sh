@@ -16,8 +16,9 @@ set -euo pipefail
 export XDG_CONFIG_HOME="${TMPDIR:-/tmp}/hi.testcfg.$$"
 export _HI_CONFIG_DIR="$XDG_CONFIG_HOME/hi.d"
 
+: "${_HI_HOME:=$(cd -P "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 # shellcheck source=../common/core.sh
-source "${_HI_HOME:-$HOME}/hi.d/common/core.sh"
+source "$_HI_HOME/hi.d/common/core.sh"
 
 # Scratch dir every suite works in, plus the ledger of everything its exit trap
 # has to take away again: containers, docker networks, and processes a case
@@ -885,6 +886,9 @@ function _hi_host_report() {
 #   ssh_fallback_fish ssh_fallback in fish's dialect
 #   installed         a permanent hi.d: asserts $_HI_ROOT is ~/hi.d, i.e.
 #                     _say_hi loaded it in place rather than shipping a tree
+#   installed_nested  the same, for a permanent hi.d that is *not* at ~/hi.d:
+#                     only _hi_remote_root reading install.sh's rc line can
+#                     have found it, so the path itself is the assertion
 #
 # Every string stays single-quoted: the variables expand on the target.
 # shellcheck disable=SC2016 # these expand later, on the target
@@ -897,6 +901,7 @@ function _hi_probe_cmd() {
   ssh_fallback) printf '%s%s' 'test -f "$_HI_ROOT/hi.sh" && alias hi_info >/dev/null 2>&1 && echo ' "$marker" ;;
   ssh_fallback_fish) printf '%s%s' 'test -f "$_HI_ROOT/hi.sh"; and functions -q hi_info; and echo ' "$marker" ;;
   installed) printf '%s%s' 'test "$_HI_ROOT" = "$HOME/hi.d" && source "$_HI_ALIASES" && alias hi_info >/dev/null 2>&1 && echo ' "$marker" ;;
+  installed_nested) printf '%s%s' 'test "$_HI_ROOT" = "$HOME/opt/nested/hi.d" && source "$_HI_ALIASES" && alias hi_info >/dev/null 2>&1 && echo ' "$marker" ;;
   *)
     _hi_cecho "unknown probe shape: $2" "$RED"
     return 1

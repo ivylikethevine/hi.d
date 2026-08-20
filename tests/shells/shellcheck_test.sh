@@ -8,8 +8,9 @@
 # not): shfmt as a formatting gate, and checkbashisms over the #!/bin/sh files.
 set -euo pipefail
 
+: "${_HI_HOME:=$(cd -P "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)}"
 # shellcheck source=../../common/core.sh
-source "${_HI_HOME:-$HOME}/hi.d/common/core.sh"
+source "$_HI_HOME/hi.d/common/core.sh"
 # shellcheck source=../test_lib.sh
 source "$_HI_TEST_LIB"
 
@@ -86,51 +87,93 @@ _HI_BASH32_LINT=(
   '\$\{![A-Za-z_][A-Za-z_0-9]*\[[@*]\][+:-]|${!a[@]+...} - use a plain "${!a[@]}"'
 )
 
-# One file's text with the $_HI_BASH32_LINT table above blanked out - the
-# patterns and their descriptions name the very constructs they look for, so
-# this file would otherwise report itself. Blanked rather than deleted so the
-# line numbers in a real hit still point at the right line.
+# The retired ~/hi.d default, as "<pattern>|<what it is>" - both dialects that
+# ever spelled it. See lint_home_default below for why this is a gate and not
+# a preference.
+# shellcheck disable=SC2016 # these are regexes and prose, not expansions
+_HI_HOME_LINT=(
+  '\$\{_HI_HOME:[-=]\$\{?HOME\}?\}|${_HI_HOME:-$HOME} tree default - derive it from the file'"'"'s own path'
+  'set -g?x? *_HI_HOME +(~|\$HOME)([^A-Za-z_]|$)|fish `set -gx _HI_HOME ~` tree default'
+)
+
+# One file's text with the pattern tables above blanked out - their patterns
+# and descriptions name the very constructs they look for, so this file would
+# otherwise report itself. Blanked rather than deleted so the line numbers in a
+# real hit still point at the right line. Any _HI_*_LINT table, not just one by
+# name: a table added below has to be blanked too, and finding out that it
+# wasn't means reading a report of this file against itself.
 function _hi_lint_source_lines() {
-  awk '/^_HI_BASH32_LINT=\(/ { inside = 1 }
+  awk '/^_HI_[A-Z0-9]*_LINT=\(/ { inside = 1 }
        inside { print ""; if (/^\)/) inside = 0; next }
        { print }' "$1"
 }
 
-# Flag every match outside a comment. Comments are excluded on purpose: half of
-# these constructs are *named* in the notes explaining why they aren't used.
-function lint_bash32() {
-  local entry pattern what file rel hits bad=0 blanks="$_HI_WORKDIR/bash32"
-  _hi_h2 "Checking for bash-4-only constructs (macOS ships bash 3.2)"
-  # Blank each file once, not once per pattern - the awk pass is the expensive
-  # half of this loop and its output is identical for every pattern. The blanks
-  # mirror the source tree's own layout, so one recursive `grep -H` per pattern
-  # reports the real path: a grep per (pattern x file) was ~1000 processes a
-  # run, and this is the CI gate.
-  rm -rf "$blanks"
-  mkdir -p "$blanks"
-  for file in "${_HI_SH_FILES[@]}"; do
+# _hi_lint_blanks <dir> <file...> - the blanked mirror of <file...> under
+# <dir>, laid out like the source tree so one recursive `grep -H` per pattern
+# reports the real path. Blanking each file once and grepping the tree is what
+# keeps a table cheap: a grep per (pattern x file) was ~1000 processes a run,
+# and this is the CI gate.
+function _hi_lint_blanks() {
+  local dir="$1" file rel
+  shift
+  rm -rf "$dir"
+  mkdir -p "$dir"
+  for file in "$@"; do
     rel="${file#"$_HI_ROOT/"}"
-    case "$rel" in */*) mkdir -p "$blanks/${rel%/*}" ;; esac
-    _hi_lint_source_lines "$file" >"$blanks/$rel"
+    case "$rel" in */*) mkdir -p "$dir/${rel%/*}" ;; esac
+    _hi_lint_source_lines "$file" >"$dir/$rel"
   done
-  for entry in "${_HI_BASH32_LINT[@]}"; do
+}
+
+# _hi_lint_table <dir> <what-plural> <entry...> - every "<pattern>|<what>" hit
+# outside a comment, reported one line per pattern. Comments are excluded on
+# purpose: half of these constructs are *named* in the notes explaining why
+# they aren't used. Returns how many patterns matched.
+function _hi_lint_table() {
+  local dir="$1" label="$2" entry pattern what hits bad=0
+  shift 2
+  for entry in "$@"; do
     pattern="${entry%|*}"
     what="${entry##*|}"
     _HI_LINT_TOTAL=$((_HI_LINT_TOTAL + 1))
     # anchored and non-global, so a '%' or a path-like string inside a matched
     # line survives into the report untouched
-    hits="$(grep -rnHE "$pattern" "$blanks" 2>/dev/null | grep -v ':[[:space:]]*#' |
-      sed "s|^$blanks/||" || true)"
+    hits="$(grep -rnHE "$pattern" "$dir" 2>/dev/null | grep -v ':[[:space:]]*#' |
+      sed "s|^$dir/||" || true)"
     if [ -z "$hits" ]; then
       _hi_align " | no $what" "OK" "$GREEN"
       continue
     fi
     _hi_align " | $what" "FOUND" "$RED"
     printf '%s\n' "$hits" | sed 's/^/      /'
-    _hi_note_failure "bash-4 construct: $what"
+    _hi_note_failure "$label: $what"
     bad=$((bad + 1))
   done
   return "$bad"
+}
+
+function lint_bash32() {
+  local blanks="$_HI_WORKDIR/bash32"
+  _hi_h2 "Checking for bash-4-only constructs (macOS ships bash 3.2)"
+  _hi_lint_blanks "$blanks" "${_HI_SH_FILES[@]}"
+  _hi_lint_table "$blanks" "bash-4 construct" "${_HI_BASH32_LINT[@]}"
+}
+
+# The same sweep for a $HOME-shaped tree default, over a wider file list: the
+# two files that most want this check - shells/zsh.zsh and shells/config.fish -
+# are not *.sh and so are invisible to the list above. Every file that needs
+# the tree can derive it from its own path (GLOSSARY: HI.33); guessing $HOME
+# does not fail when it is wrong, it silently reads *another tree*, which is
+# how both platform e2e jobs spent their first run sourcing a hi.d that was
+# never there.
+function lint_home_default() {
+  local blanks="$_HI_WORKDIR/homedefault"
+  local files
+  _hi_h2 "Checking for a \$HOME default for the hi.d tree"
+  _hi_read_lines files < <(find "$_HI_ROOT" \( -name '*.sh' -o -name '*.zsh' -o -name '*.fish' \) \
+    -not -path '*/.git/*' -not -path "$_HI_ROOT/dist/*" | sort)
+  _hi_lint_blanks "$blanks" "${files[@]}"
+  _hi_lint_table "$blanks" "tree default" "${_HI_HOME_LINT[@]}"
 }
 
 # The formatter as a lint: shfmt -d over the same file list shellcheck reads
@@ -359,6 +402,9 @@ function run_shellcheck() {
   _HI_BASH32_FAILED=0
   lint_bash32 || _HI_BASH32_FAILED=$?
 
+  _HI_HOME_FAILED=0
+  lint_home_default || _HI_HOME_FAILED=$?
+
   _HI_SHFMT_FAILED=0
   lint_shfmt || _HI_SHFMT_FAILED=$?
 
@@ -371,7 +417,7 @@ function run_shellcheck() {
   _HI_DOCKERFILE_FAILED=0
   lint_dockerfiles || _HI_DOCKERFILE_FAILED=$?
 
-  _HI_LINT_FAILED=$((_HI_SC_FAILED + _HI_NATIVE_FAILED + _HI_BASH32_FAILED + _HI_SHFMT_FAILED + _HI_CB_FAILED + _HI_GLOSSARY_FAILED + _HI_DOCKERFILE_FAILED))
+  _HI_LINT_FAILED=$((_HI_SC_FAILED + _HI_NATIVE_FAILED + _HI_BASH32_FAILED + _HI_HOME_FAILED + _HI_SHFMT_FAILED + _HI_CB_FAILED + _HI_GLOSSARY_FAILED + _HI_DOCKERFILE_FAILED))
   _hi_report_counts "$_HI_LINT_TOTAL" "$_HI_LINT_FAILED" "$_HI_SKIPPED"
 
   local skipped=""

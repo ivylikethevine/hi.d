@@ -3,8 +3,9 @@
 # shells out here); the packages check (full_check) lives at the bottom too.
 set -euo pipefail
 
+: "${_HI_HOME:=$(cd -P "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 # shellcheck source=./core.sh
-source "${_HI_HOME:-$HOME}/hi.d/common/core.sh"
+source "$_HI_HOME/hi.d/common/core.sh"
 
 function header_row() {
   local cell out=""

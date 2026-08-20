@@ -63,9 +63,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          # hi.sh reads its own tree as $_HI_HOME/hi.d and falls back to $HOME
-          # when the variable is unset - which under Git Bash is
-          # /c/Users/runneradmin, not the checkout on D:. The workspace *is* the
+          # hi.sh derives its own tree now (GLOSSARY: HI.33), so this export is
+          # belt and braces rather than the thing that makes the run work - it
+          # stays because under Git Bash a wrong tree resolves to
+          # /c/Users/runneradmin rather than the checkout on D:, and that is
+          # invisible until the session is already wrong. The workspace *is* the
           # hi.d directory, so _HI_HOME is its parent; derived with `cd ..`
           # because $GITHUB_WORKSPACE is a backslashed path bash cannot walk.
           _HI_HOME="$(cd .. && pwd)"

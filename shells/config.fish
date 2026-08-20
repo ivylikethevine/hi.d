@@ -1,7 +1,10 @@
 #!/bin/fish
 
 # === start required configuration ===
-set -q _HI_HOME; or set -gx _HI_HOME ~
+# The tree from this file's own path, and only when unset. GLOSSARY: HI.33
+if not set -q _HI_HOME
+    set -gx _HI_HOME (cd (status dirname)/../..; and pwd)
+end
 # GLOSSARY: HI.07 - defaulted, never assigned, so bare reads are
 # safe and settings.sh still overrides. Mirrors core.sh's _HI_TOGGLES.
 for _hi_toggle in _HI_DISABLE_LOCAL _HI_REMOTE_SESSION _HI_DISABLE_HEADER \

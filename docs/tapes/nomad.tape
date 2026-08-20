@@ -4,6 +4,10 @@
 # the agent and leaves the alloc ID in /tmp/hi-demo/alloc. Manual artifact,
 # reviewed by eye.
 #
+# Its configuration: _HI_HEADER_IDENTITY=0 and the GHz CPU line. The banner
+# stays on, and has to: the Wait+Screen below is /Disconnected/, which banner()
+# prints - so this is the one demo that cannot switch the header off.
+#
 # The Hide blocks pace themselves with Wait+Screen on sentinel text instead
 # of fixed sleeps; the quoted split in fixture-o''k keeps the typed command
 # from matching its own sentinel. Visible sleeps are reading time only.

@@ -751,10 +751,12 @@ function run_uninstall() {
 # two differ on scripts/ - not in the payload, required here so a user of a
 # packaged install can still run `hi --install`/`hi --uninstall`/`hi --color-preview`
 # against it. tests/ is in neither; `hi --test` reports itself unavailable.
-# docs/LICENSE.md is the one nested entry: the license lives under docs/
-# (which is otherwise not packaged), and cp lands the file flat by basename,
-# so the installed tree still carries a top-level LICENSE.md.
-_HI_PACKAGE_CONTENTS=(common misc scripts shells hi.sh load.sh docs/LICENSE.md README.md)
+# Every entry is top-level now. LICENSE.md used to be the one nested one, under
+# docs/, and moved to the root so github.com and OpenSSF Scorecard's License
+# check can both find it - they look there and nowhere else. The staged result
+# is unchanged either way: install_tree's cp lands file entries flat by
+# basename, so docs/LICENSE.md and LICENSE.md both became LICENSE.md.
+_HI_PACKAGE_CONTENTS=(common misc scripts shells hi.sh load.sh LICENSE.md README.md)
 
 # Packaging mode. hi.d normally installs *in place*, which assumes the tree is
 # somewhere you own; here the tree is copied to a staging root for a package

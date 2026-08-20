@@ -5,6 +5,13 @@
 # sshd container (this checkout preinstalled) and a throwaway ssh config,
 # so the render never touches ~/.ssh. Manual artifact, reviewed by eye.
 #
+# Its configuration: a trimmed header - _HI_HEADER_TIMESTAMP=0 and
+# _HI_HEADER_SYSINFO=0 - written by docs/tapes/fixtures.sh into the *box's* own
+# ~/.config/hi.d, not the client's. It has to be: the permanent-install path
+# ships no overlay, so this is the one demo whose knob lives on the target, and
+# that is the story anyway. Both sentinels below come from load.sh rather than
+# the header, so they survive any header toggle.
+#
 # The Hide blocks pace themselves with Wait+Screen on sentinel text instead
 # of fixed sleeps; the quoted split in fixture-o''k keeps the typed command
 # from matching its own sentinel. Visible sleeps are reading time only.

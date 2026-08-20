@@ -471,7 +471,7 @@ function test_config_hi_degrades_when_sudo_cannot_link() {
 function _hi_package_src() {
   local dir="$_HI_WORKDIR/$1" item
   mkdir -p "$dir/src/hi.d/common" "$dir/src/hi.d/misc" "$dir/src/hi.d/scripts" "$dir/src/hi.d/shells" "$dir/src/hi.d/docs"
-  for item in hi.sh load.sh docs/LICENSE.md README.md; do printf 'x\n' >"$dir/src/hi.d/$item"; done
+  for item in hi.sh load.sh LICENSE.md README.md; do printf 'x\n' >"$dir/src/hi.d/$item"; done
 }
 
 # Stand a scratch tree up and run install_tree against it.

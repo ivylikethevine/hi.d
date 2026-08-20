@@ -6,12 +6,36 @@ name: Pages
 # ROADMAP and tldr - which interlink with relative links link-check.yml keeps
 # honest.
 #
+# It also carries one file Jekyll never sees: badges/tests.json, the shields
+# endpoint README's tests badge reads. That used to be a number sed'd into
+# README.md and committed back to main by ci.yml, which put a bot commit on top
+# of the author's on every push; publishing it here keeps the figure generated
+# and leaves main alone.
+#
 # The build half is entirely in this file. The *publishing* half is one click
 # that only exists once the repo is public: Settings -> Pages -> Source:
 # GitHub Actions. Until then this is dispatch-only in practice - the push
 # trigger below is harmless without that setting, since deploy-pages is what
-# needs it and it simply has nothing to deploy to.
-on:
+# needs it and it simply has nothing to deploy to. Note that the tests badge
+# reads `inaccessible` until that click, having nowhere to fetch from.
+#
+# zizmor flags workflow_run as a dangerous trigger, and it is right about the
+# usual shape of the mistake: a privileged run that checks out the head SHA of
+# whatever it was triggered by. This one does not. It checks out the default
+# ref, the count comes from an API query for the newest green CI run on `main`
+# rather than from the triggering run's own artifact, and the `if` on `build`
+# takes only pushes - a fork PR whose branch happens to be named `main` cannot
+# reach it. Nothing here reads a single attacker-controlled byte.
+on: # zizmor: ignore[dangerous-triggers]
+  # after CI, so the badge JSON is written from a run that actually passed
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  # and on a docs edit directly, so prose publishes in a couple of minutes
+  # rather than waiting out the full suite. Both can fire for one commit; the
+  # concurrency group below serialises them and the second deploy just carries
+  # a fresher count.
   push:
     branches: [main]
     paths:
@@ -35,7 +59,18 @@ jobs:
     name: build (jekyll)
     runs-on: "ubuntu-latest"
     # runs-on: ${{ vars.RUNNER_LABEL || 'ubuntu-latest' }}
+    # a red CI must not publish, and neither may a fork's PR run - `event`
+    # pins it to a push to `main`. The other two triggers have no run to judge.
+    if: >-
+      github.event_name != 'workflow_run' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push')
     timeout-minutes: 10
+    # actions: read is for the cross-workflow artifact read below - the site
+    # build itself still needs nothing but contents
+    permissions:
+      contents: read
+      actions: read
     steps:
       # hands the persistent self-hosted workspace back to the runner user, so
       # checkout's own cleanup can always finish - see docs/PACKAGING.md
@@ -58,6 +93,64 @@ jobs:
         with:
           source: ./
           destination: ./_site
+
+      # The tests badge, in three steps, all of them after Jekyll has run: the
+      # file is written straight into _site, so it needs no front matter and no
+      # _config.yml exclusion to survive the build untouched.
+      #
+      # The lookup is by query rather than off the workflow_run payload on
+      # purpose - the newest green CI run on main *is* the triggering run when
+      # that is the event, so one code path serves push and dispatch too.
+      - name: Find the CI run that counted the suites
+        id: ci-run
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          run_id="$(gh api \
+            "repos/$REPO/actions/workflows/ci.yml/runs?branch=main&status=success&per_page=1" \
+            --jq '.workflow_runs[0].id // empty')"
+          echo "run_id=$run_id" >>"$GITHUB_OUTPUT"
+          if [ -n "$run_id" ]; then
+            echo "counting from CI run $run_id"
+          else
+            echo "::warning::no successful CI run on main to read a count from"
+          fi
+
+      # continue-on-error, not a gate: an expired artifact is a grey badge, not
+      # a failed site deploy
+      - name: Fetch that run's totals
+        if: steps.ci-run.outputs.run_id != ''
+        continue-on-error: true
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: fast-totals
+          path: ${{ runner.temp }}/totals
+          run-id: ${{ steps.ci-run.outputs.run_id }}
+          github-token: ${{ github.token }}
+
+      - name: Write the shields endpoint
+        env:
+          TOTALS: ${{ runner.temp }}/totals/totals
+        run: |
+          set -euo pipefail
+          mkdir -p _site/badges
+          passed=""
+          # four fields: passed failed skipped selected (tests/test_runner.sh).
+          # Redirect rather than pipe - `read` in a pipeline reads into a
+          # subshell and the value never comes back.
+          # `|| true`, or set -e takes the missing-file case out with it
+          [ -f "$TOTALS" ] && read -r passed _ _ _ <"$TOTALS" || true
+          if [ -n "$passed" ]; then
+            printf '{"schemaVersion":1,"label":"tests","message":"%s passed","color":"4c1","cacheSeconds":300}\n' \
+              "$passed" >_site/badges/tests.json
+            echo "tests badge: $passed passed"
+          else
+            printf '{"schemaVersion":1,"label":"tests","message":"unknown","color":"inactive","cacheSeconds":300}\n' \
+              >_site/badges/tests.json
+            echo "::warning::no fast-totals to read - tests badge published as unknown"
+          fi
 
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
 

@@ -3,6 +3,11 @@
 # with `vhs docs/tapes/podman.tape` from the repo root, podman working, hi
 # on PATH. Manual artifact, reviewed by eye.
 #
+# Its configuration: _HI_PROMPT_END_FISH, from the settings.sh
+# docs/tapes/fixtures.sh writes - fish's own prompt separator, on the one tape
+# with fish at both ends. (The fish-only abbr knob was tried here and taken back
+# out; fixtures.sh says why.)
+#
 # The Hide blocks pace themselves with Wait+Screen on sentinel text instead
 # of fixed sleeps; the quoted split in fixture-o''k keeps the typed command
 # from matching its own sentinel. Visible sleeps are reading time only.

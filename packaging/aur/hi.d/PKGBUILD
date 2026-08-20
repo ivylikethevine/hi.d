@@ -51,5 +51,5 @@ package() {
 
   # Arch wants the licence here as well; install_tree's copy lives inside the
   # tree, where it is what `hi` ships to a target rather than what pacman reads.
-  install -Dm644 "$srcdir/hi.d/docs/LICENSE.md" "$pkgdir/usr/share/licenses/$pkgname/LICENSE.md"
+  install -Dm644 "$srcdir/hi.d/LICENSE.md" "$pkgdir/usr/share/licenses/$pkgname/LICENSE.md"
 }

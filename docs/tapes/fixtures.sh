@@ -78,12 +78,29 @@ Host hi-demo-box
   LogLevel ERROR
 EOF
   # wait for sshd to answer before the tape types anything
+  local ready=0
   for _ in $(seq 1 30); do
-    ssh -F "$_HI_DEMO_DIR/ssh_config" hi-demo-box true 2>/dev/null && return 0
+    if ssh -F "$_HI_DEMO_DIR/ssh_config" hi-demo-box true 2>/dev/null; then
+      ready=1
+      break
+    fi
     sleep 1
   done
-  echo "sshd never answered on port $port" >&2
-  return 1
+  if [ "$ready" != 1 ]; then
+    echo "sshd never answered on port $port" >&2
+    return 1
+  fi
+  # This demo's configuration, and the only one that has to live on the target.
+  # hi.sh's permanent-install branch (_say_hi, the $remote_root arm) points
+  # $_HI_HOME and $_HI_ROOT at the box's own tree and ships no overlay at all -
+  # deliberately, since a machine with its own hi.d has its own settings too.
+  # So a settings.sh written client-side here would have no effect whatsoever,
+  # and the honest way to show a knob on this demo is to configure the box.
+  docker exec -u hitest hi-demo-ssh sh -c 'mkdir -p "$HOME/.config/hi.d" && printf "%s\n" \
+    "#!/bin/sh" \
+    "# written by docs/tapes/fixtures.sh for the ssh demo only" \
+    "export _HI_HEADER_TIMESTAMP='"'"'0'"'"'" \
+    "export _HI_HEADER_SYSINFO='"'"'0'"'"'" >"$HOME/.config/hi.d/settings.sh"'
 }
 
 # a bare shell-only image per flavor, the docker/podman e2e shape. <hostname>
@@ -181,9 +198,38 @@ function up_kube() {
 #
 # Written through sed rather than an unquoted heredoc so the rc's own ${...}
 # survives being generated.
-function client_rc() { # <shell> <user> <hostname>
-  local shell="$1" user="$2" host="$3" home
+# The per-demo configuration, written as the overlay's settings.sh rather than
+# exported into the client shell. That is not a style choice - it is the only
+# lever that reaches both ends: _hi_session_env (hi.sh) forwards the target
+# color, the tags and the tmux intent and nothing else, so a _HI_DISABLE_* or
+# _HI_HEADER_* exported here would style the client and leave the session it
+# opens on stock defaults. settings.sh is _HI_OVERLAY_FILES[0], so hi ships it
+# to the target and both sides read the same file.
+#
+# Written to $_HI_SETTINGS's own contract (scripts/install.sh): a `#!/bin/sh`
+# line and `export NAME='value'` lines, nothing else - fish sources this file
+# too, and doctor.sh fails a settings.sh that only parses as sh.
+#
+# Body on stdin. No call at all is itself a configuration: demo.tape ships the
+# stock defaults on purpose, as the one shot that shows everything on.
+function demo_settings() {
+  mkdir -p "$_HI_DEMO_DIR/config"
+  {
+    printf '#!/bin/sh\n'
+    printf '# written by docs/tapes/fixtures.sh for this demo only\n'
+    cat
+  } >"$_HI_DEMO_DIR/config/settings.sh"
+}
+
+function client_rc() { # <shell> <user> <hostname> [overlay-dir]
+  local shell="$1" user="$2" host="$3" config="${4:-$_HI_DEMO_DIR/config}" home
   home="$(dirname "$_HI_ROOT")"
+  # Every up:* calls this before its demo_settings, so this is the one place
+  # that can guarantee a demo gets its own configuration and no one else's.
+  # Without it a render of demo.tape straight after docker.tape would inherit
+  # docker's overlay from /tmp and quietly stop being the defaults shot.
+  mkdir -p "$_HI_DEMO_DIR/config"
+  rm -f "$_HI_DEMO_DIR/config/settings.sh"
   # $_HI_HOME/$_HI_ROOT are baked in rather than inherited: vhs starts a bare
   # shell, and on a machine where /usr/bin/hi points at some other install (or
   # a login profile exports its own $_HI_HOME) an inherited one renders the
@@ -191,9 +237,15 @@ function client_rc() { # <shell> <user> <hostname>
   case "$shell" in
   bash)
     sed -e "s/@USER@/$user/g" -e "s/@HOST@/$host/g" \
-      -e "s#@HOME@#$home#g" -e "s#@ROOT@#$_HI_ROOT#g" >"$_HI_DEMO_DIR/clientrc.bash" <<'EOF'
+      -e "s#@HOME@#$home#g" -e "s#@ROOT@#$_HI_ROOT#g" \
+      -e "s#@CONFIG@#$config#g" >"$_HI_DEMO_DIR/clientrc.bash" <<'EOF'
 export _HI_HOME='@HOME@' _HI_ROOT='@ROOT@'
 export _HI_WHOAMI_CACHE='@USER@' _HI_HOSTNAME_CACHE='@HOST@'
+# Unconditional, and it has to be: generate.sh sources common/core.sh, which
+# exports $_HI_CONFIG_DIR, and vhs hands that environment straight to this
+# shell - so anything conditional here would read the renderer's own overlay
+# and silently drop this demo's. Ahead of the rc, which is what sources it.
+export _HI_CONFIG_DIR='@CONFIG@'
 source "$_HI_ROOT/shells/bash.sh"
 _hi_demo_ps1() {
   ps1
@@ -205,9 +257,15 @@ EOF
     ;;
   zsh)
     sed -e "s/@USER@/$user/g" -e "s/@HOST@/$host/g" \
-      -e "s#@HOME@#$home#g" -e "s#@ROOT@#$_HI_ROOT#g" >"$_HI_DEMO_DIR/clientrc.zsh" <<'EOF'
+      -e "s#@HOME@#$home#g" -e "s#@ROOT@#$_HI_ROOT#g" \
+      -e "s#@CONFIG@#$config#g" >"$_HI_DEMO_DIR/clientrc.zsh" <<'EOF'
 export _HI_HOME='@HOME@' _HI_ROOT='@ROOT@'
 export _HI_WHOAMI_CACHE='@USER@' _HI_HOSTNAME_CACHE='@HOST@'
+# Unconditional, and it has to be: generate.sh sources common/core.sh, which
+# exports $_HI_CONFIG_DIR, and vhs hands that environment straight to this
+# shell - so anything conditional here would read the renderer's own overlay
+# and silently drop this demo's. Ahead of the rc, which is what sources it.
+export _HI_CONFIG_DIR='@CONFIG@'
 source "$_HI_ROOT/shells/zsh.zsh"
 # %n reads $USERNAME, which zsh will not let a script reassign, so both escapes
 # are substituted out of the finished prompt instead. zsh builds PS1 once and
@@ -218,12 +276,15 @@ EOF
     ;;
   fish)
     sed -e "s/@USER@/$user/g" -e "s/@HOST@/$host/g" \
-      -e "s#@HOME@#$home#g" -e "s#@ROOT@#$_HI_ROOT#g" >"$_HI_DEMO_DIR/clientrc.fish" <<'EOF'
+      -e "s#@HOME@#$home#g" -e "s#@ROOT@#$_HI_ROOT#g" \
+      -e "s#@CONFIG@#$config#g" >"$_HI_DEMO_DIR/clientrc.fish" <<'EOF'
 set -gx _HI_HOME '@HOME@'
 set -gx _HI_ROOT '@ROOT@'
 set -gx _HI_WHOAMI_CACHE '@USER@'
 set -gx _HI_HOSTNAME_CACHE '@HOST@'
 set -gx USER '@USER@'
+# unconditional, for the reason the bash rc spells out
+set -gx _HI_CONFIG_DIR '@CONFIG@'
 function prompt_hostname
   echo '@HOST@'
 end
@@ -291,32 +352,71 @@ case "${1:-}:${2:-}" in
 # cache-1 too (the same box, reached two ways), while the rest say hi somewhere
 # they are not.
 up:ssh)
+  # No demo_settings: this demo's trimmed header (_HI_HEADER_TIMESTAMP=0 and
+  # _HI_HEADER_SYSINFO=0) is written *on the box* by up_ssh, which is where a
+  # permanent install reads its config from. See the comment there.
   client_rc bash ivy workshop
   up_ssh
   ;;
 up:docker)
   client_rc zsh dev cache-1
+  # demo.tape connects to this same debian box, so the difference between the
+  # README's top GIF and this one has to be the *client* - hence a prompt end
+  # of its own and no packages check, neither of which touches the fixture.
+  demo_settings <<'EOF'
+export _HI_PROMPT_END_ZSH='❯'
+export _HI_HEADER_CHECK='0'
+EOF
   up_container docker hi-demo debian db-prod
   up_container docker hi-demo-zsh zsh cache-1
   ;;
 up:podman)
   client_rc fish ops bastion
+  # fish's own prompt separator. _HI_ENABLE_FISH_ALIAS_ABBR belongs to this
+  # demo on paper - it is the one fish-only knob and this is the only tape with
+  # fish on both ends - but it cannot be shown here: hi is itself an alias, so
+  # the abbr expands the `hi hi-demo-fish` the tape types into the shim's
+  # absolute path, rewriting the command the GIF exists to show.
+  demo_settings <<'EOF'
+export _HI_PROMPT_END_FISH='»'
+EOF
   up_container podman hi-demo-fish fish edge-1
   ;;
 up:nomad)
   client_rc bash ivy workshop
+  # the header knobs the other demos leave alone. Note what is *not* here:
+  # nomad.tape waits on /Disconnected/, which banner() prints, so this is the
+  # one demo that cannot turn _HI_HEADER_BANNER or _HI_DISABLE_HEADER off
+  # without hanging its own render.
+  demo_settings <<'EOF'
+export _HI_HEADER_IDENTITY='0'
+export _HI_HEADER_GHZ='1'
+EOF
   up_nomad
   ;;
 up:kube)
   client_rc zsh dev cache-1
+  # the git segment off, and only that. A pod reached through the aliases-only
+  # fallback draws no header at all, so the client prompt is the only surface
+  # this demo can show a knob on - which rules out _HI_DISABLE_PROMPT=1, the
+  # obvious pick: it renders a GIF with nothing of hi left in frame.
+  demo_settings <<'EOF'
+export _HI_DISABLE_GIT_STATUS='1'
+EOF
   up_kube
   ;;
 up:colors)
-  client_rc bash ivy workshop
+  # the one demo whose overlay is not $_HI_DEMO_DIR/config: its configuration is
+  # the colors file up_colors writes into a throwaway $HOME, and the tape still
+  # exports that $HOME itself because paths.sh derives the ssh config from it
+  client_rc bash ivy workshop "$_HI_DEMO_DIR/home/.config/hi.d"
   up_colors
   ;;
 up:demo)
   client_rc bash ivy workshop
+  # No demo_settings, deliberately. Every other demo turns something off or
+  # swaps something out; the README's top GIF is the one that shows what you
+  # get having configured nothing, which is only legible if it stays stock.
   up_container docker hi-demo debian db-prod
   ;;
 down:) demo_down ;;

@@ -10,7 +10,7 @@ This is a hobby project.
 
 ---
 
-[![tests](https://img.shields.io/badge/tests-890_passed-4c1)](https://github.com/ivylikethevine/hi.d/actions/workflows/ci.yml)
+[![tests](https://img.shields.io/endpoint?url=https%3A%2F%2Fivylikethevine.github.io%2Fhi.d%2Fbadges%2Ftests.json)](https://github.com/ivylikethevine/hi.d/actions/workflows/ci.yml)
 [![Linux](https://img.shields.io/github/actions/workflow/status/ivylikethevine/hi.d/ci.yml?branch=main&label=Linux)](https://github.com/ivylikethevine/hi.d/actions/workflows/ci.yml)
 [![macOS](https://img.shields.io/github/actions/workflow/status/ivylikethevine/hi.d/macos-e2e.yml?branch=main&label=macOS)](https://github.com/ivylikethevine/hi.d/actions/workflows/macos-e2e.yml)
 [![Windows](https://img.shields.io/github/actions/workflow/status/ivylikethevine/hi.d/windows-e2e.yml?branch=main&label=Windows)](https://github.com/ivylikethevine/hi.d/actions/workflows/windows-e2e.yml)
@@ -56,14 +56,21 @@ _Don't `ssh`ush your hosts, say `hi`!_
 
 The pitch is that `hi` behaves identically whatever is on the other end — an
 ssh host, a container, an allocation, a pod — and whatever shell each side
-runs. One GIF per backend, deliberately varying both sides. How they are rendered,
-and what to catch when you regenerate them, is at the bottom:
+runs. One GIF per backend, deliberately varying both sides, and each one
+configured differently: the line under every GIF names the knob it is showing,
+so the set reads as a configurable tool rather than one fixed look. The GIF at
+the top of this README is the exception on purpose — it is the stock defaults,
+with nothing turned off. How they are rendered, and what to catch when you
+regenerate them, is at the bottom:
 [Regenerating the demo GIFs](#regenerating-the-demo-gifs).
 
 ### ssh, with a permanent install
 
 The target carries its own `~/hi.d`, so nothing ships over the wire — hi
 loads the tree in place and leaves it alone on exit. Client: bash.
+Showing `_HI_HEADER_TIMESTAMP=0` and `_HI_HEADER_SYSINFO=0` — set on the *box*,
+not the client: a permanent install reads its own config, so this is the demo
+whose knob lives on the target.
 
 ![hi over ssh into a host with a permanent ~/hi.d](docs/demos/ssh.gif)
 
@@ -71,6 +78,8 @@ loads the tree in place and leaves it alone on exit. Client: bash.
 
 A debian/bash container, then an alpine box whose only real shell is zsh —
 hi probes and falls back without being told. Client: zsh.
+Showing `_HI_PROMPT_END_ZSH` and `_HI_HEADER_CHECK=0` — the same debian target
+as the GIF at the top, styled differently from the client side.
 
 ![hi into a debian container, then an alpine zsh-only container](docs/demos/docker.gif)
 
@@ -78,6 +87,7 @@ hi probes and falls back without being told. Client: zsh.
 
 A fish-only alpine container from a fish client: no bash anywhere in the
 loop. Same session, same code path as docker.
+Showing `_HI_PROMPT_END_FISH` — fish's own prompt separator.
 
 ![hi from fish into a fish-only alpine container via podman](docs/demos/podman.gif)
 
@@ -85,6 +95,8 @@ loop. Same session, same code path as docker.
 
 A dev agent, one docker-driver job, and `hi <alloc-id-prefix>` straight into
 the allocation. Client: bash.
+Showing `_HI_HEADER_GHZ=1` and `_HI_HEADER_IDENTITY=0` — the CPU line in GHz,
+the identity row off.
 
 ![hi into a nomad allocation by ID prefix](docs/demos/nomad.gif)
 
@@ -92,6 +104,7 @@ the allocation. Client: bash.
 
 A kind cluster and a bare alpine pod — busybox ash is all it has, which is
 hi's aliases-only fallback. Client: zsh.
+Showing `_HI_DISABLE_GIT_STATUS=1` — the same prompt, without the git segment.
 
 ![hi into a kubernetes pod on a kind cluster](docs/demos/kube.gif)
 

@@ -48,5 +48,5 @@ package() {
   # one implementation the other channels call.
   "$srcdir/hi.d/packaging/stamp.sh" --root "$pkgdir" --version "$pkgver"
 
-  install -Dm644 "$srcdir/hi.d/docs/LICENSE.md" "$pkgdir/usr/share/licenses/$pkgname/LICENSE.md"
+  install -Dm644 "$srcdir/hi.d/LICENSE.md" "$pkgdir/usr/share/licenses/$pkgname/LICENSE.md"
 }

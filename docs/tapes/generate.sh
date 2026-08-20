@@ -234,12 +234,16 @@ function gen_preflight() {
     gen_row source head "$GREEN" "clean tree"
   fi
 
-  # The renderer's own overlay rides into the recording: core.sh exports the
-  # toggles and $_HI_CONFIG_DIR, and vhs inherits this environment. Reported
-  # rather than neutralized - rendering under a config the manual `vhs <tape>`
-  # route would not use is its own surprise, and the color tape already stages
-  # a throwaway $HOME for the one case where it truly matters.
-  [ -f "$_HI_CONFIG_DIR/settings.sh" ] && overlay="settings.sh"
+  # What of the renderer's own config can still reach a recording. Not
+  # $_HI_CONFIG_DIR any more: every demo now stages an overlay of its own and
+  # the clientrc fixtures.sh writes exports it unconditionally, so each tape
+  # reads its own settings.sh and never this machine's. The exported *toggles*
+  # do still ride in - core.sh exports them before it sources settings.sh, and
+  # vhs inherits this environment - so a toggle a demo does not name keeps
+  # whatever value it has here. Reported rather than neutralized: rendering
+  # under a config the manual `vhs <tape>` route would not use is its own
+  # surprise. A non-default toggle below means the GIFs are not the defaults.
+  [ -f "$_HI_CONFIG_DIR/settings.sh" ] && overlay="settings.sh (toggles only)"
   for toggle in ${_HI_TOGGLES[@]+"${_HI_TOGGLES[@]}"}; do
     eval "val=\${$toggle:-0}"
     [ "$val" = 0 ] || overlay="$overlay $toggle=$val"

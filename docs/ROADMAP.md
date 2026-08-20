@@ -23,7 +23,7 @@ here: git history is the ledger, and this file is only what is left to do.
 - [Outside this repo](#outside-this-repo)
   - [Secrets & keys](#secrets--keys)
   - [Release channels](#release-channels)
-  - [CI runs waiting on a first green](#ci-runs-waiting-on-a-first-green)
+  - [Repo settings and first runs](#repo-settings-and-first-runs)
   - [Docs & submissions](#docs--submissions)
 
 ## In-repo code work
@@ -190,6 +190,28 @@ here: git history is the ledger, and this file is only what is left to do.
 
 ### Testing & CI
 
+- [ ] **Settle the fixture images' pinning** — Scorecard's Pinned-Dependencies
+      scores 3 on nineteen findings, and every one of them is in
+      `tests/dockerfiles/`: sixteen tag-pinned `FROM` lines (`alpine:3.20`,
+      `debian:bookworm-slim`, `bash:3.2`, `${BASE}`) and three `curl | sh`
+      installers in the atuin, mise and starship framework fixtures. Nothing
+      here ships — these are test fixtures, and the workflows and actions the
+      release path actually uses are already SHA-pinned, which is why the score
+      is 3 rather than 0.
+
+  - **The case for leaving it:** a digest-pinned fixture base has to be bumped
+    by hand forever, and buys no user-facing safety, since no byte of these
+    images reaches a release. The three `curl | sh` lines are worse to pin than
+    to keep: each fixture exists to test hi against whatever that framework
+    currently installs, so pinning them tests a frozen framework instead.
+  - **The case for pinning anyway:** a fixture base that moves under the suite
+    turns a green run red for reasons nobody changed, and the digest is the
+    only thing that makes a failed e2e run reproducible.
+  - **Ticks when:** the decision is written down — in `docs/TESTING.md` if the
+    answer is "deliberately not pinned", or in the Dockerfiles if it is not.
+    Either way Scorecard keeps reporting it, so the point is to stop
+    re-deciding it every time the report is read.
+
 - [ ] **timep profiling for the paths the bench suite guards** — `_hi_bench`
       (`../tests/bench/bench_test.sh`) gives one average per hot path against a
       generous ceiling, which answers _whether_ something got slower and never
@@ -276,25 +298,6 @@ here: git history is the ledger, and this file is only what is left to do.
     number of cases it did before.
 
 ### Demos
-
-- [ ] **A different hi configuration per demo** — all seven tapes render the
-      shipped defaults at the same 1100×620 with every feature on, so the set
-      sells one look rather than a configurable tool. Give each demo a
-      configuration of its own — a trimmed or disabled header, a narrower or
-      taller frame, individual `_HI_DISABLE_*` toggles, a different prompt end,
-      a colors overlay — and seven GIFs turn into seven answers to "what can I
-      change?".
-
-  - **Where it plugs in:** `client_rc` (`tapes/fixtures.sh`) writes the rc every
-    tape sources, which is where a per-demo toggle or overlay belongs; the
-    geometry now comes from `tapes/common.tape`, which a tape overrides with its
-    own `Set` lines after the `Source` — `tapes/color_preview.tape` already does
-    that for height.
-  - **Keep the pairs honest.** `demo.tape` and `docker.tape` share a target on
-    purpose (the README's top GIF must not drift from the one further down), so
-    vary the client configuration there, not the fixture.
-  - **Ticks when:** no two demos ship the same configuration, and the README
-    line under each GIF names the knob that demo is showing.
 
 - [ ] **A completion demo** — `hi <TAB>` is the feature nothing shows.
       `../common/targets.sh` answers with ssh hosts _and_ every running
@@ -395,48 +398,65 @@ human steps and their tick conditions.
   - **Ticks when:** `brew install ivy/tap/hi.d` works, from a release the
     `tap` job opened a PR for.
 
-### CI runs waiting on a first green
+### Repo settings and first runs
 
-Written, committed, and never yet run — each of the three ticks on its first
-green run and on nothing else, which is why they sit here rather than in the
-in-repo half: no file in this checkout can close one.
+Each of these waits on something outside the checkout — a toggle in the repo's
+settings, or a decision — which is why they sit here rather than in the in-repo
+half: no file here can close one. The macOS and Windows e2e workflows used to
+sit here too; both are green now, and `ci.yml` calls each on every push to
+`main` behind the two fast-suite jobs.
 
-Two of them are no longer dispatch-only. `ci.yml` calls both e2e workflows on
-every push to `main`, once the ubuntu and macOS fast-suite jobs are green, so
-the next push to `main` runs them; dispatch still works for running one on its
-own. The Scorecard job is the one that is still dispatch-only.
+- [ ] **Turn branch protection on for `main`** — Scorecard's highest-severity
+      finding, and the one thing on that report that was genuinely blocked
+      until now: `ci.yml`'s `badge` job held `contents: write` and pushed a
+      commit to `main` on every run, so a protected branch would have failed
+      it. That job is gone — the tests count is published to the Pages site
+      instead — and `release.yml`'s gated `publish` job is the only writer
+      left, against tags rather than `main`.
 
-- [ ] **macOS loopback e2e** (`macos-e2e.yml`) — CI's macos job runs only the
-      fast suites, so the BSD userland (`sed -i ''`, `mktemp -t`, `base64 -D`,
-      bash 3.2) is never crossed by a real connection. GitHub's macOS runners
-      ship sshd, so the job enables Remote Login, authorizes a throwaway key,
-      and runs `hi localhost 'echo marker'` — the whole client-and-target BSD
-      path in one go. Pty-wrapped, with a cleanup-trap assertion.
+  - **Watch for:** `publish` still commits the packaging manifests to `main`
+    (`release.yml`, the second credentialed checkout), so whatever rule goes on
+    has to let that job through or the release path breaks at the last step.
+    Decide the required checks too — and per the note on the markdownlint job,
+    do not make the advisory ones required.
+  - **Ticks when:** the rule exists and a release has gone out under it.
 
-  - **Ticks when:** its first green run. Shipped since: `ci.yml`'s `e2e-macos`
-    job calls it on every push to `main` behind both fast-suite jobs, and
-    README carries a macOS badge that reads "no status" until then.
+- [ ] **Decide what to do about the checks this repo cannot score** — the rest
+      of the first Scorecard report, none of it a defect. **License 0** was the
+      one real finding and is already dealt with: the MIT text was always there,
+      just at `docs/LICENSE.md`, where neither github.com nor Scorecard looks —
+      it is `LICENSE.md` at the root now and the next run should score it. What
+      is left is judgement. **Code-Review 0/26** and **CI-Tests 0/1** are what a
+      single maintainer merging their own work scores no matter how good the CI
+      is. **SAST 0** is Scorecard not counting shellcheck, actionlint or zizmor,
+      and CodeQL has no shell support to offer instead. **Fuzzing 0** has no
+      obvious target in a shell tree, though `common/targets.sh` and the colors
+      parser are the two that take untrusted-ish input. **CII-Best-Practices 0**
+      is a self-certification questionnaire nobody has filled in. Everything
+      else passed silently: Token-Permissions, Dangerous-Workflow,
+      Binary-Artifacts, Packaging, Dependency-Update-Tool, Security-Policy,
+      Vulnerabilities, Maintained, Signed-Releases and Contributors.
 
-- [ ] **Windows target e2e** (`windows-e2e.yml`) — the README documents the
-      Git Bash/WSL/PowerShell fallback ladder but no Windows job has ever run.
-      This is the _target_-side job; the client-side half is its own entry now
-      ([The Windows client-side job](#testing--ci)) and neither waits on the
-      other. It configures the stock sshd, sets the admin `authorized_keys` ACL,
-      drives `hi localhost` from Git Bash, and asserts the PowerShell greeting
-      — the cmd `||` fallback is the case to watch. Explicitly experimental;
-      `.gitattributes` pins LF repo-wide, so the classic CRLF-checkout
-      first-dispatch failure is off the risk list.
+  - **The real question** is not how to raise the number but whether to publish
+    it: `scorecard.yml` still sets `publish_results: false`, and a README badge
+    needs it on. A score dominated by "solo maintainer" is not obviously worth
+    displaying — which is the call to make here.
+  - **Ticks when:** `publish_results` is settled either way, and the README
+    badge decision follows from it.
 
-  - **Ticks when:** its first green run. Shipped since: `ci.yml`'s `e2e-windows`
-    job calls it on every push to `main` behind both fast-suite jobs, and
-    README carries a Windows badge that reads "no status" until then.
+- [ ] **Publish the Pages site** (`pages.yml`) — the site builds today and
+      deploys nowhere: `Settings -> Pages -> Source: GitHub Actions` is a click
+      that only exists on a public repo, and it has not been made. It now costs
+      more than a missing site. README's tests badge is a shields `endpoint`
+      reading `badges/tests.json` off that site, so until the click lands it
+      renders `tests | inaccessible` rather than a count.
 
-- [ ] **OpenSSF Scorecard** (`scorecard.yml`) — a public supply-chain score
-      crediting work already done here (SHA pins, minimal token permissions,
-      dependabot, zizmor, branch protection once applied). Dispatch-only,
-      SARIF artifact, `publish_results` off.
-
-  - **Ticks when:** it has been run once and the report read. Only then decide about a README badge.
+  - **Ticks when:** the source is set to GitHub Actions, a deploy goes green,
+    and README's tests badge shows a number. Shipped since: `pages.yml` builds
+    and deploys on every CI success on `main` (plus docs pushes and dispatch),
+    and writes `_site/badges/tests.json` from the fast group's own totals —
+    which replaced `ci.yml`'s `badge` job, the one that used to commit the
+    number back onto `main` on top of whatever the author had just pushed.
 
 ### Docs & submissions
 

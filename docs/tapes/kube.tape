@@ -4,6 +4,11 @@
 # kubectl and hi on PATH; the kind cluster takes a minute the first time.
 # Manual artifact, reviewed by eye.
 #
+# Its configuration: _HI_DISABLE_GIT_STATUS=1, from the settings.sh
+# docs/tapes/fixtures.sh writes. A pod reached through the aliases-only fallback
+# draws no header, so the client prompt is the only surface a knob shows on
+# here - see fixtures.sh for why that rules out the more obvious pick.
+#
 # The Hide blocks pace themselves with Wait+Screen on sentinel text instead
 # of fixed sleeps; the quoted split in fixture-o''k keeps the typed command
 # from matching its own sentinel. Visible sleeps are reading time only.

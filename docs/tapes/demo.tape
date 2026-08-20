@@ -4,6 +4,10 @@
 # the header or prompt changes. Not rendered in CI - docs/demos/demo.gif is a
 # manual artifact, reviewed by eye before committing.
 #
+# Its configuration: none. Every other demo turns a knob (docs/tapes/fixtures.sh
+# writes each one a settings.sh); this is the shot that shows the shipped
+# defaults with everything on, so it must stay stock to mean anything.
+#
 # The target is the same debian box docker.tape's first case uses, through
 # docs/tapes/fixtures.sh rather than a docker run of its own, so the demo at the
 # top of the README cannot drift from the one further down.

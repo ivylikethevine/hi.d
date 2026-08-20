@@ -106,8 +106,9 @@ function test_nfpm_apk_entries_match_package_contents() {
     if [ -d "$_HI_ROOT/$m" ]; then
       src="./dist/staging/usr/share/hi.d/$m/*"
     else
-      # install_tree's cp lands file entries flat by basename (docs/LICENSE.md
-      # stages as LICENSE.md), so the apk entry carries the flat name too
+      # install_tree's cp lands file entries flat by basename, so the apk entry
+      # carries the flat name too - which is every entry's own name today, but
+      # stays correct if a nested one is ever added back
       src="./dist/staging/usr/share/hi.d/${m##*/}"
     fi
     grep -qF -- "- src: $src" "$_HI_NFPM" || {

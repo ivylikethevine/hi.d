@@ -68,7 +68,7 @@ regenerate them, is at the bottom:
 
 The target carries its own `~/hi.d`, so nothing ships over the wire — hi
 loads the tree in place and leaves it alone on exit. Client: bash.
-Showing `_HI_HEADER_TIMESTAMP=0` and `_HI_HEADER_SYSINFO=0` — set on the *box*,
+Showing `_HI_HEADER_TIMESTAMP=0` and `_HI_HEADER_SYSINFO=0` — set on the _box_,
 not the client: a permanent install reads its own config, so this is the demo
 whose knob lives on the target.
 

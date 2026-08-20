@@ -29,11 +29,10 @@ jobs:
     name: supply-chain scorecard
     runs-on: ${{ vars.RUNNER_LABEL || 'ubuntu-latest' }}
     timeout-minutes: 10
-    # No `environment:` gate any more. It was here as a second lock behind
-    # workflow_dispatch, and a schedule cannot pass one: a required reviewer
-    # would leave every weekly run queued for an approval nobody is waiting to
-    # give. release.yml's `release` environment is the one that matters and is
-    # untouched.
+    # Deliberately no `environment:` gate: this runs on a schedule, and a
+    # schedule cannot pass one - a required reviewer would leave every weekly
+    # run queued for an approval nobody is waiting to give. release.yml's
+    # `release` environment is the one that matters.
     permissions:
       contents: read
       # the two the analysis needs, and the only write scopes in this file:

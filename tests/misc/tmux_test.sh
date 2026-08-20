@@ -6,11 +6,10 @@
 # would outlive, and the config must forward the _HI_* variables, or a new
 # window gets a shell that cannot find hi.
 #
-# GLOSSARY: HI.30
+# GLOSSARY: HI.30 + HI.34
 # shellcheck disable=SC2329
 set -euo pipefail
 
-# test_lib.sh sources core.sh itself; $_HI_TEST_LIB wins under the runner
 # shellcheck source=../test_lib.sh
 source "${_HI_TEST_LIB:-${BASH_SOURCE[0]%/*}/../test_lib.sh}"
 

@@ -4,7 +4,7 @@
 #
 # --uninstall is the exact inverse and lives here rather than in a script of its
 # own: both halves own the same marker-tagged lines and the same symlink, and
-# when they were two files the contract between them was two copies of a string
+# split across two files the contract between them is two copies of a string
 # staying identical. scripts/uninstall.sh is a shim onto this flag.
 set -euo pipefail
 
@@ -330,8 +330,8 @@ function show_preview() {
 }
 
 # banner() takes an arg, so wrap it to the zero-arg signature ask_setting's $5
-# expects. _HI_HEADER_BANNER is unset for the call (in a subshell), or a
-# previously-disabled toggle would render an empty preview of the very thing
+# expects. _HI_HEADER_BANNER is unset for the call (in a subshell), or a toggle
+# the user has switched off would render an empty preview of the very thing
 # being asked about.
 function _hi_banner_preview() { (unset _HI_HEADER_BANNER && banner Connected); }
 
@@ -345,7 +345,8 @@ function _hi_prompt_preview() {
 
 # the real git prompt segment against hi.d's own checkout (always a git repo),
 # so the preview shows this machine's actual status. _HI_DISABLE_GIT_STATUS is
-# unset for the call, or a previously-disabled toggle makes it return empty.
+# unset for the call, or a toggle the user has switched off makes it return
+# empty.
 function _hi_git_status_preview() {
   # shellcheck disable=SC2119 # stdout form on purpose - this feeds show_preview
   (cd "$_HI_ROOT" 2>/dev/null && unset _HI_DISABLE_GIT_STATUS && _hi_git_prompt)
@@ -751,11 +752,10 @@ function run_uninstall() {
 # two differ on scripts/ - not in the payload, required here so a user of a
 # packaged install can still run `hi --install`/`hi --uninstall`/`hi --color-preview`
 # against it. tests/ is in neither; `hi --test` reports itself unavailable.
-# Every entry is top-level now. LICENSE.md used to be the one nested one, under
-# docs/, and moved to the root so github.com and OpenSSF Scorecard's License
-# check can both find it - they look there and nowhere else. The staged result
-# is unchanged either way: install_tree's cp lands file entries flat by
-# basename, so docs/LICENSE.md and LICENSE.md both became LICENSE.md.
+# Every entry is top-level. LICENSE.md is at the root rather than under docs/
+# so github.com and OpenSSF Scorecard's License check can both find it - they
+# look there and nowhere else. It makes no difference to the staged result:
+# install_tree's cp lands file entries flat by basename either way.
 _HI_PACKAGE_CONTENTS=(common misc scripts shells hi.sh load.sh LICENSE.md README.md)
 
 # Packaging mode. hi.d normally installs *in place*, which assumes the tree is

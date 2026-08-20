@@ -4,13 +4,12 @@
 # this machine happens to be running" - the same isolation targets_test.sh
 # uses for completion.
 #
-# GLOSSARY: HI.30. SC2317 rides along because sourcing doctor.sh reaches
+# GLOSSARY: HI.30 + HI.34. SC2317 rides along because sourcing doctor.sh reaches
 # hi.sh's trailing dispatch, which shellcheck thinks never returns (see
 # hi_test.sh for the long form of this story).
 # shellcheck disable=SC2329,SC2317
 set -euo pipefail
 
-# test_lib.sh sources core.sh itself; $_HI_TEST_LIB wins under the runner
 # shellcheck source=../test_lib.sh
 source "${_HI_TEST_LIB:-${BASH_SOURCE[0]%/*}/../test_lib.sh}"
 # doctor's own hatch stops it before it reports anything; sourcing hands over
@@ -141,8 +140,8 @@ function test_target_resolves_a_running_container() {
   [[ "$out" == *"resolves"*"docker container"* ]]
 }
 
-# The container arm, which used to stop at the `resolves` row. bash present is
-# the full tier; the interesting case is the other one.
+# The container arm reports a tier like the ssh arm, not just the `resolves`
+# row. bash present is the full tier; the interesting case is the other one.
 function test_container_target_reports_the_full_tier() {
   local out
   out="$(PATH="$(_hi_doctor_shims):$(_hi_doctor_path)" HI_FAKE_TOOLS="base64 bash sh " \

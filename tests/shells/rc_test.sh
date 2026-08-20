@@ -1,15 +1,14 @@
 #!/bin/bash
-# Behavioral tests for shells/bash.sh, zsh.zsh and config.fish - until now they
-# were only syntax-linted, so a prompt or completion that silently stopped being
-# defined would pass CI. Each case runs a fresh shell under `env -i` with HOME
+# Behavioral tests for shells/bash.sh, zsh.zsh and config.fish. Syntax-linting
+# alone lets a prompt or completion silently stop being defined and still pass
+# CI, so these run them. Each case runs a fresh shell under `env -i` with HOME
 # and _HI_CONFIG_DIR pointed into the workdir, so local settings can't leak in.
 #
-# GLOSSARY: HI.30. The single-quoted scripts are expanded by the *child*
+# GLOSSARY: HI.30 + HI.34. The single-quoted scripts are expanded by the *child*
 # shell, which is the whole point (SC2016).
 # shellcheck disable=SC2329,SC2016
 set -euo pipefail
 
-# test_lib.sh sources core.sh itself; $_HI_TEST_LIB wins under the runner
 # shellcheck source=../test_lib.sh
 source "${_HI_TEST_LIB:-${BASH_SOURCE[0]%/*}/../test_lib.sh}"
 

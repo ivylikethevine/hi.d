@@ -25,7 +25,6 @@
 # shellcheck disable=SC2329
 set -euo pipefail
 
-# test_lib.sh sources core.sh itself; $_HI_TEST_LIB wins under the runner
 # shellcheck source=../test_lib.sh
 source "${_HI_TEST_LIB:-${BASH_SOURCE[0]%/*}/../test_lib.sh}"
 

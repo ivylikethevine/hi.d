@@ -7,12 +7,14 @@ floor CI enforces), **POSIX sh** (dash/ash/busybox source parts of it), and
 userlands**. Each entry below is a construct that looks odd until you know
 which master it serves.
 
-Every entry carries a stable `HI.NN` code, and shipped files reference it with a
-short `# GLOSSARY: HI.NN` tag instead of re-explaining - every byte in
-`common/`, `shells/`, `misc/` and `load.sh` rides over the wire on each `hi`.
-The code is what the tags point at, so an entry can be retitled without touching
-a single shipped file; codes are never reused once retired.
-`tests/shells/shellcheck_test.sh` fails the build if a tag names a code this
+Every entry carries a stable `HI.NN` code, and a file references it with a short
+`# GLOSSARY: HI.NN` tag instead of re-explaining. Any file in the tree may carry
+a tag, and `tests/` carries plenty; the tag is *mandatory* in `common/`,
+`shells/`, `misc/`, `load.sh` and `hi.sh`, because every byte of those rides
+over the wire on each `hi`. The code is what the tags point at, so an entry can
+be retitled without touching a single tagged file; codes are never reused once
+retired. A tag is one code, or two joined with ` + `, with optional prose after
+it. `tests/lint/shellcheck_test.sh` fails the build if a tag names a code this
 file doesn't define. This file never ships (the payload is `$_HI_PAYLOAD` in
 `hi.sh`; `docs/` isn't in it).
 
@@ -51,6 +53,7 @@ file doesn't define. This file never ships (the payload is `$_HI_PAYLOAD` in
 - [HI.31 porcelain branch.oid](#hi31-porcelain-branchoid)
 - [HI.32 starship deference](#hi32-starship-deference)
 - [HI.33 derived tree location](#hi33-derived-tree-location)
+- [HI.34 test suite preamble](#hi34-test-suite-preamble)
 
 ## HI.01 empty-array guard
 
@@ -61,7 +64,7 @@ treats expanding an _empty_ array as a fatal "unbound variable". Plain
 **Exception - the index form.** `"${!a[@]}"` is already empty-safe and must
 NOT get the guard: bash 3.2 reads `${!a[@]+...}` as expanding to nothing
 whatever the array holds, and bash 5 reads it as an indirect reference and
-errors outright. The lint table in `tests/shells/shellcheck_test.sh` rejects
+errors outright. The lint table in `tests/lint/shellcheck_test.sh` rejects
 the guarded index form.
 
 ## HI.02 _hi_read_lines
@@ -383,16 +386,19 @@ Each dialect asks the question its own way, and each asks it only when
 `load.sh`, the rc line `scripts/install.sh` writes) still wins and costs no
 fork:
 
-Only a handful of files ask. `common/core.sh` owns the answer; everything that
-merely _needs_ the tree reaches core.sh through its own path rather than
-hand-counting a depth from `$_HI_HOME`, so `common/header.sh`, `scripts/` and
-the test suites carry no derivation at all.
+Only a handful of files ask. `common/core.sh` owns the answer, and everything
+that merely _needs_ the tree reaches core.sh through its own path rather than
+hand-counting a depth from `$_HI_HOME` - `common/header.sh` carries no
+derivation at all. The files that do ask are the ones with nothing above them
+to ask through: an entry point, or a dialect that cannot use the previous row's
+answer.
 
 | where | how |
 | --- | --- |
 | `common/core.sh` | `${BASH_SOURCE[0]}`, then `cd -P ../.. && pwd`. The one that answers for every file sourced through it |
 | `hi.sh`, `scripts/install.sh`, `packaging/lib.sh` | the same, behind a `readlink` walk - `$_HI_LINK` is `/usr/bin/hi`, and the unresolved path answers `/usr`. Three copies, because each must resolve itself before it can source anything |
 | `load.sh`, `tests/test_runner.sh` | `${BASH_SOURCE[0]}` - entry points that _export_ for children |
+| `scripts/doctor.sh`, `scripts/color_preview.sh`, `scripts/packages_preview.sh`, `tests/test_lib.sh` | `${BASH_SOURCE[0]}`, then `$_HI_HOME` if it is set - the standalone-entry form below |
 | zsh (`shells/zsh.zsh`, and `common/core.sh` reached through it) | `${(%):-%x}` with zsh's `:A:h` modifiers; zsh has no `$BASH_SOURCE`, and bash cannot parse `%x`, so core.sh's arm is `eval`'d |
 | fish (`shells/config.fish`) | `sh -c 'cd -P "$1/../.." && pwd'`. Not fish's own `cd`/`pwd`: a builtin-only command substitution runs in the _current_ process, so it would move the caller's cwd, and fish's `pwd` is logical where every other dialect here is physical |
 | `shells/bash.sh` | `$_HI_HOME`, not its own path - the one file that cannot self-locate, because `load.sh` grafts its _text_ into someone else's rc (HI.24), where `$BASH_SOURCE` is that rc |
@@ -400,6 +406,22 @@ the test suites carry no derivation at all.
 `common/core.sh`'s zsh arm is `eval`'d for one reason: bash reads `${(%):-%x}`
 as a bad substitution, and the file has to _parse_ in both shells whichever
 one is running it.
+
+**The standalone-entry form, and why `$_HI_HOME` wins in it.** A script invoked
+on its own has to find core.sh before it can be told anything, so it derives
+from `${BASH_SOURCE[0]}` - but only as the fallback:
+
+```sh
+_hi_d="${BASH_SOURCE[0]}"
+case "$_hi_d" in */*) _hi_d="${_hi_d%/*}/.." ;; *) _hi_d=".." ;; esac
+[ -z "${_HI_HOME:-}" ] || _hi_d="$_HI_HOME/hi.d"
+```
+
+When `$_HI_HOME` is set, _everything_ has to come from there, core.sh included.
+Reaching core.sh through the script's own path while `$_HI_ROOT` - and so
+`table.sh`, `header.sh` and the launcher - came from `$_HI_HOME` runs two trees
+in one process, and does it silently: the loud "no such file" you would want is
+exactly what having a second, working tree takes away.
 
 Two places keep a fallback, and both say so out loud rather than guessing.
 `hi.sh` prints `set _HI_HOME to the directory that holds it` and exits when the
@@ -437,6 +459,36 @@ hi's rc _into someone else's rc_, where `$BASH_SOURCE` is that rc. They are
 wrapped in a guard that requires `$_HI_HOME` to be set - in a session it always
 is, and outside one there is no tree to source.
 
-`tests/shells/shellcheck_test.sh`'s `lint_home_default` greps the tree for the
+`tests/lint/shellcheck_test.sh`'s `lint_home_default` greps the tree for the
 retired spellings, the way it already greps for bash-4 constructs - over
 `.md` too, since docs teaching the old rule are what a packager reads.
+
+## HI.34 test suite preamble
+
+Every suite under `tests/` opens with the same four lines, and they are four
+separate mechanisms rather than boilerplate:
+
+```sh
+# GLOSSARY: HI.30 + HI.34
+# shellcheck disable=SC2329
+set -euo pipefail
+
+# shellcheck source=../test_lib.sh
+source "${_HI_TEST_LIB:-${BASH_SOURCE[0]%/*}/../test_lib.sh}"
+```
+
+`$_HI_TEST_LIB` is exported by `common/paths.sh`, so under `test_runner.sh` -
+or under any shell that has sourced the product - the harness is found through
+the tree the runner resolved, not through the suite's own location. The `${...:-}`
+tail is the fallback for running a suite directly (`tests/common/core_test.sh`),
+where nothing has exported it yet; its `../` depth is the suite's distance from
+`tests/`, so a suite that moves has to have it re-counted.
+
+`test_lib.sh` sources `common/core.sh` itself. A suite therefore sources the
+harness and never core.sh: doing both would run core.sh's initialisation twice,
+and the second run happens after the harness has already moved
+`$XDG_CONFIG_HOME` into the scratch dir.
+
+The `# shellcheck source=` line is a directive, not prose - the linter follows
+it to type-check the source - and `# shellcheck disable=SC2329` is HI.30's
+indirect invocation. Both must stay verbatim above their statement.

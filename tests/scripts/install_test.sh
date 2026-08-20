@@ -4,11 +4,10 @@
 # settings/toggle handling, then the stripping that reverses them (incl. an
 # install+uninstall round trip).
 #
-# GLOSSARY: HI.30
+# GLOSSARY: HI.30 + HI.34
 # shellcheck disable=SC2329
 set -euo pipefail
 
-# test_lib.sh sources core.sh itself; $_HI_TEST_LIB wins under the runner
 # shellcheck source=../test_lib.sh
 source "${_HI_TEST_LIB:-${BASH_SOURCE[0]%/*}/../test_lib.sh}"
 
@@ -136,7 +135,7 @@ function test_fish_config_sources_settings_first() {
 
 # hi.sh's fallback rc is the third entry point, but it's *generated* rather
 # than sourced, so it's asserted against _hi_fallback_rc's real output over in
-# tests/shells/hi_test.sh instead of by grepping the file.
+# tests/hi/parse_test.sh instead of by grepping the file.
 
 # settings.sh is sourced by sh, bash, zsh and fish, so line 1 has to be the
 # `#!/bin/sh` all four read as a comment - and has to stay line 1 once

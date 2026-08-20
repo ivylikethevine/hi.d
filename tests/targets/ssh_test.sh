@@ -11,11 +11,10 @@
 # image never reaches; and that same install plus tmux, for --tmux. The debian base comes
 # from test_lib.sh's _hi_sshd_image, shared with ssh_disconnect_test.sh.
 #
-# GLOSSARY: HI.30
+# GLOSSARY: HI.30 + HI.34
 # shellcheck disable=SC2329
 set -euo pipefail
 
-# test_lib.sh sources core.sh itself; $_HI_TEST_LIB wins under the runner
 # shellcheck source=../test_lib.sh
 source "${_HI_TEST_LIB:-${BASH_SOURCE[0]%/*}/../test_lib.sh}"
 
@@ -236,6 +235,10 @@ function _hi_run_bystander_case() {
     _hi_skip "[bystander]" "no python3 to drive an interactive pty"
     return 0
   fi
+  # $_HI_SSHD_IMAGE is tests/lib/ssh.sh's, reached two sources deep through
+  # test_lib.sh - a depth SC2153's misspelling heuristic stops counting
+  # assignments at, so it offers this file's own _HI_SSH_IMAGES instead
+  # shellcheck disable=SC2153
   _hi_sshd_container "$name" "$_HI_SSHD_IMAGE" -e "LOGIN_SHELL=/bin/bash" || return 1
   _hi_ssh_launch "$_HI_SSH_PORT"
   : >"$out_file"

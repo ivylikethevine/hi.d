@@ -246,9 +246,9 @@ jobs:
   # size on a fixture built once and thrown away. Worth seeing, never worth
   # reddening somebody's PR over.
   #
-  # The one finding that was a real bug is already fixed rather than ignored:
-  # DL4006, three framework fixtures piping curl into sh with no pipefail, so a
-  # 404 built a green image with the framework missing.
+  # The one finding worth a hard failure is fixed in the fixtures rather than
+  # ignored here: DL4006, a framework fixture piping curl into sh with no
+  # pipefail, where a 404 builds a green image with the framework missing.
   hadolint:
     name: hadolint (advisory)
     # Pinned hosted, not needs.runner: this job installs no apt packages and

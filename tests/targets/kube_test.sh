@@ -11,11 +11,10 @@
 # is already proven there, so this only needs to prove kubectl exec's own
 # argument shapes work - once with bash present, once without.
 #
-# GLOSSARY: HI.30
+# GLOSSARY: HI.30 + HI.34
 # shellcheck disable=SC2329
 set -euo pipefail
 
-# test_lib.sh sources core.sh itself; $_HI_TEST_LIB wins under the runner
 # shellcheck source=../test_lib.sh
 source "${_HI_TEST_LIB:-${BASH_SOURCE[0]%/*}/../test_lib.sh}"
 
@@ -79,8 +78,9 @@ function _hi_run_case() {
   fi
   _hi_cecho " | Pod: $name (image: $image)"
 
-  # 120s, not the 20s this used to allow: the preload makes Running arrive in a
-  # couple of seconds, and this is the budget for the run where it didn't work.
+  # 120s, generously: the preload makes Running arrive in a couple of seconds,
+  # so this is the budget for the run where that didn't work rather than a
+  # figure anything normally spends.
   if ! _hi_poll_bool 240 0.5 _hi_pod_running "$name"; then
     kubectl describe pod "$name" >"$_HI_WORKDIR/$label.describe.log" 2>&1 || true
     _hi_dump_log "Pod never reported Running:" "$_HI_WORKDIR/$label.describe.log"

@@ -8,11 +8,10 @@
 # those seams, plus the table geometry, against a fixture packages file and a
 # PATH holding exactly the packages the fixture calls installed.
 #
-# GLOSSARY: HI.30
+# GLOSSARY: HI.30 + HI.34
 # shellcheck disable=SC2329
 set -euo pipefail
 
-# test_lib.sh sources core.sh itself; $_HI_TEST_LIB wins under the runner
 # shellcheck source=../test_lib.sh
 source "${_HI_TEST_LIB:-${BASH_SOURCE[0]%/*}/../test_lib.sh}"
 # its own hatch stops it before it renders anything; sourcing hands over the

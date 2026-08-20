@@ -69,7 +69,7 @@ settings" — the fork-PR approval and the `manual-dispatch` environment —
 _before_ pointing any of these variables at a self-hosted runner. Neither can
 be done from a workflow file, and the `environment:` declarations in
 `release.yml` and `scorecard.yml` are inert until the second one exists. The
-two e2e workflows no longer carry one: `ci.yml` calls them on every push to
+two e2e workflows deliberately carry none: `ci.yml` calls them on every push to
 `main`, where a required reviewer would stall the run rather than gate it — the
 `push`-only condition is what keeps a fork's pull request out of them.
 
@@ -104,7 +104,7 @@ shell, tmux's `update-environment`, another machine's `hi` probing this one - ha
 what a packaged install contains — `_HI_PACKAGE_CONTENTS` and `install_tree()` in that file. Both AUR
 PKGBUILDs and `mkpkg.sh` call it. Only the Homebrew formula repeats the list, because a formula cannot
 call it: `install_tree` hardcodes `/usr/bin` and `/etc/profile.d`, neither of which exists in a brew
-prefix. `tests/scripts/packaging_test.sh` fails if that copy drifts.
+prefix. `tests/packaging/packaging_test.sh` fails if that copy drifts.
 
 ## Layout
 
@@ -125,7 +125,7 @@ It cannot live in git: `bump.sh` runs only after the tag exists (its checksums n
 committed stamp would always be one release stale in the very tarball Homebrew and the AUR build from. A
 checkout answers `hi --version` with `git describe` instead, so the committed line stays empty. The
 formula passes `--date <version>`, having no `SOURCE_DATE_EPOCH`, and `stamp.sh` refuses to guess one.
-`tests/scripts/packaging_test.sh` guards all of it.
+`tests/packaging/packaging_test.sh` guards all of it.
 
 ## Cutting a release
 
@@ -187,8 +187,8 @@ W: Dependency zsh detected but optional (programs ['zsh'] ...)     # same
 W: Dependency included, but may not be needed ('openssh')          # hi runs ssh; no shebang says so
 ```
 
-Anything else is a real finding. (`coreutils` appeared here too and was dropped from `depends` — it is in
-`base`, which packaging guidelines say to assume.)
+Anything else is a real finding. (`coreutils` is deliberately not in `depends` — it is in `base`, which
+packaging guidelines say to assume.)
 
 **The end-to-end check**, which is what caught the `hi.d-git` package shipping no version stamp:
 

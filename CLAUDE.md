@@ -18,20 +18,35 @@ Symptom of forgetting: suites report fewer/MISSING cases, or a script runs
 - `tests/test_runner.sh` runs everything; `--group fast` is the CI gate. Lint
   (shellcheck, shfmt, checkbashisms, the bash-4 construct grep) is enforced by
   the fast group itself — there is no separate lint step.
+- Run the suite at the **end** of a multi-step change, not between its steps.
+  A structural refactor breaks loudly at source time, and each run costs ~2
+  minutes — twice through a six-step change buys nothing the last run doesn't.
+- A suite lives in `tests/<the directory it tests>/`: `tests/hi/` and
+  `tests/load/` for the two scripts at the tree root, `tests/lint/` for the
+  lint gate, `tests/harness/` for the suites that test the harness, and
+  `tests/common|shells|misc|scripts|packaging/` mirroring the tree. The harness
+  is `tests/test_lib.sh`, a façade over `tests/lib/` — that path is pinned by
+  `common/paths.sh`'s `$_HI_TEST_LIB`, which ships, so it does not move. A
+  suite sources the façade and nothing else (`docs/GLOSSARY.md`'s HI.34).
 - Skip the suite when the diff is prose only — it costs ~2 minutes, most of it
   shellcheck, and no case reads ordinary `.md`. "Only `.yml`/`.md`" is _not_
   the same test, though: the fast group reads several of both. Run it when the
   diff touches `.github/workflows/*.yml` (`runner_test.sh` checks that every
   `--group` name `ci.yml` invokes exists; `packaging_test.sh` asserts against
   `release.yml` and scans every workflow for its `tool:` pins),
-  `docs/GLOSSARY.md` (drift-checked against the shipped files' `# GLOSSARY:`
-  tags by the shellcheck suite), or `packaging/nfpm/nfpm.yaml`. `README.md`'s
+  `docs/GLOSSARY.md` (drift-checked against the tree's `# GLOSSARY:` tags by
+  `tests/lint/shellcheck_test.sh`), or `packaging/nfpm/nfpm.yaml`. `README.md`'s
   payload badge is read by `bench_test.sh` — `--group bench`, not fast.
 - The container suites run their cases in parallel (`_hi_par_case` /
-  `_hi_par_wait` in `test_lib.sh`), capped at four at a time. Set
+  `_hi_par_wait` in `tests/lib/parallel.sh`), capped at four at a time. Set
   `_HI_PAR_WIDTH=1` to put a suite back on one case at a time — it is the same
   code path, and it is what to reach for when a case is flaky or a transcript
-  needs reading live rather than replayed.
+  needs reading live rather than replayed. The lint suite fans out the same
+  way, one shellcheck invocation per CPU over a share of the file list;
+  `_HI_SC_WIDTH=1` is its serial form.
+- `shfmt -w .` is **not** the fix for a red shfmt gate: the gate reads the same
+  `*.sh` list shellcheck does, and `.` also reformats `shells/zsh.zsh`, which
+  is zsh and ships. Reformat the paths the failure names.
 - The e2e suites (ssh, docker, podman, nomad, kube) need real backends, and
   they do run in this environment (the sandbox allows the docker socket as of
   Aug 2026). A suite that stands down reports yellow **SKIPPED**, never green;
@@ -39,7 +54,7 @@ Symptom of forgetting: suites report fewer/MISSING cases, or a script runs
   STATUS/SKIP columns rather than assuming.
 - `tests/coverage.sh` is deliberately not in CI and its numbers are currently
   untrustworthy — its own header explains why (kcov loses the DEBUG trap once
-  test_lib.sh is sourced). Don't write tests to move those figures.
+  the harness is sourced). Don't write tests to move those figures.
 
 ## Hard constraints
 

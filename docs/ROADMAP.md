@@ -119,7 +119,7 @@ here: git history is the ledger, and this file is only what is left to do.
       obviously worth doing. `_hi_payload_tar` now drops `misc/vim.rc`,
       `misc/nano.rc` and `shells/osc52.sh` when the overlay has switched them
       off, measured at −2071 bytes gzipped with both toggles set. `aliases.sh`
-      is the biggest file in `misc/` at 8.7KB and was the entry's headline
+      is the biggest file in `misc/` at 8.7KB and would be the headline
       saving, but it is deliberately excluded.
 
   - **Why it is excluded.** `_HI_DISABLE_ALIASES` turns off the _personal_
@@ -128,7 +128,7 @@ here: git history is the ledger, and this file is only what is left to do.
     return — its comments say so explicitly ("above the early return, so
     disabling personal aliases still leaves the theme"). Trimming it is a
     behaviour change wearing a size saving's clothes, and
-    `tests/shells/hi_test.sh` now pins that it keeps shipping.
+    `tests/hi/payload_test.sh` now pins that it keeps shipping.
   - **What it would take:** split the file, so the always-on half and the
     personal-aliases half are separate payload members and only the second is
     trimmed. That is a real refactor of a file three shells parse under a
@@ -177,7 +177,7 @@ here: git history is the ledger, and this file is only what is left to do.
       forever and teaches everyone to skip it. With `--ignore-unfixed` all three
       images report **0** today, so the job is green until something actionable
       lands and its going red means exactly one thing: bump the pin.
-  - **Shipped since:** `.github/workflows/image-scan.yml` runs it weekly and on
+  - **The code half is in place.** `.github/workflows/image-scan.yml` runs it weekly and on
       dispatch, advisory like markdownlint and link-check. trivy is pinned in
       `setup-tool`'s `tools.txt`, so it caches and the weekly drift check
       watches it like every other tool — no new action dependency. The scan
@@ -199,12 +199,12 @@ here: git history is the ledger, and this file is only what is left to do.
       not every package inside it. `DL3002` (last USER is root) is what an
       sshd fixture is. A `.hadolint.yaml` naming those, with the reason, is
       part of the work.
-  - **`DL4006` was the one that was a bug**, and it is fixed rather than
-      ignored: `framework-atuin`, `framework-mise` and `framework-starship`
-      piped curl into sh with no `pipefail`, so a 404 built a green image with
-      the framework missing and the suite then tested an absence. All three
-      carry `SHELL ["/bin/bash", "-o", "pipefail", "-c"]` now.
-  - **Shipped since:** `ci.yml`'s `hadolint` job, advisory, on every PR rather
+  - **`DL4006` is the one that is a bug**, and it is fixed rather than
+      ignored: piping curl into sh with no `pipefail` lets a 404 build a green
+      image with the framework missing, and the suite then tests an absence.
+      `framework-atuin`, `framework-mise` and `framework-starship` all carry
+      `SHELL ["/bin/bash", "-o", "pipefail", "-c"]`.
+  - **The code half is in place.** `ci.yml`'s `hadolint` job, advisory, on every PR rather
       than only ones touching `tests/dockerfiles/**` — a job-level paths filter
       does not exist and the job costs seconds, so the superset is the simpler
       honest answer. `.hadolint.yaml` carries a reason per silenced rule and
@@ -269,32 +269,9 @@ here: git history is the ledger, and this file is only what is left to do.
     it as a known limit beside the tmux limits already in `CONFIGURATION.md`.
     Both are defensible; what is not defensible is that neither the docs nor a
     test currently says which one is true.
-  - **Ticks when:** the behaviour is whichever of the two was chosen, and a case
+  - **Ticks when:** the behaviour is whichever of the two is chosen, and a case
     pins it — two overlapping sessions, the first one exiting, then a fresh shell
     in the second.
-
-- [ ] **Break up the three test files over 1000 lines** — `tests/test_lib.sh`
-      (~1680), `tests/shells/hi_test.sh` (~1250) and
-      `tests/harness/lib_test.sh` (~1130) are the only source files in the tree
-      past that mark, and they are the three a session is most likely to have to
-      read end to end. `test_lib.sh` is the worst of them because every suite
-      sources it: it is the harness, the assertions, the parallel-case runner,
-      the container ledger, the fixture builders and the host report in one file.
-
-  - **Split on the seams that already exist.** The file is written in labelled
-    blocks — counters and assertions, the parallel batch, workdir and cleanup,
-    container and key fixtures, reporting — and each has its own header comment
-    already. Sourcing one file that sources the parts keeps every suite's
-    `source "${_HI_TEST_LIB:-...}"` line working unchanged.
-  - **The two suites split by subject**, not by size: `hi_test.sh` covers
-    argument parsing, payload assembly and the remote suffix, and `lib_test.sh`
-    covers the harness's own contracts.
-  - **Nothing here ships**, so neither payload budget moves — but the lint suite
-    walks every `*.sh` in the tree, so a split adds files to shellcheck's count
-    rather than work to a session.
-  - **Ticks when:** no file under `tests/` is over 1000 lines, the suite list in
-    `tests/test_runner.sh` is unchanged, and `--group fast` passes the same
-    number of cases it did before.
 
 ### Demos
 
@@ -401,18 +378,13 @@ human steps and their tick conditions.
 
 Each of these waits on something outside the checkout — a toggle in the repo's
 settings, or a decision — which is why they sit here rather than in the in-repo
-half: no file here can close one. Three entries have left it recently: the
-macOS and Windows e2e workflows are green and `ci.yml` calls each on every push
-to `main` behind the two fast-suite jobs, and Pages is published — the site and
-the `badges/tests.json` endpoint README's tests badge reads both answer.
+half: no file here can close one.
 
 - [ ] **Turn branch protection on for `main`** — Scorecard's highest-severity
-      finding, and the one thing on that report that was genuinely blocked
-      until now: `ci.yml`'s `badge` job held `contents: write` and pushed a
-      commit to `main` on every run, so a protected branch would have failed
-      it. That job is gone — the tests count is published to the Pages site
-      instead — and `release.yml`'s gated `publish` job is the only writer
-      left, against tags rather than `main`.
+      finding, and nothing in the repo blocks it: the tests count is published
+      to the Pages site rather than pushed to `main` by a `contents: write`
+      job, so `release.yml`'s gated `publish` job is the only writer, and it
+      writes against tags.
 
   - **Watch for:** `publish` still commits the packaging manifests to `main`
     (`release.yml`, the second credentialed checkout), so whatever rule goes on
@@ -461,11 +433,9 @@ the `badges/tests.json` endpoint README's tests badge reads both answer.
     after the hook exists means two mechanisms for one problem.
 
 - [ ] **Decide what to do about the checks this repo cannot score** — the rest
-      of the first Scorecard report, none of it a defect. **License 0** was the
-      one real finding and is already dealt with: the MIT text was always there,
-      just at `docs/LICENSE.md`, where neither github.com nor Scorecard looks —
-      it is `LICENSE.md` at the root now and the next run should score it. What
-      is left is judgement. **Code-Review 0/26** and **CI-Tests 0/1** are what a
+      of the first Scorecard report, none of it a defect. **License 0** is dealt
+      with: the MIT text is `LICENSE.md` at the root, which is the one place
+      github.com and Scorecard both look. What is left is judgement. **Code-Review 0/26** and **CI-Tests 0/1** are what a
       single maintainer merging their own work scores no matter how good the CI
       is. **SAST 0** is Scorecard not counting shellcheck, actionlint or zizmor,
       and CodeQL has no shell support to offer instead. **Fuzzing 0** has no
@@ -480,15 +450,15 @@ the `badges/tests.json` endpoint README's tests badge reads both answer.
     it: `scorecard.yml` still sets `publish_results: false`, and a README badge
     needs it on. A score dominated by "solo maintainer" is not obviously worth
     displaying — which is the call to make here.
-  - **Shipped since:** the workflow runs weekly rather than on dispatch, so the
+  - **The code half is in place.** The workflow runs weekly rather than on dispatch, so the
     answer arrives as a trend instead of whenever someone remembers. Its
     `manual-dispatch` environment went with the change — a schedule cannot
-    satisfy a required reviewer — and nothing was lost with it, the job being
-    `read-all` with an artifact for output. `publish_results` is on and the
-    SARIF now uploads to code scanning, so findings land in the Security tab
-    rather than inside an artifact.
-  - **The README badge is deliberately not there yet.** It was added and taken
-    back out: `api.securityscorecards.dev` 404s for this repo until a
+    satisfy a required reviewer, and the job is `read-all` with an artifact for
+    output so it needs none. `publish_results` is on and the SARIF uploads to
+    code scanning, so findings land in the Security tab rather than inside an
+    artifact.
+  - **The README badge is deliberately not there yet.**
+    `api.securityscorecards.dev` 404s for this repo until a
     _scheduled_ run has published, and shields renders that as
     `openssf scorecard: invalid repo path` while scorecard.dev's viewer errors
     outright. A `workflow_dispatch` will not fix it — the action only publishes

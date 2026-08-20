@@ -5,12 +5,7 @@
 # check itself as it will actually print. Run via `hi --packages-preview`.
 set -euo pipefail
 
-# The tree from this file's own path - unless $_HI_HOME already names one, in
-# which case *everything* comes from there, core.sh included. Reaching core.sh
-# through this file while $_HI_ROOT (and so table.sh, header.sh and the
-# launcher) came from $_HI_HOME ran two trees in one process, and silently:
-# the loud "no such file" you would want was exactly what it stopped giving.
-# GLOSSARY: HI.33
+# GLOSSARY: HI.33 - the standalone-entry form, and why $_HI_HOME wins in it
 _hi_d="${BASH_SOURCE[0]}"
 case "$_hi_d" in */*) _hi_d="${_hi_d%/*}/.." ;; *) _hi_d=".." ;; esac
 [ -z "${_HI_HOME:-}" ] || _hi_d="$_HI_HOME/hi.d"

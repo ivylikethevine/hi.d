@@ -1,8 +1,8 @@
 #!/bin/bash
 # Renders every demo GIF from its tape: one `vhs` run per tape, with a
 # `fixtures.sh down` in between - no tape cleans up after itself, on purpose
-# (typing into the pty right after a session teardown proved flaky), so somebody
-# has to, and that somebody used to be a person following README.
+# (typing into the pty right after a session teardown proved flaky), so this
+# script is what does it, rather than a person following README.
 #
 # The two things a hand-render has to get right every single time, both handled
 # below:
@@ -59,7 +59,7 @@ _HI_USAGE="Usage: generate.sh [-l|--list] [--head] [--keep] [--require-run] [--d
 
 # "<name>:<fixture>:<tool...>", in render order. A string table rather than an
 # associative array: bash 3.2 is the floor (see the lint suite), and the same
-# shape is what tests/shells/shellcheck_test.sh's own tables use.
+# shape is what tests/lint/shellcheck_test.sh's own tables use.
 #
 # The tool column is not a copy of the tape's `Require` lines - those cover the
 # backend only. Nothing declares the tape's own client shell (`Set Shell zsh`,

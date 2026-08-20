@@ -6,12 +6,14 @@
 # fork slipping into a loop, a probe losing its timeout), not to flake on a
 # busy CI runner. Its own `bench` group, so `--group fast` stays fast.
 #
-# GLOSSARY: HI.30. The single-quoted child scripts are expanded by the child
-# shell (SC2016).
-# shellcheck disable=SC2329,SC2016
+# GLOSSARY: HI.30 + HI.34. The single-quoted child scripts are expanded by the
+# child shell (SC2016). SC2317 rides along because the two payload benches
+# source hi.sh inside a function: with test_lib.sh reached first, hi.sh's
+# trailing `_hi "$@"` is two sources deep and shellcheck reads everything
+# after the source as unreachable.
+# shellcheck disable=SC2329,SC2016,SC2317
 set -euo pipefail
 
-# test_lib.sh sources core.sh itself; $_HI_TEST_LIB wins under the runner
 # shellcheck source=../test_lib.sh
 source "${_HI_TEST_LIB:-${BASH_SOURCE[0]%/*}/../test_lib.sh}"
 

@@ -10,16 +10,11 @@
 # SC2317/SC2329: shellcheck follows the `source "$_HI_LAUNCHER"` below into
 # hi.sh's trailing `_hi "$@"`, decides that call never returns, and marks
 # everything after the source line unreachable - it doesn't model hi.sh's
-# BASH_SOURCE guard (same story as tests/shells/hi_test.sh).
+# BASH_SOURCE guard (same story as tests/hi/parse_test.sh).
 # shellcheck disable=SC2317,SC2329
 set -euo pipefail
 
-# The tree from this file's own path - unless $_HI_HOME already names one, in
-# which case *everything* comes from there, core.sh included. Reaching core.sh
-# through this file while $_HI_ROOT (and so table.sh, header.sh and the
-# launcher) came from $_HI_HOME ran two trees in one process, and silently:
-# the loud "no such file" you would want was exactly what it stopped giving.
-# GLOSSARY: HI.33
+# GLOSSARY: HI.33 - the standalone-entry form, and why $_HI_HOME wins in it
 _hi_d="${BASH_SOURCE[0]}"
 case "$_hi_d" in */*) _hi_d="${_hi_d%/*}/.." ;; *) _hi_d=".." ;; esac
 [ -z "${_HI_HOME:-}" ] || _hi_d="$_HI_HOME/hi.d"
@@ -232,9 +227,10 @@ function doctor_target() {
 
 # The container half, and deliberately the same shape as doctor_ssh_target: what
 # the target has, whether a session lands in the full tier or the aliases-only
-# one, and what it costs to get there. A docker/podman/nomad/kube target used to
-# stop at the `resolves` row, which is the half of the report worth having when
-# a session comes up in the fallback tier and nobody can say why.
+# one, and what it costs to get there. A docker/podman/nomad/kube target gets
+# the same tier report an ssh one does, not just the `resolves` row: the tier is
+# the half worth having when a session comes up in the fallback and nobody can
+# say why.
 #
 # hi.sh's _hi_container_cmds builds the exec, so this asks the question through
 # exactly the call a real session would - not an approximation of it.

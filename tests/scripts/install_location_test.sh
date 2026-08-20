@@ -28,13 +28,12 @@
 # the wiring under test. $_HI_HOME in particular is never passed: passing it
 # would answer the question the suite is asking.
 #
-# GLOSSARY: HI.30
+# GLOSSARY: HI.30 + HI.34
 # shellcheck disable=SC2329
 # The single-quoted scripts below are expanded by the *child* shell (SC2016).
 # shellcheck disable=SC2016
 set -euo pipefail
 
-# test_lib.sh sources core.sh itself; $_HI_TEST_LIB wins under the runner
 # shellcheck source=../test_lib.sh
 source "${_HI_TEST_LIB:-${BASH_SOURCE[0]%/*}/../test_lib.sh}"
 

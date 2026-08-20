@@ -1,7 +1,7 @@
 #!/bin/bash
 # Unit tests for common/git_prompt.sh's _hi_git_prompt.
 #
-# GLOSSARY: HI.30
+# GLOSSARY: HI.30 + HI.34
 # shellcheck disable=SC2329
 # Every _hi_git_prompt call here deliberately omits the optional out-var (the
 # stdout form is what's under test), which SC2119 can't tell from a mistake.
@@ -11,7 +11,6 @@ set -euo pipefail
 # set so a runner without a UTF-8 locale doesn't get the ASCII fallback
 # (chosen after core.sh is sourced, below)
 
-# test_lib.sh sources core.sh itself; $_HI_TEST_LIB wins under the runner
 # shellcheck source=../test_lib.sh
 source "${_HI_TEST_LIB:-${BASH_SOURCE[0]%/*}/../test_lib.sh}"
 # shellcheck source=../../common/git_prompt.sh

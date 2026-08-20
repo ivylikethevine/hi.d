@@ -11,6 +11,7 @@ tests/test_runner.sh
 ## Contents
 
 - [Running the tests](#running-the-tests)
+  - [Where a suite lives](#where-a-suite-lives)
   - [The container suites run their cases in parallel](#the-container-suites-run-their-cases-in-parallel)
   - [The images are files; the build contexts are not](#the-images-are-files-the-build-contexts-are-not)
 - [The lint gate](#the-lint-gate)
@@ -42,21 +43,34 @@ and fails on another. CI passes it on every job. The `_HI_HOME` half of it print
 not - but only when the tree the suites are testing isn't the one you invoked the runner from, which is the
 quietest way to get a wrong result here.
 
-Four groups (`--group <name>`), matching CI's four jobs. `fast`: `aliases`, `alias_fallthrough`, `osc52`,
-`tmux`, `shellcheck`, `install`, `packaging`, `hi`, `header`, `core`, `git_prompt`, `targets`, `paths`,
-`color_preview`, `packages_preview`, `doctor`, `load`, `rc`, `test_lib`, `test_runner` — dependency-free, the first thing CI runs
-on every push/PR (the last two are the harness testing itself). `bench`: hot-path timings checked against
-ceilings. `e2e`: `ssh`, `ssh_disconnect`, `ssh_relay`, `docker`, `framework` — real throwaway containers
-driving `hi.sh`'s actual connection paths, covering both halves of it (`_say_hi` and `_say_hi_container`).
-`backends`: `podman`, `nomad`, `kube` — split from `e2e` because they need extra runner setup (podman, nomad,
-kind) beyond docker; a separate, slower CI job. Every e2e/backends suite skips cleanly with a warning rather
-than failing when its backend isn't installed. Every test script also runs directly, e.g.
-`tests/shells/shellcheck_test.sh`.
+Four groups (`--group <name>`), matching CI's four jobs. `--list` prints the membership, which is the copy
+to trust — `tests/test_runner.sh --group fast --list`:
+
+- **`fast`** — dependency-free, the first thing CI runs on every push/PR. Every suite except the four below,
+  including `test_lib`, `test_lib_report`, `test_lib_par` and `test_runner`, which are the harness testing
+  itself.
+- **`bench`** — hot-path timings checked against ceilings, plus the payload's two size budgets.
+- **`e2e`** — `ssh`, `ssh_disconnect`, `ssh_relay`, `docker`, `framework`: real throwaway containers driving
+  `hi.sh`'s actual connection paths, covering both halves of it (`_say_hi` and `_say_hi_container`).
+- **`backends`** — `podman`, `nomad`, `kube`: split from `e2e` because they need extra runner setup (podman,
+  nomad, kind) beyond docker; a separate, slower CI job.
+
+Every e2e/backends suite skips cleanly with a warning rather than failing when its backend isn't installed.
+Every test script also runs directly, e.g. `tests/lint/shellcheck_test.sh`.
+
+### Where a suite lives
+
+`tests/<the directory it tests>/`. `tests/common/`, `tests/shells/`, `tests/misc/`, `tests/scripts/` and
+`tests/packaging/` mirror the tree; `tests/hi/` and `tests/load/` cover the two scripts at the root;
+`tests/lint/` is the lint gate, `tests/bench/` the timings, `tests/targets/` the container/ssh e2e suites,
+and `tests/harness/` the suites that test the harness. The harness itself is `tests/test_lib.sh` — a façade
+over `tests/lib/`, which is where its parts live. A suite sources the façade and nothing else
+(`docs/GLOSSARY.md`'s HI.34).
 
 ### The container suites run their cases in parallel
 
 `ssh`, `ssh_relay`, `docker`, `podman`, `framework` and `kube` spend nearly all their wall clock waiting on
-one container at a time, so their cases run in a batch: `_hi_par_case` in `tests/test_lib.sh` submits a case
+one container at a time, so their cases run in a batch: `_hi_par_case` in `tests/lib/parallel.sh` submits a case
 to a background subshell, `_hi_par_wait` collects the batch. Each case writes its verdict to a file that the
 parent tallies (a subshell's counter increments would die with it), registers what it started on a teardown
 ledger the exit trap sweeps, and buffers its output to be replayed **in submission order** - so a parallel
@@ -102,7 +116,9 @@ as "the image just didn't build" in an e2e run on a machine with a container bac
 `tests/test_runner.sh shellcheck` is one suite with seven halves, and CI runs all of them:
 
 1. **shellcheck** over every `*.sh` (CI pins the version - see
-   `.github/actions/setup-tool/tools.txt`).
+   `.github/actions/setup-tool/tools.txt`). It is the whole cost of the fast
+   group, so the file list is dealt into one invocation per CPU and replayed
+   in order; `_HI_SC_WIDTH=1` puts it back on a single process.
 2. **Native syntax checks**: `zsh -n` / `fish --no-execute` over the files
    those shells parse for themselves.
 3. **The bash-3.2 grep**: no `mapfile`, no associative arrays, no namerefs,
@@ -110,8 +126,10 @@ as "the image just didn't build" in an e2e run on a machine with a container bac
    deliberately-odd construct this forces is explained once in
    [GLOSSARY.md](GLOSSARY.md); code references entries by their stable
    `HI.NN` code with `# GLOSSARY: HI.NN` tags rather than re-explaining.
-4. **shfmt** as a formatting gate. The style comes from `.editorconfig`;
-   fix a red run with `shfmt -w .`.
+4. **shfmt** as a formatting gate over the same `*.sh` list. The style comes
+   from `.editorconfig`; fix a red run with `shfmt -w` on the paths it
+   names, not `shfmt -w .` - that would also reformat `shells/zsh.zsh`,
+   which is not in the gate and is zsh, not bash.
 5. **checkbashisms** over the `#!/bin/sh` files, which dash and busybox sh
    really do parse on minimal targets.
 6. **GLOSSARY tags**: every `# GLOSSARY: HI.NN` in the tree has to name a code

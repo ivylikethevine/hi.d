@@ -29,7 +29,7 @@ class HiD < Formula
     # This list is _HI_PACKAGE_CONTENTS in scripts/install.sh, repeated because
     # a formula cannot call install.sh: install_tree hardcodes /usr/bin and
     # /etc/profile.d, neither of which exists inside a brew prefix. The
-    # packaging suite (tests/scripts/packaging_test.sh) fails if the two lists
+    # packaging suite (tests/packaging/packaging_test.sh) fails if the two lists
     # drift apart.
     #
     # It must land in a directory named hi.d - every path in the project

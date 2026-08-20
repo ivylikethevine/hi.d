@@ -10,13 +10,12 @@
 # with the real _HI_ROOT would delete this checkout; the canary case at the end
 # proves none did.
 #
-# GLOSSARY: HI.30
+# GLOSSARY: HI.30 + HI.34
 # The single-quoted probe scripts expand in the child shell, which is the
 # point (SC2016).
 # shellcheck disable=SC2329,SC2016
 set -euo pipefail
 
-# test_lib.sh sources core.sh itself; $_HI_TEST_LIB wins under the runner
 # shellcheck source=../test_lib.sh
 source "${_HI_TEST_LIB:-${BASH_SOURCE[0]%/*}/../test_lib.sh}"
 

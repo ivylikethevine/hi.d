@@ -8,7 +8,6 @@
 # not): shfmt as a formatting gate, and checkbashisms over the #!/bin/sh files.
 set -euo pipefail
 
-# test_lib.sh sources core.sh itself; $_HI_TEST_LIB wins under the runner
 # shellcheck source=../test_lib.sh
 source "${_HI_TEST_LIB:-${BASH_SOURCE[0]%/*}/../test_lib.sh}"
 
@@ -202,9 +201,9 @@ function lint_shfmt() {
   if out="$(shfmt -d "${_HI_SH_FILES[@]}" 2>&1)"; then
     _hi_align " | shfmt $(shfmt --version): every file already formatted" "OK" "$GREEN"
   else
-    _hi_align " | shfmt: files need reformatting (fix with: shfmt -w .)" "FAILED" "$RED"
+    _hi_align " | shfmt: files need reformatting (fix with: shfmt -w on the paths below)" "FAILED" "$RED"
     printf '%s\n' "$out" | sed 's/^/      /'
-    _hi_note_failure "shfmt formatting (fix with: shfmt -w .)"
+    _hi_note_failure "shfmt formatting (shfmt -w the paths it names)"
     return 1
   fi
 }
@@ -327,8 +326,8 @@ function lint_dockerfiles() {
     stem="${stem%.Dockerfile}"
     _HI_LINT_TOTAL=$((_HI_LINT_TOTAL + 1))
 
-    # a real Dockerfile, not a leftover FROM-less fragment of the kind
-    # framework_test.sh used to assemble at build time
+    # a real Dockerfile, not a FROM-less fragment for a suite to assemble at
+    # build time - the shape this guard exists to keep out
     first="$(grep -vE '^[[:space:]]*(#|$)' "$file" | head -1 | awk '{print $1}')"
     if [ "$first" != FROM ] && [ "$first" != ARG ]; then
       _hi_align " | $stem: starts with ${first:-nothing}, not FROM or ARG" "FAILED" "$RED"
@@ -369,6 +368,84 @@ function lint_dockerfiles() {
   return "$bad"
 }
 
+# The linter is the whole cost of `--group fast`, and it runs as one serial
+# process: under -x it re-parses each file's entire sourced tree from scratch, so
+# tests/test_lib.sh and the eight parts under tests/lib/ are analysed once per
+# suite that sources them - most of the tree. The work is per-file and
+# independent, so it fans out here the way tests/lib/parallel.sh fans out
+# container cases: one shellcheck per file, $(_hi_sc_width) at a time, each
+# writing its own output file so concurrent findings cannot interleave, replayed
+# in the original order once the batch is done. Same tool, same flags, same
+# bytes on the terminal - only the wall clock changes.
+#
+# The width is the whole CPU count rather than _hi_par_width's cap of four: that
+# cap is there because a container case is a docker daemon and an sshd, where
+# this is pure CPU and a few MB resident. $_HI_SC_WIDTH overrides it, and
+# _HI_SC_WIDTH=1 is the serial run down this same code path.
+function _hi_sc_width() {
+  local cpus
+  if [ -n "${_HI_SC_WIDTH:-}" ]; then
+    printf '%s' "$_HI_SC_WIDTH"
+    return 0
+  fi
+  cpus="$(getconf _NPROCESSORS_ONLN 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || true)"
+  case "$cpus" in '' | *[!0-9]*) cpus=2 ;; esac
+  [ "$cpus" -lt 1 ] && cpus=1
+  printf '%s' "$cpus"
+}
+
+# _hi_sc_chunks <outdir> <width> <file...> - the file list dealt into <width>
+# chunks, printed as "<outdir>/<n>\0<file>\0<file>...\0\n" - one line per chunk,
+# which is the argv one shellcheck invocation gets.
+#
+# Chunks rather than one process per file, and the difference is not small: under
+# -x a single invocation parses each sourced file once and reuses it for every
+# file in that invocation, so 130 one-file runs re-parse test_lib.sh and its
+# parts 130 times and spend triple the CPU to save half the wall clock. Dealing
+# round-robin keeps a chunk from being all of tests/targets/, where the sourced
+# trees are deepest.
+function _hi_sc_chunks() {
+  local out="$1" width="$2" i=0 f
+  shift 2
+  for f in "$@"; do
+    printf '%s\0' "$f" >>"$out/chunk.$((i % width))"
+    i=$((i + 1))
+  done
+  i=0
+  while [ "$i" -lt "$width" ]; do
+    [ -s "$out/chunk.$i" ] && printf '%s\n' "$i"
+    i=$((i + 1))
+  done
+}
+
+# _hi_shellcheck_all <log> <file...> - every file checked, concatenated into
+# <log> in the order given. Non-zero when any file had findings, exactly as a
+# single shellcheck over the whole list would be.
+function _hi_shellcheck_all() {
+  local log="$1" out width rc=0 i
+  shift
+  width="$(_hi_sc_width)"
+  out="$_HI_WORKDIR/sc.out"
+  rm -rf "$out"
+  mkdir -p "$out"
+
+  _hi_read_lines _HI_SC_CHUNKS < <(_hi_sc_chunks "$out" "$width" "$@")
+
+  # one invocation per chunk, each writing its own file so concurrent findings
+  # cannot interleave; replayed in chunk order once the batch is done
+  # ($1 below expands in the child sh, which is the point - SC2016.)
+  # shellcheck disable=SC2016
+  printf '%s\0' ${_HI_SC_CHUNKS[@]+"${_HI_SC_CHUNKS[@]}"} |
+    (cd "$out" && xargs -0 -n 1 -P "$width" \
+      sh -c 'xargs -0 shellcheck -x -Calways -S style <"chunk.$1" >"out.$1" 2>&1' sh) || rc=$?
+
+  : >"$log"
+  for i in ${_HI_SC_CHUNKS[@]+"${_HI_SC_CHUNKS[@]}"}; do
+    [ -s "$out/out.$i" ] && cat "$out/out.$i" >>"$log"
+  done
+  return "$rc"
+}
+
 function run_shellcheck() {
   # deliberately *not* _hi_require: every other suite skips cleanly when its
   # backend is missing, but this one is the lint gate - a missing shellcheck
@@ -395,10 +472,12 @@ function run_shellcheck() {
   _HI_T0="$(_hi_now)"
 
   _HI_SC_FAILED=0
-  shellcheck -x -Calways -S style "${_HI_SH_FILES[@]}" | tee "$_HI_SC_LOG"
-  if [ "${PIPESTATUS[0]}" -ne 0 ]; then
-    # -Calways leaves ANSI codes in $_HI_SC_LOG (needed for the live colorized
-    # stream above), so they have to be stripped before "^In " can match
+  _HI_SC_RC=0
+  _hi_shellcheck_all "$_HI_SC_LOG" "${_HI_SH_FILES[@]}" || _HI_SC_RC=$?
+  cat "$_HI_SC_LOG"
+  if [ "$_HI_SC_RC" -ne 0 ]; then
+    # -Calways leaves ANSI codes in $_HI_SC_LOG (needed for the colorized
+    # output above), so they have to be stripped before "^In " can match
     _HI_SC_FAILED=$(sed 's/\x1b\[[0-9;]*m//g' "$_HI_SC_LOG" | grep -oE '^In .* line [0-9]+:' | sed -E 's/^In (.*) line [0-9]+:/\1/' | sort -u | wc -l)
     _hi_note_failure "shellcheck: $_HI_SC_FAILED file(s) with findings"
   fi

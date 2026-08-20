@@ -12,11 +12,10 @@
 # 127.0.0.1 only. Skips cleanly if nomad or docker isn't installed/reachable
 # (the dev agent's docker task driver needs a real docker daemon).
 #
-# GLOSSARY: HI.30
+# GLOSSARY: HI.30 + HI.34
 # shellcheck disable=SC2329
 set -euo pipefail
 
-# test_lib.sh sources core.sh itself; $_HI_TEST_LIB wins under the runner
 # shellcheck source=../test_lib.sh
 source "${_HI_TEST_LIB:-${BASH_SOURCE[0]%/*}/../test_lib.sh}"
 

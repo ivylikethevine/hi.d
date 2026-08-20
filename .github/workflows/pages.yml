@@ -7,10 +7,10 @@ name: Pages
 # honest.
 #
 # It also carries one file Jekyll never sees: badges/tests.json, the shields
-# endpoint README's tests badge reads. That used to be a number sed'd into
-# README.md and committed back to main by ci.yml, which put a bot commit on top
-# of the author's on every push; publishing it here keeps the figure generated
-# and leaves main alone.
+# endpoint README's tests badge reads. Publishing the figure here rather than
+# sed'ing it into README.md and committing it back keeps the number generated
+# and keeps every push free of a bot commit on top of the author's - which is
+# also what lets main take branch protection.
 #
 # Publishing is live: Settings -> Pages -> Source is set to GitHub Actions, so
 # deploy-pages has somewhere to put the site and the badge endpoint answers. If
@@ -26,13 +26,13 @@ name: Pages
 # takes only pushes - a fork PR whose branch happens to be named `main` cannot
 # reach it. Nothing here reads a single attacker-controlled byte.
 #
-# After CI, and only after CI. There was a `push` trigger here too, on the
-# markdown paths, so prose could publish without waiting out the suite - but
-# ci.yml runs on *every* push to main with no path filter, so workflow_run
-# already covers every commit this would have caught. All the second trigger
-# added was a duplicate build and deploy on any push touching a .md, which is
-# most of them. The cost of dropping it is latency: the site now lands when CI
-# goes green rather than a couple of minutes in. The gain is that it never
+# After CI, and only after CI - `workflow_run` is the single trigger, on
+# purpose. A `push` trigger on the markdown paths would let prose publish
+# without waiting out the suite, but ci.yml runs on *every* push to main with
+# no path filter, so `workflow_run` already covers every commit such a trigger
+# would catch; all it adds is a duplicate build and deploy on any push touching
+# a .md, which is most of them. The cost is latency - the site lands when CI
+# goes green rather than a couple of minutes in - and the gain is that it never
 # publishes docs from a commit whose tests failed.
 on: # zizmor: ignore[dangerous-triggers]
   workflow_run:

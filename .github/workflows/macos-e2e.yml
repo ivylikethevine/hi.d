@@ -19,11 +19,10 @@ jobs:
     name: hi localhost (BSD both ends)
     runs-on: ${{ vars.MACOS_RUNNER_LABEL || 'macos-latest' }}
     timeout-minutes: 15
-    # No `environment:` here any more. It was the second lock behind
-    # dispatch-only, and a required reviewer on it would now stall every push to
-    # main waiting for a human. What replaces it as the gate: ci.yml calls this
-    # only on `push`, which is to say only on a branch someone could already
-    # write to - a fork PR never reaches it.
+    # Deliberately no `environment:`. A required reviewer on it would stall
+    # every push to main waiting for a human. The gate instead is the caller:
+    # ci.yml calls this only on `push`, which is to say only on a branch someone
+    # could already write to - a fork PR never reaches it.
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

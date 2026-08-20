@@ -3,8 +3,8 @@
 #
 # Almost nobody's ~/.zshrc is empty, and load.sh appends hi's block to the *end*
 # of it - so hi runs after the framework and is the one positioned to break it.
-# It has: `setopt KSH_ARRAYS` was set here for hi's convenience, and oh-my-zsh
-# indexes arrays from 1.
+# The canonical collision: a `setopt KSH_ARRAYS` set for hi's convenience,
+# against an oh-my-zsh that indexes arrays from 1.
 #
 # Each case boots a container with the framework installed per its own README,
 # connects for real, and asserts the marker landed, the probe below says the
@@ -17,11 +17,10 @@
 # in - which is also what makes these cases a test of that. Builds need the
 # network; a failed one skips its case rather than failing the suite.
 #
-# GLOSSARY: HI.30
+# GLOSSARY: HI.30 + HI.34
 # shellcheck disable=SC2329
 set -euo pipefail
 
-# test_lib.sh sources core.sh itself; $_HI_TEST_LIB wins under the runner
 # shellcheck source=../test_lib.sh
 source "${_HI_TEST_LIB:-${BASH_SOURCE[0]%/*}/../test_lib.sh}"
 

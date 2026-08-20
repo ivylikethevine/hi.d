@@ -1,0 +1,530 @@
+#!/bin/bash
+# Unit tests for hi.sh, the client entry point: argument parsing, backend
+# dispatch, `--help` and the local sub-commands - everything that decides what
+# hi is about to do before it does any of it.
+#
+# Sourcing hi.sh goes through the same `[[ BASH_SOURCE == $0 ]]` hatch install.sh
+# uses, which defines every function without connecting to anything - so the pure
+# half is reachable here, where a mis-parse is an assertion rather than a
+# confusing connection failure. _say_hi stays e2e-only by nature.
+#
+# GLOSSARY: HI.30 + HI.34. The linter follows `source "$_HI_LAUNCHER"` into hi.sh's
+# trailing `_hi "$@"`, decides it never returns, and marks this file unreachable
+# (SC2317) - it does not model the BASH_SOURCE guard. The single-quoted strings
+# below are the target's to expand, not ours (SC2016).
+# shellcheck disable=SC2329,SC2317,SC2016
+set -euo pipefail
+
+# shellcheck source=../test_lib.sh
+source "${_HI_TEST_LIB:-${BASH_SOURCE[0]%/*}/../test_lib.sh}"
+# shellcheck source=../../hi.sh
+source "$_HI_LAUNCHER"
+
+# The fake backend CLIs come from test_lib.sh's _hi_probe_shims - the one
+# home of the exact argv shapes hi.sh's predicates make. "yes" is
+# running/Running, anything else is not.
+_HI_SHIM_PATH=""
+
+# _hi_parse writes to the globals DOMAIN/CMDARG/SSHARGS and can exit outright,
+# so every case runs it in a subshell and prints what it produced. Fields are
+# newline-separated: DOMAIN, CMDARG, then one line per SSHARGS entry.
+function _hi_parse_out() {
+  (
+    unset DOMAIN CMDARG
+    _hi_parse "$@" >/dev/null 2>&1
+    printf '%s\n%s\n' "${DOMAIN:-}" "${CMDARG:-}"
+    [ "${#SSHARGS[@]}" -eq 0 ] || printf '%s\n' "${SSHARGS[@]}"
+  )
+}
+
+function test_parse_takes_a_bare_target() {
+  [ "$(_hi_parse_out myhost)" = "$(printf 'myhost\n\n')" ]
+}
+
+function test_parse_keeps_valueless_flags() {
+  [ "$(_hi_parse_out -v myhost)" = "$(printf 'myhost\n\n-v\n')" ]
+}
+
+function test_parse_pairs_a_flag_with_its_value() {
+  [ "$(_hi_parse_out -p 2222 myhost)" = "$(printf 'myhost\n\n-p\n2222\n')" ]
+}
+
+# the regression this list exists for: -J takes a value, so without it in the
+# case arm "bastion" becomes DOMAIN and hi connects to the wrong machine
+function test_parse_treats_jump_host_as_a_value_not_the_target() {
+  [ "$(_hi_parse_out -J bastion myhost)" = "$(printf 'myhost\n\n-J\nbastion\n')" ]
+}
+
+function test_parse_treats_bind_interface_as_a_value_not_the_target() {
+  [ "$(_hi_parse_out -B eth0 myhost)" = "$(printf 'myhost\n\n-B\neth0\n')" ]
+}
+
+function test_parse_handles_several_flags_before_the_target() {
+  [ "$(_hi_parse_out -4 -o StrictHostKeyChecking=no -i /tmp/k myhost)" = \
+    "$(printf 'myhost\n\n-4\n-o\nStrictHostKeyChecking=no\n-i\n/tmp/k\n')" ]
+}
+
+# a trailing command becomes CMDARG - suffixed with "; exit" so the target
+# shell closes after it - and never a second target. The spacing between the
+# two is incidental (_hi_parse pastes '; ' and ' exit'), so don't pin it.
+# hi's own flags are consumed by the parse, never forwarded - ssh would reject
+# --tmux outright, and the target is still the first bare word after it
+function test_parse_takes_hi_flags_without_forwarding_them() {
+  [ "$(_hi_parse_out --tmux myhost)" = "$(printf 'myhost\n\n')" ] || return 1
+  [ "$(_hi_parse_out -p 2222 --no-tmux myhost)" = "$(printf 'myhost\n\n-p\n2222\n')" ]
+}
+
+function test_parse_tmux_flags_set_the_toggle() {
+  local on off
+  on="$( (
+    unset DOMAIN CMDARG
+    _hi_parse --tmux myhost >/dev/null 2>&1
+    printf '%s' "${_HI_TMUX_ATTACH:-unset}"
+  ))"
+  off="$( (
+    unset DOMAIN CMDARG
+    _HI_TMUX_ATTACH=1
+    _hi_parse --no-tmux myhost >/dev/null 2>&1
+    printf '%s' "${_HI_TMUX_ATTACH:-unset}"
+  ))"
+  [ "$on" = 1 ] && [ "$off" = 0 ]
+}
+
+function test_parse_turns_trailing_words_into_a_command() {
+  local out
+  out="$(_hi_parse_out myhost echo hello)"
+  [[ "$out" == myhost*"echo hello;"*exit* ]]
+}
+
+function test_parse_leaves_cmdarg_empty_for_a_plain_session() {
+  [ "$(_hi_parse_out myhost | sed -n 2p)" = "" ]
+}
+
+# a value-taking flag with nothing after it must report itself, not die on an
+# unbound $2 or swallow the next argument
+function test_parse_rejects_a_flag_missing_its_value() {
+  local rc=0
+  (_hi_parse -p >/dev/null 2>&1) || rc=$?
+  [ "$rc" -eq 1 ]
+}
+
+function test_parse_names_the_offending_flag() {
+  local out
+  out="$( (_hi_parse -o 2>&1 >/dev/null) || true)"
+  [[ "$out" == *"-o"* ]]
+}
+
+function test_is_docker_container_accepts_a_running_one() {
+  PATH="$_HI_SHIM_PATH" _hi_is_docker_container yes
+}
+
+function test_is_docker_container_rejects_a_stopped_one() {
+  ! PATH="$_HI_SHIM_PATH" _hi_is_docker_container no
+}
+
+function test_is_podman_container_accepts_a_running_one() {
+  PATH="$_HI_SHIM_PATH" _hi_is_podman_container yes
+}
+
+function test_is_nomad_alloc_accepts_a_running_one() {
+  PATH="$_HI_SHIM_PATH" _hi_is_nomad_alloc yes
+}
+
+function test_is_nomad_alloc_rejects_a_pending_one() {
+  ! PATH="$_HI_SHIM_PATH" _hi_is_nomad_alloc no
+}
+
+function test_is_k8s_pod_accepts_a_running_one() {
+  PATH="$_HI_SHIM_PATH" _hi_is_k8s_pod yes
+}
+
+function test_is_k8s_pod_rejects_a_pending_one() {
+  ! PATH="$_HI_SHIM_PATH" _hi_is_k8s_pod no
+}
+
+# with no backend CLI on $PATH at all, every predicate must answer "no"
+# rather than erroring - that is what lets _hi fall through to ssh
+function test_predicates_are_false_without_their_cli() {
+  local empty="$_HI_WORKDIR/empty"
+  mkdir -p "$empty"
+  ! PATH="$empty" _hi_is_docker_container yes &&
+    ! PATH="$empty" _hi_is_podman_container yes &&
+    ! PATH="$empty" _hi_is_nomad_alloc yes &&
+    ! PATH="$empty" _hi_is_k8s_pod yes
+}
+
+# The predicates run together now, so the guarantee worth pinning is that the
+# *answer* is still the roster's first match rather than whichever CLI
+# happened to reply first. The shims answer for target "yes", so a target
+# every backend claims must still resolve to docker - the row at the top of
+# $_HI_BACKENDS.
+
+function test_resolve_backend_picks_the_first_matching_row() {
+  [ "$(PATH="$_HI_SHIM_PATH" _hi_resolve_backend yes)" = docker ]
+}
+
+# ...and the roster order is the thing being asserted, not "docker": prove it
+# moves with the table rather than being baked into the resolver
+function test_resolve_backend_follows_the_roster_order() {
+  local out
+  out="$(
+    # SC2030: subshell-local is exactly the intent - the swap must not leak
+    # into the cases below, which read the real roster
+    # shellcheck disable=SC2030
+    _HI_BACKENDS=("${_HI_BACKENDS[1]}" "${_HI_BACKENDS[0]}")
+    PATH="$_HI_SHIM_PATH" _hi_resolve_backend yes
+  )"
+  [ "$out" = podman ]
+}
+
+# The header's identity() row counts the same backends this roster dispatches
+# on, but it cannot read $_HI_BACKENDS - hi.sh is never sourced in a session,
+# and a shared roster would cost the ssh payload bytes for a list that changes
+# about once a year. So the drift is caught here instead of prevented there -
+# the header is the copy a user sees on every single connect. Add a backend to
+# the roster and this goes red until common/header.sh's _hi_probe_launch
+# counts it too.
+function test_header_probes_every_backend_in_the_roster() {
+  local row name launch
+  launch="$(sed -n '/^function _hi_probe_launch()/,/^}/p' "$_HI_HEADER")"
+  [ -n "$launch" ] || return 1
+  # SC2031: the roster swap above happens inside a $( ) and never reaches here;
+  # this reads the file-scope table, which is the whole point of the check
+  # shellcheck disable=SC2031
+  for row in "${_HI_BACKENDS[@]}"; do
+    name="${row%%|*}"
+    # podman is docker's drop-in and shares its probe, so either name counts;
+    # kube is probed by its CLI's name rather than the roster's
+    case "$name" in
+    podman) [[ "$launch" == *podman* || "$launch" == *docker* ]] || return 1 ;;
+    kube) [[ "$launch" == *kubectl* || "$launch" == *kube* ]] || return 1 ;;
+    *) [[ "$launch" == *"$name"* ]] || return 1 ;;
+    esac
+  done
+}
+
+function test_resolve_backend_prints_nothing_for_a_stranger() {
+  [ -z "$(PATH="$_HI_SHIM_PATH" _hi_resolve_backend no)" ]
+}
+
+# no CLI at all: every predicate is false, and _hi falls through to ssh
+function test_resolve_backend_prints_nothing_without_any_cli() {
+  local empty="$_HI_WORKDIR/empty"
+  mkdir -p "$empty"
+  [ -z "$(PATH="$empty" _hi_resolve_backend yes)" ]
+}
+
+# `pod/container` and `alloc/task`: one spelling for both, because a task and a
+# container are the same idea. The plain form has to stay byte-identical - this
+# syntax is additive or it breaks every existing target.
+function test_container_cmds_pick_the_inner_unit() {
+  local -a probe cp attach
+  local DOMAIN
+
+  DOMAIN=mypod
+  _hi_container_cmds kube
+  case "${attach[*]}" in *" -c "*)
+    _hi_cecho " | a plain pod grew a -c flag" "$RED"
+    return 1
+    ;;
+  esac
+
+  DOMAIN=mypod/sidecar
+  _hi_container_cmds kube
+  case "${attach[*]}" in
+  *"exec -it mypod -c sidecar --") ;;
+  *)
+    _hi_cecho " | kube: expected 'exec -it mypod -c sidecar --', got '${attach[*]}'" "$RED"
+    return 1
+    ;;
+  esac
+
+  DOMAIN=685afd67/worker
+  _hi_container_cmds nomad
+  case "${attach[*]}" in
+  *"-task worker"*"685afd67") ;;
+  *)
+    _hi_cecho " | nomad: expected '-task worker ... 685afd67', got '${attach[*]}'" "$RED"
+    return 1
+    ;;
+  esac
+
+  # docker has no inner unit and `/` is legal in a container name, so it is
+  # taken whole - splitting one would break a real target
+  DOMAIN=some/name
+  _hi_container_cmds docker
+  case "${attach[*]}" in
+  *"exec -it some/name") return 0 ;;
+  esac
+  _hi_cecho " | docker split a name it should have taken whole: '${attach[*]}'" "$RED"
+  return 1
+}
+
+# The one arm of the dispatch block that has to be *executed* rather than
+# sourced: sourcing hi.sh stops at the BASH_SOURCE guard, which is above the
+# `case "${1:-}"`. So these run the real launcher as a subprocess, with an ssh
+# that fails loudly on $PATH - the whole point of the flag is that it never
+# reaches ssh, and before it existed `hi -h` answered with ssh's usage block.
+
+function _hi_help_out() {
+  local dir="$_HI_WORKDIR/nossh"
+  mkdir -p "$dir"
+  cat >"$dir/ssh" <<'EOF'
+#!/bin/sh
+echo "ssh was called: $*" >&2
+exit 97
+EOF
+  chmod +x "$dir/ssh"
+  PATH="$dir:$PATH" "$_HI_LAUNCHER" "$@" 2>&1
+}
+
+function test_help_long_flag_prints_usage() {
+  local out
+  out="$(_hi_help_out --help)" || return 1
+  [[ "$out" == "Usage: hi "* && "$out" != *"ssh was called"* ]]
+}
+
+function test_help_short_flag_prints_the_same() {
+  [ "$(_hi_help_out -h)" = "$(_hi_help_out --help)" ]
+}
+
+# the two things a usage block is for: what the flags are, and how a name is
+# resolved - hi's target ladder is the part no ssh user can guess
+function test_help_lists_hi_s_own_flags() {
+  local out flag
+  out="$(_hi_help_out --help)" || return 1
+  for flag in --doctor --version --tmux --no-tmux; do
+    [[ "$out" == *"$flag"* ]] || return 1
+  done
+  [[ "$out" == *docker* && "$out" == *podman* && "$out" == *nomad* && "$out" == *kubernetes* ]]
+}
+
+# The same drift guard tests/test_runner.sh's suite table gets: a flag hi
+# answers itself but the man page never mentions is a flag nobody finds.
+# $_HI_USAGE's synopsis has to match the man page's .SH SYNOPSIS too. The
+# flag list is scraped from the live --help output rather than copied here,
+# so a flag added there is guarded the moment it exists - with a floor on the
+# scrape's size, so a broken scrape can't pass as an empty loop.
+function test_help_flags_are_all_in_the_man_page() {
+  local man="$_HI_HOME/hi.d/docs/hi.1" out flags flag
+  [ -f "$man" ] || return 1
+  out="$(_hi_help_out --help)" || return 1
+  _hi_read_lines flags < <(printf '%s\n' "$out" | grep -oE -- '\-\-[a-z][a-z-]+' | sort -u)
+  [ "${#flags[@]}" -ge 4 ] || return 1
+  for flag in -h "${flags[@]}"; do
+    # the man page escapes every dash as \- for roff
+    grep -q -- "${flag//-/\\\\-}" "$man" || return 1
+  done
+}
+
+# The ladders drift the same way the flags do - doctor.sh once still promised
+# "zsh/fish/sh" after ksh joined (the comment above $_HI_SHELL_LADDER tells
+# it), and the man page repeated the trick with the session shells. Every
+# shell either ladder can land you in has to be named in the page. The
+# no-bash half reads the live variable; the session half is spelled out here
+# because load.sh's default ranking is a literal inside _hi_session_shell -
+# a stale copy of it fails this test the same way a stale man page would.
+function test_shell_ladders_are_in_the_man_page() {
+  local man="$_HI_HOME/hi.d/docs/hi.1" shell
+  [ -f "$man" ] || return 1
+  for shell in $_HI_SHELL_LADDER fish zsh bash; do
+    # -w keeps "sh" from riding on "ssh"
+    grep -Eqw -- "$shell" "$man" || return 1
+  done
+}
+
+# The tree itself, spelled out here on purpose: hi.sh derives $_HI_SHELL_LADDER
+# from core.sh's $_HI_SHELL_TREE, so a test written as that same expression
+# would assert nothing. This is the intended order in one place, and both the
+# tree and the cut have to match it. The ladder is the tree minus bash because
+# a missing bash is the only thing that makes the ladder reachable at all.
+function test_the_shell_tree_is_the_documented_order() {
+  [ "$_HI_SHELL_TREE" = "fish zsh bash mksh ksh dash ash sh" ] || return 1
+  [ "$_HI_SHELL_LADDER" = "fish zsh mksh ksh dash ash sh" ]
+}
+
+# hi's local sub-commands - `hi --install` and friends - are the case block at
+# the foot of hi.sh, on the far side of the BASH_SOURCE hatch. Unlike every
+# function above they cannot be reached by sourcing, so these cases run hi.sh
+# as a process against two throwaway trees.
+#
+# _hi_subcmd_home builds the shape a *target* gets: common/, misc/, shells/,
+# load.sh and hi.sh symlinked in, and deliberately no scripts/, no tests/ and
+# no .git. That is the shape every one of these flags has to refuse by name,
+# and it is the reason $_HI_NO_CHECKOUT exists.
+function _hi_subcmd_home() {
+  local home="$_HI_WORKDIR/$1" f
+  mkdir -p "$home/hi.d"
+  for f in common misc shells load.sh hi.sh; do
+    ln -sfn "$_HI_ROOT/$f" "$home/hi.d/$f"
+  done
+  printf '%s' "$home"
+}
+
+# The same tree plus a stub for every script a flag reaches. Each stub prints
+# its own name and its argv verbatim, which is what lets the cases below pin
+# the mapping - `hi --configure` has to become install.sh --features-only, not
+# just "some install.sh".
+function _hi_subcmd_stubs() {
+  local home stub dir
+  home="$(_hi_subcmd_home subcmd-stubs)"
+  mkdir -p "$home/hi.d/scripts" "$home/hi.d/tests"
+  for stub in install:scripts/install.sh uninstall:scripts/uninstall.sh \
+    color_preview:scripts/color_preview.sh doctor:scripts/doctor.sh \
+    packages_preview:scripts/packages_preview.sh test_runner:tests/test_runner.sh; do
+    dir="$home/hi.d/${stub#*:}"
+    printf '#!/bin/sh\nprintf %s\nfor a in "$@"; do printf " %%s" "$a"; done\nprintf "\\n"\n' \
+      "'STUB ${stub%%:*}'" >"$dir"
+    chmod +x "$dir"
+  done
+  printf '%s' "$home"
+}
+
+function _hi_subcmd_run() {
+  local home="$1"
+  shift
+  (_HI_HOME="$home" "$home/hi.d/hi.sh" "$@" 2>&1)
+}
+
+# every one of them names itself rather than dying on a missing path
+function test_local_subcommands_refuse_without_the_checkout() {
+  local home flag out
+  home="$(_hi_subcmd_home subcmd-bare)"
+  for flag in --install --uninstall --configure --check-configs --overlay-init \
+    --color-preview --doctor --test; do
+    out="$(_hi_subcmd_run "$home" "$flag")" && {
+      _hi_cecho " | $flag exited 0 without a checkout" "$RED"
+      return 1
+    }
+    [[ "$out" == *"hi $flag needs the full hi.d checkout"* ]] || {
+      _hi_cecho " | $flag said: $out" "$RED"
+      return 1
+    }
+  done
+}
+
+# --update is the one that cannot borrow that sentence: .git, not scripts/
+function test_update_refuses_without_a_git_dir() {
+  local home out
+  home="$(_hi_subcmd_home subcmd-bare)"
+  out="$(_hi_subcmd_run "$home" --update)" && return 1
+  [[ "$out" == *"hi --update: no .git in"* ]]
+}
+
+# ...and --packages-preview is the one that does not refuse at all: the check
+# itself ships in common/header.sh, so on a target it falls back to that
+function test_packages_preview_falls_back_to_the_shipped_check() {
+  local home out
+  home="$(_hi_subcmd_home subcmd-bare)"
+  out="$(_hi_subcmd_run "$home" --packages-preview)" || return 1
+  [ -n "$out" ] && [[ "$out" != *"needs the full hi.d checkout"* ]]
+}
+
+# the mapping itself: which script, with which arguments
+function test_local_subcommands_exec_the_right_script() {
+  local home out spec flag want
+  home="$(_hi_subcmd_stubs)"
+  for spec in \
+    '--install|STUB install' \
+    '--uninstall|STUB uninstall' \
+    '--configure|STUB install --features-only' \
+    '--check-configs|STUB install --check-configs' \
+    '--overlay-init|STUB install --overlay-init' \
+    '--color-preview|STUB color_preview' \
+    '--packages-preview|STUB packages_preview' \
+    '--doctor|STUB doctor' \
+    '--test|STUB test_runner'; do
+    flag="${spec%%|*}"
+    want="${spec#*|}"
+    out="$(_hi_subcmd_run "$home" "$flag")" || return 1
+    [ "$out" = "$want" ] || {
+      _hi_cecho " | $flag ran '$out', wanted '$want'" "$RED"
+      return 1
+    }
+  done
+}
+
+# a sub-command is still a command line: what follows the flag rides along
+function test_local_subcommands_forward_extra_arguments() {
+  local home out
+  home="$(_hi_subcmd_stubs)"
+  out="$(_hi_subcmd_run "$home" --doctor myhost)" || return 1
+  [ "$out" = "STUB doctor myhost" ] || return 1
+  out="$(_hi_subcmd_run "$home" --test --group fast)" || return 1
+  [ "$out" = "STUB test_runner --group fast" ]
+}
+
+# the other half of the move: paths.sh must not grow them back. hi_info is the
+# deliberate exception - it is an echo, not a script entry point, and the test
+# harness probes for it (see _hi_probe_cmd in test_lib.sh).
+function test_paths_defines_no_command_aliases() {
+  local stray
+  stray="$(grep -oE '^alias hi_[a-z_]+' "$_HI_ROOT/common/paths.sh" | grep -vx 'alias hi_info' || true)"
+  [ -z "$stray" ] || {
+    _hi_cecho " | paths.sh still defines: $stray" "$RED"
+    return 1
+  }
+}
+
+function run_hi_parse_tests() {
+  _hi_workdir hiparsetest
+  _hi_probe_shims "$_HI_WORKDIR/shims"
+  _HI_SHIM_PATH="$_HI_WORKDIR/shims:$PATH"
+
+  _hi_suite_begin
+
+  _hi_h1 "Testing hi.sh: parsing and dispatch"
+
+  _hi_h2 "Testing: _hi_parse (targets and flags)"
+  _hi_check "A bare target" test_parse_takes_a_bare_target
+  _hi_check "Keeps valueless flags" test_parse_keeps_valueless_flags
+  _hi_check "Pairs a flag with its value" test_parse_pairs_a_flag_with_its_value
+  _hi_check "-J's value is not mistaken for the target" test_parse_treats_jump_host_as_a_value_not_the_target
+  _hi_check "-B's value is not mistaken for the target" test_parse_treats_bind_interface_as_a_value_not_the_target
+  _hi_check "Several flags before the target" test_parse_handles_several_flags_before_the_target
+
+  _hi_h2 "Testing: _hi_parse (commands and errors)"
+  _hi_check "Trailing words become a command" test_parse_turns_trailing_words_into_a_command
+  _hi_check "A plain session has no command" test_parse_leaves_cmdarg_empty_for_a_plain_session
+  _hi_check "Rejects a flag missing its value" test_parse_rejects_a_flag_missing_its_value
+  _hi_check "hi's own flags aren't forwarded to ssh" test_parse_takes_hi_flags_without_forwarding_them
+  _hi_check "--tmux/--no-tmux set the toggle" test_parse_tmux_flags_set_the_toggle
+  _hi_check "Names the offending flag" test_parse_names_the_offending_flag
+
+  _hi_h2 "Testing: backend predicates"
+  _hi_check "docker: running" test_is_docker_container_accepts_a_running_one
+  _hi_check "docker: stopped" test_is_docker_container_rejects_a_stopped_one
+  _hi_check "podman: running" test_is_podman_container_accepts_a_running_one
+  _hi_check "nomad: running" test_is_nomad_alloc_accepts_a_running_one
+  _hi_check "nomad: pending" test_is_nomad_alloc_rejects_a_pending_one
+  _hi_check "kube: running" test_is_k8s_pod_accepts_a_running_one
+  _hi_check "kube: pending" test_is_k8s_pod_rejects_a_pending_one
+  _hi_check "All false with no CLI installed" test_predicates_are_false_without_their_cli
+
+  _hi_h2 "Testing: _hi_resolve_backend"
+  _hi_check "Picks the roster's first match" test_resolve_backend_picks_the_first_matching_row
+  _hi_check "The roster decides, not the resolver" test_resolve_backend_follows_the_roster_order
+  _hi_check "The header counts every backend the roster dispatches" test_header_probes_every_backend_in_the_roster
+  _hi_check "Nothing for an unknown target" test_resolve_backend_prints_nothing_for_a_stranger
+  _hi_check "Nothing with no backend CLI at all" test_resolve_backend_prints_nothing_without_any_cli
+  _hi_check "target/inner picks the container or task" test_container_cmds_pick_the_inner_unit
+
+  _hi_h2 "Testing: hi's local sub-commands"
+  _hi_check "Each refuses by name without the checkout" test_local_subcommands_refuse_without_the_checkout
+  _hi_check "--update refuses without a .git" test_update_refuses_without_a_git_dir
+  _hi_check "--packages-preview falls back instead" test_packages_preview_falls_back_to_the_shipped_check
+  _hi_check "Each execs the right script and args" test_local_subcommands_exec_the_right_script
+  _hi_check "Extra arguments ride along" test_local_subcommands_forward_extra_arguments
+  _hi_check "paths.sh defines no command aliases" test_paths_defines_no_command_aliases
+
+  _hi_h2 "Testing: hi --help"
+  _hi_check "--help prints the usage line" test_help_long_flag_prints_usage
+  _hi_check "-h is the same text" test_help_short_flag_prints_the_same
+  _hi_check "Lists hi's flags and the target ladder" test_help_lists_hi_s_own_flags
+  _hi_check "Every flag is in the man page" test_help_flags_are_all_in_the_man_page
+  _hi_check "Both shell ladders are in the man page" test_shell_ladders_are_in_the_man_page
+  _hi_check "The ladder is the shell tree without bash" test_the_shell_tree_is_the_documented_order
+  _hi_suite_end "hi.sh (parsing and dispatch)"
+}
+
+run_hi_parse_tests

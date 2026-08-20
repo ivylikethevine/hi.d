@@ -131,9 +131,9 @@ function rewrite() {
   rm -f "$tmp"
 }
 
-# Every channel's sed was bare, so a renamed line made the stamp a silent
-# no-op - which is how hi.d-git once shipped answering "unknown (no stamp, no
-# git)". Counting first turns that into a build failure.
+# A bare sed per channel makes a renamed line a silent no-op - which is how
+# hi.d-git can ship answering "unknown (no stamp, no git)". Counting the
+# matches first turns that into a build failure.
 function require_one_match() {
   local file="$1" pattern="$2" n
   n="$(grep -c "$pattern" "$file" || true)"

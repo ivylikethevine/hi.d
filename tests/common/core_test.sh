@@ -1,11 +1,10 @@
 #!/bin/bash
 # Unit tests for common/core.sh
-# GLOSSARY: HI.30. The single-quoted probe scripts are expanded by the *child*
-# shell, which is the whole point (SC2016).
+# GLOSSARY: HI.30 + HI.34. The single-quoted probe scripts are expanded by the
+# *child* shell, which is the whole point (SC2016).
 # shellcheck disable=SC2329,SC2016
 set -euo pipefail
 
-# test_lib.sh sources core.sh itself; $_HI_TEST_LIB wins under the runner
 # shellcheck source=../test_lib.sh
 source "${_HI_TEST_LIB:-${BASH_SOURCE[0]%/*}/../test_lib.sh}"
 

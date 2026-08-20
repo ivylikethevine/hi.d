@@ -15,7 +15,7 @@
 # configuration. It belongs in the image rather than in a `docker exec` after
 # the run: hi's permanent-install path ships no overlay and reads the box's own
 # ~/.config/hi.d, so this file is part of what makes the box the demo's box.
-FROM debian:bookworm-slim
+FROM debian:bookworm-slim@sha256:abd67ffcfa541b485a3dff59865ab629aa048a6c613e639d36e7456b0b229241
 RUN apt-get update && apt-get install -y --no-install-recommends \
       openssh-server bash zsh fish git ca-certificates \
     && rm -rf /var/lib/apt/lists/* \

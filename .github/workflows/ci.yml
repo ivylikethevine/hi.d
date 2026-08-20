@@ -217,7 +217,15 @@ jobs:
         continue-on-error: true
         uses: DavidAnson/markdownlint-cli2-action@21c1be1b93ad9ed58fa840aacc3f279cde2a72ff # v24.2.0
         with:
-          globs: "**/*.md"
+          # .claude/ is an agent scratch directory - plans and notes an
+          # assistant writes while working here. It is gitignored, so CI never
+          # sees it and this negation changes nothing about a run; it is here so
+          # the command the summary below tells you to run locally reports the
+          # same findings CI did, instead of thirty from files that are not the
+          # project's.
+          globs: |
+            **/*.md
+            !.claude/**
           config: ".markdownlint.yaml"
 
       - name: Say so, without failing
@@ -229,7 +237,7 @@ jobs:
             echo "### markdownlint found something"
             echo
             echo "Advisory only: this job never blocks a merge. See the step above for the findings,"
-            echo "or run \`markdownlint-cli2 '**/*.md'\` locally."
+            echo "or run \`markdownlint-cli2 '**/*.md' '!.claude/**'\` locally."
           } >>"$GITHUB_STEP_SUMMARY"
 
   # Hot-path timings against generous ceilings - catches an order-of-magnitude

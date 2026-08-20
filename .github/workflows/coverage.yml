@@ -1,12 +1,16 @@
 name: Coverage
 
-# Monthly kcov over the fast suites, published as an artifact - visibility,
-# never a gate: no PR waits on this and no threshold fails it. The question it
-# keeps answerable is "which arms of install.sh/bump.sh do the ~500 cases
-# never touch". Dispatchable for a dry run.
+# kcov over the fast suites, published as an artifact - visibility, never a
+# gate: no PR waits on this and no threshold fails it.
+#
+# Dispatch-only, and deliberately so rather than on a schedule. tests/coverage.sh
+# opens with a section headed READ THIS BEFORE BELIEVING A NUMBER THIS PRINTS:
+# kcov loses its DEBUG trap once test_lib.sh is sourced, so the percentages
+# describe what runs at load time and understate real coverage by a wide, uneven
+# margin. A monthly 45-minute run that mints a 90-day artifact nobody should act
+# on is the one kind of automation worth removing. Put the schedule back the day
+# the numbers mean something - the topology in coverage.sh is already right.
 on:
-  schedule:
-    - cron: "17 6 3 * *"
   workflow_dispatch:
 
 permissions:

@@ -85,7 +85,7 @@ figures.
 Every container image an e2e suite builds is a real Dockerfile under
 [`tests/dockerfiles/`](../tests/dockerfiles) - `sshd-debian` and `sshd-alpine` for the ssh targets, `alpine-shell` for
 the bare shell ones, `framework-*` for the nine shell frameworks, and so on. What stays generated per case
-is the *build context*: the throwaway keypair's `entrypoint.sh`, and for the pre-installed case the repo
+is the _build context_: the throwaway keypair's `entrypoint.sh`, and for the pre-installed case the repo
 itself. Suites reach a file through `_hi_dockerfile <stem>` and pass it with `-f`; the variants that differ
 only by a package list or a base image are one file plus a `--build-arg` (`PKGS`, `BASE`) rather than a
 file each.

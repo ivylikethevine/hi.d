@@ -1,11 +1,27 @@
 name: Scorecard
 
-# OpenSSF Scorecard, dispatch-only for now: run it, read the report from the
-# artifact, and only then decide about publishing results and a README badge
-# (publish_results and a schedule are the follow-up, not the first step).
+# OpenSSF Scorecard. It has been run and the first report read (docs/ROADMAP.md
+# records what it found), so it is on a schedule now rather than dispatch-only -
+# a supply-chain score is only useful as a trend, and the checks it grades move
+# when dependabot bumps an action, not when anyone remembers to press a button.
+#
+# The results are shown in two places, which answer different questions.
+# Privately, the SARIF is uploaded to code scanning, so findings land in the
+# repo's Security tab with file and line rather than inside an artifact nobody
+# downloads. Publicly, publish_results puts the score on the OpenSSF API that
+# README's Scorecard badge reads.
+#
+# publish_results only takes effect on a scheduled run against the default
+# branch - a workflow_dispatch will not publish, by the action's own design, so
+# the cron above is what keeps the badge current rather than a convenience.
 on:
+  schedule:
+    - cron: "41 7 * * 2"
   workflow_dispatch:
 
+# read-all is the floor; the analysis job takes the two write scopes it needs
+# below. Job-level permissions replace the workflow-level block rather than
+# adding to it, which is why that job spells out its read scopes again.
 permissions: read-all
 
 jobs:
@@ -13,12 +29,20 @@ jobs:
     name: supply-chain scorecard
     runs-on: ${{ vars.RUNNER_LABEL || 'ubuntu-latest' }}
     timeout-minutes: 10
-    # workflow_dispatch is this workflow's only trigger, and dispatch already
-    # needs write access - this is the second lock: an environment with a
-    # required reviewer on it. Note that an environment with *no* reviewer
-    # configured is no gate at all - the same caveat release.yml's `release`
-    # environment carries. docs/ROADMAP.md holds the one-time setup step.
-    environment: manual-dispatch
+    # No `environment:` gate any more. It was here as a second lock behind
+    # workflow_dispatch, and a schedule cannot pass one: a required reviewer
+    # would leave every weekly run queued for an approval nobody is waiting to
+    # give. release.yml's `release` environment is the one that matters and is
+    # untouched.
+    permissions:
+      contents: read
+      # the two the analysis needs, and the only write scopes in this file:
+      # code scanning takes the SARIF, and publish_results signs the score it
+      # sends to the OpenSSF API with an OIDC token
+      security-events: write
+      id-token: write
+      # Dangerous-Workflow and Token-Permissions read workflow definitions
+      actions: read
     steps:
       # hands the persistent self-hosted workspace back to the runner user, so
       # checkout's own cleanup can always finish - see docs/PACKAGING.md
@@ -36,10 +60,19 @@ jobs:
         with:
           results_file: results.sarif
           results_format: sarif
-          publish_results: false
+          publish_results: true
 
+      # kept alongside the code-scanning upload rather than replaced by it: the
+      # artifact is the whole report as the tool emitted it, which is what you
+      # want when reading a run by hand (the local-mode notes in ROADMAP came
+      # from one). Code scanning keeps only what it can map to a line.
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: scorecard-results
           path: results.sarif
           if-no-files-found: error
+
+      - name: Upload the findings to code scanning
+        uses: github/codeql-action/upload-sarif@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4
+        with:
+          sarif_file: results.sarif

@@ -19,7 +19,7 @@ Symptom of forgetting: suites report fewer/MISSING cases, or a script runs
   (shellcheck, shfmt, checkbashisms, the bash-4 construct grep) is enforced by
   the fast group itself — there is no separate lint step.
 - Skip the suite when the diff is prose only — it costs ~2 minutes, most of it
-  shellcheck, and no case reads ordinary `.md`. "Only `.yml`/`.md`" is *not*
+  shellcheck, and no case reads ordinary `.md`. "Only `.yml`/`.md`" is _not_
   the same test, though: the fast group reads several of both. Run it when the
   diff touches `.github/workflows/*.yml` (`runner_test.sh` checks that every
   `--group` name `ci.yml` invokes exists; `packaging_test.sh` asserts against
@@ -50,7 +50,7 @@ Symptom of forgetting: suites report fewer/MISSING cases, or a script runs
   numbers: `bench_payload_size` budgets the gzipped tar (65536 B), while the
   README badge tracks `_hi_wire_bytes` — the assembled script a session
   actually sends, which is what `hi` prints on connect — to within 5%. They
-  move independently: putting a file *into* the tar raises the first and
+  move independently: putting a file _into_ the tar raises the first and
   lowers the second. Tooling-only helpers must not go into `common/core.sh`;
   check both numbers when touching shipped files.
 - Several files are dialect-constrained and say so at the top: paths.sh's

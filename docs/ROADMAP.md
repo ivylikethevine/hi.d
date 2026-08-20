@@ -113,6 +113,31 @@ here: git history is the ledger, and this file is only what is left to do.
     session offers only the flags that work there, and a lint case fails when the
     roster and `--help` disagree.
 
+- [ ] **Decide whether Renovate replaces dependabot plus `tool-versions.yml`** —
+      a consolidation to weigh, not an obvious win. Three classes of pin move
+      here and only two have a watcher: dependabot handles the `uses:` SHAs and
+      now the `tests/dockerfiles` digests, while
+      `.github/actions/setup-tool/tools.txt` (eight curl-installed tools) has no
+      ecosystem, which is exactly why `tool-versions.yml` exists — a bespoke
+      weekly script that reads the same rows and warns on drift. A third class
+      has no watcher at all: the same three images named as plain tags in
+      `tests/test_lib.sh` and `docs/tapes/fixtures.sh`, which dependabot cannot
+      see because it reads Dockerfiles.
+
+  - **What Renovate would buy:** `customManagers` match arbitrary files by
+    regex, so `tools.txt`'s version column and the tag strings in shell both
+    become ordinary managed dependencies. That is one tool watching all three
+    classes, and `.github/scripts/check_tool_versions.sh` plus its workflow
+    delete.
+  - **What it costs:** a second bot app on the repo, a `renovate.json` that is
+    its own dialect to learn, and the loss of something the current setup has —
+    `tool-versions.yml` fails loudly with `::warning` annotations in a run,
+    where Renovate opens PRs. For eight pins that is arguably a downgrade in
+    signal.
+  - **Ticks when:** the answer is written down either way. If it stays
+    dependabot, say so here and in `.github/dependabot.yml`'s header so the
+    question stops being reopened.
+
 - [ ] **Pick the container or task on multi-container targets** — README
       documents the same limitation twice and it is the only place `hi <target>`
       is knowingly less capable than the CLI underneath it. A multi-task Nomad
@@ -211,6 +236,45 @@ here: git history is the ledger, and this file is only what is left to do.
     answer is "deliberately not pinned", or in the Dockerfiles if it is not.
     Either way Scorecard keeps reporting it, so the point is to stop
     re-deciding it every time the report is read.
+
+- [ ] **Trivy over the pinned base images, `--ignore-unfixed`** — the missing
+      half of digest-pinning. `tests/dockerfiles` now pins `alpine:3.20`,
+      `debian:bookworm-slim` and `bash:3.2` by digest, which is what makes a
+      fixture build reproducible and also what freezes whatever CVEs those
+      layers carried that day. Dependabot opens a bump PR weekly, but it bumps
+      on _release_, not on severity — nothing currently says "the digest you are
+      pinned to now has a fixable hole".
+
+  - **`--ignore-unfixed` is the whole design, not a detail.** Measured on the
+      current pins: `debian:bookworm-slim` reports **17 HIGH and 5 CRITICAL**,
+      and **every one of the 22 has no fix available** — Debian won't-fix
+      entries, eight of them `perl-base`. A gate on the raw number is red
+      forever and teaches everyone to skip it. With `--ignore-unfixed` all three
+      images report **0** today, so the job is green until something actionable
+      lands and its going red means exactly one thing: bump the pin.
+  - **Shape:** its own scheduled workflow rather than a CI job — this tracks
+      upstream's clock, like `tool-versions.yml` and `link-check.yml`, not the
+      diff's. Advisory at first.
+  - **Ticks when:** it runs weekly and has been seen green against the pins in
+      `tests/dockerfiles`.
+
+- [ ] **hadolint over the seventeen fixture Dockerfiles** — nothing lints them
+      today, and a sweep finds real things rather than style noise. Counted
+      across the set: `DL3009` (apt lists left in the layer) ×10, `DL3015`
+      (no `--no-install-recommends`) ×10, `DL4006` (a piped `RUN` with no
+      `pipefail`, so a failing left-hand side passes) ×3, plus `DL3002`,
+      `DL3008` and `DL3018`.
+
+  - **Expect to silence some of it.** `DL3008`/`DL3018` want every apt and apk
+      package version-pinned, which for throwaway fixtures is the same argument
+      the pinning entry above settles the other way — pin the base image,
+      not every package inside it. `DL3002` (last USER is root) is what an
+      sshd fixture is. A `.hadolint.yaml` naming those, with the reason, is
+      part of the work.
+  - **`DL4006` is the one that is a bug**, not a preference: three fixtures pipe
+      into a shell without `pipefail`.
+  - **Ticks when:** it runs on any PR touching `tests/dockerfiles/**` and the
+      ignore list has a comment per rule.
 
 - [ ] **timep profiling for the paths the bench suite guards** — `_hi_bench`
       (`../tests/bench/bench_test.sh`) gives one average per hot path against a
@@ -402,9 +466,10 @@ human steps and their tick conditions.
 
 Each of these waits on something outside the checkout — a toggle in the repo's
 settings, or a decision — which is why they sit here rather than in the in-repo
-half: no file here can close one. The macOS and Windows e2e workflows used to
-sit here too; both are green now, and `ci.yml` calls each on every push to
-`main` behind the two fast-suite jobs.
+half: no file here can close one. Three entries have left it recently: the
+macOS and Windows e2e workflows are green and `ci.yml` calls each on every push
+to `main` behind the two fast-suite jobs, and Pages is published — the site and
+the `badges/tests.json` endpoint README's tests badge reads both answer.
 
 - [ ] **Turn branch protection on for `main`** — Scorecard's highest-severity
       finding, and the one thing on that report that was genuinely blocked
@@ -420,6 +485,45 @@ sit here too; both are green now, and `ci.yml` calls each on every push to
     Decide the required checks too — and per the note on the markdownlint job,
     do not make the advisory ones required.
   - **Ticks when:** the rule exists and a release has gone out under it.
+
+- [ ] **Secret scanning and push protection** — free on a public repo, off by
+      default, and this repo now has four things worth protecting:
+      `APK_SIGNING_KEY` and `MINISIGN_SECRET_KEY` (the two signing keys, both
+      under **Secrets & keys** above), `AUR_SSH_KEY` and `HOMEBREW_TAP_TOKEN`
+      (the two publishing credentials, under **Release channels**). Every one
+      of them is generated on a laptop, pasted into a settings page, and
+      deleted locally — a sequence whose failure mode is a paste into the wrong
+      buffer and a commit.
+
+  - **Push protection is the half that matters.** Scanning tells you a
+    credential leaked, which by then means rotating an AUR key and a tap token.
+    Push protection refuses the push that would leak it, so the recovery is
+    editing a file rather than re-registering with two package channels.
+  - **Where:** Settings → Code security. Turn on secret scanning, then push
+    protection.
+  - **Not a workflow, and not gitleaks or trufflehog.** GitHub's own scanner
+    runs on the push path where a third-party action cannot, and it costs
+    nothing here. Revisit only if a key format it does not recognise shows up.
+  - **Ticks when:** both are on, and the CONTRIBUTING/SECURITY note says what a
+    contributor should do when a push is refused.
+
+- [ ] **A job-started hook on the self-hosted runner** — eleven jobs across
+      six workflows open with the same `Reclaim the workspace` step: a
+      `sudo chown -R` of `$GITHUB_WORKSPACE`, guarded on
+      `runner.environment != 'github-hosted'`, because that box's `_work`
+      persists between jobs and one root-owned file from a container test makes
+      the next checkout's cleanup throw (docs/PACKAGING.md has the full
+      account). It cannot be factored into a composite action: it has to run
+      _before_ `actions/checkout`, and `uses: ./.github/actions/...` needs the
+      checkout that has not happened yet.
+
+  - **Where it actually belongs:** `ACTIONS_RUNNER_HOOK_JOB_STARTED` on the
+    runner itself — a script the runner executes before every job, which is
+    exactly this step's scope. Setting it is a file and an env var on that
+    machine, which is why this is here and not in the in-repo half.
+  - **Ticks when:** the hook is in place and the eleven copies are deleted in
+    one commit. Do both at once: the copies are harmless, but leaving them
+    after the hook exists means two mechanisms for one problem.
 
 - [ ] **Decide what to do about the checks this repo cannot score** — the rest
       of the first Scorecard report, none of it a defect. **License 0** was the
@@ -441,22 +545,13 @@ sit here too; both are green now, and `ci.yml` calls each on every push to
     it: `scorecard.yml` still sets `publish_results: false`, and a README badge
     needs it on. A score dominated by "solo maintainer" is not obviously worth
     displaying — which is the call to make here.
+  - **Shipped since:** the workflow runs weekly rather than on dispatch, so the
+    answer arrives as a trend instead of whenever someone remembers. Its
+    `manual-dispatch` environment went with the change — a schedule cannot
+    satisfy a required reviewer — and nothing was lost with it, the job being
+    `read-all` with an artifact for output.
   - **Ticks when:** `publish_results` is settled either way, and the README
     badge decision follows from it.
-
-- [ ] **Publish the Pages site** (`pages.yml`) — the site builds today and
-      deploys nowhere: `Settings -> Pages -> Source: GitHub Actions` is a click
-      that only exists on a public repo, and it has not been made. It now costs
-      more than a missing site. README's tests badge is a shields `endpoint`
-      reading `badges/tests.json` off that site, so until the click lands it
-      renders `tests | inaccessible` rather than a count.
-
-  - **Ticks when:** the source is set to GitHub Actions, a deploy goes green,
-    and README's tests badge shows a number. Shipped since: `pages.yml` builds
-    and deploys on every CI success on `main` (plus docs pushes and dispatch),
-    and writes `_site/badges/tests.json` from the fast group's own totals —
-    which replaced `ci.yml`'s `badge` job, the one that used to commit the
-    number back onto `main` on top of whatever the author had just pushed.
 
 ### Docs & submissions
 

@@ -50,7 +50,7 @@ checkout in this repo sets `persist-credentials: false`, so a `Removing auth`
 teardown runs in `finally`, fails its own `git config --local` against the
 now-`.git`-less directory, and replaces the real error with
 
-```
+```text
 fatal: --local can only be used inside a git repository
 The process '/usr/bin/git' failed with exit code 128
 ```
@@ -92,7 +92,7 @@ two e2e workflows no longer carry one: `ci.yml` calls them on every push to
 `/usr/bin/hi` pointing into a package prefix resolves correctly on its own (GLOSSARY: HI.33). Everything
 then resolves against `$_HI_ROOT="$_HI_HOME/hi.d"`. What a channel still owes is the layout and the
 handoff: put the tree in a directory literally named `hi.d`, and make sure `_HI_HOME` names that
-directory's **parent** in the environment, because a *new* process with no tree to derive from - a login
+directory's **parent** in the environment, because a _new_ process with no tree to derive from - a login
 shell, tmux's `update-environment`, another machine's `hi` probing this one - has nothing else to read.
 
 | channel            | tree                 | how `_HI_HOME` gets set                                    |

@@ -12,12 +12,11 @@ name: Pages
 # of the author's on every push; publishing it here keeps the figure generated
 # and leaves main alone.
 #
-# The build half is entirely in this file. The *publishing* half is one click
-# that only exists once the repo is public: Settings -> Pages -> Source:
-# GitHub Actions. Until then this is dispatch-only in practice - the push
-# trigger below is harmless without that setting, since deploy-pages is what
-# needs it and it simply has nothing to deploy to. Note that the tests badge
-# reads `inaccessible` until that click, having nowhere to fetch from.
+# Publishing is live: Settings -> Pages -> Source is set to GitHub Actions, so
+# deploy-pages has somewhere to put the site and the badge endpoint answers. If
+# that setting is ever turned off the build half here still passes and only the
+# deploy has nothing to write to - at which point the README badge goes back to
+# rendering `inaccessible`, which is the symptom to recognise.
 #
 # zizmor flags workflow_run as a dangerous trigger, and it is right about the
 # usual shape of the mistake: a privileged run that checks out the head SHA of
@@ -26,22 +25,20 @@ name: Pages
 # rather than from the triggering run's own artifact, and the `if` on `build`
 # takes only pushes - a fork PR whose branch happens to be named `main` cannot
 # reach it. Nothing here reads a single attacker-controlled byte.
+#
+# After CI, and only after CI. There was a `push` trigger here too, on the
+# markdown paths, so prose could publish without waiting out the suite - but
+# ci.yml runs on *every* push to main with no path filter, so workflow_run
+# already covers every commit this would have caught. All the second trigger
+# added was a duplicate build and deploy on any push touching a .md, which is
+# most of them. The cost of dropping it is latency: the site now lands when CI
+# goes green rather than a couple of minutes in. The gain is that it never
+# publishes docs from a commit whose tests failed.
 on: # zizmor: ignore[dangerous-triggers]
-  # after CI, so the badge JSON is written from a run that actually passed
   workflow_run:
     workflows: [CI]
     types: [completed]
     branches: [main]
-  # and on a docs edit directly, so prose publishes in a couple of minutes
-  # rather than waiting out the full suite. Both can fire for one commit; the
-  # concurrency group below serialises them and the second deploy just carries
-  # a fresher count.
-  push:
-    branches: [main]
-    paths:
-      - "**.md"
-      - "_config.yml"
-      - ".github/workflows/pages.yml"
   workflow_dispatch:
 
 permissions:
@@ -57,8 +54,13 @@ concurrency:
 jobs:
   build:
     name: build (jekyll)
-    runs-on: "ubuntu-latest"
-    # runs-on: ${{ vars.RUNNER_LABEL || 'ubuntu-latest' }}
+    # Hosted, deliberately, and not vars.RUNNER_LABEL like the rest: this job
+    # runs jekyll-build-pages, which is a container action, and then has to
+    # chown its root-owned output. Pinning it here is what keeps that seam in
+    # one known environment - and it is why this job carries no `Reclaim the
+    # workspace` step, unlike every other checkout in this repo. It could never
+    # fire on a github-hosted runner.
+    runs-on: ubuntu-latest
     # a red CI must not publish, and neither may a fork's PR run - `event`
     # pins it to a push to `main`. The other two triggers have no run to judge.
     if: >-
@@ -72,14 +74,6 @@ jobs:
       contents: read
       actions: read
     steps:
-      # hands the persistent self-hosted workspace back to the runner user, so
-      # checkout's own cleanup can always finish - see docs/PACKAGING.md
-      - name: Reclaim the workspace
-        if: ${{ runner.environment != 'github-hosted' }}
-        run: |
-          set -euo pipefail
-          sudo chown -R "$(id -u):$(id -g)" "$GITHUB_WORKSPACE"
-
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false

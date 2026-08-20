@@ -264,9 +264,7 @@ work, and detecting a permanent `~/hi.d` on the target to use in place.
 - [chezmoi], [yadm], [GNU Stow], [dotbot], [rcm] — the install-it-there family
 
 [sshrc]: https://github.com/cdown/sshrc
-[cdown]: https://github.com/cdown/sshrc
 [cdown's]: https://github.com/cdown/sshrc
-[danrabinowitz]: https://github.com/danrabinowitz/sshrc
 [danrabinowitz's]: https://github.com/danrabinowitz/sshrc
 [xxh]: https://github.com/xxh/xxh
 [kyrat]: https://github.com/fsquillace/kyrat

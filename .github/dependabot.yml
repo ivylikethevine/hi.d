@@ -1,9 +1,10 @@
-# Keeps the SHA-pinned `uses:` in the workflows AND the setup-tool action
-# moving via PRs instead of memory. What this does not cover: the curl-installed
-# tool versions in .github/actions/setup-tool/tools.txt (shellcheck, shfmt,
-# checkbashisms, actionlint, zizmor, nfpm, minisign, kcov) - those move by editing
-# that file's version column, and dependabot has no ecosystem for them; the
-# tool-versions workflow watches that drift instead.
+# Keeps the SHA-pinned `uses:` in the workflows, the setup-tool action AND the
+# digest-pinned base images in tests/dockerfiles moving via PRs instead of
+# memory. What this does not cover: the curl-installed tool versions in
+# .github/actions/setup-tool/tools.txt (shellcheck, shfmt, checkbashisms,
+# actionlint, zizmor, nfpm, minisign, kcov) - those move by editing that file's
+# version column, and dependabot has no ecosystem for them; the tool-versions
+# workflow watches that drift instead.
 version: 2
 updates:
   - package-ecosystem: github-actions
@@ -14,5 +15,19 @@ updates:
       interval: weekly
     # let a new action release age before a bump PR shows up - a freshly
     # compromised release's window is its first days (zizmor: dependabot-cooldown)
+    cooldown:
+      default-days: 7
+
+  # The three upstream base images the test fixtures build on, pinned by digest
+  # in tests/dockerfiles/*.Dockerfile. A digest never moves, which is the point
+  # and also the hazard: without this, `alpine:3.20` would keep meaning whatever
+  # it meant the day it was pinned, security fixes included, and nothing would
+  # say so. The `docker` ecosystem reads Dockerfiles specifically - the same
+  # images named in shell (tests/test_lib.sh, docs/tapes/fixtures.sh) are out of
+  # its reach, which is why those stay on tags.
+  - package-ecosystem: docker
+    directory: "/tests/dockerfiles"
+    schedule:
+      interval: weekly
     cooldown:
       default-days: 7

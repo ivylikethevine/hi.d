@@ -7,7 +7,7 @@
 # of these whose prompt renders a live git segment).
 #
 # ARG *after* FROM: see alpine-shell.Dockerfile for why that placement matters.
-FROM alpine:3.20
+FROM alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc
 ARG PKGS
 RUN apk add --no-cache openssh ${PKGS} \
     && adduser -D -s /bin/ash hitest

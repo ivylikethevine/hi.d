@@ -14,9 +14,9 @@ This is a hobby project.
 [![Linux](https://img.shields.io/github/actions/workflow/status/ivylikethevine/hi.d/ci.yml?branch=main&label=Linux)](https://github.com/ivylikethevine/hi.d/actions/workflows/ci.yml)
 [![macOS](https://img.shields.io/github/actions/workflow/status/ivylikethevine/hi.d/macos-e2e.yml?branch=main&label=macOS)](https://github.com/ivylikethevine/hi.d/actions/workflows/macos-e2e.yml)
 [![Windows](https://img.shields.io/github/actions/workflow/status/ivylikethevine/hi.d/windows-e2e.yml?branch=main&label=Windows)](https://github.com/ivylikethevine/hi.d/actions/workflows/windows-e2e.yml)
-[![Coverage](https://github.com/ivylikethevine/hi.d/actions/workflows/coverage.yml/badge.svg)](https://github.com/ivylikethevine/hi.d/actions/workflows/coverage.yml)
 ![ssh payload](https://img.shields.io/badge/ssh_payload-73KB_per_session-4c1)
 ![bash](https://img.shields.io/badge/bash-3.2%2B-4EAA25?logo=gnubash&logoColor=white)
+[![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/ivylikethevine/hi.d/badge)](https://scorecard.dev/viewer/?uri=github.com/ivylikethevine/hi.d)
 ![license](https://img.shields.io/badge/license-MIT-blue)
 
 **One config directory to rule them all, uniting all shells from all hosts!**

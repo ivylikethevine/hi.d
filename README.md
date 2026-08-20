@@ -338,7 +338,7 @@ signature over the sums (the offline half — no `gh`, no network, one static pu
 
 ```sh
 sha256sum -c --ignore-missing SHA256SUMS                        # the bytes match the release
-minisign -Vm SHA256SUMS -P 'RWT-PLACEHOLDER-see-ROADMAP-secrets-and-keys'
+minisign -Vm SHA256SUMS -P 'RWTDcJ3LGWayrAxK6mbMysyOF8mNLOmMUGRl4YSWk5KIoayS+lW0Fy1L'
 gh attestation verify hi.d_*_all.deb --repo ivylikethevine/hi.d # which CI run built them
 ```
 

@@ -89,30 +89,6 @@ here: git history is the ledger, and this file is only what is left to do.
 
 ### Tooling
 
-- [ ] **`hi --<TAB>` completes hi's own flags** — completion answers targets and
-      nothing else: `complete -F _hi_complete hi` (`shells/bash.sh`),
-      `compdef _hi hi` (`shells/zsh.zsh`) and `complete -c hi -f -a '(sh
-      $_HI_TARGETS)'` (`shells/config.fish`) all resolve `common/targets.sh` and
-      stop there. So none of the flags `hi --help` lists complete, in any shell —
-      the one part of the CLI a user cannot discover by pressing TAB, in a tool
-      whose pitch is that the session is the same everywhere.
-
-  - **Single-home the roster or it will drift.** The flags are spelled out in
-    `hi.sh`'s `--help` heredoc and again in `docs/hi.1`; three completions would
-    make five copies. Put the list where `$_HI_SHELL_TABLE` lives and have the
-    lint suite check the four consumers agree, the way it already drift-checks
-    the `GLOSSARY:` tags.
-  - **Not every flag exists on a target.** `--install`, `--test`,
-    `--configure`, `--check-configs` and `--color-preview` need `scripts/`, which
-    the payload does not carry, so a session offering them completes straight
-    into `$_HI_NO_CHECKOUT`. Filter on `$_HI_REMOTE_SESSION` rather than shipping
-    a list that is wrong on half the machines it runs on.
-  - **It costs wire.** The completions ship, and the payload is CI-budgeted
-    twice; check both numbers, not just the badge.
-  - **Ticks when:** `hi --<TAB>` completes flags in bash, zsh and fish, a remote
-    session offers only the flags that work there, and a lint case fails when the
-    roster and `--help` disagree.
-
 - [ ] **Decide whether Renovate replaces dependabot plus `tool-versions.yml`** —
       a consolidation to weigh, not an obvious win. Three classes of pin move
       here and only two have a watcher: dependabot handles the `uses:` SHAs and
@@ -138,80 +114,29 @@ here: git history is the ledger, and this file is only what is left to do.
     dependabot, say so here and in `.github/dependabot.yml`'s header so the
     question stops being reopened.
 
-- [ ] **Pick the container or task on multi-container targets** — README
-      documents the same limitation twice and it is the only place `hi <target>`
-      is knowingly less capable than the CLI underneath it. A multi-task Nomad
-      allocation needs `nomad alloc exec -task <name>` and a multi-container pod
-      needs `kubectl exec -c <name>`; `hi` passes through neither, so an
-      allocation needs a single unambiguous task and a pod silently gets its
-      first container — `kubectl`'s own default, with `kubectl`'s warning, which
-      is not the same thing as a choice.
+- [ ] **Trim misc/aliases.sh from the payload too** — the leftover half of
+      "do not ship what the toggles turned off", and the half that is not
+      obviously worth doing. `_hi_payload_tar` now drops `misc/vim.rc`,
+      `misc/nano.rc` and `shells/osc52.sh` when the overlay has switched them
+      off, measured at −2071 bytes gzipped with both toggles set. `aliases.sh`
+      is the biggest file in `misc/` at 8.7KB and was the entry's headline
+      saving, but it is deliberately excluded.
 
-  - **Where it plugs in:** `_say_hi_container` (`hi.sh`) already builds a
-    `probe`/`cp`/`attach` triple per backend, and every one of the three needs
-    the same flag — that triple is the whole surface this touches.
-  - **Decide the spelling first.** A `--task`/`--container` flag, a setting, or
-    `pod/container` on the target itself are three different answers with
-    different completion stories; `common/targets.sh` would have to emit the
-    inner names for the last one.
-  - **Ticks when:** a multi-container pod and a multi-task allocation each get a
-    named session, `tests/targets/kube_test.sh` and `tests/targets/nomad_test.sh`
-    cover both, and README's two caveats are replaced by the syntax.
-
-- [ ] **`hi --doctor <container>` reaches as deep as the ssh arm** —
-      `doctor_target` (`scripts/doctor.sh`) walks the resolution chain for any
-      target, then hands off to `doctor_ssh_target` **only** for an ssh host. A
-      docker, podman, nomad or kube target therefore gets one `resolves` row and
-      stops: no bash/`base64` inventory, no shell-ladder verdict, no size. That
-      is precisely the report wanted when a container session comes up in the
-      aliases-only tier, and it is the half the doctor does not answer.
-
-  - **The ssh arm is the template**, and the probe commands already exist —
-      `_say_hi_container`'s `probe` triple is the same call this needs, so this
-      is a second consumer of an existing roster rather than new plumbing.
-  - **Say what a disposable target costs.** The ssh arm prints whether a
-    permanent tree is there and what a session ships otherwise; the container
-    arm has the same two answers to give.
-  - **Ticks when:** `hi --doctor <container>` reports the target's shells,
-    `base64` and the tier a session would land in, for all four backends, and
-    `tests/scripts/doctor_test.sh` covers one of them.
-
-- [ ] **Do not ship what the toggles turned off** — `$_HI_PAYLOAD` is whole
-      directories, so every session sends `misc/vim.rc` and `misc/nano.rc` under
-      `_HI_DISABLE_EDITORS=1`, `shells/osc52.sh` under `_HI_DISABLE_OSC52=1`, and
-      `misc/aliases.sh` — the single biggest file in `misc/` — under
-      `_HI_DISABLE_ALIASES=1`. The client already knows all three answers before
-      it builds the tar, so this costs no probe, no round trip and no protocol.
-
-  - **Read the overlay, not the environment.** The toggle that applies on the
-    target is the one in the overlay's `settings.sh`, which rides along and is
-    sourced there; the client shell's own exported value is a different thing
-    entirely. Trim on the wrong one and a locally-disabled feature silently stops
-    shipping to hosts that never disabled it.
-  - **Both budgets start measuring a _default_ configuration** once the payload
-    varies — `bench_payload_size`'s gzipped ceiling and README's wire badge alike.
-    Say so where each is documented, or the next person to read them will think
-    the number is the number.
-  - **Ticks when:** a client with a toggle off sends a measurably smaller
-    payload, the session on the far side is unchanged for everyone else, and a
-    case pins one toggle to the file it stops shipping.
-
-- [ ] **A floor for the packages check** — `../misc/packages` ranks every entry
-      1–5 and `full_check` (`../common/header.sh`) gives each rank its own pair
-      of colors, hiding the "not installed" half from 4 down. What no setting
-      can do is show _less_: every rank that resolves gets printed, and the
-      header is the first thing a session puts on screen. A minimum-priority
-      setting — `_HI_PACKAGES_MIN_PRIORITY` in `settings.sh`, alongside the
-      other knobs — would let a host say "4 and up" and get a two-line header
-      instead of a paragraph.
-
-  - **One number, two consumers.** The check and `hi --packages-preview`
-    (`../scripts/packages_preview.sh`) read the same file and have to agree; the
-    preview's legend should name the ranks the floor is hiding rather than
-    quietly dropping their rows, the way it already explains a "hidden" cell.
-  - **Ticks when:** the setting exists, both consumers honor it,
-    `CONFIGURATION.md` documents it next to the other toggles, and a case pins
-    the boundary — a package exactly at the floor shows, one below it does not.
+  - **Why it is excluded.** `_HI_DISABLE_ALIASES` turns off the _personal_
+    aliases, and the file installs the `vim`/`nano`, `hi_copy` and `tmux`
+    aliases, plus fish's toggle backstop `eval`, **above** its own early
+    return — its comments say so explicitly ("above the early return, so
+    disabling personal aliases still leaves the theme"). Trimming it is a
+    behaviour change wearing a size saving's clothes, and
+    `tests/shells/hi_test.sh` now pins that it keeps shipping.
+  - **What it would take:** split the file, so the always-on half and the
+    personal-aliases half are separate payload members and only the second is
+    trimmed. That is a real refactor of a file three shells parse under a
+    shared dialect constraint, for 8.7KB uncompressed on the sessions of people
+    who turned aliases off.
+  - **Ticks when:** the split exists and a case pins the personal half leaving
+    the payload while the editor aliases stay — or when this is closed as not
+    worth doing, which is a legitimate answer and should be written here.
 
 ### Testing & CI
 
@@ -252,11 +177,14 @@ here: git history is the ledger, and this file is only what is left to do.
       forever and teaches everyone to skip it. With `--ignore-unfixed` all three
       images report **0** today, so the job is green until something actionable
       lands and its going red means exactly one thing: bump the pin.
-  - **Shape:** its own scheduled workflow rather than a CI job — this tracks
-      upstream's clock, like `tool-versions.yml` and `link-check.yml`, not the
-      diff's. Advisory at first.
-  - **Ticks when:** it runs weekly and has been seen green against the pins in
-      `tests/dockerfiles`.
+  - **Shipped since:** `.github/workflows/image-scan.yml` runs it weekly and on
+      dispatch, advisory like markdownlint and link-check. trivy is pinned in
+      `setup-tool`'s `tools.txt`, so it caches and the weekly drift check
+      watches it like every other tool — no new action dependency. The scan
+      list is `sed`'d out of the `FROM …@sha256:` lines rather than repeated,
+      so a base image added or repinned is covered without editing that file.
+  - **Ticks when:** it has been seen green in CI. Measured locally at the
+      current pins: all three images report zero fixable HIGH/CRITICAL.
 
 - [ ] **hadolint over the seventeen fixture Dockerfiles** — nothing lints them
       today, and a sweep finds real things rather than style noise. Counted
@@ -271,10 +199,17 @@ here: git history is the ledger, and this file is only what is left to do.
       not every package inside it. `DL3002` (last USER is root) is what an
       sshd fixture is. A `.hadolint.yaml` naming those, with the reason, is
       part of the work.
-  - **`DL4006` is the one that is a bug**, not a preference: three fixtures pipe
-      into a shell without `pipefail`.
-  - **Ticks when:** it runs on any PR touching `tests/dockerfiles/**` and the
-      ignore list has a comment per rule.
+  - **`DL4006` was the one that was a bug**, and it is fixed rather than
+      ignored: `framework-atuin`, `framework-mise` and `framework-starship`
+      piped curl into sh with no `pipefail`, so a 404 built a green image with
+      the framework missing and the suite then tested an absence. All three
+      carry `SHELL ["/bin/bash", "-o", "pipefail", "-c"]` now.
+  - **Shipped since:** `ci.yml`'s `hadolint` job, advisory, on every PR rather
+      than only ones touching `tests/dockerfiles/**` — a job-level paths filter
+      does not exist and the job costs seconds, so the superset is the simpler
+      honest answer. `.hadolint.yaml` carries a reason per silenced rule and
+      says which findings are deliberately left visible (`DL3009`, `DL3015`).
+  - **Ticks when:** it has been seen green in CI.
 
 - [ ] **timep profiling for the paths the bench suite guards** — `_hi_bench`
       (`../tests/bench/bench_test.sh`) gives one average per hot path against a
@@ -549,7 +484,17 @@ the `badges/tests.json` endpoint README's tests badge reads both answer.
     answer arrives as a trend instead of whenever someone remembers. Its
     `manual-dispatch` environment went with the change — a schedule cannot
     satisfy a required reviewer — and nothing was lost with it, the job being
-    `read-all` with an artifact for output.
+    `read-all` with an artifact for output. `publish_results` is on and the
+    SARIF now uploads to code scanning, so findings land in the Security tab
+    rather than inside an artifact.
+  - **The README badge is deliberately not there yet.** It was added and taken
+    back out: `api.securityscorecards.dev` 404s for this repo until a
+    _scheduled_ run has published, and shields renders that as
+    `openssf scorecard: invalid repo path` while scorecard.dev's viewer errors
+    outright. A `workflow_dispatch` will not fix it — the action only publishes
+    on a schedule. Add the badge after the first Tuesday run, once
+    `curl -s https://api.securityscorecards.dev/projects/github.com/ivylikethevine/hi.d`
+    answers 200.
   - **Ticks when:** `publish_results` is settled either way, and the README
     badge decision follows from it.
 

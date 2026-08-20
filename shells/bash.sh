@@ -75,8 +75,18 @@ function _hi_target_names() {
 # `*` or `?`, and `set -f` is belt to that: names are matched, never globbed.
 function _hi_complete() {
   local cur="${COMP_WORDS[COMP_CWORD]}" n
-  _hi_target_names
   COMPREPLY=()
+  # A word starting with `-` is asking for hi's own options, never a target, so
+  # this answers without touching the target cache or its probes. Uncached on
+  # purpose: the roster is a dozen printfs in targets.sh, cheaper than the
+  # bookkeeping a cache would need.
+  if [[ "$cur" == -* ]]; then
+    for n in $(sh "$_HI_TARGETS" flags); do
+      case "$n" in "$cur"*) COMPREPLY+=("$n") ;; esac
+    done
+    return 0
+  fi
+  _hi_target_names
   set -f
   for n in $_HI_TARGET_NAMES; do
     case "$n" in "$cur"*) COMPREPLY+=("$n") ;; esac

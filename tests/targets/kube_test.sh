@@ -93,6 +93,51 @@ function _hi_run_case() {
   [ "$ok" -eq 1 ]
 }
 
+# The pod/container syntax, against a pod that actually has two. The assertion
+# is not "it connected" but "it connected to the one named": each container
+# writes its own name to /tmp/who, and a session that ignored the suffix would
+# read the other's file - which is exactly what kubectl's silent first-container
+# default does, and what this syntax exists to stop.
+function _hi_kube_multi_container_case() {
+  local name=hi-kubetest-multi got ok=0
+  _hi_h3 "Testing shape: [multi-container]"
+  if ! kubectl apply -f - >"$_HI_WORKDIR/multi.run.log" 2>&1 <<EOF; then
+apiVersion: v1
+kind: Pod
+metadata:
+  name: $name
+spec:
+  containers:
+    - name: app
+      image: $_HI_PAIR_IMAGE_SH
+      command: ["sleep", "infinity"]
+    - name: sidecar
+      image: $_HI_PAIR_IMAGE_SH
+      command: ["sleep", "infinity"]
+EOF
+    _hi_dump_log "Failed to create the multi-container pod:" "$_HI_WORKDIR/multi.run.log"
+    return 1
+  fi
+  if ! _hi_poll_bool 240 0.5 _hi_pod_running "$name"; then
+    kubectl describe pod "$name" >"$_HI_WORKDIR/multi.describe.log" 2>&1 || true
+    _hi_dump_log "Multi-container pod never reported Running:" "$_HI_WORKDIR/multi.describe.log"
+    kubectl delete pod "$name" --now >/dev/null 2>&1
+    return 1
+  fi
+  kubectl exec "$name" -c app -- sh -c 'echo app >/tmp/who' >/dev/null 2>&1
+  kubectl exec "$name" -c sidecar -- sh -c 'echo sidecar >/tmp/who' >/dev/null 2>&1
+
+  got="$("$_HI_ROOT/hi.sh" "$name/sidecar" 'cat /tmp/who' 2>/dev/null | tr -d '\r' | tail -1)"
+  if [ "$got" = sidecar ]; then
+    _hi_align " | pod/container reached the named container" "OK" "$GREEN"
+    ok=1
+  else
+    _hi_cecho " | hi $name/sidecar read '$got', expected 'sidecar'" "$RED"
+  fi
+  kubectl delete pod "$name" --now >/dev/null 2>&1
+  [ "$ok" -eq 1 ]
+}
+
 function run_kube_test() {
   _hi_require kind
   _hi_require kubectl
@@ -122,7 +167,7 @@ function run_kube_test() {
 
   _hi_pty_stdin auto "no tty and no python3 to fake one - kubectl exec -it will fail outright, results may be unreliable"
 
-  _hi_backend_pair_cases kube "shape"
+  _hi_backend_pair_cases kube "shape" _hi_kube_multi_container_case
 }
 
 run_kube_test

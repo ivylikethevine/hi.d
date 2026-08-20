@@ -444,6 +444,111 @@ function test_remote_suffix_fallbacks_are_interactive() {
   [[ "$out" == *'zsh -i'* && "$out" == *'sh -i'* && "$out" == *'fish -C'* ]]
 }
 
+# The overlay trims the tar. Pins one toggle to the file it stops shipping, and
+# the same run asserts the rest of the tree is still there - a broken --exclude
+# that dropped everything would satisfy "vim.rc is gone" just as well.
+function test_payload_trims_what_the_overlay_disabled() {
+  local dir="$_HI_WORKDIR/trim" listing
+  mkdir -p "$dir"
+  printf "#!/bin/sh\nexport _HI_DISABLE_EDITORS='1'\n" >"$dir/settings.sh"
+  listing="$(_HI_CONFIG_DIR="$dir" _hi_payload_tar | tar tzf - 2>/dev/null)"
+  case "$listing" in *hi.d/misc/vim.rc*)
+    _hi_cecho " | _HI_DISABLE_EDITORS=1 still shipped misc/vim.rc" "$RED"
+    return 1
+    ;;
+  esac
+  case "$listing" in *hi.d/misc/nano.rc*)
+    _hi_cecho " | _HI_DISABLE_EDITORS=1 still shipped misc/nano.rc" "$RED"
+    return 1
+    ;;
+  esac
+  # ...and the tree is otherwise intact
+  case "$listing" in *hi.d/misc/aliases.sh*) ;; *)
+    _hi_cecho " | the trim took misc/aliases.sh with it" "$RED"
+    return 1
+    ;;
+  esac
+  case "$listing" in *hi.d/load.sh*) return 0 ;; esac
+  _hi_cecho " | the trim took load.sh with it" "$RED"
+  return 1
+}
+
+# An unconfigured client ships everything - which is also what both size budgets
+# are measuring, so this is the case that keeps those numbers meaning something.
+function test_payload_ships_everything_by_default() {
+  local dir="$_HI_WORKDIR/notrim" listing
+  mkdir -p "$dir"
+  listing="$(_HI_CONFIG_DIR="$dir" _hi_payload_tar | tar tzf - 2>/dev/null)"
+  case "$listing" in *hi.d/misc/vim.rc*) ;; *)
+    _hi_cecho " | a default client did not ship misc/vim.rc" "$RED"
+    return 1
+    ;;
+  esac
+  case "$listing" in *hi.d/shells/osc52.sh*) return 0 ;; esac
+  _hi_cecho " | a default client did not ship shells/osc52.sh" "$RED"
+  return 1
+}
+
+# misc/aliases.sh is deliberately never trimmed: _HI_DISABLE_ALIASES turns off
+# the personal aliases, but the file installs the vim/nano, hi_copy and tmux
+# aliases above its own early return. Pinned so a later "obvious" saving cannot
+# quietly take those with it.
+function test_payload_keeps_aliases_even_when_disabled() {
+  local dir="$_HI_WORKDIR/noalias" listing
+  mkdir -p "$dir"
+  printf "#!/bin/sh\nexport _HI_DISABLE_ALIASES='1'\n" >"$dir/settings.sh"
+  listing="$(_HI_CONFIG_DIR="$dir" _hi_payload_tar | tar tzf - 2>/dev/null)"
+  case "$listing" in *hi.d/misc/aliases.sh*) return 0 ;; esac
+  _hi_cecho " | _HI_DISABLE_ALIASES=1 dropped misc/aliases.sh, which still carries other aliases" "$RED"
+  return 1
+}
+
+# `pod/container` and `alloc/task`: one spelling for both, because a task and a
+# container are the same idea. The plain form has to stay byte-identical - this
+# syntax is additive or it breaks every existing target.
+function test_container_cmds_pick_the_inner_unit() {
+  local -a probe cp attach
+  local DOMAIN
+
+  DOMAIN=mypod
+  _hi_container_cmds kube
+  case "${attach[*]}" in *" -c "*)
+    _hi_cecho " | a plain pod grew a -c flag" "$RED"
+    return 1
+    ;;
+  esac
+
+  DOMAIN=mypod/sidecar
+  _hi_container_cmds kube
+  case "${attach[*]}" in
+  *"exec -it mypod -c sidecar --") ;;
+  *)
+    _hi_cecho " | kube: expected 'exec -it mypod -c sidecar --', got '${attach[*]}'" "$RED"
+    return 1
+    ;;
+  esac
+
+  DOMAIN=685afd67/worker
+  _hi_container_cmds nomad
+  case "${attach[*]}" in
+  *"-task worker"*"685afd67") ;;
+  *)
+    _hi_cecho " | nomad: expected '-task worker ... 685afd67', got '${attach[*]}'" "$RED"
+    return 1
+    ;;
+  esac
+
+  # docker has no inner unit and `/` is legal in a container name, so it is
+  # taken whole - splitting one would break a real target
+  DOMAIN=some/name
+  _hi_container_cmds docker
+  case "${attach[*]}" in
+  *"exec -it some/name") return 0 ;;
+  esac
+  _hi_cecho " | docker split a name it should have taken whole: '${attach[*]}'" "$RED"
+  return 1
+}
+
 # The payload is an allow list; this is its drift guard. Exact match on the
 # list (so nothing sneaks on the wire unnoticed) plus an existence check on
 # every member (so a rename can't quietly ship an empty payload).
@@ -1246,6 +1351,10 @@ function run_hi_tests() {
   _hi_check "Every flag is in the man page" test_help_flags_are_all_in_the_man_page
   _hi_check "Both shell ladders are in the man page" test_shell_ladders_are_in_the_man_page
   _hi_check "The ladder is the shell tree without bash" test_the_shell_tree_is_the_documented_order
+  _hi_check "Overlay trims what it disabled" test_payload_trims_what_the_overlay_disabled
+  _hi_check "A default client ships everything" test_payload_ships_everything_by_default
+  _hi_check "aliases.sh ships even when disabled" test_payload_keeps_aliases_even_when_disabled
+  _hi_check "target/inner picks the container or task" test_container_cmds_pick_the_inner_unit
 
   _hi_suite_end "hi.sh"
 }

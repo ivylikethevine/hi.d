@@ -14,9 +14,9 @@ This is a hobby project.
 [![Linux](https://img.shields.io/github/actions/workflow/status/ivylikethevine/hi.d/ci.yml?branch=main&label=Linux)](https://github.com/ivylikethevine/hi.d/actions/workflows/ci.yml)
 [![macOS](https://img.shields.io/github/actions/workflow/status/ivylikethevine/hi.d/macos-e2e.yml?branch=main&label=macOS)](https://github.com/ivylikethevine/hi.d/actions/workflows/macos-e2e.yml)
 [![Windows](https://img.shields.io/github/actions/workflow/status/ivylikethevine/hi.d/windows-e2e.yml?branch=main&label=Windows)](https://github.com/ivylikethevine/hi.d/actions/workflows/windows-e2e.yml)
-![ssh payload](https://img.shields.io/badge/ssh_payload-73KB_per_session-4c1)
+![ssh payload](https://img.shields.io/badge/ssh_payload-76KB_per_session-4c1)
+[![package](https://img.shields.io/endpoint?url=https%3A%2F%2Fivylikethevine.github.io%2Fhi.d%2Fbadges%2Fpackage.json)](https://github.com/ivylikethevine/hi.d/releases)
 ![bash](https://img.shields.io/badge/bash-3.2%2B-4EAA25?logo=gnubash&logoColor=white)
-[![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/ivylikethevine/hi.d/badge)](https://scorecard.dev/viewer/?uri=github.com/ivylikethevine/hi.d)
 ![license](https://img.shields.io/badge/license-MIT-blue)
 
 **One config directory to rule them all, uniting all shells from all hosts!**
@@ -166,7 +166,13 @@ Every username and hostname gets a color deterministically derived from its name
    already has its own `hi.d` gets neither: hi loads that tree in place and it reads its own overlay.
 2. Both are base64-armored into one script and written over the **stdin** of an ssh connection the session
    then reuses - not argv, which Linux caps at 128KB however big `ARG_MAX` says it is. That script is what
-   `hi` prints the size of on connect, and what the payload badge measures.
+   `hi` prints the size of on connect, and what the payload badge measures - for a _default_ configuration:
+   a client whose overlay turns off the editor overrides or the OSC 52 clipboard ships less, since hi does not
+   send files it has already been told not to use. That badge is not the package
+   badge beside it and the two should not be read as one number: the payload is what crosses the wire for a
+   single ssh session, while the package badge is what you download from a release and what it costs on disk
+   once installed - which is the larger figure, since `scripts/` and the docs ship in a package and never on
+   the wire.
 3. On the target, `load.sh` prints the header, appends hi's shell configs to the host's own rc files, and
    drops you into **your login shell** when hi styles it (bash, zsh, fish), else the best of
    `$_HI_SHELL_TREE` (`fish > zsh > bash > mksh > ksh > dash > ash > sh`) the target has.
@@ -197,11 +203,11 @@ and the unpacked size, labeled.
 
 ### Nomad allocations
 
-`hi <alloc-id>` also works against a running Nomad allocation (matched by ID/prefix, after the ssh-host and container checks) - same session, same code path as docker. Since `nomad alloc exec` has no `docker cp`/`-e` equivalent, files stream in with `exec -i` + `cat >` and env vars go through a `sh -c "export ...; exec ..."` wrapper. Multi-task allocations would need `nomad alloc exec -task <name>`, which `hi` doesn't pass through, so they need a single unambiguous task.
+`hi <alloc-id>` also works against a running Nomad allocation (matched by ID/prefix, after the ssh-host and container checks) - same session, same code path as docker. Since `nomad alloc exec` has no `docker cp`/`-e` equivalent, files stream in with `exec -i` + `cat >` and env vars go through a `sh -c "export ...; exec ..."` wrapper. A multi-task allocation picks its task with `hi <alloc-id>/<task>`, which becomes `nomad alloc exec -task <name>`; a plain `hi <alloc-id>` is unchanged, and completion offers the pairs for any allocation that has more than one task.
 
 ### Kubernetes pods
 
-`hi <pod-name>` also works against a running Kubernetes pod (checked last, after ssh/docker/podman/nomad) - same idea again, using `kubectl exec` with `--` separating its own flags from the remote command. Uses whatever context/namespace your `kubectl` is currently pointed at; like Nomad's multi-task allocations above, a multi-container pod needs `-c <name>` to pick one, which `hi` doesn't pass through, so it needs a single unambiguous container (`kubectl` falls back to the pod's first container with a warning rather than failing outright).
+`hi <pod-name>` also works against a running Kubernetes pod (checked last, after ssh/docker/podman/nomad) - same idea again, using `kubectl exec` with `--` separating its own flags from the remote command. Uses whatever context/namespace your `kubectl` is currently pointed at; a multi-container pod picks its container the same way Nomad's tasks do - `hi <pod>/<container>`, which becomes `kubectl exec -c <name>`. Without the suffix `kubectl` still falls back to the pod's first container with a warning, so the suffix is how you say which one you meant; completion offers `pod/container` for every pod that has more than one.
 
 ### Windows hosts
 

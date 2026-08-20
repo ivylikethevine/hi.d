@@ -65,6 +65,16 @@ _HI_TARGET_ROWS_AT=-1
 
 _hi() {
   local name kind
+  # hi's own options when the word is one, targets otherwise - the same split
+  # bash.sh's _hi_complete makes, and for the same reason: a flag list must not
+  # wait on a backend probe. Unlike targets it is not cached; it is a dozen
+  # printfs.
+  if [[ "${words[CURRENT]}" == -* ]]; then
+    local -a flags
+    flags=("${(@f)$(sh "$_HI_TARGETS" flags)}")
+    compadd -a flags
+    return 0
+  fi
   if (( _HI_TARGET_ROWS_AT < 0 || SECONDS - _HI_TARGET_ROWS_AT >= ${_HI_TARGETS_TTL:-5} )); then
     _HI_TARGET_ROWS=()
     _HI_TARGET_DESCS=()

@@ -1670,14 +1670,22 @@ function _hi_container_backend_test() {
 _HI_PAIR_IMAGE_BASH="debian:bookworm-slim"
 _HI_PAIR_IMAGE_SH="alpine:3.20"
 
+# _hi_backend_pair_cases <label> <thing> [extra-case-fn...] - the bash/sh pair
+# every backend runs, plus any case only one backend has. The extras go inside
+# the same parallel block on purpose: _hi_suite_end below reports and exits, so
+# a caller cannot add a check after this returns - it does not return.
 function _hi_backend_pair_cases() {
-  local label="$1" thing="$2"
+  local label="$1" thing="$2" extra
+  shift 2
 
   _hi_suite_begin
 
   _hi_par_begin "$label cases"
   _hi_par_case bash _hi_run_case bash "$_HI_PAIR_IMAGE_BASH" "$(_hi_probe_cmd "$_HI_TEST_MARKER" bash)"
   _hi_par_case sh _hi_run_case sh "$_HI_PAIR_IMAGE_SH" "$(_hi_probe_cmd "$_HI_TEST_MARKER" fallback)"
+  for extra in "$@"; do
+    _hi_par_case "${extra##*_}" "$extra"
+  done
   _hi_par_wait
 
   _hi_suite_end "" \

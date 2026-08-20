@@ -124,8 +124,50 @@ function _hi_overlay_tar() {
   tar czf - -h -C "$_HI_CONFIG_DIR" "${present[@]}"
 }
 
+# _hi_overlay_toggle <name> - what the overlay's settings.sh sets it to, or
+# nothing. Read out of the file rather than off the environment, and that
+# distinction is the whole point: settings.sh rides along and is sourced on the
+# target, so it is the value that will apply there. The client shell's exported
+# copy is a different thing - `_HI_DISABLE_LOCAL=1` is precisely "leave my
+# machine alone but style the hosts I visit", and trimming on the environment
+# would stop shipping a file to targets that never disabled it.
+#
+# Matches install.sh's `export NAME='value'` contract for $_HI_SETTINGS.
+function _hi_overlay_toggle() {
+  [ -f "$_HI_CONFIG_DIR/settings.sh" ] || return 0
+  sed -n "s/^export $1='\(.*\)'\$/\1/p" "$_HI_CONFIG_DIR/settings.sh" | tail -1
+}
+
+# The tree, minus whatever the overlay has already switched off. $_HI_PAYLOAD is
+# whole directories, so without this a session ships files it has been told not
+# to use - and the client knows the answer before it builds the tar, so this
+# costs no probe, no round trip and no protocol.
+#
+# Only two of the three candidates are here, and the third is the interesting
+# one. misc/aliases.sh is NOT trimmed under _HI_DISABLE_ALIASES=1: that toggle
+# turns off the *personal* aliases, and the file installs the vim/nano, hi_copy
+# and tmux aliases plus fish's toggle backstop above its own early return - on
+# purpose, as its comments say. Dropping it would quietly take those with it,
+# which is a behaviour change wearing a size saving's clothes.
+#
+# The two that are safe are safe for a reason worth keeping: every consumer of
+# shells/osc52.sh already tests the file exists (misc/aliases.sh's `[ -f ]`,
+# misc/vim.rc's `filereadable`), and the editor rc files are reached only
+# through aliases that the same toggle switches off.
+#
+# NOTE for anyone reading a size figure: both budgets - bench_payload_size's
+# gzipped ceiling and README's wire badge - measure a *default* configuration,
+# because that is what an unconfigured client sends. A client with toggles off
+# sends less.
 function _hi_payload_tar() {
-  tar czf - -h -C "$_HI_HOME" "${_HI_PAYLOAD[@]/#/hi.d/}"
+  local -a excl=()
+  if [ "$(_hi_overlay_toggle _HI_DISABLE_EDITORS)" = 1 ]; then
+    excl+=(--exclude=hi.d/misc/vim.rc --exclude=hi.d/misc/nano.rc)
+  fi
+  if [ "$(_hi_overlay_toggle _HI_DISABLE_OSC52)" = 1 ]; then
+    excl+=(--exclude=hi.d/shells/osc52.sh)
+  fi
+  tar czf - -h ${excl[@]+"${excl[@]}"} -C "$_HI_HOME" "${_HI_PAYLOAD[@]/#/hi.d/}"
 }
 
 # The walker's rc 2 means "known host, no tag"; only 1 means not in the config.
@@ -143,16 +185,32 @@ function _hi_is_container_running() {
 function _hi_is_docker_container() { _hi_is_container_running docker "$1"; }
 function _hi_is_podman_container() { _hi_is_container_running podman "$1"; }
 
-function _hi_is_nomad_alloc() {
-  command -v nomad >/dev/null 2>&1 &&
-    [ "$(nomad alloc status -t '{{.ClientStatus}}' "$1" 2>/dev/null)" = running ]
+# _hi_outer <target> / _hi_inner <target> - a target may name what to run in as
+# well as where: `pod/container` for kubernetes, `alloc/task` for nomad. One
+# spelling for both, because a task and a container are the same idea here, and
+# a suffix rather than a flag so completion can offer the pairs themselves.
+#
+# Only kube and nomad split. A docker or podman name is taken whole: those have
+# no inner unit, and a `/` in a container name is legal there.
+function _hi_outer() { printf '%s' "${1%%/*}"; }
+function _hi_inner() {
+  case "$1" in
+  */*) printf '%s' "${1#*/}" ;;
+  esac
 }
 
-# multi-container pods need `-c <name>`, which isn't passed through - kubectl
-# warns and uses the first container rather than failing.
+function _hi_is_nomad_alloc() {
+  command -v nomad >/dev/null 2>&1 &&
+    [ "$(nomad alloc status -t '{{.ClientStatus}}' "$(_hi_outer "$1")" 2>/dev/null)" = running ]
+}
+
+# A multi-container pod resolves on the pod half; the container half is checked
+# by kubectl itself when the session runs, which fails loudly on a name that is
+# not there - better than this predicate silently declining and the target then
+# falling through to ssh.
 function _hi_is_k8s_pod() {
   command -v kubectl >/dev/null 2>&1 &&
-    [ "$(kubectl get pod "$1" -o jsonpath='{.status.phase}' 2>/dev/null)" = Running ]
+    [ "$(kubectl get pod "$(_hi_outer "$1")" -o jsonpath='{.status.phase}' 2>/dev/null)" = Running ]
 }
 
 # The backend roster, in resolution order:
@@ -550,30 +608,52 @@ $(_hi_remote_suffix)"
 }
 
 # _say_hi_container <label> <errlog> <copy_start> - docker, podman, nomad, kube
+# _hi_container_cmds <label> - the three ways to run something in a container
+# target, filled into the caller's probe/cp/attach arrays: probe asks a question
+# (no stdin, no tty), cp streams a file in, attach hands over a session.
+#
+# A function rather than three lines inside _say_hi_container because
+# scripts/doctor.sh is a second consumer: `hi --doctor <container>` asks the
+# target the same questions the ssh arm asks an ssh host, and has to ask them
+# exactly the way a real session would. Reads $DOMAIN, like its caller.
+function _hi_container_cmds() {
+  # the two halves of a `pod/container` target; $inner is empty for a plain one,
+  # and the arrays below then expand to exactly what they always did
+  local outer inner
+  outer="$(_hi_outer "$DOMAIN")"
+  inner="$(_hi_inner "$DOMAIN")"
+  local -a pick=()
+  case "$1" in
+  docker | podman)
+    # no inner unit here, so the name is taken whole - a `/` is a legal
+    # character in a docker container name and splitting one would break it
+    probe=("$1" exec "$DOMAIN")
+    cp=("$1" exec -i "$DOMAIN")
+    attach=("$1" exec -it "$DOMAIN")
+    ;;
+  nomad)
+    [ -n "$inner" ] && pick=(-task "$inner")
+    probe=(nomad alloc exec ${pick[@]+"${pick[@]}"} -i=false -t=false "$outer")
+    cp=(nomad alloc exec ${pick[@]+"${pick[@]}"} -i=true -t=false "$outer")
+    # explicit -t=true: nomad's stdin-is-a-tty guess lands wrong on a wrapped
+    # pty and then hangs the exec outright
+    attach=(nomad alloc exec ${pick[@]+"${pick[@]}"} -i=true -t=true "$outer")
+    ;;
+  kube)
+    [ -n "$inner" ] && pick=(-c "$inner")
+    probe=(kubectl exec "$outer" ${pick[@]+"${pick[@]}"} --)
+    cp=(kubectl exec -i "$outer" ${pick[@]+"${pick[@]}"} --)
+    attach=(kubectl exec -it "$outer" ${pick[@]+"${pick[@]}"} --)
+    ;;
+  esac
+}
+
 function _say_hi_container() {
   local label="$1" tmp="$2" copy_start="$3"
   local shell_end root fallback exit_code size prefix tarball env_kv
   local ksh_git=""
   local -a probe cp attach
-  case "$label" in
-  docker | podman)
-    probe=("$label" exec "$DOMAIN")
-    cp=("$label" exec -i "$DOMAIN")
-    attach=("$label" exec -it "$DOMAIN")
-    ;;
-  nomad)
-    probe=(nomad alloc exec -i=false -t=false "$DOMAIN")
-    cp=(nomad alloc exec -i=true -t=false "$DOMAIN")
-    # explicit -t=true: nomad's stdin-is-a-tty guess lands wrong on a wrapped
-    # pty and then hangs the exec outright
-    attach=(nomad alloc exec -i=true -t=true "$DOMAIN")
-    ;;
-  kube)
-    probe=(kubectl exec "$DOMAIN" --)
-    cp=(kubectl exec -i "$DOMAIN" --)
-    attach=(kubectl exec -it "$DOMAIN" --)
-    ;;
-  esac
+  _hi_container_cmds "$label"
 
   root="/tmp/$(_hi_whoami).hi.log.$$"
   shell_end="$(_hi_now)"

@@ -358,6 +358,80 @@ function test_complete_still_answers_from_the_cache() {
   printf '%s\n' "$out" | grep -qx alpha
 }
 
+# The drift check the roster exists for. hi.sh's --help heredoc and docs/hi.1
+# both spell these out; targets.sh is now a third copy, and the only one a
+# completion reads - so a flag that stops agreeing with --help is a flag the
+# user is offered and hi then rejects.
+function test_flags_all_appear_in_help() {
+  local flag help bad=0
+  help="$(_HI_HOME="$_HI_HOME" bash "$_HI_ROOT/hi.sh" --help 2>&1)" || true
+  while read -r flag; do
+    case "$help" in
+    *"$flag"*) ;;
+    *)
+      _hi_cecho "   targets.sh offers $flag, which hi --help does not list" "$RED"
+      bad=1
+      ;;
+    esac
+  done < <(sh "$_HI_ROOT/common/targets.sh" flags)
+  [ "$bad" = 0 ]
+}
+
+# ...and the other direction, which is the one that rots quietly: a flag added
+# to hi.sh that nobody can TAB to.
+function test_help_flags_all_appear_in_roster() {
+  local flag roster bad=0
+  roster="$(sh "$_HI_ROOT/common/targets.sh" flags)"
+  # the long options out of the two --help blocks, which is every flag hi parses
+  # except -h (its --help twin is listed, and a single letter is not worth
+  # completing)
+  while read -r flag; do
+    case $'\n'"$roster"$'\n' in
+    *$'\n'"$flag"$'\n'*) ;;
+    *)
+      _hi_cecho "   hi --help lists $flag, which targets.sh does not offer" "$RED"
+      bad=1
+      ;;
+    esac
+  done < <(_HI_HOME="$_HI_HOME" bash "$_HI_ROOT/hi.sh" --help 2>&1 |
+    sed -n 's/^ *\(--[a-z-]\{2,\}\).*/\1/p' | sort -u)
+  [ "$bad" = 0 ]
+}
+
+# Inside a session the local sub-commands need a checkout the payload does not
+# carry, so completing one lands on hi.sh's refusal. The roster has to know.
+function test_flags_drop_local_subcommands_in_a_session() {
+  local out
+  out="$(_HI_REMOTE_SESSION=1 sh "$_HI_ROOT/common/targets.sh" flags)"
+  case $'\n'"$out"$'\n' in
+  *$'\n--install\n'*)
+    _hi_cecho "   a session was offered --install" "$RED"
+    return 1
+    ;;
+  esac
+  # ...while the ones that do work there are still offered
+  case $'\n'"$out"$'\n' in
+  *$'\n--doctor\n'*) return 0 ;;
+  esac
+  _hi_cecho "   a session lost --doctor, which works there" "$RED"
+  return 1
+}
+
+# `hi --<TAB>` must not wait on a docker daemon or an ssh config. Pinned by
+# pointing every backend at a command that would hang if it were ever run.
+function test_flags_do_not_probe() {
+  local out
+  out="$(
+    PATH="/nonexistent-hi-test-path:$PATH" \
+      _HI_PROBE_TIMEOUT=0 sh "$_HI_ROOT/common/targets.sh" flags
+  )"
+  case $'\n'"$out"$'\n' in
+  *$'\n--doctor\n'*) return 0 ;;
+  esac
+  _hi_cecho "   flags did not answer with an empty PATH - something probed" "$RED"
+  return 1
+}
+
 function run_targets_tests() {
   _hi_workdir targetstest
 
@@ -403,6 +477,10 @@ function run_targets_tests() {
   _hi_check "A repeat TAB inside the TTL forks nothing" test_complete_reuses_the_list_inside_the_ttl
   _hi_check "TTL 0 refetches every time" test_complete_refetches_when_the_ttl_is_zero
   _hi_check "The cached answer is still an answer" test_complete_still_answers_from_the_cache
+  _hi_check "flags: every one is in hi --help" test_flags_all_appear_in_help
+  _hi_check "flags: every --help flag is in the roster" test_help_flags_all_appear_in_roster
+  _hi_check "flags: a session is offered only what works there" test_flags_drop_local_subcommands_in_a_session
+  _hi_check "flags: answered without probing a backend" test_flags_do_not_probe
 
   _hi_suite_end "targets.sh"
 }

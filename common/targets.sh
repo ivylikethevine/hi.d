@@ -2,9 +2,35 @@
 # Everything `hi <target>` can connect to, one "<name>\t<kind>" line each.
 # The bash, zsh and fish completions (and `hi_colors`) all read this for
 # connection, autocomplete, and autosuggest.
-# Usage: sh targets.sh [ssh|docker|podman|nomad|kube] (no argument = all of them)
+# Usage: sh targets.sh [ssh|docker|podman|nomad|kube|flags]
+#        (no argument = every backend; `flags` = hi's own options instead)
 # GLOSSARY: HI.26 - _HI_PROBE_TIMEOUT and _HI_TARGETS_TTL
 kind="${1:-all}"
+
+# hi's own flags, so `hi --<TAB>` completes them the way a target does. They
+# live here rather than in each shell because this file is already the one thing
+# all three completions read, and the only one fish can run - a roster in
+# core.sh would be unreachable from `complete -c hi`.
+#
+# Answered before anything else below: a flag list must never wait on a docker
+# daemon or an ssh config, and this exits before the cache and the probes.
+#
+# tests/common/targets_test.sh drift-checks both halves against hi.sh's --help,
+# so a flag added there and forgotten here fails the fast suite.
+if [ "$kind" = flags ]; then
+  # always offered - these work on a client and inside a session alike
+  printf '%s\n' --help --version --doctor --tmux --no-tmux
+  # ...and these do not: every one needs the full checkout, which the payload
+  # deliberately does not carry, so offering them on a target completes straight
+  # into hi.sh's $_HI_NO_CHECKOUT refusal. Filtered on the same variable the
+  # session itself is marked with.
+  if [ "${_HI_REMOTE_SESSION:-0}" != 1 ]; then
+    printf '%s\n' --install --uninstall --configure --check-configs \
+      --overlay-init --update --color-preview --packages-preview --test
+  fi
+  exit 0
+fi
+
 ttl="${_HI_TARGETS_TTL:-5}"
 
 # `timeout` is GNU, absent on stock macOS - optional. Called via list_*.
@@ -67,18 +93,42 @@ list_ps() {
 }
 
 # shellcheck disable=SC2329
+# The allocation, plus "alloc/task" per task when the group has more than one -
+# the same shape list_kube emits, and the same syntax hi takes. The task names
+# come from the same template as the ID, so this stays one call per job.
 list_nomad() {
   run_backend nomad job status 2>/dev/null | awk 'NR > 1 { print $1 }' | while read -r job; do
+    # shellcheck disable=SC2016 # $t/$s are nomad's Go template, not the shell's
     run_backend nomad job allocs -t \
-      '{{range .}}{{if eq .ClientStatus "running"}}{{printf "%.8s" .ID}}{{"\n"}}{{end}}{{end}}' \
+      '{{range .}}{{if eq .ClientStatus "running"}}{{printf "%.8s" .ID}}{{range $t, $s := .TaskStates}}{{" "}}{{$t}}{{end}}{{"\n"}}{{end}}{{end}}' \
       "$job" 2>/dev/null
-  done | sed 's/$/	nomad/'
+  done | while read -r alloc t1 t2 rest; do
+    [ -n "$alloc" ] || continue
+    printf '%s	nomad\n' "$alloc"
+    if [ -n "$t2" ]; then
+      for t in $t1 $t2 $rest; do printf '%s/%s	nomad\n' "$alloc" "$t"; done
+    fi
+  done
 }
 
+# The pod, and - when it has more than one container - a "pod/container" line
+# per container as well, which is the syntax hi takes for picking one. A
+# single-container pod emits only its own name: the suffix would be noise on a
+# target where there is nothing to choose.
+#
+# One jsonpath, not one call per pod: this runs on every TAB.
 # shellcheck disable=SC2329
 list_kube() {
   run_backend kubectl get pods --field-selector=status.phase=Running \
-    -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' 2>/dev/null | sed 's/$/	kube/'
+    -o jsonpath='{range .items[*]}{.metadata.name}{range .spec.containers[*]}{" "}{.name}{end}{"\n"}{end}' 2>/dev/null |
+    while read -r pod c1 c2 rest; do
+      [ -n "$pod" ] || continue
+      printf '%s	kube\n' "$pod"
+      # c2 non-empty means more than one container, so the choice is real
+      if [ -n "$c2" ]; then
+        for c in $c1 $c2 $rest; do printf '%s/%s	kube\n' "$pod" "$c"; done
+      fi
+    done
 }
 
 # No cache wanted (or no writable place to put one): just answer.

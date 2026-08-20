@@ -51,6 +51,11 @@ set -q _HI_ENABLE_FISH_ALIAS_ABBR; or set -gx _HI_ENABLE_FISH_ALIAS_ABBR 0
 test "$_HI_ENABLE_FISH_ALIAS_ABBR" = 1; and hi_abbr_aliases
 
 complete -c hi -f -a '(sh $_HI_TARGETS)' # "<target>\ttype" lines
+# hi's own options, from the same file rather than a second list here - the two
+# would drift, and targets.sh is the only one of the three fish can run. The
+# condition keeps flags out of a bare TAB, which should still be targets.
+complete -c hi -f -n 'string match -q -- "-*" (commandline -ct)' \
+  -a '(sh $_HI_TARGETS flags)'
 complete exa --wraps eza
 
 # fish can't run hi's bash side, so the greeting, the package check and the

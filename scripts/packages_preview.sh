@@ -41,7 +41,10 @@ Takes no arguments. Reads:
   common/header.sh   the priority meanings and their two color tables
 
 A cell reading "hidden" is not a color: at that priority the header prints
-nothing for that state, which is why it has no example either. A priority with
+nothing for that state, which is why it has no example either. An EXAMPLE cell
+reading "below floor" is the same idea one level up: $_HI_PACKAGES_MIN_PRIORITY
+is set above that rank, so the header prints nothing for it whatever its colors
+say. A priority with
 no example at all has no package of its own in your file.
 EOF
   exit 0
@@ -114,7 +117,10 @@ function _hi_color_label() {
 # priority (a plain indexed array - bash 3.2 has no associative ones), and
 # global rather than local because the collector cannot return six things.
 _HI_EX_OK=() _HI_EX_OK_W=() _HI_EX_NO=() _HI_EX_NO_W=()
-_HI_PKG_LISTED=0 _HI_PKG_SHOWN=0
+_HI_PKG_LISTED=0 _HI_PKG_SHOWN=0 _HI_PKG_FLOORED=0
+# read once, here, rather than at each use: full_check reads the same setting
+# and this preview has to answer for the floor the header will actually apply
+_HI_PKG_MIN="${_HI_PACKAGES_MIN_PRIORITY:-0}"
 
 # Run the real check over the real packages file and keep the first installed
 # and first missing row at each priority. check_line appends what it would print
@@ -135,6 +141,10 @@ function _hi_collect_examples() {
 
   for entry in ${visible[@]+"${visible[@]}"}; do
     IFS=$'\x1f' read -r priority width rendered <<<"$entry"
+    # counted, not skipped: the example is still collected so the table can show
+    # what this rank *would* print, with the cell saying the floor is why it
+    # does not. full_check applies the same floor for real.
+    ((priority >= _HI_PKG_MIN)) || _HI_PKG_FLOORED=$((_HI_PKG_FLOORED + 1))
     # the mark is the last thing check_line renders, and $RED prefixes only
     # that one - a bare "x" (the ASCII glyph) also occurs inside package names
     if [[ "$rendered" == *"$RED$_HI_MARK_NO" ]]; then
@@ -157,6 +167,13 @@ function _hi_collect_examples() {
 # writing to yet another global.
 function _hi_example_cell() {
   local p="$1" text="" width=0
+  # the floor's own "hidden": a rank below it renders nothing in the header
+  # whatever its colors say, so the cell names the reason rather than showing an
+  # example that will never appear
+  if ((p < _HI_PKG_MIN)); then
+    printf '%s\t%s' "below floor" 11
+    return 0
+  fi
   if [[ -n "${_HI_EX_OK[p]:-}" ]]; then
     text+="$NC|${_HI_EX_OK[p]} "
     width=$((width + _HI_EX_OK_W[p]))
@@ -216,7 +233,10 @@ function _hi_print_priorities_table() {
   done
 
   _hi_hbar "$w_prio" "$w_meaning" "$w_yes" "$w_no" "$w_example"
-  _hi_cecho " | $_HI_PKG_LISTED listed, $_HI_PKG_SHOWN shown, $((_HI_PKG_LISTED - _HI_PKG_SHOWN)) hidden by their priority"
+  _hi_cecho " | $_HI_PKG_LISTED listed, $((_HI_PKG_SHOWN - _HI_PKG_FLOORED)) shown, $((_HI_PKG_LISTED - _HI_PKG_SHOWN)) hidden by their priority"
+  if ((_HI_PKG_MIN > 0)); then
+    _hi_cecho " | $_HI_PKG_FLOORED more below \$_HI_PACKAGES_MIN_PRIORITY=$_HI_PKG_MIN, which this legend marks \"below floor\"" "$YELLOW"
+  fi
 }
 
 # the other half of a rendered row: which of the three marks it ends in, and

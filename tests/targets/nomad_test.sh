@@ -98,6 +98,76 @@ EOF
   [ "$ok" -eq 1 ]
 }
 
+# The alloc/task syntax, against a group that actually has two tasks. Same
+# assertion as the kube suite's twin: not "it connected" but "it connected to
+# the one named". Without the suffix nomad refuses a multi-task exec outright
+# rather than guessing, so the plain form is expected to fail here - which is
+# why only the suffixed one is asserted.
+function _hi_nomad_multi_task_case() {
+  local job="hi-nomadtest-multi-$$" jobfile="$_HI_WORKDIR/multi.nomad.hcl"
+  local alloc got ok=0
+  _hi_h3 "Testing driver shape: [multi-task]"
+  cat >"$jobfile" <<EOF
+job "$job" {
+  datacenters = ["dc1"]
+  type        = "service"
+
+  group "hitest" {
+    count = 1
+    task "app" {
+      driver = "docker"
+      config {
+        image   = "$_HI_PAIR_IMAGE_SH"
+        command = "sh"
+        args    = ["-c", "echo app >/tmp/who; sleep infinity"]
+      }
+      resources {
+        cpu    = 100
+        memory = 64
+      }
+    }
+    task "sidecar" {
+      driver = "docker"
+      config {
+        image   = "$_HI_PAIR_IMAGE_SH"
+        command = "sh"
+        args    = ["-c", "echo sidecar >/tmp/who; sleep infinity"]
+      }
+      resources {
+        cpu    = 100
+        memory = 64
+      }
+    }
+  }
+}
+EOF
+  if ! nomad job run -detach "$jobfile" >"$_HI_WORKDIR/multi.run.log" 2>&1; then
+    _hi_dump_log "failed to submit the multi-task job:" "$_HI_WORKDIR/multi.run.log"
+    return 1
+  fi
+  _hi_ledger job "$job"
+  if ! alloc="$(_hi_poll_value 120 0.25 _hi_first_running_alloc "$job")"; then
+    _hi_cecho " | Multi-task allocation never reported running" "$RED"
+    nomad job stop -purge "$job" >/dev/null 2>&1
+    return 1
+  fi
+  _hi_cecho " | Allocation: $alloc"
+
+  # through the suite's pty wrapper, like _hi_exec_case: `nomad alloc exec`
+  # refuses outright with "not a terminal" when stdin is a pipe, and hi asks
+  # for -t=true because a real session needs one.
+  got="$(${_HI_PTY_WRAP[@]+"${_HI_PTY_WRAP[@]}"} "$_HI_ROOT/hi.sh" "$alloc/sidecar" 'cat /tmp/who' 2>/dev/null |
+    tr -d '\r' | tail -1)"
+  if [ "$got" = sidecar ]; then
+    _hi_align " | alloc/task reached the named task" "OK" "$GREEN"
+    ok=1
+  else
+    _hi_cecho " | hi $alloc/sidecar read '$got', expected 'sidecar'" "$RED"
+  fi
+  nomad job stop -purge "$job" >/dev/null 2>&1
+  [ "$ok" -eq 1 ]
+}
+
 function run_nomad_test() {
   _hi_require nomad
   _hi_require_backend docker "not installed (nomad's dev agent needs it for the docker task driver)"
@@ -143,7 +213,7 @@ EOF
   # and container suites are where the wall clock actually is. Job teardown is
   # not a constraint here: it goes through the ledger, which is subshell-safe.
   export _HI_PAR_WIDTH=1
-  _hi_backend_pair_cases nomad "driver shape"
+  _hi_backend_pair_cases nomad "driver shape" _hi_nomad_multi_task_case
 }
 
 run_nomad_test

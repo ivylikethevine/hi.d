@@ -197,17 +197,19 @@ function doctor_backends() {
 # the same chain _hi dispatches on, each predicate timed, first match wins -
 # ssh leads (its predicate isn't a backend row), then the roster in order
 function doctor_target() {
-  local target="$1" kind="" pair row name what predicate t0 t1
-  local -a chain=("ssh host:_hi_is_ssh_host")
+  local target="$1" kind="" label="" pair row name what predicate t0 t1
+  # the label rides along beside the human name: doctor_container_target needs
+  # "docker", not "docker container", to build the same exec the session would
+  local -a chain=("ssh host::_hi_is_ssh_host")
   for row in "${_HI_BACKENDS[@]}"; do
-    IFS='|' read -r _ what _ predicate <<<"$row"
-    chain+=("$what:$predicate")
+    IFS='|' read -r name what _ predicate <<<"$row"
+    chain+=("$what:$name:$predicate")
   done
   _hi_h2 "Target: $target"
   for pair in "${chain[@]}"; do
-    name="${pair%%:*}"
+    IFS=':' read -r name label predicate <<<"$pair"
     t0="$(_hi_now)"
-    if "${pair#*:}" "$target" >/dev/null 2>&1; then
+    if "$predicate" "$target" >/dev/null 2>&1; then
       t1="$(_hi_now)"
       kind="$name"
       doctor_row resolves "$name ($(_hi_elapsed "$t0" "$t1")s)" ok
@@ -220,7 +222,72 @@ function doctor_target() {
     doctor_row resolves "nothing matched - hi would hand it to ssh anyway"
     kind="ssh host"
   fi
-  [ "$kind" = "ssh host" ] && doctor_ssh_target "$target"
+  if [ "$kind" = "ssh host" ]; then
+    doctor_ssh_target "$target"
+  else
+    doctor_container_target "$label" "$target"
+  fi
+  return 0
+}
+
+# The container half, and deliberately the same shape as doctor_ssh_target: what
+# the target has, whether a session lands in the full tier or the aliases-only
+# one, and what it costs to get there. A docker/podman/nomad/kube target used to
+# stop at the `resolves` row, which is the half of the report worth having when
+# a session comes up in the fallback tier and nobody can say why.
+#
+# hi.sh's _hi_container_cmds builds the exec, so this asks the question through
+# exactly the call a real session would - not an approximation of it.
+function doctor_container_target() {
+  local label="$1" tools shells
+  DOMAIN="$2"
+  local -a probe cp attach
+  _hi_container_cmds "$label"
+
+  # one exec, not one per tool: a kubectl round trip is ~100ms and this is a
+  # report somebody is waiting on
+  tools="$("${probe[@]}" sh -c "for c in base64 bash $_HI_SHELL_LADDER tmux vim git; do command -v \"\$c\" >/dev/null 2>&1 && printf \"%s \" \"\$c\"; done" 2>/dev/null || true)"
+  if [ -z "$tools" ]; then
+    doctor_row target "no answer - the container is not running, or exec is refused" bad
+    return 0
+  fi
+  doctor_row target "has: $tools"
+
+  # the tier, which is the question this arm exists for. hi ships the tree and
+  # runs load.sh under bash; without bash it copies misc/aliases.sh alone and
+  # drops into the best of the ladder.
+  case " $tools" in
+  *" bash "*)
+    doctor_row session "full - bash is there, so hi ships the tree and load.sh runs"
+    ;;
+  *)
+    shells="$(_hi_ladder_first "$tools")"
+    if [ -n "$shells" ]; then
+      doctor_row session "aliases only - no bash, so a session lands in $shells with misc/aliases.sh" warn
+    else
+      doctor_row session "no shell hi knows - not even ${_HI_SHELL_LADDER%% *}" bad
+    fi
+    ;;
+  esac
+
+  # what it costs. No permanent-install branch here, unlike the ssh arm: a
+  # container target has nowhere hi would find a tree it did not put there, so
+  # every session pays the copy.
+  doctor_row ships "$(_hi_human_bytes "$(_hi_payload_tar | wc -c | tr -d ' ')") gzipped, streamed through $label exec - no base64 armor, unlike ssh"
+}
+
+# _hi_ladder_first <space-separated tools> - the first shell of $_HI_SHELL_LADDER
+# the target actually has, which is the one a bash-less session would land in.
+# The ladder's order is the preference, so first match wins.
+function _hi_ladder_first() {
+  local s
+  for s in $_HI_SHELL_LADDER; do
+    case " $1 " in *" $s "*)
+      printf '%s' "$s"
+      return 0
+      ;;
+    esac
+  done
   return 0
 }
 

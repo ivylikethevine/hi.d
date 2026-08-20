@@ -37,6 +37,33 @@ function _hi_doctor_shims() {
     rm -f "$dir/nomad" "$dir/kubectl"
     printf '#!/bin/sh\nexit 1\n' >"$dir/podman"
 
+    # ...plus the container arm's own probe. _hi_probe_shims writes a shim that
+    # answers the *predicate* (`ps -q`, `container inspect`) and exits 1 on
+    # anything else, so `docker exec` never reached it. Wrapped rather than
+    # patched: the exec arm answers the tool inventory per $HI_FAKE_TOOLS the
+    # way the ssh shim below does, and everything else delegates to the
+    # generated shim, so the resolution rows other cases assert keep working.
+    mv "$dir/docker" "$dir/docker-probe"
+    cat >"$dir/docker" <<'EOF'
+#!/bin/sh
+if [ "$1" = exec ]; then
+  for a in "$@"; do
+    case "$a" in
+    *'for c in base64'*)
+      printf '%s' "${HI_FAKE_TOOLS:-}"
+      exit 0
+      ;;
+    esac
+  done
+  exit 0
+fi
+# by name, not $(dirname $0): a shim found through PATH gets $0 set to the
+# bare word in some shells, and dirname then says ".". The shims dir is first
+# on PATH here, so this resolves to the sibling and nothing else.
+exec docker-probe "$@"
+EOF
+    chmod +x "$dir/docker"
+
     # connect ok; -O teardown ok; the install probe answers per $HI_FAKE_ROOT;
     # the tool-inventory loop answers per $HI_FAKE_TOOLS. Each is matched on a
     # string only that one script contains - /etc/profile.d/hi.d.sh is in
@@ -114,6 +141,34 @@ function test_target_resolves_a_running_container() {
   [[ "$out" == *"resolves"*"docker container"* ]]
 }
 
+# The container arm, which used to stop at the `resolves` row. bash present is
+# the full tier; the interesting case is the other one.
+function test_container_target_reports_the_full_tier() {
+  local out
+  out="$(PATH="$(_hi_doctor_shims):$(_hi_doctor_path)" HI_FAKE_TOOLS="base64 bash sh " \
+  _HI_SSH_CONFIG=/nonexistent doctor_target runningbox)"
+  [[ "$out" == *"session"*"full"* && "$out" == *"ships"*gzipped* ]]
+}
+
+# no bash means hi copies misc/aliases.sh alone and drops into the best of the
+# ladder - the report has to name which shell that is, since that is the whole
+# question somebody runs this to answer
+function test_container_target_names_the_fallback_shell() {
+  local out
+  out="$(PATH="$(_hi_doctor_shims):$(_hi_doctor_path)" HI_FAKE_TOOLS="base64 ash sh " \
+  _HI_SSH_CONFIG=/nonexistent doctor_target runningbox)"
+  [[ "$out" == *"aliases only"* && "$out" == *"lands in ash"* ]]
+}
+
+# a container that answers nothing is not running, and saying so beats an empty
+# inventory row that reads as "it has nothing installed"
+function test_container_target_flags_a_silent_target() {
+  local out
+  out="$(PATH="$(_hi_doctor_shims):$(_hi_doctor_path)" HI_FAKE_TOOLS="" \
+  _HI_SSH_CONFIG=/nonexistent doctor_target runningbox)"
+  [[ "$out" == *"not running"* ]]
+}
+
 function test_target_falls_through_to_ssh() {
   local out
   out="$(PATH="$(_hi_doctor_shims):$(_hi_doctor_path)" HI_FAKE_TOOLS="base64 bash " \
@@ -178,6 +233,9 @@ function run_doctor_tests() {
   _hi_h2 "Testing: doctor_target / doctor_ssh_target"
   _hi_check "Resolves a running container" test_target_resolves_a_running_container
   _hi_check "Falls through to ssh" test_target_falls_through_to_ssh
+  _hi_check "Container: full tier reported" test_container_target_reports_the_full_tier
+  _hi_check "Container: fallback shell named" test_container_target_names_the_fallback_shell
+  _hi_check "Container: silent target flagged" test_container_target_flags_a_silent_target
   _hi_check "Reports a permanent install" test_ssh_target_reports_a_permanent_install
   _hi_check "Flags a target without base64" test_ssh_target_flags_a_missing_base64
   _hi_check "Flags a target without bash" test_ssh_target_flags_a_missing_bash

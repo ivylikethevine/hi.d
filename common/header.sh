@@ -324,9 +324,16 @@ function check_line() {
   [[ "$color" == hide ]] || visible+=("$best_priority"$'\x1f'"$((${#best} + 4 + mark_w))"$'\x1f'"$rendered")
 }
 
-# print sorted package results limited by _HI_MAX_WIDTH
+# print sorted package results limited by _HI_MAX_WIDTH, from
+# $_HI_PACKAGES_MIN_PRIORITY up
+#
+# The floor lives here rather than in check_line on purpose: check_line renders,
+# full_check decides what to print. scripts/packages_preview.sh calls check_line
+# directly and needs the rows the floor hides, so it can say which ranks went
+# quiet instead of dropping them without a word.
 function full_check() {
   local line priority width_item rendered count=0 width=0
+  local min="${_HI_PACKAGES_MIN_PRIORITY:-0}"
   local -a visible=() # appended to by check_line
   while IFS=$' ' read -r line; do
     [[ "$line" == *#* || -z "$line" ]] || check_line "$line"
@@ -336,6 +343,7 @@ function full_check() {
   # GLOSSARY: HI.11 - numeric key over opaque bytes; unpinned, BSD
   # sort under UTF-8 printed nothing and the check rendered empty.
   while IFS=$'\x1f' read -r priority width_item rendered; do
+    ((priority >= min)) || continue
     if ((count == 0)) || ((width + width_item > ${_HI_MAX_WIDTH:-80})); then # start of a row
       ((count == 0)) || printf '\n'
       printf ' '
@@ -345,5 +353,7 @@ function full_check() {
     width=$((width + width_item))
     ((++count))
   done < <(printf '%s\n' "${visible[@]}" | LC_ALL=C sort -t $'\x1f' -k1,1nr -s)
-  printf '\n'
+  # guarded: a floor high enough to hide everything printed a bare newline
+  # otherwise, which is a blank line in the header rather than no check at all
+  if ((count)); then printf '\n'; fi
 }

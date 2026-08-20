@@ -149,8 +149,14 @@ function load() {
 
   hi_header Connected "" "${_HI_CONNECT_PREFIX:-}"
 
-  # vim only: setting VIMINIT when all we have is vi breaks it
-  command -v vim &>/dev/null && export VIMINIT="let \$MYVIMRC='$_HI_VIMRC' | source \$MYVIMRC"
+  # vim only: setting VIMINIT when all we have is vi breaks it. Gated on
+  # _HI_DISABLE_EDITORS as well, which it was not before: VIMINIT pointing at
+  # hi's vimrc *is* the vim config override that toggle turns off, and with it
+  # set the file also has to be there - which is what lets hi.sh trim
+  # misc/vim.rc out of the payload when it is switched off.
+  [[ "${_HI_DISABLE_EDITORS:-0}" != 1 ]] &&
+    command -v vim &>/dev/null &&
+    export VIMINIT="let \$MYVIMRC='$_HI_VIMRC' | source \$MYVIMRC"
   configure_files
   _hi_cecho " | " "$NC" 1
   _hi_cecho "hi loaded with... " "$BRCYAN" 1

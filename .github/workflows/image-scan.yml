@@ -1,0 +1,118 @@
+name: Image scan
+
+# The other half of digest-pinning. tests/dockerfiles pins its base images by
+# digest, which is what makes a fixture build reproducible and also what freezes
+# whatever was in those layers that day. Dependabot opens a bump PR weekly, but
+# it bumps on release, not on severity - nothing else here would say "the digest
+# you are pinned to now has a fixable hole".
+#
+# --ignore-unfixed is the whole design, not a flag. Measured on the current
+# pins, debian:bookworm-slim reports 17 HIGH and 5 CRITICAL and every one of the
+# 22 has no fix available - Debian won't-fix entries, eight of them perl-base.
+# A job that counts those is red forever and teaches everyone to skip it. With
+# --ignore-unfixed all three images report zero, so this stays green until
+# something actionable lands, and its going red means exactly one thing: bump
+# the pin.
+#
+# Advisory, like markdownlint and link-check: a CVE landing upstream is not a
+# reason to redden somebody's unrelated PR. Scheduled rather than per-PR for the
+# same reason those two are - this tracks upstream's clock, not the diff's.
+on:
+  schedule:
+    - cron: "37 6 * * 3"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    name: trivy over the pinned base images (advisory)
+    runs-on: ${{ vars.RUNNER_LABEL || 'ubuntu-latest' }}
+    timeout-minutes: 20
+    steps:
+      # hands the persistent self-hosted workspace back to the runner user, so
+      # checkout's own cleanup can always finish - see docs/PACKAGING.md
+      - name: Reclaim the workspace
+        if: ${{ runner.environment != 'github-hosted' }}
+        run: |
+          set -euo pipefail
+          sudo chown -R "$(id -u):$(id -g)" "$GITHUB_WORKSPACE"
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: ./.github/actions/setup-tool
+        with:
+          tool: trivy
+
+      # The scan list is read out of the Dockerfiles rather than repeated here,
+      # so a base image added, dropped or repinned is covered without anyone
+      # remembering this file. Only `FROM x@sha256:...` lines qualify: a
+      # `FROM ${BASE}` names an image the test harness builds locally, which has
+      # no upstream to scan and no digest to pin.
+      - id: images
+        name: Collect the pinned base images
+        run: |
+          set -euo pipefail
+          sed -n 's/^FROM \(.*@sha256:[0-9a-f]*\).*/\1/p' tests/dockerfiles/*.Dockerfile |
+            sort -u >"$RUNNER_TEMP/images"
+          echo "count=$(grep -c . <"$RUNNER_TEMP/images")" >>"$GITHUB_OUTPUT"
+          echo "scanning:"
+          sed 's/^/  /' "$RUNNER_TEMP/images"
+
+      # continue-on-error, not a gate - see the header. The step keeps its exit
+      # code so the findings still annotate, and the summary below restates the
+      # verdict either way.
+      - id: scan
+        continue-on-error: true
+        env:
+          IMAGES: ${{ runner.temp }}/images
+        run: |
+          set -uo pipefail
+          rc=0
+          : >"$RUNNER_TEMP/findings"
+          while read -r image; do
+            [ -n "$image" ] || continue
+            echo "::group::$image"
+            # --exit-code 1 so a finding is visible here as well as in the file;
+            # the severities are the two worth waking up for, and
+            # --ignore-unfixed drops everything nobody can act on
+            trivy image \
+              --scanners vuln \
+              --severity HIGH,CRITICAL \
+              --ignore-unfixed \
+              --exit-code 1 \
+              --no-progress \
+              "$image" | tee -a "$RUNNER_TEMP/findings" || rc=1
+            echo "::endgroup::"
+          done <"$IMAGES"
+          exit "$rc"
+
+      - name: Say what it found, without failing
+        env:
+          COUNT: ${{ steps.images.outputs.count }}
+        run: |
+          set -euo pipefail
+          if [ "${{ steps.scan.outcome }}" = success ]; then
+            {
+              echo "### Image scan: clean"
+              echo
+              echo "No fixable HIGH or CRITICAL vulnerabilities in the $COUNT pinned base image(s)."
+            } >>"$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          echo "::warning title=trivy::A pinned base image has a fixable HIGH/CRITICAL vulnerability - advisory, not blocking"
+          {
+            echo "### A pinned base image needs bumping"
+            echo
+            echo "trivy found a **fixable** HIGH or CRITICAL vulnerability. Unlike the"
+            echo "won't-fix noise this job filters out, these have an upstream fix, so the"
+            echo "answer is to repin the digest in \`tests/dockerfiles\` - either by merging"
+            echo "dependabot's PR or by rerunning its digest resolution by hand."
+            echo
+            echo '```'
+            sed -n '1,120p' "$RUNNER_TEMP/findings"
+            echo '```'
+          } >>"$GITHUB_STEP_SUMMARY"

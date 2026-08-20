@@ -395,6 +395,51 @@ function test_full_check_empty_when_everything_hidden() {
   [ -z "$out" ]
 }
 
+# The floor's boundary, which is the whole point of the setting: >= shows, < is
+# gone. One file, one run, both sides asserted - a case that only checked the
+# hidden half would pass just as well if the floor hid everything.
+function test_full_check_min_priority_boundary() {
+  command -v bash >/dev/null 2>&1 || return 0
+  local pkgfile="$_HI_WORKDIR/floor" out
+  # both installed, so the only thing separating them is the floor. bash is a
+  # second real command (the wrap case above leans on it the same way).
+  printf '%s:4\nbash:3\n' "$_HI_REAL_CMD" >"$pkgfile"
+  out="$(
+    _HI_PACKAGES="$pkgfile"
+    _HI_PACKAGES_MIN_PRIORITY=4
+    full_check
+  )"
+  _hi_contains "$out" "$_HI_REAL_CMD" || return 1
+  # exactly at the floor stays, one below it does not
+  case "$out" in *bash*) return 1 ;; esac
+  return 0
+}
+
+# a floor above every rank prints nothing at all - not a blank line, which in a
+# header reads as a check that ran and found nothing rather than one turned off
+function test_full_check_min_priority_above_everything_is_silent() {
+  local pkgfile="$_HI_WORKDIR/floor-all" out
+  printf '%s:5\n' "$_HI_REAL_CMD" >"$pkgfile"
+  out="$(
+    _HI_PACKAGES="$pkgfile"
+    _HI_PACKAGES_MIN_PRIORITY=6
+    full_check
+  )"
+  [ -z "$out" ]
+}
+
+# unset behaves as 0: every rank the colors allow still prints
+function test_full_check_min_priority_defaults_to_showing_everything() {
+  local pkgfile="$_HI_WORKDIR/floor-default" out
+  printf '%s:1\n' "$_HI_REAL_CMD" >"$pkgfile"
+  out="$(
+    _HI_PACKAGES="$pkgfile"
+    unset _HI_PACKAGES_MIN_PRIORITY
+    full_check
+  )"
+  _hi_contains "$out" "$_HI_REAL_CMD"
+}
+
 function test_full_check_wraps_at_max_width() {
   command -v bash >/dev/null 2>&1 || return 0
   local pkgfile="$_HI_WORKDIR/wrap" out lines
@@ -487,6 +532,9 @@ function run_header_tests() {
   _hi_h2 "Testing: full_check"
   _hi_check "Skips comment/blank lines" test_full_check_skips_comments_and_blanks
   _hi_check "Empty output when everything is hidden" test_full_check_empty_when_everything_hidden
+  _hi_check "Min priority: at the floor shows, below is gone" test_full_check_min_priority_boundary
+  _hi_check "Min priority above every rank prints nothing" test_full_check_min_priority_above_everything_is_silent
+  _hi_check "Min priority unset shows everything" test_full_check_min_priority_defaults_to_showing_everything
   _hi_check "Wraps rows at _HI_MAX_WIDTH" test_full_check_wraps_at_max_width
   _hi_check "Real misc/packages file parses cleanly" test_full_check_reads_real_packages_file_without_erroring
   _hi_check "Writes nothing to stderr" test_full_check_is_silent_on_stderr

@@ -51,7 +51,9 @@ Symptom of forgetting: suites report fewer/MISSING cases, or a script runs
   README badge tracks `_hi_wire_bytes` — the assembled script a session
   actually sends, which is what `hi` prints on connect — to within 5%. They
   move independently: putting a file _into_ the tar raises the first and
-  lowers the second. Tooling-only helpers must not go into `common/core.sh`;
+  lowers the second. Both measure a **default** configuration - `_hi_payload_tar`
+  trims `misc/vim.rc`, `misc/nano.rc` and `shells/osc52.sh` when the overlay has
+  turned them off, so a configured client sends less than either number. Tooling-only helpers must not go into `common/core.sh`;
   check both numbers when touching shipped files.
 - Several files are dialect-constrained and say so at the top: paths.sh's
   four-shell plain-export subset, aliases.sh's POSIX+fish subset, and

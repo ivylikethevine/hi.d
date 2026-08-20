@@ -531,7 +531,7 @@ REMOTE
 }
 
 # Connect, copy say-hi over, hand off to load.sh. Everything up to the bash
-# branch is plain POSIX under one `sh -c` (GLOSSARY: sh -c wrapping)
+# branch is plain POSIX under one `sh -c` (GLOSSARY: HI.18)
 function _say_hi() {
   local size hi_esc nc_esc script middle boot_tmp remote_root tmp_root ctl_path ec=0
   local bootloader="" tree="" overlay_line=""
@@ -540,7 +540,7 @@ function _say_hi() {
   # only this path armors (containers stream via their CLI); a target with no
   # base64 fails the one-liner loudly on its own
   command -v base64 >/dev/null 2>&1 || {
-    _hi_cecho >&2 "hi requires base64 on [$(_hi_hostname)] to reach an ssh target, but it is not installed. Aborting..." "$RED"
+    _hi_cecho >&2 "hi: requires base64 on [$(_hi_hostname)] to reach an ssh target, but it is not installed. Aborting..." "$RED"
     return 1
   }
 
@@ -837,7 +837,7 @@ function _hi() {
   local copy_start tmp exit_code errors backend
 
   [ -d "$_HI_ROOT" ] || {
-    _hi_cecho "No such directory: $_HI_ROOT" "$RED" >&2
+    _hi_cecho "hi: no such directory: $_HI_ROOT" "$RED" >&2
     exit 1
   }
 

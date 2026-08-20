@@ -141,7 +141,7 @@ function _hi_alias_defined_in() {
 # into an interactive shell on their own terminal, so the alias must not exist.
 function _hi_no_alias_without_paths() {
   local out
-  out="$(env -u _HI_OSC52 sh -c ". $_HI_ALIASES; alias hi_copy >/dev/null 2>&1 && echo yes || echo no" 2>/dev/null)"
+  out="$(_hi_alias_probe_bare hi_copy _HI_OSC52)"
   [ "$out" = no ]
 }
 

@@ -352,14 +352,12 @@ function test_visible_len_strips_color_codes() {
 }
 
 function test_check_one_config_valid_bash() {
-  command -v bash >/dev/null 2>&1 || return 0
   local target="$_HI_WORKDIR/valid.bashrc"
   printf 'echo hi\n' >"$target"
   check_one_config bash "$target" bash -n
 }
 
 function test_check_one_config_invalid_bash() {
-  command -v bash >/dev/null 2>&1 || return 0
   local target="$_HI_WORKDIR/invalid.bashrc"
   printf 'if [ 1 = 1 ]; then\n' >"$target" # unterminated if
   ! check_one_config bash "$target" bash -n
@@ -372,7 +370,6 @@ function test_check_one_config_skips_missing_shell() {
 }
 
 function test_check_one_config_skips_empty_file() {
-  command -v bash >/dev/null 2>&1 || return 0
   local target="$_HI_WORKDIR/empty.bashrc"
   : >"$target"
   check_one_config bash "$target" bash -n
@@ -775,10 +772,10 @@ function run_install_tests() {
   _hi_check "Strips color codes" test_visible_len_strips_color_codes
 
   _hi_h2 "Testing: check_one_config"
-  _hi_check "Valid bash syntax" test_check_one_config_valid_bash
-  _hi_check "Invalid bash syntax" test_check_one_config_invalid_bash
+  _hi_check_requires bash "Valid bash syntax" test_check_one_config_valid_bash
+  _hi_check_requires bash "Invalid bash syntax" test_check_one_config_invalid_bash
   _hi_check "Skips a missing shell" test_check_one_config_skips_missing_shell
-  _hi_check "Skips an empty file" test_check_one_config_skips_empty_file
+  _hi_check_requires bash "Skips an empty file" test_check_one_config_skips_empty_file
 
   _hi_h2 "Testing: config_hi (skip path only)"
   _hi_check "Skips when already linked" test_config_hi_skips_when_already_linked

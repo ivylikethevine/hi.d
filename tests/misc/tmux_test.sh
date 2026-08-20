@@ -79,8 +79,7 @@ function test_alias_absent_on_a_disposable_tree() {
 # $_HI_TMUXCONF; `tmux -f ` with an empty path would fail on every invocation
 function test_alias_absent_without_paths() {
   local out
-  out="$(env -u _HI_TMUXCONF -u _HI_CLEANUP sh -c \
-    ". $_HI_ALIASES; alias tmux >/dev/null 2>&1 && echo yes || echo no" 2>/dev/null)"
+  out="$(_hi_alias_probe_bare tmux _HI_TMUXCONF _HI_CLEANUP)"
   [ "$out" = no ]
 }
 

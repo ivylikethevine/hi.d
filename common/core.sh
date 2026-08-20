@@ -112,7 +112,7 @@ function _hi_cecho() {
 }
 
 # _hi_read_lines <array-name> - stdin into that array, one element per line,
-# used like `_hi_read_lines lines < <(cmd)`. GLOSSARY: _hi_read_lines
+# used like `_hi_read_lines lines < <(cmd)`. GLOSSARY: HI.02
 function _hi_read_lines() {
   local _hi_rl_var="$1" _hi_rl_line
   eval "$_hi_rl_var=()"
@@ -253,6 +253,7 @@ function _hi_release_or_describe() {
 }
 
 # zsh's `trap ... EXIT` doesn't fire the way bash's does; it has TRAPEXIT instead
+# GLOSSARY: HI.14
 function _hi_on_exit() {
   if [ -n "${ZSH_VERSION:-}" ]; then
     eval "TRAPEXIT() { $1; }"
@@ -302,7 +303,7 @@ function _hi_wants_starship() {
 }
 
 # Does this terminal do color? $TERM, not `tput` (a fork per shell); a
-# non-empty $NO_COLOR overrides the terminal's yes. GLOSSARY: no-fork reads
+# non-empty $NO_COLOR overrides the terminal's yes. GLOSSARY: HI.16
 function _hi_has_color() {
   [ -z "${NO_COLOR:-}" ] && [ -n "${TERM:-}" ] && [ "$TERM" != dumb ]
 }
@@ -326,7 +327,7 @@ function _hi_ascii_flag() { _hi_use_ascii && echo 1 || echo 0; }
 
 # One glyph set per session, decided at source time so hot paths read plain
 # variables; tests flip _HI_ASCII and re-call. The _W widths are visible
-# columns, not bytes (GLOSSARY: bytes vs columns).
+# columns, not bytes (GLOSSARY: HI.12).
 function _hi_choose_glyphs() {
   if _hi_use_ascii; then
     _HI_GLYPH_AHEAD="^" _HI_GLYPH_BEHIND="v" _HI_GLYPH_STAGED="*"
@@ -516,7 +517,7 @@ function _hi_user_escape() {
 }
 
 # Out-var forms for the prompt builders: through $( ) the memo above is filled
-# in a subshell and dies with it. GLOSSARY: printf -v out-var
+# in a subshell and dies with it. GLOSSARY: HI.05
 function _hi_host_escape_var() {
   _hi_host_escape >/dev/null
   printf -v "$1" '%s' "$_HI_HOST_ESC"

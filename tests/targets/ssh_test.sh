@@ -414,9 +414,9 @@ function run_ssh_tests() {
     # every *.sh through a real 3.2 parser (`bash -n`): the lint suite's grep
     # table only knows the constructs it lists, while the parser catches the
     # unlisted ones - an apostrophe in a comment inside $( ), say, which 3.2
-    # reads as an unterminated string (GLOSSARY: apostrophes in substitution
-    # comments). The macOS CI job found that one at runtime; this catches the
-    # whole class before a release does. Its own container, no fixture shared
+    # reads as an unterminated string (GLOSSARY: HI.29). The macOS CI job
+    # found that one at runtime; this catches the whole class before a
+    # release does. Its own container, no fixture shared
     # with anything, so it rides the batch like the rest.
     _hi_par_case bash32-parse _hi_assert "every *.sh parses under bash 3.2" test_bash32_parses_every_file
   fi

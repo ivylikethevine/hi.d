@@ -317,8 +317,15 @@ function lint_image_tags() {
 # joined with ` + `; the code is matched, not the title, so retitling an entry
 # touches no shipped file. Markdown files are excluded from the sweep - the
 # docs *talk about* the convention.
+#
+# Matched anywhere on the line, not only at the start of a comment. Half the
+# references in the tree are mid-sentence - `(GLOSSARY: HI.33)` inside a
+# paragraph of prose - and an anchored pattern silently skipped every one of
+# them, which is exactly the stranding this check exists to prevent. The cost
+# of the wider net: a reference that wraps onto a second comment line is still
+# invisible, so keep the code on the same line as the marker.
 function lint_glossary_tags() {
-  local pat='# GLOSSARY' glossary="$_HI_ROOT/docs/GLOSSARY.md"
+  local pat='GLOSSARY' glossary="$_HI_ROOT/docs/GLOSSARY.md"
   local headings tags line tag part h ok bad=0
   _hi_h2 "Checking GLOSSARY tags against docs/GLOSSARY.md"
   _HI_LINT_TOTAL=$((_HI_LINT_TOTAL + 1))

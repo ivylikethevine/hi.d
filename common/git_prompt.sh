@@ -4,7 +4,7 @@
 set -euo pipefail # off again at the end: an error must not close an interactive shell
 
 # _hi_git_prompt [outvar] - with outvar the segment lands there instead of
-# stdout, saving bash.sh's per-prompt fork. GLOSSARY: printf -v out-var
+# stdout, saving bash.sh's per-prompt fork. GLOSSARY: HI.05
 # shellcheck disable=SC2120 # the argument is optional by design
 _hi_git_prompt() {
   [[ -n "${1:-}" ]] && printf -v "$1" ''

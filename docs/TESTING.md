@@ -168,7 +168,7 @@ SHA-pinned separately.
 
 ## The lint gate
 
-`tests/test_runner.sh shellcheck` is one suite with seven halves, and CI runs all of them:
+`tests/test_runner.sh shellcheck` is one suite with nine halves, and CI runs all of them:
 
 1. **shellcheck** over every `*.sh` (CI pins the version - see
    `.github/actions/setup-tool/tools.txt`). It is the whole cost of the fast
@@ -180,21 +180,31 @@ SHA-pinned separately.
    no `${x,,}` - macOS ships bash 3.2 and hi runs there. Every
    deliberately-odd construct this forces is explained once in
    [GLOSSARY.md](GLOSSARY.md); code references entries by their stable
-   `HI.NN` code with `# GLOSSARY: HI.NN` tags rather than re-explaining.
-4. **shfmt** as a formatting gate over the same `*.sh` list. The style comes
+   `HI.NN` code with `GLOSSARY: HI.NN` tags rather than re-explaining.
+4. **The `$HOME` default sweep**: nothing may fall back to `$HOME` when it
+   derives the say-hi tree - a guessed tree is how a session ends up reading
+   someone else's. Wider than the shellcheck list, covering `*.zsh`, `*.fish`
+   and `*.md` too, since the docs teach the rule as much as the code obeys it.
+5. **shfmt** as a formatting gate over the same `*.sh` list. The style comes
    from `.editorconfig`; fix a red run with `shfmt -w` on the paths it
    names, not `shfmt -w .` - that would also reformat `shells/zsh.zsh`,
    which is not in the gate and is zsh, not bash.
-5. **checkbashisms** over the `#!/bin/sh` files, which dash and busybox sh
+6. **checkbashisms** over the `#!/bin/sh` files, which dash and busybox sh
    really do parse on minimal targets.
-6. **GLOSSARY tags**: every `# GLOSSARY: HI.NN` in the tree has to name a code
+7. **GLOSSARY tags**: every `GLOSSARY: HI.NN` in the tree has to name a code
    [GLOSSARY.md](GLOSSARY.md) defines, so a deleted entry can't strand the tags
    pointing at it. Codes are matched, not titles - retitling an entry touches
-   no shipped file.
-7. **tests/dockerfiles/**: every image definition has a caller and every
+   no shipped file. Matched anywhere on a line, so a mid-sentence
+   `(GLOSSARY: HI.33)` counts; keep the code on the same line as the marker,
+   since a reference wrapped onto the next comment line is not seen.
+8. **tests/dockerfiles/**: every image definition has a caller and every
    caller has an image definition - see above.
+9. **Image tags**: every `alpine:3.24`/`debian:bookworm-slim`/`bash:3.2`
+   named as a plain tag in shell or YAML has to agree with the digest-pinned
+   version in `tests/dockerfiles`. Dependabot bumps the Dockerfile digests and
+   cannot see the rest; this is what makes them follow.
 
-Halves 4 and 5 skip yellow when the tool isn't installed locally; CI always enforces them.
+Halves 5 and 6 skip yellow when the tool isn't installed locally; CI always enforces them.
 
 ## Relaying
 

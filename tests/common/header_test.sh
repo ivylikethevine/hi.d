@@ -168,7 +168,9 @@ function test_banner_prints_when_toggle_unset() {
 # the assignment can't be observed - which is the very thing under test.
 function test_banner_change_count_is_computed_once() {
   local first second file
-  file="$(mktemp -t hi.banner.XXXXXX)"
+  # under $_HI_WORKDIR, so the teardown trap owns it: the early `return 1`
+  # below is on the failure path, where a manual rm never runs
+  file="$_HI_WORKDIR/banner.$$"
   # _HI_BANNER_HOST too: banner memoizes the hostname into it, and this is the
   # one case that deliberately runs banner in the suite's own shell, so anything
   # it leaves behind outlives it. Left set, it silently overrides the
@@ -176,15 +178,11 @@ function test_banner_change_count_is_computed_once() {
   unset _HI_BANNER_CHANGES _HI_BANNER_HOST
   banner TestBanner >"$file"
   first="$(cat "$file")"
-  [ -n "${_HI_BANNER_CHANGES+x}" ] || {
-    rm -f "$file"
-    return 1 # nothing was cached at all
-  }
+  [ -n "${_HI_BANNER_CHANGES+x}" ] || return 1 # nothing was cached at all
   # a value git could never produce, so a second git call would overwrite it
   _HI_BANNER_CHANGES=4242
   banner TestBanner >"$file"
   second="$(cat "$file")"
-  rm -f "$file"
   unset _HI_BANNER_CHANGES _HI_BANNER_HOST
   [ -n "$first" ] && [[ "$second" == *4242* ]]
 }
@@ -193,13 +191,13 @@ function test_banner_change_count_is_computed_once() {
 # and the banner there must simply carry no counter rather than a stale one.
 function test_banner_omits_the_count_without_a_git_dir() {
   local out dir
-  dir="$(mktemp -d -t hi.nogit.XXXXXX)"
+  dir="$_HI_WORKDIR/nogit.$$"
+  mkdir -p "$dir"
   out="$(
     _HI_ROOT="$dir"
     unset _HI_BANNER_CHANGES
     banner TestBanner
   )"
-  rm -rf "$dir"
   [[ "$out" == *"TestBanner"* ]] && [[ "$out" != *"↑"* ]]
 }
 
@@ -369,7 +367,6 @@ function test_check_line_fallback_uses_second_alternative() {
 }
 
 function test_check_line_picks_highest_priority_installed() {
-  command -v bash >/dev/null 2>&1 || return 0 # nothing to assert without bash
   local -a visible=()
   check_line "$_HI_REAL_CMD:1,bash:5"
   _hi_contains "${visible[0]}" bash
@@ -398,7 +395,6 @@ function test_full_check_empty_when_everything_hidden() {
 # gone. One file, one run, both sides asserted - a case that only checked the
 # hidden half would pass just as well if the floor hid everything.
 function test_full_check_min_priority_boundary() {
-  command -v bash >/dev/null 2>&1 || return 0
   local pkgfile="$_HI_WORKDIR/floor" out
   # both installed, so the only thing separating them is the floor. bash is a
   # second real command (the wrap case above leans on it the same way).
@@ -440,7 +436,6 @@ function test_full_check_min_priority_defaults_to_showing_everything() {
 }
 
 function test_full_check_wraps_at_max_width() {
-  command -v bash >/dev/null 2>&1 || return 0
   local pkgfile="$_HI_WORKDIR/wrap" out lines
   printf '%s:5\nbash:5\n' "$_HI_REAL_CMD" >"$pkgfile"
   out="$(
@@ -526,15 +521,15 @@ function run_header_tests() {
   _hi_check "Missing priority 0 -> hidden" test_check_line_missing_priority0_is_hidden
   _hi_check "Missing priority 5 -> visible, crossed" test_check_line_missing_priority5_is_visible_crossed
   _hi_check "Fallback alternative used" test_check_line_fallback_uses_second_alternative
-  _hi_check "Picks the highest-priority installed alternative" test_check_line_picks_highest_priority_installed
+  _hi_check_requires bash "Picks the highest-priority installed alternative" test_check_line_picks_highest_priority_installed
 
   _hi_h2 "Testing: full_check"
   _hi_check "Skips comment/blank lines" test_full_check_skips_comments_and_blanks
   _hi_check "Empty output when everything is hidden" test_full_check_empty_when_everything_hidden
-  _hi_check "Min priority: at the floor shows, below is gone" test_full_check_min_priority_boundary
+  _hi_check_requires bash "Min priority: at the floor shows, below is gone" test_full_check_min_priority_boundary
   _hi_check "Min priority above every rank prints nothing" test_full_check_min_priority_above_everything_is_silent
   _hi_check "Min priority unset shows everything" test_full_check_min_priority_defaults_to_showing_everything
-  _hi_check "Wraps rows at _HI_MAX_WIDTH" test_full_check_wraps_at_max_width
+  _hi_check_requires bash "Wraps rows at _HI_MAX_WIDTH" test_full_check_wraps_at_max_width
   _hi_check "Real misc/packages file parses cleanly" test_full_check_reads_real_packages_file_without_erroring
   _hi_check "Writes nothing to stderr" test_full_check_is_silent_on_stderr
   _hi_check "Emits a row for an installed package" test_full_check_emits_a_row_for_an_installed_package

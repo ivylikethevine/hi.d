@@ -237,6 +237,27 @@ function run_flag_tests() {
   done
 }
 
+# misc/aliases.sh resolves `vim` through `command -v nvim || command -v vim`,
+# and scripts/install.sh's _hi_editors_preview spells the same ladder a second
+# time to show the answer before the toggle is set. Neither can source the
+# other (see the note above the alias), so nothing but this pins them: a
+# preview that disagrees with the alias it previews is a lie told during
+# install, and the only place it would surface is a user's screen.
+function test_vim_ladder_matches_the_install_preview() {
+  local from_aliases from_install
+  from_aliases="$(grep -o 'command -v nvim || command -v vim' "$_HI_ALIASES" | head -1)"
+  from_install="$(grep -o 'command -v nvim || command -v vim' "$_HI_INSTALL" | head -1)"
+  [ -n "$from_aliases" ] || {
+    _hi_cecho " | no nvim/vim ladder found in misc/aliases.sh" "$RED"
+    return 1
+  }
+  [ "$from_aliases" = "$from_install" ] || {
+    _hi_cecho " | aliases.sh: [$from_aliases]" "$RED"
+    _hi_cecho " | install.sh: [$from_install]" "$RED"
+    return 1
+  }
+}
+
 function run_alias_fallthrough_test() {
   _hi_h1 "Testing aliases.sh fallthrough + flag logic across shells"
 
@@ -263,6 +284,8 @@ function run_alias_fallthrough_test() {
   [ -n "$missing" ] && _hi_cecho " | not installed, skipped:$missing" "$YELLOW"
 
   _hi_suite_begin
+  _hi_check "The vim ladder matches install.sh's preview" \
+    test_vim_ladder_matches_the_install_preview
   run_fallthrough_tests
   run_flag_tests
   run_overlay_tests

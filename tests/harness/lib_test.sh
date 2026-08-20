@@ -91,7 +91,6 @@ function test_probe_cmd_installed_shape_fires_only_when_root_is_home() {
 }
 
 function test_probe_cmd_fish_shapes_run_under_fish() {
-  command -v fish >/dev/null 2>&1 || return 0
   _hi_probe_says_ok fallback_fish "function sudo; end; " "" fish &&
     ! _hi_probe_says_ok fallback_fish "" "" fish &&
     _hi_probe_says_ok ssh_fallback_fish "function hi_info; end; " "" fish &&
@@ -341,7 +340,6 @@ function test_pty_wrap_auto_leaves_a_real_tty_alone() {
 }
 
 function test_pty_wrap_actually_allocates_a_pty() {
-  command -v python3 >/dev/null 2>&1 || return 0 # nothing to assert without it
   _hi_pty_wrap 0 force "no python3" >/dev/null
   [ "${#_HI_PTY_WRAP[@]}" -gt 0 ] || return 0
   # `test -t 0` inside the wrapper is the whole point: it must see a terminal
@@ -374,7 +372,6 @@ function test_sshd_entrypoint_body_unlocks_the_test_account() {
 }
 
 function test_ssh_keypair_writes_a_usable_key() {
-  command -v ssh-keygen >/dev/null 2>&1 || return 0
   (
     _HI_WORKDIR="$(mktemp -d "$_HI_WORKDIR/keys.XXXXXX")"
     _hi_ssh_keypair >/dev/null
@@ -383,7 +380,6 @@ function test_ssh_keypair_writes_a_usable_key() {
 }
 
 function test_ssh_reachable_fails_against_a_dead_port() {
-  command -v ssh >/dev/null 2>&1 || return 0
   # port 1 has nothing listening; this must fail rather than hang or error
   # out. ssh's own "connection refused" is the expected noise, not a result -
   # _hi_poll_bool discards it the same way for real callers
@@ -421,7 +417,7 @@ function run_lib_process_tests() {
   _hi_check "Bash shape fires only with a real root" test_probe_cmd_bash_shape_fires_only_with_a_real_root
   _hi_check "Container fallback fires only with the alias" test_probe_cmd_fallback_shape_fires_only_with_the_alias
   _hi_check "Ssh fallback fires only with hi_info" test_probe_cmd_ssh_fallback_fires_only_with_hi_info
-  _hi_check "Fish shapes run under fish" test_probe_cmd_fish_shapes_run_under_fish
+  _hi_check_requires fish "Fish shapes run under fish" test_probe_cmd_fish_shapes_run_under_fish
   _hi_check "Installed shape fires only when \$_HI_ROOT is ~/say-hi" test_probe_cmd_installed_shape_fires_only_when_root_is_home
   _hi_check "Every shape ends with the marker" test_probe_cmd_every_shape_ends_with_the_marker
   _hi_check "Rejects an unknown shape" test_probe_cmd_rejects_an_unknown_shape
@@ -448,15 +444,15 @@ function run_lib_process_tests() {
   _hi_h2 "Testing: _hi_pty_wrap"
   _hi_check "Force wraps regardless of the fd" test_pty_wrap_force_wraps_even_on_a_tty
   _hi_check "Auto leaves a real tty alone" test_pty_wrap_auto_leaves_a_real_tty_alone
-  _hi_check "The wrapper really allocates a pty" test_pty_wrap_actually_allocates_a_pty
+  _hi_check_requires python3 "The wrapper really allocates a pty" test_pty_wrap_actually_allocates_a_pty
   _hi_check "Resets between calls" test_pty_wrap_resets_between_calls
 
   _hi_h2 "Testing: shared ssh fixtures"
   _hi_check "Ssh opts never touch the user's known_hosts" test_ssh_opts_never_touch_the_users_known_hosts
   _hi_check "Sshd entrypoint honours runtime \$SSHD_OPTS" test_sshd_entrypoint_body_passes_runtime_opts_to_sshd
   _hi_check "Sshd entrypoint unlocks the test account" test_sshd_entrypoint_body_unlocks_the_test_account
-  _hi_check "Keypair lands in the workdir" test_ssh_keypair_writes_a_usable_key
-  _hi_check "Reachability probe fails on a dead port" test_ssh_reachable_fails_against_a_dead_port
+  _hi_check_requires ssh-keygen "Keypair lands in the workdir" test_ssh_keypair_writes_a_usable_key
+  _hi_check_requires ssh "Reachability probe fails on a dead port" test_ssh_reachable_fails_against_a_dead_port
   _hi_suite_end "tests/lib/ (probes, polling and fixtures)"
 }
 

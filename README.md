@@ -45,7 +45,7 @@ _Don't `ssh`ush your hosts, say `hi`!_
   - [Nomad allocations](#nomad-allocations)
   - [Kubernetes pods](#kubernetes-pods)
   - [Windows hosts](#windows-hosts)
-- [say-hi and the alternatives](#hid-and-the-alternatives)
+- [say-hi and the alternatives](#say-hi-and-the-alternatives)
   - [Compatibility](#compatibility)
 - [Testing](#testing)
 - [More docs](#more-docs)

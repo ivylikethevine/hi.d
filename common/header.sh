@@ -229,7 +229,7 @@ function banner() {
       [ "$_HI_BANNER_BRANCH" = main ] && _HI_BANNER_BRANCH=""
     fi
     changes="$BRYELLOW$_HI_BANNER_CHANGES $_HI_GLYPH_AHEAD "
-    # columns, not ${#} bytes (GLOSSARY: bytes vs columns): digits + "␣↑␣"
+    # columns, not ${#} bytes (GLOSSARY: HI.12): the digits, then "␣↑␣"
     changes_w=$((${#_HI_BANNER_CHANGES} + 3))
     # the Online (local) banner only: a remote session's Connected banner
     # describes the target, and the disconnect banner stays as-is

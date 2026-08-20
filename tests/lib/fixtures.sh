@@ -176,6 +176,22 @@ function _hi_alias_probe() {
   env -u _HI_CLEANUP _HI_HOME="$_HI_HOME" "$@" "$shell" -c "$script" 2>/dev/null
 }
 
+# _hi_alias_probe_bare <name> [VAR ...] - _hi_alias_probe's other half: sources
+# aliases.sh *without* paths.sh first, which is the shape the container
+# fallback ships. The named VARs are unset for the probe, since what these
+# cases prove is that an alias whose path variable is undefined does not get
+# defined at all - `sh ` or `tmux -f ` would otherwise be an alias that eats
+# the user's terminal. POSIX sh only: this shape never reaches fish.
+# GLOSSARY: HI.01 - the guard on an empty unset list.
+function _hi_alias_probe_bare() {
+  local name="$1" var
+  local -a scrub=()
+  shift
+  for var in "$@"; do scrub+=(-u "$var"); done
+  env ${scrub[@]+"${scrub[@]}"} sh -c \
+    ". $_HI_ALIASES; alias $name >/dev/null 2>&1 && echo yes || echo no" 2>/dev/null
+}
+
 # _hi_scratch_tree <name> <dir...> - a throwaway say-hi under $_HI_WORKDIR/<name>
 # holding copies of the named top-level directories, and prints the _HI_HOME
 # that points at it. What a "minimal shipped tree" needs is one edit here

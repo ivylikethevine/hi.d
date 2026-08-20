@@ -53,7 +53,7 @@ fi
 # makes it free and means the same thing: a container started inside the window
 # was already invisible until the file cache turned over. $SECONDS is the stamp
 # because it is a builtin; -1 is "never filled", and a TTL of 0 refreshes every
-# time, as targets.sh reads it. GLOSSARY: completion probe knobs
+# time, as targets.sh reads it. GLOSSARY: HI.26
 _HI_TARGET_NAMES=""
 _HI_TARGET_NAMES_AT=-1
 

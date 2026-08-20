@@ -109,7 +109,7 @@ function _hi_login_shell() {
 # case below is the allow list, so the tree's bash-less tiers fall through it
 # unmatched - they are reachable only where bash is absent, and this file is
 # bash. What survives is fish > zsh > bash, $_HI_SHELL_PREFERENCE's documented
-# default. GLOSSARY: session-shell ranking - why login leads the default
+# default. GLOSSARY: HI.25 - why login leads the default
 function _hi_session_shell() {
   local want
   for want in ${_HI_SHELL_PREFERENCE:-login} $_HI_SHELL_TREE; do
@@ -178,7 +178,7 @@ function load() {
   [ "$shell" = fish ] && shell_cmd=(fish -C "set fish_greeting ''" -i)
   if _hi_tmux_wanted; then
     # -A: attach-or-create, which never loses work; separate args so fish's -C
-    # survives unquoted. GLOSSARY: tmux server-start rules
+    # survives unquoted. GLOSSARY: HI.27
     tmux -f "$_HI_TMUXCONF" new-session -A -s "${_HI_TMUX_SESSION:-hi}" \
       "${shell_cmd[@]}" || shell_ec=$?
   else

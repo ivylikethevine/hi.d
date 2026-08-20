@@ -352,7 +352,9 @@ function _hi_git_status_preview() {
   (cd "$_HI_ROOT" 2>/dev/null && unset _HI_DISABLE_GIT_STATUS && _hi_git_prompt)
 }
 
-# what `nano`/`vim` actually resolve to with the override on
+# what `nano`/`vim` actually resolve to with the override on. The vim ladder
+# is misc/aliases.sh's, spelled again because this file cannot source it - see
+# the note there; alias_fallthrough_test.sh fails when the two drift.
 function _hi_editors_preview() {
   printf 'nano -> nano --rcfile %s\n' "$_HI_NANORC"
   printf 'vim  -> %s -u %s\n' "$(command -v nvim || command -v vim)" "$_HI_VIMRC"

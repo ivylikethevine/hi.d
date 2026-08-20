@@ -15,8 +15,8 @@ deciding whether to use say-hi, not to sell it.
   - [sshdot](#sshdot)
   - [homeshick — the same constraints, the opposite answer](#homeshick--the-same-constraints-the-opposite-answer)
 - [Adjacent tools, and how they compose](#adjacent-tools-and-how-they-compose)
-- [What actually makes say-hi different](#what-actually-makes-hid-different)
-- [Where say-hi is the wrong choice](#where-hid-is-the-wrong-choice)
+- [What actually makes say-hi different](#what-actually-makes-say-hi-different)
+- [Where say-hi is the wrong choice](#where-say-hi-is-the-wrong-choice)
 - [Sources](#sources)
 
 ## The problem being solved

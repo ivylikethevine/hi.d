@@ -28,9 +28,9 @@ _HI_LEDGER=""
 # _hi_on_exit installs a *single* trap rather than appending to one, so
 # everything that has to happen on the way out goes through here.
 #
-# Resolved with `cd -P`: the product derives its tree physically (GLOSSARY:
-# HI.33), so a $TMPDIR holding a symlink - macOS's /var - would leave a suite
-# comparing two spellings of one directory.
+# Resolved with `cd -P`: the product derives its tree physically
+# (GLOSSARY: HI.33), so a $TMPDIR holding a symlink - macOS's /var - would
+# leave a suite comparing two spellings of one directory.
 function _hi_workdir() {
   _HI_WORKDIR="$(cd -P "$(mktemp -d -t "hi.$1.XXXXXX")" && pwd)"
   _HI_EXTRA_CLEANUP="${2:-}"

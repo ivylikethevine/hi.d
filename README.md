@@ -10,7 +10,7 @@ This is a hobby project.
 
 ---
 
-[![tests](https://img.shields.io/badge/tests-890_passed-4c1)](https://github.com/ivylikethevine/hi.d/actions/workflows/ci.yml)
+[![tests](https://img.shields.io/badge/tests-895_passed-4c1)](https://github.com/ivylikethevine/hi.d/actions/workflows/ci.yml)
 [![Linux](https://img.shields.io/github/actions/workflow/status/ivylikethevine/hi.d/ci.yml?branch=main&label=Linux)](https://github.com/ivylikethevine/hi.d/actions/workflows/ci.yml)
 [![macOS](https://img.shields.io/github/actions/workflow/status/ivylikethevine/hi.d/macos-e2e.yml?branch=main&label=macOS)](https://github.com/ivylikethevine/hi.d/actions/workflows/macos-e2e.yml)
 [![Windows](https://img.shields.io/github/actions/workflow/status/ivylikethevine/hi.d/windows-e2e.yml?branch=main&label=Windows)](https://github.com/ivylikethevine/hi.d/actions/workflows/windows-e2e.yml)

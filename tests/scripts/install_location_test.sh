@@ -1,14 +1,14 @@
 #!/bin/bash
-# hi.d installed somewhere other than $HOME/hi.d, driven through the real
+# say-hi installed somewhere other than $HOME/say-hi, driven through the real
 # scripts/install.sh and then read back out of a *fresh* shell in each dialect.
 #
-# Every path in the product resolves through $_HI_HOME/hi.d, and every entry
+# Every path in the product resolves through $_HI_HOME/say-hi, and every entry
 # point derives $_HI_HOME from its own location rather than defaulting to $HOME
 # (GLOSSARY: HI.33). Both halves of that are only load-bearing when the tree is
 # not at the default path, which is exactly the shape nothing else here builds:
-# the e2e suites' `installed` case models a permanent install at $HOME/hi.d,
+# the e2e suites' `installed` case models a permanent install at $HOME/say-hi,
 # and a developer's checkout sits elsewhere by accident rather than by
-# assertion. So this suite installs to $HOME/opt/nested/hi.d and to a tree
+# assertion. So this suite installs to $HOME/opt/nested/say-hi and to a tree
 # outside $HOME entirely, and asks the two questions that shape raises:
 #
 #   the rc wiring   the `export _HI_HOME=...` install.sh writes into .bashrc /
@@ -24,7 +24,7 @@
 # its arm is the one thing that path actually does: source common/paths.sh and
 # resolve the tree from it.
 #
-# Fresh shells run under `env -i`, so the only way any of them can find hi.d is
+# Fresh shells run under `env -i`, so the only way any of them can find say-hi is
 # the wiring under test. $_HI_HOME in particular is never passed: passing it
 # would answer the question the suite is asking.
 #
@@ -42,17 +42,17 @@ source "${_HI_TEST_LIB:-${BASH_SOURCE[0]%/*}/../test_lib.sh}"
 # Not the whole checkout - .git is the expensive half and nothing reads it.
 _HI_LOC_ITEMS=(common misc shells scripts hi.sh load.sh)
 
-# _hi_loc_tree <name> - a hi.d under $_HI_WORKDIR/<name>, printed.
+# _hi_loc_tree <name> - a say-hi under $_HI_WORKDIR/<name>, printed.
 # _hi_scratch_tree copies and prints the parent; this adds an executable hi.sh.
 function _hi_loc_tree() {
   local root
-  root="$(_hi_scratch_tree "$1" "${_HI_LOC_ITEMS[@]}")/hi.d"
+  root="$(_hi_scratch_tree "$1" "${_HI_LOC_ITEMS[@]}")/say-hi"
   chmod +x "$root/hi.sh"
   printf '%s' "$root"
 }
 
 # The nested install: a real `install.sh --no-link -y` from a tree at
-# $HOME/opt/nested/hi.d, against a $HOME of this suite's own. --no-link because
+# $HOME/opt/nested/say-hi, against a $HOME of this suite's own. --no-link because
 # the symlink wants sudo and /usr/bin, neither of which a test may touch; -y
 # because there is no tty to answer the validation prompt on.
 _HI_LOC_HOME=""
@@ -131,7 +131,7 @@ function test_the_install_wrote_nothing_into_the_tree() {
 # Value producers rather than predicates: _hi_par_check_eq compares and, on a
 # mismatch, prints what came back. A bare `[ "$(...)" = "$..." ]` here reported
 # FAILED and nothing else, which is worth little on a run you cannot reach -
-# an empty $_HI_ROOT (the rc wiring never loaded), one pointing at $HOME/hi.d
+# an empty $_HI_ROOT (the rc wiring never loaded), one pointing at $HOME/say-hi
 # (a surviving $HOME default) and one carrying stray rc stdout are three
 # different bugs behind one identical red line.
 function test_bash_resolves_the_nested_tree() {
@@ -206,7 +206,7 @@ function test_fish_doctor_names_the_nested_tree() { _hi_loc_doctor_names_the_tre
 # both have to land in the nested tree rather than beside $HOME.
 function _hi_loc_sh() {
   _hi_loc_env "$_HI_LOC_HOME" env _HI_HOME="$_HI_LOC_PARENT" \
-    sh -c ". \"\$_HI_HOME/hi.d/common/paths.sh\"; $1" 2>/dev/null
+    sh -c ". \"\$_HI_HOME/say-hi/common/paths.sh\"; $1" 2>/dev/null
 }
 
 function test_sh_renders_the_header() {
@@ -222,7 +222,7 @@ function test_sh_doctor_names_the_nested_tree() {
 # The rc wiring above is one way to carry a non-default location. This is the
 # other, and the one that has to hold when there is no wiring at all: a file
 # that can find itself has no business guessing $HOME. $HOME here is a
-# directory with no hi.d in it whatsoever, so a surviving $HOME default would
+# directory with no say-hi in it whatsoever, so a surviving $HOME default would
 # fail loudly rather than silently reading the checkout.
 
 _HI_LOC_OUT_ROOT=""
@@ -274,8 +274,26 @@ function test_outside_launcher_runs_through_a_symlink() {
 function test_a_missing_tree_is_named_and_refused() {
   local out rc=0
   out="$(_HI_HOME="$_HI_WORKDIR/nothing-here" "$_HI_LOC_OUT_ROOT/hi.sh" --version 2>&1)" || rc=$?
-  [ "$rc" -ne 0 ] && [[ "$out" == *"no hi.d at $_HI_WORKDIR/nothing-here"* ]] &&
+  [ "$rc" -ne 0 ] && [[ "$out" == *"no say-hi at $_HI_WORKDIR/nothing-here"* ]] &&
     [[ "$out" == *"set _HI_HOME"* ]]
+}
+
+# The rename's other half. A checkout cloned as hi.d and only ever pulled is
+# complete and correct - it sits right beside the path hi reports missing,
+# under its old name - so the generic "set _HI_HOME to the directory that holds
+# it" is advice that cannot work: _HI_HOME is already right. hi.sh names the
+# rename instead, and this is what keeps it doing so.
+function test_an_old_named_checkout_is_told_to_rename() {
+  local parent="$_HI_WORKDIR/oldname" out rc=0
+  rm -rf "$parent"
+  mkdir -p "$parent"
+  cp -a "$_HI_LOC_OUT_ROOT" "$parent/hi.d"
+  # unset, not pointed elsewhere: the whole case is hi.sh deriving $_HI_HOME
+  # from its own path and finding the tree there under the wrong name
+  out="$(env -u _HI_HOME "$parent/hi.d/hi.sh" --version 2>&1)" || rc=$?
+  [ "$rc" -ne 0 ] &&
+    [[ "$out" == *"still named hi.d"* ]] &&
+    [[ "$out" == *"mv '$parent/hi.d' '$parent/say-hi'"* ]]
 }
 
 # --- the inverse ----------------------------------------------------------
@@ -291,7 +309,7 @@ function test_uninstall_removes_the_tree_line() {
 
 function run_install_location_tests() {
   _hi_workdir installloctest
-  _hi_h1 "Testing hi.d installed outside \$HOME/hi.d"
+  _hi_h1 "Testing say-hi installed outside \$HOME/say-hi"
 
   _hi_loc_install
   _hi_cecho " | tree:  $_HI_LOC_ROOT" "$BLUE"
@@ -342,6 +360,7 @@ function run_install_location_tests() {
   _hi_par_check "hi.sh runs from it" test_outside_launcher_runs
   _hi_par_check "hi.sh runs through a symlink onto it" test_outside_launcher_runs_through_a_symlink
   _hi_par_check "A missing tree is named and refused" test_a_missing_tree_is_named_and_refused
+  _hi_par_check "A checkout still named hi.d is told to rename" test_an_old_named_checkout_is_told_to_rename
   _hi_par_wait
 
   # serial, and last: it rewrites the rc files every case above reads

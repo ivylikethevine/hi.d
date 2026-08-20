@@ -89,7 +89,7 @@ function test_no_color_empty_means_on() {
 function test_no_color_blanks_the_palette_at_source_time() {
   local out
   out="$(env NO_COLOR=1 _HI_HOME="$_HI_HOME" bash -c \
-    '. "$_HI_HOME/hi.d/common/core.sh"; printf "%s" "$NC$RED$BRCYAN"')"
+    '. "$_HI_HOME/say-hi/common/core.sh"; printf "%s" "$NC$RED$BRCYAN"')"
   [ -z "$out" ]
 }
 
@@ -230,7 +230,65 @@ function test_settings_sh_is_sourced() {
   mkdir -p "$dir"
   printf 'export _HI_PROBE=global\n' >"$dir/settings.sh"
   [ "$(env -u _hi_core_loaded -u _HI_PROBE _HI_HOME="$_HI_HOME" _HI_CONFIG_DIR="$dir" \
-    bash -c 'source "$_HI_HOME/hi.d/common/core.sh"; printf "%s" "${_HI_PROBE:-unset}"')" = global ]
+    bash -c 'source "$_HI_HOME/say-hi/common/core.sh"; printf "%s" "${_HI_PROBE:-unset}"')" = global ]
+}
+
+# --- $_HI_CONFIG_DIR resolution ----------------------------------------------
+#
+# The config directory was renamed hi.d -> say-hi along with the tree, and an
+# overlay is the user's own data - settings, colors, a git history they may
+# have pushed - so core.sh reads an unmigrated ~/.config/hi.d where it lies
+# rather than starting an empty new one beside it. Same preamble-in-a-fresh-
+# bash shape as test_settings_sh_is_sourced above, for the same reason.
+#
+# shells/config.fish carries the same ladder in fish's dialect and is pinned
+# against these answers by tests/shells/rc_test.sh.
+
+# _hi_cfg_answer <case> - what core.sh resolves $_HI_CONFIG_DIR to when the XDG
+# base holds <case>: `old`, `new`, `both` or `neither`. Printed relative to the
+# base, so a case reads as the name rather than a workdir path.
+function _hi_cfg_answer() {
+  local base="$_HI_WORKDIR/xdg.$1" out
+  rm -rf "$base"
+  mkdir -p "$base"
+  case "$1" in
+  old | both) mkdir -p "$base/hi.d" ;;
+  esac
+  case "$1" in
+  new | both) mkdir -p "$base/say-hi" ;;
+  esac
+  out="$(env -u _hi_core_loaded -u _HI_CONFIG_DIR _HI_HOME="$_HI_HOME" XDG_CONFIG_HOME="$base" \
+    bash -c 'source "$_HI_HOME/say-hi/common/core.sh"; printf "%s" "$_HI_CONFIG_DIR"')"
+  printf '%s' "${out#"$base/"}"
+}
+
+function test_config_dir_defaults_to_the_new_name() {
+  [ "$(_hi_cfg_answer neither)" = say-hi ]
+}
+
+function test_config_dir_reads_an_unmigrated_overlay() {
+  [ "$(_hi_cfg_answer old)" = hi.d ]
+}
+
+function test_config_dir_uses_the_new_name_when_it_exists() {
+  [ "$(_hi_cfg_answer new)" = say-hi ]
+}
+
+# a half-finished migration: the renamed directory is the one being kept
+function test_config_dir_prefers_the_new_name_when_both_exist() {
+  [ "$(_hi_cfg_answer both)" = say-hi ]
+}
+
+# hi.sh points a target at the overlay it shipped, so an explicit value has to
+# beat both names - this is the case that keeps the fallback from reaching into
+# a session it has no business in
+function test_config_dir_explicit_value_wins() {
+  local base="$_HI_WORKDIR/xdg.explicit"
+  rm -rf "$base"
+  mkdir -p "$base/hi.d" "$base/say-hi"
+  [ "$(env -u _hi_core_loaded _HI_HOME="$_HI_HOME" XDG_CONFIG_HOME="$base" \
+    _HI_CONFIG_DIR="$base/shipped" \
+    bash -c 'source "$_HI_HOME/say-hi/common/core.sh"; printf "%s" "$_HI_CONFIG_DIR"')" = "$base/shipped" ]
 }
 
 # shells/zsh.zsh sources core.sh directly, so its functions run in zsh too - and
@@ -243,7 +301,7 @@ function test_settings_sh_is_sourced() {
 function _hi_in_shell() {
   local shell="$1" script="$2"
   env _HI_HOME="$_HI_HOME" _HI_SSH_CONFIG="$_HI_WORKDIR/ssh_config" \
-    "$shell" -c "source \"\$_HI_HOME/hi.d/common/core.sh\"; $script" 2>&1
+    "$shell" -c "source \"\$_HI_HOME/say-hi/common/core.sh\"; $script" 2>&1
 }
 
 function _hi_shell_agrees() {
@@ -275,7 +333,7 @@ function test_zsh_resolve_color_agrees_with_bash() {
 function test_zsh_rc_leaves_ksharrays_alone() {
   local out
   out="$(env _HI_HOME="$_HI_HOME" TERM=xterm-256color zsh -c \
-    'source "$_HI_HOME/hi.d/shells/zsh.zsh"; setopt | grep -c ksharrays' 2>/dev/null)"
+    'source "$_HI_HOME/say-hi/shells/zsh.zsh"; setopt | grep -c ksharrays' 2>/dev/null)"
   [ "$out" = 0 ]
 }
 
@@ -283,7 +341,7 @@ function test_zsh_rc_leaves_ksharrays_alone() {
 function test_zsh_rc_survives_ksharrays_being_on() {
   local out
   out="$(env _HI_HOME="$_HI_HOME" TERM=xterm-256color zsh -c \
-    'setopt KSH_ARRAYS; source "$_HI_HOME/hi.d/shells/zsh.zsh"; print -n "$USER_COLOR"' 2>/dev/null)"
+    'setopt KSH_ARRAYS; source "$_HI_HOME/say-hi/shells/zsh.zsh"; print -n "$USER_COLOR"' 2>/dev/null)"
   [ -n "$out" ]
 }
 
@@ -418,6 +476,11 @@ function run_core_tests() {
 
   _hi_h2 "Testing: the settings overlay"
   _hi_check "settings.sh is sourced" test_settings_sh_is_sourced
+  _hi_check "Defaults to ~/.config/say-hi" test_config_dir_defaults_to_the_new_name
+  _hi_check "Reads an unmigrated ~/.config/hi.d" test_config_dir_reads_an_unmigrated_overlay
+  _hi_check "Uses say-hi when it exists" test_config_dir_uses_the_new_name_when_it_exists
+  _hi_check "Prefers say-hi when both exist" test_config_dir_prefers_the_new_name_when_both_exist
+  _hi_check "An explicit \$_HI_CONFIG_DIR wins" test_config_dir_explicit_value_wins
 
   _hi_h2 "Testing: the same answers in zsh"
   _hi_check_requires zsh "_hi_hash_color agrees with bash" test_zsh_hash_color_agrees_with_bash

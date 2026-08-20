@@ -1,11 +1,11 @@
 #!/bin/bash
 # forked from sshrc by Russell Stewart: https://github.com/danrabinowitz/sshrc & https://github.com/cdown/sshrc
-# Runs on the client - copies hi.d to the target and chainloads load.sh there.
+# Runs on the client - copies say-hi to the target and chainloads load.sh there.
 set -euo pipefail # must be disabled after our code (this file is part of the interactive shell - any error would close the session)
 
-# $_HI_HOME is the directory *containing* hi.d, derived from this script rather
+# $_HI_HOME is the directory *containing* say-hi, derived from this script rather
 # than guessed. The symlink walk is what makes that work from $_HI_LINK:
-# /usr/bin/hi points at <prefix>/hi.d/hi.sh, and the unresolved path answers
+# /usr/bin/hi points at <prefix>/say-hi/hi.sh, and the unresolved path answers
 # /usr. GLOSSARY: HI.33
 #
 # The same walk as scripts/install.sh's and packaging/lib.sh's - each must
@@ -29,13 +29,24 @@ fi
 export _HI_HOME
 # Checked before the source, because bash's own "No such file or directory"
 # names a path nobody typed - which is what a tree that is not laid out as
-# $_HI_HOME/hi.d looks like. No _hi_cecho: core.sh is the file that's gone.
-[ -r "$_HI_HOME/hi.d/common/core.sh" ] || {
-  echo "hi: no hi.d at $_HI_HOME/hi.d - set _HI_HOME to the directory that holds it" >&2
+# $_HI_HOME/say-hi looks like. No _hi_cecho: core.sh is the file that's gone.
+#
+# The hi.d arm is the one worth spelling out. A checkout that was cloned before
+# the rename and only ever pulled is *complete and correct* - it is sitting
+# right beside the path being reported missing, under its old name - so the
+# generic "set _HI_HOME" is advice that cannot work here. Say what actually
+# fixes it instead.
+[ -r "$_HI_HOME/say-hi/common/core.sh" ] || {
+  if [ -r "$_HI_HOME/hi.d/common/core.sh" ]; then
+    echo "hi: this checkout is still named hi.d - the tree is now say-hi." >&2
+    echo "    mv '$_HI_HOME/hi.d' '$_HI_HOME/say-hi' and re-run $_HI_HOME/say-hi/scripts/install.sh" >&2
+  else
+    echo "hi: no say-hi at $_HI_HOME/say-hi - set _HI_HOME to the directory that holds it" >&2
+  fi
   exit 1
 }
 # shellcheck source=./common/core.sh
-source "$_HI_HOME/hi.d/common/core.sh"
+source "$_HI_HOME/say-hi/common/core.sh"
 
 _HI_RELEASE="${_HI_RELEASE:-}"
 
@@ -162,18 +173,18 @@ function _hi_overlay_toggle() {
 function _hi_payload_tar() {
   local -a excl=()
   if [ "$(_hi_overlay_toggle _HI_DISABLE_EDITORS)" = 1 ]; then
-    excl+=(--exclude=hi.d/misc/vim.rc --exclude=hi.d/misc/nano.rc)
+    excl+=(--exclude=say-hi/misc/vim.rc --exclude=say-hi/misc/nano.rc)
   fi
   if [ "$(_hi_overlay_toggle _HI_DISABLE_OSC52)" = 1 ]; then
-    excl+=(--exclude=hi.d/shells/osc52.sh)
+    excl+=(--exclude=say-hi/shells/osc52.sh)
   fi
   # the personal half only. misc/aliases.sh always ships: the toggle turns off
   # one person's preferences, not the vim/nano, hi_copy and tmux aliases hi
   # installs, and those live above the source line in aliases.sh.
   if [ "$(_hi_overlay_toggle _HI_DISABLE_ALIASES)" = 1 ]; then
-    excl+=(--exclude=hi.d/misc/personal.sh)
+    excl+=(--exclude=say-hi/misc/personal.sh)
   fi
-  tar czf - -h ${excl[@]+"${excl[@]}"} -C "$_HI_HOME" "${_HI_PAYLOAD[@]/#/hi.d/}"
+  tar czf - -h ${excl[@]+"${excl[@]}"} -C "$_HI_HOME" "${_HI_PAYLOAD[@]/#/say-hi/}"
 }
 
 # The walker's rc 2 means "known host, no tag"; only 1 means not in the config.
@@ -256,30 +267,42 @@ function _hi_ctl_close() {
 }
 
 # The sh script _hi_remote_root runs on the target: the path of a permanent
-# hi.d there, or nothing. Candidates come from what install.sh wrote into the
+# say-hi there, or nothing. Candidates come from what install.sh wrote into the
 # login rc files, read as *files* (`sh -c` over ssh sources none of them),
-# then $HOME/hi.d. Its own function so a suite can run it without an ssh hop.
+# then $HOME. Its own function so a suite can run it without an ssh hop.
 # GLOSSARY: HI.33 - the candidate order, the two seds, and what `--tmux` gets
 # out of it. The unwrapping sed's `-e` order matters: they run in sequence over
 # one pattern space, so the comment strip goes first, addressed to unquoted
 # lines - after unquoting it would eat a `#` from inside the quotes.
+#
+# Each candidate home is tried under BOTH tree names, new first. The tree was
+# renamed hi.d -> say-hi, and this probe is the one place that cannot assume
+# the rename has reached the other end: it reads what a *target* wrote, and a
+# target nobody has updated still has ~/hi.d and an rc line pointing at it.
+# Dropping the old name here would turn every un-updated permanent install into
+# a disposable copy - silently, and only visible as a slower connect.
 function _hi_remote_root_probe() {
   cat <<'PROBE'
-_c=$(for _f in "$HOME/.bashrc" "$HOME/.zshrc" "$HOME/.config/fish/config.fish" /etc/profile.d/hi.d.sh; do
+_c=$(for _f in "$HOME/.bashrc" "$HOME/.zshrc" "$HOME/.config/fish/config.fish" /etc/profile.d/say-hi.sh /etc/profile.d/hi.d.sh; do
   [ -f "$_f" ] && sed -n -e 's/^[[:space:]]*export  *_HI_HOME=//p' -e 's/^[[:space:]]*set -gx  *_HI_HOME  *//p' "$_f"
 done | sed -e '/^"/!s/[[:space:]]*#.*$//' -e 's/^"\([^"]*\)".*$/\1/' -e 's/[[:space:]]*$//')
 IFS='
 '
 for _h in $_c "$HOME"; do
-  [ -n "$_h" ] && [ -x "$_h/hi.d/hi.sh" ] && [ -f "$_h/hi.d/common/paths.sh" ] && {
-    printf "%s" "$_h/hi.d"
-    exit 0
-  }
+  [ -n "$_h" ] || continue
+  # new name first: a home holding both is a half-finished migration, and the
+  # renamed tree is the one being kept
+  for _n in say-hi hi.d; do
+    [ -x "$_h/$_n/hi.sh" ] && [ -f "$_h/$_n/common/paths.sh" ] && {
+      printf "%s" "$_h/$_n"
+      exit 0
+    }
+  done
 done
 PROBE
 }
 
-# Prints the path of a permanent hi.d on $DOMAIN, if any
+# Prints the path of a permanent say-hi on $DOMAIN, if any
 function _hi_remote_root() {
   local out
   out="$(_hi_ssh_sh "$(_hi_remote_root_probe)" \
@@ -515,7 +538,7 @@ REMOTE
 function _hi_remote_middle() {
   cat <<REMOTE
       export _HI_HOME=\$(mktemp -d -t $(_hi_whoami).hi.XXXXXX) # busybox mktemp needs exactly six X
-      export _HI_ROOT=\$_HI_HOME/hi.d
+      export _HI_ROOT=\$_HI_HOME/say-hi
       export _HI_CONFIG_DIR=\$_HI_ROOT/config
       export _HI_CLEANUP=\$_HI_HOME
       mkdir "\$_HI_ROOT"
@@ -529,7 +552,7 @@ function _hi_remote_middle() {
 REMOTE
 }
 
-# Connect, copy hi.d over, hand off to load.sh. Everything up to the bash
+# Connect, copy say-hi over, hand off to load.sh. Everything up to the bash
 # branch is plain POSIX under one `sh -c` (GLOSSARY: sh -c wrapping)
 function _say_hi() {
   local size hi_esc nc_esc script middle boot_tmp remote_root tmp_root ctl_path ec=0
@@ -551,16 +574,18 @@ function _say_hi() {
   remote_root="$(_hi_remote_root "${ctl_opts[@]}")"
 
   if [ -n "$remote_root" ]; then
-    tmp_root="${remote_root%/hi.d}"
+    # the last component, whichever name the probe matched - $remote_root is
+    # always <home>/<tree>, so this needs no list of names to keep in step
+    tmp_root="${remote_root%/*}"
     # shellcheck disable=SC2016 # _hi_armored_line's destination is the target's to expand
     middle="$(
       cat <<REMOTE
       export _HI_HOME="$tmp_root"
       export _HI_ROOT="$remote_root"
       _hi_rc_dir="\$(dirname "\$0")"
-      printf '%s %s%s' "$hi_esc" "$nc_esc" "-> local hi.d install"
+      printf '%s %s%s' "$hi_esc" "$nc_esc" "-> local say-hi install"
       $(_hi_bootloader | _hi_armored_line '>' '"$_hi_rc_dir/hi.bashrc"')
-      export _HI_CONNECT_PREFIX="-> local hi.d install"
+      export _HI_CONNECT_PREFIX="-> local say-hi install"
 REMOTE
     )"
   else
@@ -612,7 +637,7 @@ $(_hi_remote_suffix)"
   else
     ssh -t "${ctl_opts[@]}" "${SSHARGS[@]}" "$DOMAIN" \
       powershell -NoLogo -NoExit -Command \
-      "Write-Host 'hi from PowerShell - no bash or sh on this host, hi.d colors/aliases are unavailable' -ForegroundColor Yellow" || ec=$?
+      "Write-Host 'hi from PowerShell - no bash or sh on this host, say-hi colors/aliases are unavailable' -ForegroundColor Yellow" || ec=$?
   fi
 
   _hi_ctl_close
@@ -739,7 +764,7 @@ function _say_hi_container() {
   # staged to a file so the announced size is the one actually sent
   tarball="$tmp.tar.gz"
   if ! _hi_payload_tar >"$tarball"; then
-    _hi_cecho " failed to archive hi.d for [$DOMAIN]" "$BRRED"
+    _hi_cecho " failed to archive say-hi for [$DOMAIN]" "$BRRED"
     return 1
   fi
   size="$(_hi_human_bytes "$(_hi_file_bytes "$tarball")")"
@@ -752,7 +777,7 @@ function _say_hi_container() {
   # this is a failure state, so we exit early
   if ! "${cp[@]}" sh -c "mkdir -p '$root' && tar mxzf - -C '$root'" <"$tarball"; then
     rm -f "$tarball"
-    _hi_cecho " failed to copy hi.d into [$DOMAIN]" "$BRRED"
+    _hi_cecho " failed to copy say-hi into [$DOMAIN]" "$BRRED"
     "${probe[@]}" rm -rf "$root" >/dev/null 2>&1
     return 1
   fi
@@ -760,18 +785,18 @@ function _say_hi_container() {
 
   if _hi_has_overlay &&
     ! _hi_overlay_tar |
-    "${cp[@]}" sh -c "mkdir -p '$root/hi.d/config' && tar mxzf - -C '$root/hi.d/config'" 2>"$tmp"; then
-    _hi_cecho " failed to copy your hi.d config overlay into [$DOMAIN], using defaults" "$YELLOW"
+    "${cp[@]}" sh -c "mkdir -p '$root/say-hi/config' && tar mxzf - -C '$root/say-hi/config'" 2>"$tmp"; then
+    _hi_cecho " failed to copy your say-hi config overlay into [$DOMAIN], using defaults" "$YELLOW"
   fi
 
   # hi.sh rides the payload tar unpacked above, mode and all - no separate copy
-  _hi_bootloader | "${cp[@]}" sh -c "cat > '$root/hi.d/hi.bashrc'"
+  _hi_bootloader | "${cp[@]}" sh -c "cat > '$root/say-hi/hi.bashrc'"
 
   # _HI_CLEANUP marks the tree disposable for load.sh's clean_all; the
   # `rm -rf "$root"` below is the client-side belt to it. Shared vars come from
   # _hi_session_env; the tree paths and timing are this transport's own.
   env_kv="$(_hi_env_each " %s='%s'")"
-  "${attach[@]}" sh -c "export$env_kv _HI_HOME='$root' _HI_ROOT='$root/hi.d' _HI_CONFIG_DIR='$root/hi.d/config' _HI_CLEANUP='$root' _HI_COPY_TIME='$(_hi_copy_time "$copy_start" "$_HI_SHELL_START" "$shell_end")' _HI_CONNECT_PREFIX='$prefix'; exec bash --rcfile '$root/hi.d/hi.bashrc'"
+  "${attach[@]}" sh -c "export$env_kv _HI_HOME='$root' _HI_ROOT='$root/say-hi' _HI_CONFIG_DIR='$root/say-hi/config' _HI_CLEANUP='$root' _HI_COPY_TIME='$(_hi_copy_time "$copy_start" "$_HI_SHELL_START" "$shell_end")' _HI_CONNECT_PREFIX='$prefix'; exec bash --rcfile '$root/say-hi/hi.bashrc'"
   exit_code=$?
 
   "${probe[@]}" rm -rf "$root" >/dev/null 2>&1
@@ -897,7 +922,7 @@ case "${1:-}" in
   cat <<EOF
 $_HI_USAGE
 
-Copies your hi.d to <target> and hands you an identical shell session there -
+Copies your say-hi to <target> and hands you an identical shell session there -
 header, colors, git prompt, aliases, vim/nano/tmux configs - then strips it all
 back out when the session ends. With [command ...], runs that instead, the way
 ssh does.
@@ -918,18 +943,18 @@ hi's own options:
                         name resolves to plus an ssh reachability check
       --tmux            run the session inside a named tmux on the target, so a
                         dropped connection detaches instead of losing the work.
-                        Needs a permanent hi.d there. May appear anywhere
+                        Needs a permanent say-hi there. May appear anywhere
                         before the target.
       --no-tmux         turn that back off when settings.sh made it the default
 
 hi's local sub-commands, which act on this machine instead of connecting. They
-need the full hi.d checkout, so inside a hi session each says so and stops:
-      --install          install or repair hi.d's lines in your shell rc files
+need the full say-hi checkout, so inside a hi session each says so and stops:
+      --install          install or repair say-hi's lines in your shell rc files
       --uninstall        take those lines back out again
       --configure        revisit the feature toggles, leaving the rc wiring be
       --check-configs    re-run just the shell rc syntax validation
       --overlay-init     make the config overlay a git repo, in place
-      --update           git pull in the hi.d checkout
+      --update           git pull in the say-hi checkout
       --color-preview    what every ssh host and your user resolve to, in color
       --packages-preview the package-priority legend, as the header prints it
       --test             run the test suite
@@ -938,7 +963,7 @@ Everything else is passed to ssh unchanged - -p, -i, -J, -o and the rest behave
 exactly as they do there. Only the first non-option word is the target;
 everything after it is the remote command.
 
-Configuration lives outside this tree, in \${XDG_CONFIG_HOME:-\$HOME/.config}/hi.d/
+Configuration lives outside this tree, in \${XDG_CONFIG_HOME:-\$HOME/.config}/say-hi/
 so it survives an upgrade. See \`man hi\` and the README for all of it.
 EOF
   exit 0

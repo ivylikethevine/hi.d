@@ -9,7 +9,7 @@ set -euo pipefail
 
 # The tree this file was invoked from, resolved before anything derived from
 # $_HI_HOME exists. It is the default for _HI_HOME below (so a fresh clone and
-# CI run with no setup, and no run falls back to ~/hi.d by accident), and it is
+# CI run with no setup, and no run falls back to ~/say-hi by accident), and it is
 # also the only honest reference for the tree check further down: $_HI_ROOT,
 # $_HI_TESTS_DIR and this suite table all move together when _HI_HOME is wrong,
 # so none of them can notice that it is.
@@ -19,15 +19,15 @@ if [ -z "${_HI_HOME:-}" ]; then
 fi
 export _HI_HOME
 # shellcheck source=../common/core.sh
-source "$_HI_HOME/hi.d/common/core.sh"
+source "$_HI_HOME/say-hi/common/core.sh"
 # The scaffolding every suite sources; the runner wants the host report out of
 # it (and the tree check it prints on every run). Sourcing it here also puts
 # the runner behind test_lib.sh's config isolation - $XDG_CONFIG_HOME moves to
 # a path that does not exist, so nothing here can read the developer's real
-# ~/.config/hi.d. Each suite re-sources the file and re-derives that path from
+# ~/.config/say-hi. Each suite re-sources the file and re-derives that path from
 # its own $$, so what the suites see is unchanged.
 # shellcheck source=./test_lib.sh
-source "$_HI_HOME/hi.d/tests/test_lib.sh"
+source "$_HI_HOME/say-hi/tests/test_lib.sh"
 
 # group:name:path (relative to this directory), in the order they run - fast
 # local checks first, the docker/kind/nomad-backed end-to-end tests after.
@@ -238,7 +238,7 @@ if [ "$_HI_LIST" = 1 ]; then
   for _hi_t in "${_HI_SELECTED[@]}"; do
     if [ "$_HI_LIST_PATHS" = 1 ]; then
       printf '%s %s %s\n' "$(_hi_test_group "$_hi_t")" "$(_hi_test_name "$_hi_t")" \
-        "$_HI_HOME/hi.d/tests/$(_hi_test_path "$_hi_t")"
+        "$_HI_HOME/say-hi/tests/$(_hi_test_path "$_hi_t")"
     else
       printf '%s %s\n' "$(_hi_test_group "$_hi_t")" "$(_hi_test_name "$_hi_t")"
     fi

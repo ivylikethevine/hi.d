@@ -50,7 +50,7 @@ function test_sudden_disconnect_removes_cleanup_dir() {
   "${_HI_SSH_LAUNCH[@]}" 'echo READY:$_HI_CLEANUP; sleep 600' </dev/null >"$out_file" 2>&1 &
   launcher_pid=$!
 
-  # generous: this covers the whole connect + install-probe + tar copy of hi.d,
+  # generous: this covers the whole connect + install-probe + tar copy of say-hi,
   # which is slow on a cold, small CI runner
   cleanup_dir="$(_hi_poll_value 60 0.5 _hi_ready_dir "$out_file")" || cleanup_dir=""
   if [ -z "$cleanup_dir" ] || ! docker exec "$_HI_CONTAINER" test -d "$cleanup_dir" 2>/dev/null; then

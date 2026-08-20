@@ -1,6 +1,6 @@
 # Tooling & practices roadmap
 
-What is left to do on hi.d, in two halves:
+What is left to do on say-hi, in two halves:
 
 - **[In-repo code work](#in-repo-code-work)** — everything that can be written
   and finished in this checkout, with nothing outside it involved.
@@ -49,35 +49,34 @@ here: git history is the ledger, and this file is only what is left to do.
     entry or file that satisfies it, and the two _Blocked on: v1_ entries point
     at this one instead of at a version number.
 
-- [ ] **Rename the tree from `hi.d` to `say-hi`** — the directory name is
-      load-bearing in more places than it looks. Every path in the product
-      resolves as `$_HI_HOME/hi.d` (`common/core.sh`, `common/paths.sh`, `hi.sh`,
-      `load.sh`, `scripts/install.sh`, `packaging/lib.sh`), all four packages are
-      named `hi.d`, the packaged profile hook is `/etc/profile.d/hi.d.sh`, and
-      `packaging/apk/hi.d.rsa.pub` is matched by filename out of `/etc/apk/keys/`.
-      Nothing is published to any channel yet, which is exactly why this is a
-      _now_ item: the cost is at its floor today and rises the moment the first
-      channel goes live, so it belongs **before** v1 rather than after it.
+- [ ] **Finish the `hi.d` → `say-hi` rename** — _the in-repo half has shipped._
+      The tree resolves as `$_HI_HOME/say-hi`, the config overlay defaults to
+      `~/.config/say-hi`, all four packages are named `say-hi`, the profile hook
+      is `/etc/profile.d/say-hi.sh` and the apk key is
+      `packaging/apk/say-hi.rsa.pub`. Both old names are still accepted:
+      `hi.sh`'s permanent-install probe tries `say-hi` then `hi.d` under every
+      candidate home, and `common/core.sh` reads an unmigrated
+      `~/.config/hi.d` where it lies (`scripts/install.sh`'s `overlay_migrate`
+      offers to move it, and `hi --doctor` flags both cases). What is left is
+      three steps no file here can perform.
 
-  - **The transition is the hard half, not the rename.** An existing install has
-    `~/hi.d` and rc lines pointing at it. `scripts/install.sh` repairs its own
-    lines, but `hi.sh`'s permanent-install probe reads the `_HI_HOME` line a
-    _target_ wrote and falls back to `~/hi.d` when there is none — so a target
-    nobody has updated still answers with the old name. That fallback has to
-    accept both names for a release or two, and `hi --doctor` should say which
-    one it found.
-  - **Four names, four decisions.** The tree (`hi.d`), the command (`hi`), the
-    env prefix (`_HI_*`) and the config directory (`~/.config/hi.d/`) are
-    independent. This entry is the **tree only**; renaming the other three is a
-    much larger change and each would need its own entry and its own migration.
-  - **Everything with the name baked in has to move together:** the four package
-    manifests and their tests, the apk key filename (`nfpm.yaml`'s `key_name`
-    must keep matching it), the repo URL in every manifest and doc, and the demo
-    GIFs, which show real paths on screen and would have to be re-rendered.
-  - **Ticks when:** a fresh install lands in `$_HI_HOME/say-hi`, an existing
-    `~/hi.d` is still found and still connects, `tests/scripts/install_location_test.sh`
-    covers both names, and no file in the tree names `hi.d` except where it is
-    deliberately describing the old name.
+  - **Rename the GitHub repo** to `say-hi` (Settings → General → Repository
+    name). Every manifest and doc already points at
+    `github.com/ivylikethevine/say-hi`, so **they are wrong until this is
+    done** — GitHub redirects the old URL, which is what keeps that survivable
+    rather than urgent. Afterwards, `git remote set-url origin` in every
+    checkout.
+  - **Re-render the seven demo GIFs** in `docs/demos/` — they show `~/hi.d` on
+    screen, and `docs/tapes/generate.sh` refuses to run unless the checkout is
+    named `say-hi`. Needs docker and a clean tree; its own commit, since it is
+    seven binary files.
+  - **Rename the AUR repos** if either was created before this landed:
+    `ssh://aur@aur.archlinux.org/say-hi.git` and `say-hi-git`. The AUR has no
+    rename — it is a new repo and a deletion request for the old one, so do it
+    before the first push if at all possible.
+  - **When the fallbacks come out.** They are a migration aid, not a feature,
+    and they are the only places the old name survives on purpose. Drop both a
+    release or two after v1, together with this entry.
 
 - [ ] **Source tarball under the provenance chain** — _Blocked on **Say what
       v1.0.0 means**, above._ Both
@@ -228,18 +227,18 @@ here: git history is the ledger, and this file is only what is left to do.
 Two keypairs. **The in-repo half of both is written and tested** — CI consumes each secret the moment it exists and says so loudly when it doesn't. What's left is generating the key and pasting it in.
 
 - [ ] **apk signing key** — wired end to end: `nfpm.yaml` declares the
-      signature (key from `$HI_APK_KEY`, name `hi.d.rsa.pub`), `release.yml`
+      signature (key from `$HI_APK_KEY`, name `say-hi.rsa.pub`), `release.yml`
       injects the `APK_SIGNING_KEY` secret, and CI's packaging-smoke installs a
       signed apk on Alpine every PR. Without the key the release apk builds
       unsigned and installing it needs `--allow-untrusted`.
 
   - **Where:** a terminal, then Settings → Secrets and variables → Actions
-  - **Do:** generate the RSA keypair (abuild-style), add the private half as the `APK_SIGNING_KEY` **repo** secret (not an environment secret — the ungated build job needs it), commit `packaging/apk/hi.d.rsa.pub` under exactly that filename (apk matches signatures to `/etc/apk/keys/` by name, and it must stay what `nfpm.yaml`'s `key_name` says), delete the local private half.
+  - **Do:** generate the RSA keypair (abuild-style), add the private half as the `APK_SIGNING_KEY` **repo** secret (not an environment secret — the ungated build job needs it), commit `packaging/apk/say-hi.rsa.pub` under exactly that filename (apk matches signatures to `/etc/apk/keys/` by name, and it must stay what `nfpm.yaml`'s `key_name` says), delete the local private half.
   - **Ticks when:** the secret exists and the public key is committed.
 
     ```sh
-    openssl genrsa -out hi.d-apk.rsa 4096
-    openssl rsa -in hi.d-apk.rsa -pubout -out packaging/apk/hi.d.rsa.pub
+    openssl genrsa -out say-hi-apk.rsa 4096
+    openssl rsa -in say-hi-apk.rsa -pubout -out packaging/apk/say-hi.rsa.pub
     ```
 
 - [ ] **minisign keypair** — the publish job installs a pinned minisign
@@ -274,7 +273,7 @@ NOTE: AUR registration is closed due to spam so... :shrug:
       handles the versioned package after.
 
   - **Ticks when:** both packages are live on the AUR and the `aur` job has
-    kept `hi.d` current for one real release.
+    kept `say-hi` current for one real release.
 
 - [ ] **Homebrew tap** — create the `homebrew-tap` repo (a plain GitHub repo
       with a `Formula/` directory), add a fine-grained PAT scoped to it
@@ -282,7 +281,7 @@ NOTE: AUR registration is closed due to spam so... :shrug:
       the `brew install`/`test`/`audit` gate on an actual Mac (the keg lives
       under `/opt/homebrew` there, not Linuxbrew's prefix used so far).
 
-  - **Ticks when:** `brew install ivy/tap/hi.d` works, from a release the
+  - **Ticks when:** `brew install ivy/tap/say-hi` works, from a release the
     `tap` job opened a PR for.
 
 ### Repo settings and first runs
@@ -379,7 +378,7 @@ half: no file here can close one.
     `openssf scorecard: invalid repo path` while scorecard.dev's viewer errors
     outright. A `workflow_dispatch` will not fix it — the action only publishes
     on a schedule. Add the badge after the first Tuesday run, once
-    `curl -s https://api.securityscorecards.dev/projects/github.com/ivylikethevine/hi.d`
+    `curl -s https://api.securityscorecards.dev/projects/github.com/ivylikethevine/say-hi`
     answers 200.
   - **Ticks when:** `publish_results` is settled either way, and the README
     badge decision follows from it.

@@ -1,5 +1,5 @@
 #!/bin/bash
-# End-to-end test that `hi` chains: from this machine (A, which has hi.d) to a
+# End-to-end test that `hi` chains: from this machine (A, which has say-hi) to a
 # throwaway sshd container (B, which does not), and then *from inside that
 # session* on to a second one (C). What it establishes:
 #

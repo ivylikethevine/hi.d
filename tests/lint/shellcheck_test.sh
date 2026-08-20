@@ -86,7 +86,7 @@ _HI_BASH32_LINT=(
   '\$\{![A-Za-z_][A-Za-z_0-9]*\[[@*]\][+:-]|${!a[@]+...} - use a plain "${!a[@]}"'
 )
 
-# The retired ~/hi.d default, as "<pattern>|<what it is>" - both dialects that
+# The retired ~/say-hi default, as "<pattern>|<what it is>" - both dialects that
 # ever spelled it. See lint_home_default below for why this is a gate and not
 # a preference.
 # shellcheck disable=SC2016 # these are regexes and prose, not expansions
@@ -171,7 +171,7 @@ function lint_bash32() {
 # file that needs the tree can derive it from its own path (GLOSSARY: HI.33);
 # guessing $HOME does not fail when it is wrong, it silently reads *another
 # tree*, which is how both platform e2e jobs spent their first run sourcing a
-# hi.d that was never there.
+# say-hi that was never there.
 #
 # Wider than the shellcheck list, which is *.sh only: zsh.zsh and config.fish
 # are the files that most want this, and .md carries the rule as documentation
@@ -181,7 +181,7 @@ function lint_bash32() {
 function lint_home_default() {
   local blanks="$_HI_WORKDIR/homedefault"
   local files
-  _hi_h2 "Checking for a \$HOME default for the hi.d tree"
+  _hi_h2 "Checking for a \$HOME default for the say-hi tree"
   _hi_read_lines files < <(_hi_lint_find -name '*.sh' -o -name '*.zsh' \
     -o -name '*.fish' -o -name '*.md')
   _hi_lint_blanks "$blanks" "${files[@]}"

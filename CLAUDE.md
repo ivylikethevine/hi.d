@@ -1,4 +1,4 @@
-# CLAUDE.md — working on hi.d
+# CLAUDE.md — working on say-hi
 
 Conventions for agent sessions in this repo. The README and docs/ describe the
 product; this file is only what a session needs to work here safely.
@@ -7,18 +7,46 @@ product; this file is only what a session needs to work here safely.
 
 Always set `_HI_HOME` explicitly — to this checkout's parent, e.g.
 `_HI_HOME=/home/ivy/projects/claude` — on every hi.sh, script, or test
-invocation. This machine's login profile exports `_HI_HOME=/home/ivy`, so the
-inherited value silently points every run at `~/hi.d`: the user's real,
-unrelated install. Never inspect or touch `~/hi.d`, even if it looks dirty.
-Symptom of forgetting: suites report fewer/MISSING cases, or a script runs
-"clean" because it ran against the wrong tree.
+invocation. Symptom of forgetting: suites report fewer/MISSING cases, or a
+script runs "clean" because it ran against the wrong tree.
 
-**`_HI_HOME` alone is not enough to run one suite directly.** The same login
-profile also exports `_HI_ROOT` and `_HI_TEST_LIB`, and a suite's source line
-is `${_HI_TEST_LIB:-…}` — the inherited value wins, so the *harness* is loaded
-out of `~/hi.d` while `core.sh` quietly corrects `$_HI_ROOT` to the tree you
-asked for. The run half-succeeds against two trees at once. Either go through
-the runner, which sources the harness by absolute path:
+There are two say-hi trees on this machine, and neither is wired into the
+user's shell any more:
+
+- `~/projects/claude/say-hi` — **this dev checkout**, deliberately not
+  installed, so work here never runs in the user's live shell.
+- `~/projects/say-hi` — the user's real install, moved there from the old
+  `~/hi.d`. Never inspect or touch it, even if it looks dirty. As of the
+  rename it holds *pre-rename code under the new directory name* (its
+  `paths.sh` still resolves `$_HI_HOME/hi.d`), so it cannot load at all until
+  `rename-say-hi` lands on `main` and it pulls.
+
+The hazard is no longer a login profile: the rc wiring was removed on purpose,
+and nothing on disk exports `_HI_*` any more — not `.bashrc`, `.zshrc`,
+`config.fish`, `/etc/profile.d/`, nor `/etc/environment`. What remains is
+**inherited process state**. A long-lived shell started back when `~/hi.d`
+existed still carries a full `_HI_*` set (`_HI_HOME=/home/ivy`,
+`_HI_ROOT=/home/ivy/hi.d`, `_HI_TEST_LIB=/home/ivy/hi.d/tests/test_lib.sh`,
+~50 more) and hands it to every child, agent sessions included. Those paths
+point at a tree that no longer exists, so the runner dies at its `source` line
+with a bare `No such file or directory` naming a path nobody typed — before
+`_hi_host_tree_check` (`tests/lib/report.sh`) ever gets to warn. Check with
+`env | grep '^_HI_'`, and clear it with:
+
+```sh
+unset $(env | sed -n 's/^\(_HI_[A-Za-z0-9_]*\)=.*/\1/p')
+```
+
+In a shell with no `_HI_*` set, no override is needed at all — every entry
+point derives the tree from its own path (GLOSSARY: HI.33), and
+`tests/test_runner.sh <suite>` just works.
+
+**`_HI_HOME` alone is not enough to run one suite directly.** An inherited
+environment also carries `_HI_ROOT` and `_HI_TEST_LIB`, and a suite's source
+line is `${_HI_TEST_LIB:-…}` — the inherited value wins, so the *harness* is
+loaded out of the old tree while `core.sh` quietly corrects `$_HI_ROOT` to the
+tree you asked for. The run half-succeeds against two trees at once. Either go
+through the runner, which sources the harness by absolute path:
 
 ```sh
 _HI_HOME=/home/ivy/projects/claude tests/test_runner.sh <suite>
@@ -28,7 +56,7 @@ or, when a suite really has to run on its own, set both:
 
 ```sh
 export _HI_HOME=/home/ivy/projects/claude
-export _HI_TEST_LIB=$_HI_HOME/hi.d/tests/test_lib.sh
+export _HI_TEST_LIB=$_HI_HOME/say-hi/tests/test_lib.sh
 ```
 
 ## Testing

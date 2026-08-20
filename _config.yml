@@ -3,7 +3,7 @@
 # actions/jekyll-build-pages brings the github-pages gem, which is where the
 # theme and every plugin below come from.
 
-title: hi.d
+title: say-hi
 description: >-
   A greeting, a prompt and your aliases on every machine you ssh, docker,
   podman, nomad or kubectl into - without installing anything there.

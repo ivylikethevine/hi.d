@@ -12,7 +12,7 @@
 # Usage: tests/profile.sh [target ...]
 #   target ...   one or more of the names `--list` prints (default: all)
 #   --list       print "<name>  <what it profiles>" and exit
-#   --outdir D   where the profiles are written (default: $TMPDIR/hi.d-profile)
+#   --outdir D   where the profiles are written (default: $TMPDIR/say-hi-profile)
 #   $_HI_TIMEP   a timep.bash you have read, mounted in instead of fetched
 #
 # **It runs in a container, and that is the point.** timep is not a program you
@@ -76,7 +76,7 @@ if [ -z "${_HI_HOME:-}" ]; then
 fi
 export _HI_HOME
 # shellcheck source=../common/core.sh
-source "$_HI_HOME/hi.d/common/core.sh"
+source "$_HI_HOME/say-hi/common/core.sh"
 
 # The targets, as parallel arrays sharing one index: bash 3.2 has no
 # associative arrays (GLOSSARY: HI.03). The body is the string a child bash
@@ -90,14 +90,14 @@ _HI_PROF_WHAT=(
 )
 # shellcheck disable=SC2016 # every body expands in the child bash, not here
 _HI_PROF_BODY=(
-  'source "$_HI_HOME/hi.d/shells/bash.sh"'
-  'source "$_HI_HOME/hi.d/common/header.sh"; hi_header Online'
-  'source "$_HI_HOME/hi.d/common/core.sh"
-   source "$_HI_HOME/hi.d/common/git_prompt.sh"
-   cd "$_HI_HOME/hi.d" || exit 1
+  'source "$_HI_HOME/say-hi/shells/bash.sh"'
+  'source "$_HI_HOME/say-hi/common/header.sh"; hi_header Online'
+  'source "$_HI_HOME/say-hi/common/core.sh"
+   source "$_HI_HOME/say-hi/common/git_prompt.sh"
+   cd "$_HI_HOME/say-hi" || exit 1
    for ((i = 0; i < 50; i++)); do _hi_git_prompt out; done'
   'set --
-   source "$_HI_HOME/hi.d/hi.sh"
+   source "$_HI_HOME/say-hi/hi.sh"
    _hi_payload_tar >/dev/null
    _hi_wire_bytes >/dev/null'
 )
@@ -114,7 +114,7 @@ _HI_PROF_BODY=(
 # hand instead.
 # shellcheck disable=SC2016 # $1 is the container shell's to expand, not ours
 _HI_PROF_RUNNER='
-  git config --global --add safe.directory /work/hi.d || exit 1
+  git config --global --add safe.directory /work/say-hi || exit 1
   if [ ! -r /timep.bash ]; then
     curl -sSL -o /timep.bash \
       https://raw.githubusercontent.com/jkool702/timep/main/timep.bash ||
@@ -176,11 +176,11 @@ function prof_one() { # <name> <what> <body>
   # a profiler that runs arbitrary upstream code cannot touch the tree.
   docker run --rm -t \
     --tmpfs /dev/shm:rw,exec,nosuid,nodev,size=512m \
-    -v "$_HI_ROOT:/work/hi.d:ro" \
+    -v "$_HI_ROOT:/work/say-hi:ro" \
     -v "$out:/out" \
     ${_HI_TIMEP_MOUNT[@]+"${_HI_TIMEP_MOUNT[@]}"} \
     -e _HI_HOME=/work -e _HI_CONFIG_DIR=/out/cfg -e _HI_PROBE_TIMEOUT=1 -e _HI_TARGETS_TTL=5 \
-    -w /work/hi.d "$_HI_PROF_IMAGE" \
+    -w /work/say-hi "$_HI_PROF_IMAGE" \
     bash -c "$_HI_PROF_RUNNER" bash "$body" >"$out/profile.txt" 2>&1 || rc=$?
 
   if [ "$rc" -ne 0 ]; then
@@ -201,7 +201,7 @@ function prof_one() { # <name> <what> <body>
 }
 
 _HI_PROF_IMAGE=hi-timep-profile
-_HI_PROF_DIR="${TMPDIR:-/tmp}/hi.d-profile"
+_HI_PROF_DIR="${TMPDIR:-/tmp}/say-hi-profile"
 declare -a _HI_PROF_WANT=()
 while [ $# -gt 0 ]; do
   case "$1" in

@@ -1,44 +1,44 @@
 # Maintainer: Ivy Duggan <ivylikethevine@gmail.com>
 #
-# The VCS package, built from the branch. Identical to ../hi.d/ except for
+# The VCS package, built from the branch. Identical to ../say-hi/ except for
 # where the source comes from - keep package() in the two in step.
 
-pkgname=hi.d-git
+pkgname=say-hi-git
 pkgver=r0.0000000
 pkgrel=1
 pkgdesc="sshrc supercharged - your shell config, on every host you say hi to (git)"
 arch=('any')
-url="https://github.com/ivylikethevine/hi.d"
+url="https://github.com/ivylikethevine/say-hi"
 license=('MIT')
 # coreutils is in `base`, which packaging guidelines say to assume; openssh is
 # not, and hi runs ssh itself
 depends=('bash' 'openssh')
 makedepends=('git')
-provides=('hi.d')
-conflicts=('hi.d')
+provides=('say-hi')
+conflicts=('say-hi')
 optdepends=('zsh: zsh support on the client'
   'fish: fish support on the client'
   'docker: container targets'
   'podman: container targets'
   'nomad: allocation targets'
   'kubectl: pod targets')
-# The `hi.d::` alias is load-bearing, not cosmetic: install.sh looks for a
-# checkout named exactly hi.d under $srcdir, and without the alias git would
-# clone to hi.d-git. It is also why this one needs no prepare().
-source=("hi.d::git+$url.git#branch=main")
+# The `say-hi::` alias is load-bearing, not cosmetic: install.sh looks for a
+# checkout named exactly say-hi under $srcdir, and without the alias git would
+# clone to say-hi-git. It is also why this one needs no prepare().
+source=("say-hi::git+$url.git#branch=main")
 # SKIP is correct for a VCS source - there is no fixed tarball to sum
 b2sums=('SKIP')
 
 pkgver() {
-  cd "$srcdir/hi.d"
+  cd "$srcdir/say-hi"
   # no tags exist yet, so the rN.shorthash form rather than a git describe;
   # switch to describe once v1.0.0 is out and this package can sort against it
   printf 'r%s.%s' "$(git rev-list --count HEAD)" "$(git rev-parse --short HEAD)"
 }
 
 package() {
-  # see ../hi.d/PKGBUILD for why this is one line
-  DESTDIR="$pkgdir" "$srcdir/hi.d/scripts/install.sh" --prefix /usr/share
+  # see ../say-hi/PKGBUILD for why this is one line
+  DESTDIR="$pkgdir" "$srcdir/say-hi/scripts/install.sh" --prefix /usr/share
 
   # Stamped here too, for the same reason the versioned package stamps, plus
   # one of its own: the installed tree has no .git for `hi --version` to fall
@@ -46,7 +46,7 @@ package() {
   # it), so without this a -git install answers "unknown (no stamp, no git)".
   # $pkgver is the rN.shorthash pkgver() computed above; stamp.sh is the same
   # one implementation the other channels call.
-  "$srcdir/hi.d/packaging/stamp.sh" --root "$pkgdir" --version "$pkgver"
+  "$srcdir/say-hi/packaging/stamp.sh" --root "$pkgdir" --version "$pkgver"
 
-  install -Dm644 "$srcdir/hi.d/LICENSE.md" "$pkgdir/usr/share/licenses/$pkgname/LICENSE.md"
+  install -Dm644 "$srcdir/say-hi/LICENSE.md" "$pkgdir/usr/share/licenses/$pkgname/LICENSE.md"
 }

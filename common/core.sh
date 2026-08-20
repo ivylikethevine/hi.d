@@ -34,8 +34,23 @@ if [ -z "${_hi_core_loaded:-}" ]; then
     eval ": \"\${$_hi_t:=0}\"; export $_hi_t"
   done
   unset _hi_t
-  # the overlay's home; `:=` lets hi.sh point a target at its shipped copy
-  : "${_HI_CONFIG_DIR:=${XDG_CONFIG_HOME:-$HOME/.config}/hi.d}"
+  # The overlay's home; an already-set value wins, which is how hi.sh points a
+  # target at its shipped copy. Two names for the same reason hi.sh's remote
+  # probe carries two: the tree was renamed hi.d -> say-hi, and an overlay is
+  # the user's own data - settings, colors, a git history they may have pushed
+  # somewhere - so an unmigrated ~/.config/hi.d keeps being read where it lies
+  # rather than being silently ignored in favour of an empty new directory.
+  # New name first, and it is what a fresh install creates; `hi --install`
+  # offers to move an old one over (scripts/install.sh's overlay_migrate).
+  if [ -z "${_HI_CONFIG_DIR:-}" ]; then
+    _hi_cfg_base="${XDG_CONFIG_HOME:-$HOME/.config}"
+    if [ ! -d "$_hi_cfg_base/say-hi" ] && [ -d "$_hi_cfg_base/hi.d" ]; then
+      _HI_CONFIG_DIR="$_hi_cfg_base/hi.d"
+    else
+      _HI_CONFIG_DIR="$_hi_cfg_base/say-hi"
+    fi
+    unset _hi_cfg_base
+  fi
   export _HI_CONFIG_DIR
   # settings ahead of paths.sh, whose gate reads them - hence the spelled path
   # shellcheck source=/dev/null # user config, may not exist
@@ -43,7 +58,7 @@ if [ -z "${_hi_core_loaded:-}" ]; then
     . "$_HI_CONFIG_DIR/settings.sh"
   fi
   # shellcheck source=./paths.sh
-  source "$_HI_HOME/hi.d/common/paths.sh"
+  source "$_HI_HOME/say-hi/common/paths.sh"
 fi
 
 # Every shell hi wires up, one row each:
@@ -374,7 +389,7 @@ function _hi_hash_color() {
   printf '%s\n' "${_HI_COLOR_NAMES[@]:$((sum % ${#_HI_COLOR_NAMES[@]})):1}"
 }
 
-# the user/host hi.d is permanently installed on; hi.sh ships these ahead as
+# the user/host say-hi is permanently installed on; hi.sh ships these ahead as
 # _HI_LOCAL_USER/_HI_LOCAL_HOSTNAME (see its _hi_remote_preamble)
 function _hi_local_username() { printf '%s\n' "${_HI_LOCAL_USER:-$(_hi_whoami)}"; }
 function _hi_local_hostname() { printf '%s\n' "${_HI_LOCAL_HOSTNAME:-$(_hi_hostname)}"; }

@@ -27,7 +27,7 @@ trust boundaries sit, and how to report what slipped through.
 - **The payload is an allow list.** What goes over the wire is exactly
   `$_HI_PAYLOAD` at the top of `hi.sh` (`common misc shells load.sh`) -
   docs, tests, CI and editor config never leave the client. Your overlay
-  (`settings.sh`, `colors`, `packages` from `~/.config/hi.d/`) is a
+  (`settings.sh`, `colors`, `packages` from `~/.config/say-hi/`) is a
   second, smaller allow list.
 - **base64 is armor, not crypto.** The payload is base64-encoded so it
   survives the target's login shell unmangled; it provides no
@@ -54,11 +54,11 @@ the target executes was generated on the client.
   abrupt disconnect, not just a clean exit.
 - The rc additions sit between `# hi-config-start` and `# hi-config-end`
   markers and are stripped back out by that same on-exit hook.
-- A target with a permanent `~/hi.d` (you ran `scripts/install.sh`
+- A target with a permanent `~/say-hi` (you ran `scripts/install.sh`
   there) is used in place and nothing is deleted; the rc grafts are
   still cleaned on exit. That permanent tree never needs to be writable
   by you - root-owned, package-manager-installed copies work, because
-  your config lives in `~/.config/hi.d/`.
+  your config lives in `~/.config/say-hi/`.
 - On the client, `install.sh` validates your existing rc files with each
   shell's own syntax checker before touching them, and `--uninstall`
   removes exactly what install wrote.
@@ -72,7 +72,7 @@ the target executes was generated on the client.
   payload and a terminal. Treat your overlay (`settings.sh`, `colors`,
   `packages`) as public to every host you visit. Nothing a target sends
   back is ever executed on the client - the one string hi reads back
-  (the probe for an existing `~/hi.d`) is only interpolated into the
+  (the probe for an existing `~/say-hi`) is only interpolated into the
   script sent back to that same target. Escape sequences in session
   output remain possible, exactly as with plain `ssh`.
 - Backend dispatch trusts your local `~/.ssh/config` and your
@@ -91,6 +91,6 @@ Please don't open a public issue for anything exploitable. Instead,
 either:
 
 - report privately via
-  [GitHub private vulnerability reporting](https://github.com/ivylikethevine/hi.d/security/advisories/new),
+  [GitHub private vulnerability reporting](https://github.com/ivylikethevine/say-hi/security/advisories/new),
   or
 - email <ivylikethevine@gmail.com>.

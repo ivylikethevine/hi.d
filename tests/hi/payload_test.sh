@@ -28,23 +28,23 @@ function test_payload_trims_what_the_overlay_disabled() {
   mkdir -p "$dir"
   printf "#!/bin/sh\nexport _HI_DISABLE_EDITORS='1'\n" >"$dir/settings.sh"
   listing="$(_HI_CONFIG_DIR="$dir" _hi_payload_tar | tar tzf - 2>/dev/null)"
-  case "$listing" in *hi.d/misc/vim.rc*)
+  case "$listing" in *say-hi/misc/vim.rc*)
     _hi_cecho " | _HI_DISABLE_EDITORS=1 still shipped misc/vim.rc" "$RED"
     return 1
     ;;
   esac
-  case "$listing" in *hi.d/misc/nano.rc*)
+  case "$listing" in *say-hi/misc/nano.rc*)
     _hi_cecho " | _HI_DISABLE_EDITORS=1 still shipped misc/nano.rc" "$RED"
     return 1
     ;;
   esac
   # ...and the tree is otherwise intact
-  case "$listing" in *hi.d/misc/aliases.sh*) ;; *)
+  case "$listing" in *say-hi/misc/aliases.sh*) ;; *)
     _hi_cecho " | the trim took misc/aliases.sh with it" "$RED"
     return 1
     ;;
   esac
-  case "$listing" in *hi.d/load.sh*) return 0 ;; esac
+  case "$listing" in *say-hi/load.sh*) return 0 ;; esac
   _hi_cecho " | the trim took load.sh with it" "$RED"
   return 1
 }
@@ -55,12 +55,12 @@ function test_payload_ships_everything_by_default() {
   local dir="$_HI_WORKDIR/notrim" listing
   mkdir -p "$dir"
   listing="$(_HI_CONFIG_DIR="$dir" _hi_payload_tar | tar tzf - 2>/dev/null)"
-  case "$listing" in *hi.d/misc/vim.rc*) ;; *)
+  case "$listing" in *say-hi/misc/vim.rc*) ;; *)
     _hi_cecho " | a default client did not ship misc/vim.rc" "$RED"
     return 1
     ;;
   esac
-  case "$listing" in *hi.d/shells/osc52.sh*) return 0 ;; esac
+  case "$listing" in *say-hi/shells/osc52.sh*) return 0 ;; esac
   _hi_cecho " | a default client did not ship shells/osc52.sh" "$RED"
   return 1
 }
@@ -77,19 +77,19 @@ function test_payload_trims_personal_but_keeps_aliases() {
   printf "#!/bin/sh\nexport _HI_DISABLE_ALIASES='1'\n" >"$dir/settings.sh"
   listing="$(_HI_CONFIG_DIR="$dir" _hi_payload_tar | tar tzf - 2>/dev/null)"
   case "$listing" in
-  *hi.d/misc/personal.sh*)
+  *say-hi/misc/personal.sh*)
     _hi_cecho " | _HI_DISABLE_ALIASES=1 still shipped misc/personal.sh" "$RED"
     return 1
     ;;
   esac
-  case "$listing" in *hi.d/misc/aliases.sh*) ;; *)
+  case "$listing" in *say-hi/misc/aliases.sh*) ;; *)
     _hi_cecho " | _HI_DISABLE_ALIASES=1 dropped misc/aliases.sh, which still carries the editor, hi_copy and tmux aliases" "$RED"
     return 1
     ;;
   esac
   # and the default client ships both
   listing="$(_hi_payload_tar | tar tzf - 2>/dev/null)"
-  case "$listing" in *hi.d/misc/personal.sh*) return 0 ;; esac
+  case "$listing" in *say-hi/misc/personal.sh*) return 0 ;; esac
   _hi_cecho " | a default client did not ship misc/personal.sh" "$RED"
   return 1
 }
@@ -141,7 +141,7 @@ function test_overlay_is_seen_when_present() {
 
 # members land at the archive's top level under their plain names, since it is
 # unpacked straight into the target's config/ - a "colors" that arrived as
-# "hi.d/colors" or "./config/colors" would be invisible to paths.sh
+# "say-hi/colors" or "./config/colors" would be invisible to paths.sh
 function test_overlay_tar_members_are_bare_names() {
   local dir listing
   dir="$(_hi_overlay_fixture members colors packages settings.sh)"

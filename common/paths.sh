@@ -5,8 +5,8 @@
 # shellcheck disable=SC2139 # aliases are meant to expand $_HI_* now, not later
 # shellcheck disable=SC2153 # $_HI_HOME is set by whoever sources this, not here
 
-# hi.d itself
-export _HI_ROOT="$_HI_HOME/hi.d"
+# say-hi itself
+export _HI_ROOT="$_HI_HOME/say-hi"
 export _HI_LAUNCHER="$_HI_ROOT/hi.sh"
 export _HI_CORE="$_HI_ROOT/common/core.sh"
 export _HI_HEADER="$_HI_ROOT/common/header.sh"
@@ -65,9 +65,9 @@ export _HI_HUMAN_SHORT_DATE="+%b %e %y %H:%M %Z"
 # payload ships no scripts/, no tests/ and no .git, so `hi --install` and its
 # siblings have to say why rather than fail as a missing path. They live here,
 # exported, so this file stays the one place that wording exists.
-export _HI_NO_CHECKOUT="needs the full hi.d checkout - not available in a hi session"
+export _HI_NO_CHECKOUT="needs the full say-hi checkout - not available in a hi session"
 # one message for both no-.git shapes
-export _HI_NO_GIT="no .git in $_HI_ROOT - if a package manager installed hi.d, update it there; if this is a hi session, update on the machine hi.d lives on"
+export _HI_NO_GIT="no .git in $_HI_ROOT - if a package manager installed say-hi, update it there; if this is a hi session, update on the machine say-hi lives on"
 alias hi="$_HI_LAUNCHER"
 # The only hi_* alias left; the rest became `hi --flag` (see hi.sh's case
 # block). This one is not a script entry point: it is a single echo, it has to

@@ -193,6 +193,115 @@ function test_overlay_commit_never_creates_a_repo() {
     [ ! -d "$dir/.git" ]
 }
 
+# --- overlay_migrate ---------------------------------------------------------
+#
+# The hi.d -> say-hi rename left existing overlays under the old name.
+# common/core.sh reads one where it lies, so migrating is a tidy-up, not a
+# repair - which is why the non-interactive default is to leave it alone and
+# say so.
+#
+# Each case runs in a fresh bash rather than a subshell, for two reasons that
+# point the same way: overlay_migrate re-sources paths.sh on success, which
+# would repoint $_HI_SETTINGS for every case after it, and install.sh sets
+# _HI_ASSUME_YES itself while parsing "$@" - so `-y` has to arrive as an
+# argument, exactly as it does from `hi --install -y`, not as an environment
+# variable the sourcing would overwrite.
+
+# _hi_names <dir> - the entries directly under <dir>, space-separated. A glob
+# rather than `ls` (SC2012), and glob order is already sorted. "What is on
+# disk" is most of the assertion for a function whose job is to move a
+# directory.
+function _hi_names() {
+  local entry out=""
+  for entry in "$1"/*; do
+    [ -e "$entry" ] || continue
+    out="$out${entry##*/} "
+  done
+  printf '%s' "$out"
+}
+
+# _hi_migrate <xdg-base> <config-dir> <yes|no> - run overlay_migrate the way a
+# real install reaches it, and print what it left $_HI_CONFIG_DIR as
+function _hi_migrate() {
+  local args="set --"
+  [ "$3" = yes ] && args="set -- -y"
+  env XDG_CONFIG_HOME="$1" _HI_CONFIG_DIR="$2" _HI_HOME="$_HI_HOME" HOME="$_HI_WORKDIR" \
+    bash -c "$args
+      source \"\$_HI_HOME/say-hi/scripts/install.sh\" >/dev/null 2>&1
+      overlay_migrate >/dev/null 2>&1
+      printf '%s' \"\$_HI_CONFIG_DIR\"" </dev/null
+}
+
+# _hi_migrate_base <case> - an XDG base holding an old overlay (and, for
+# `both`, a new one beside it), printed
+function _hi_migrate_base() {
+  local base="$_HI_WORKDIR/mig.$1"
+  rm -rf "$base"
+  mkdir -p "$base/hi.d"
+  printf 'export _HI_PROBE=kept\n' >"$base/hi.d/settings.sh"
+  [ "$1" = both ] && mkdir -p "$base/say-hi"
+  printf '%s' "$base"
+}
+
+function test_overlay_migrate_moves_an_old_overlay_with_yes() {
+  local base
+  base="$(_hi_migrate_base yes)"
+  [ "$(_hi_migrate "$base" "$base/hi.d" yes)" = "$base/say-hi" ] &&
+    [ "$(_hi_names "$base")" = "say-hi " ] &&
+    [ "$(cat "$base/say-hi/settings.sh")" = "export _HI_PROBE=kept" ]
+}
+
+# non-interactive and unasked: leaving it is the safe answer, and core.sh keeps
+# reading it, so this must not move anything
+function test_overlay_migrate_leaves_it_alone_without_yes() {
+  local base
+  base="$(_hi_migrate_base no)"
+  [ "$(_hi_migrate "$base" "$base/hi.d" no)" = "$base/hi.d" ] &&
+    [ "$(_hi_names "$base")" = "hi.d " ]
+}
+
+# `mv` onto an existing directory would move *into* it - both stay put instead
+function test_overlay_migrate_refuses_when_both_exist() {
+  local base
+  base="$(_hi_migrate_base both)"
+  [ "$(_hi_migrate "$base" "$base/hi.d" yes)" = "$base/hi.d" ] &&
+    [ "$(_hi_names "$base")" = "hi.d say-hi " ]
+}
+
+# nothing to do, and no heading printed for it either
+function test_overlay_migrate_is_a_noop_with_no_old_overlay() {
+  local base="$_HI_WORKDIR/mig.none" out
+  rm -rf "$base"
+  mkdir -p "$base/say-hi"
+  # shellcheck disable=SC2016 # the child bash expands these, not this shell
+  out="$(env XDG_CONFIG_HOME="$base" _HI_CONFIG_DIR="$base/say-hi" \
+    _HI_HOME="$_HI_HOME" HOME="$_HI_WORKDIR" \
+    bash -c 'set -- -y
+      source "$_HI_HOME/say-hi/scripts/install.sh" >/dev/null 2>&1
+      overlay_migrate 2>&1' </dev/null)"
+  [ -z "$out" ] && [ ! -e "$base/hi.d" ]
+}
+
+# an overlay hi.sh shipped to a target is not ours to move, whatever is in
+# $XDG_CONFIG_HOME
+function test_overlay_migrate_ignores_an_explicit_config_dir() {
+  local base="$_HI_WORKDIR/mig.explicit"
+  rm -rf "$base"
+  mkdir -p "$base/hi.d" "$base/shipped"
+  [ "$(_hi_migrate "$base" "$base/shipped" yes)" = "$base/shipped" ] &&
+    [ "$(_hi_names "$base")" = "hi.d shipped " ]
+}
+
+# a versioned overlay is the case that makes `mv` the only correct mechanism:
+# the .git has to come across intact, remote and all
+function test_overlay_migrate_carries_the_git_history() {
+  local base
+  base="$(_hi_migrate_base git)"
+  (_HI_CONFIG_DIR="$base/hi.d" overlay_init >/dev/null) || return 1
+  [ "$(_hi_migrate "$base" "$base/hi.d" yes)" = "$base/say-hi" ] &&
+    [ -d "$base/say-hi/.git" ] && [ "$(_hi_overlay_commits "$base/say-hi")" = 1 ]
+}
+
 function test_shebang_is_written_to_a_new_settings_file() {
   _hi_settings_fixture shebang_new _hi_shebang_fresh
   [ "$(head -n 1 "$(_hi_fixture_settings shebang_new)")" = "#!/bin/sh" ]
@@ -469,21 +578,21 @@ function test_config_hi_degrades_when_sudo_cannot_link() {
 # install_tree run (or several runs)
 function _hi_package_src() {
   local dir="$_HI_WORKDIR/$1" item
-  mkdir -p "$dir/src/hi.d/common" "$dir/src/hi.d/misc" "$dir/src/hi.d/scripts" "$dir/src/hi.d/shells"
-  for item in hi.sh load.sh LICENSE.md README.md; do printf 'x\n' >"$dir/src/hi.d/$item"; done
+  mkdir -p "$dir/src/say-hi/common" "$dir/src/say-hi/misc" "$dir/src/say-hi/scripts" "$dir/src/say-hi/shells"
+  for item in hi.sh load.sh LICENSE.md README.md; do printf 'x\n' >"$dir/src/say-hi/$item"; done
 }
 
 # Stand a scratch tree up and run install_tree against it.
 function _hi_package_fixture() {
   local dir="$_HI_WORKDIR/$1"
-  local _HI_ROOT="$dir/src/hi.d" _HI_PREFIX="/usr/share" DESTDIR="$dir/dest"
+  local _HI_ROOT="$dir/src/say-hi" _HI_PREFIX="/usr/share" DESTDIR="$dir/dest"
   _hi_package_src "$1"
   install_tree >/dev/null
 }
 
 function test_install_tree_copies_the_tree_under_destdir() {
   _hi_package_fixture copies
-  local dest="$_HI_WORKDIR/copies/dest/usr/share/hi.d"
+  local dest="$_HI_WORKDIR/copies/dest/usr/share/say-hi"
   [ -d "$dest/common" ] && [ -d "$dest/misc" ] && [ -d "$dest/shells" ] &&
     [ -f "$dest/load.sh" ] && [ -x "$dest/hi.sh" ]
 }
@@ -493,7 +602,7 @@ function test_install_tree_copies_the_tree_under_destdir() {
 # every user of that package has to run once) would not be there to run.
 function test_install_tree_ships_scripts() {
   _hi_package_fixture scripts
-  [ -d "$_HI_WORKDIR/scripts/dest/usr/share/hi.d/scripts" ]
+  [ -d "$_HI_WORKDIR/scripts/dest/usr/share/say-hi/scripts" ]
 }
 
 # the man page: gzipped outside the tree when the source has one (a checkout
@@ -501,7 +610,7 @@ function test_install_tree_ships_scripts() {
 # tree doesn't, and install_tree must simply skip it then)
 function test_install_tree_stages_the_man_page() {
   local dir="$_HI_WORKDIR/man"
-  local _HI_ROOT="$dir/src/hi.d" _HI_PREFIX="/usr/share" DESTDIR="$dir/dest"
+  local _HI_ROOT="$dir/src/say-hi" _HI_PREFIX="/usr/share" DESTDIR="$dir/dest"
   _hi_package_src man
   mkdir -p "$_HI_ROOT/docs"
   printf '.TH HI 1\n' >"$_HI_ROOT/docs/hi.1"
@@ -518,14 +627,14 @@ function test_install_tree_skips_the_man_page_without_a_source() {
 # the staging root, which won't exist by then
 function test_install_tree_links_hi_without_destdir_in_the_target() {
   _hi_package_fixture link
-  [ "$(readlink "$_HI_WORKDIR/link/dest/usr/bin/hi")" = "/usr/share/hi.d/hi.sh" ]
+  [ "$(readlink "$_HI_WORKDIR/link/dest/usr/bin/hi")" = "/usr/share/say-hi/hi.sh" ]
 }
 
 # a package can't rewrite anyone's rc file, so profile.d is the only place it
 # can put the _HI_HOME every shell needs before it sources anything
 function test_install_tree_writes_the_profile_snippet() {
   _hi_package_fixture profile
-  grep -qF 'export _HI_HOME="/usr/share"' "$_HI_WORKDIR/profile/dest/etc/profile.d/hi.d.sh"
+  grep -qF 'export _HI_HOME="/usr/share"' "$_HI_WORKDIR/profile/dest/etc/profile.d/say-hi.sh"
 }
 
 function test_install_tree_touches_no_rc_file() {
@@ -538,10 +647,10 @@ function test_install_tree_touches_no_rc_file() {
 function test_install_tree_clears_a_stale_destination() {
   local dir="$_HI_WORKDIR/staledest"
   _hi_package_fixture staledest
-  printf 'stale\n' >"$dir/dest/usr/share/hi.d/leftover"
-  local _HI_ROOT="$dir/src/hi.d" _HI_PREFIX="/usr/share" DESTDIR="$dir/dest"
+  printf 'stale\n' >"$dir/dest/usr/share/say-hi/leftover"
+  local _HI_ROOT="$dir/src/say-hi" _HI_PREFIX="/usr/share" DESTDIR="$dir/dest"
   install_tree >/dev/null
-  [ ! -e "$dir/dest/usr/share/hi.d/leftover" ] && [ -f "$dir/dest/usr/share/hi.d/load.sh" ]
+  [ ! -e "$dir/dest/usr/share/say-hi/leftover" ] && [ -f "$dir/dest/usr/share/say-hi/load.sh" ]
 }
 
 # clearing the dest removes a pre-existing symlink itself, never its target
@@ -550,11 +659,11 @@ function test_install_tree_replaces_a_symlinked_dest_without_following() {
   _hi_package_src symdest
   mkdir -p "$dir/dest/usr/share" "$dir/elsewhere"
   printf 'keep\n' >"$dir/elsewhere/precious"
-  ln -s "$dir/elsewhere" "$dir/dest/usr/share/hi.d"
-  local _HI_ROOT="$dir/src/hi.d" _HI_PREFIX="/usr/share" DESTDIR="$dir/dest"
+  ln -s "$dir/elsewhere" "$dir/dest/usr/share/say-hi"
+  local _HI_ROOT="$dir/src/say-hi" _HI_PREFIX="/usr/share" DESTDIR="$dir/dest"
   install_tree >/dev/null
-  [ -f "$dir/elsewhere/precious" ] && [ ! -L "$dir/dest/usr/share/hi.d" ] &&
-    [ -f "$dir/dest/usr/share/hi.d/load.sh" ]
+  [ -f "$dir/elsewhere/precious" ] && [ ! -L "$dir/dest/usr/share/say-hi" ] &&
+    [ -f "$dir/dest/usr/share/say-hi/load.sh" ]
 }
 
 function test_strip_marker_removes_tagged_lines_only() {
@@ -743,6 +852,14 @@ function run_install_tests() {
   _hi_check_requires git "A tracked overlay commits settings writes" test_overlay_commit_records_a_change_when_tracked
   _hi_check_requires git "Nothing new, no commit" test_overlay_commit_is_a_noop_with_nothing_new
   _hi_check_requires git "An untracked overlay never hears about git" test_overlay_commit_never_creates_a_repo
+
+  _hi_h2 "Testing: overlay_migrate (hi.d -> say-hi)"
+  _hi_check "--yes moves an old overlay across" test_overlay_migrate_moves_an_old_overlay_with_yes
+  _hi_check "Non-interactive leaves it where it is" test_overlay_migrate_leaves_it_alone_without_yes
+  _hi_check "Refuses when both names exist" test_overlay_migrate_refuses_when_both_exist
+  _hi_check "Silent no-op with no old overlay" test_overlay_migrate_is_a_noop_with_no_old_overlay
+  _hi_check "Ignores an explicit \$_HI_CONFIG_DIR" test_overlay_migrate_ignores_an_explicit_config_dir
+  _hi_check_requires git "Carries a versioned overlay's history" test_overlay_migrate_carries_the_git_history
 
   _hi_h2 "Testing: ensure_settings_shebang"
   _hi_check "Written to a new settings.sh" test_shebang_is_written_to_a_new_settings_file

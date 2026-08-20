@@ -22,9 +22,9 @@ source "$_HI_INSTALL"
 
 _HI_PKG_DIR="$_HI_ROOT/packaging"
 _HI_NFPM="$_HI_PKG_DIR/nfpm/nfpm.yaml"
-_HI_FORMULA="$_HI_PKG_DIR/homebrew/hi.d.rb"
-_HI_PKGBUILD="$_HI_PKG_DIR/aur/hi.d/PKGBUILD"
-_HI_PKGBUILD_GIT="$_HI_PKG_DIR/aur/hi.d-git/PKGBUILD"
+_HI_FORMULA="$_HI_PKG_DIR/homebrew/say-hi.rb"
+_HI_PKGBUILD="$_HI_PKG_DIR/aur/say-hi/PKGBUILD"
+_HI_PKGBUILD_GIT="$_HI_PKG_DIR/aur/say-hi-git/PKGBUILD"
 _HI_RELEASE_WF="$_HI_ROOT/.github/workflows/release.yml"
 _HI_TOOLS_TXT="$_HI_ROOT/.github/actions/setup-tool/tools.txt"
 
@@ -84,7 +84,7 @@ function test_nfpm_references_the_staging_root() {
 function test_nfpm_symlink_matches_install_tree() {
   local dest declared actual
   dest="$(stage_fixture)"
-  declared="$(sed -n 's|^ *- src: \(/usr/share/hi.d/hi.sh\)$|\1|p' "$_HI_NFPM" | head -1)"
+  declared="$(sed -n 's|^ *- src: \(/usr/share/say-hi/hi.sh\)$|\1|p' "$_HI_NFPM" | head -1)"
   actual="$(readlink "$dest/usr/bin/hi")"
   [ -n "$declared" ] && [ "$declared" = "$actual" ]
 }
@@ -103,12 +103,12 @@ function test_nfpm_apk_entries_match_package_contents() {
   local m src
   for m in "${_HI_PACKAGE_CONTENTS[@]}"; do
     if [ -d "$_HI_ROOT/$m" ]; then
-      src="./dist/staging/usr/share/hi.d/$m/*"
+      src="./dist/staging/usr/share/say-hi/$m/*"
     else
       # install_tree's cp lands file entries flat by basename, so the apk entry
       # carries the flat name too - which is every entry's own name today, but
       # stays correct if a nested one is ever added back
-      src="./dist/staging/usr/share/hi.d/${m##*/}"
+      src="./dist/staging/usr/share/say-hi/${m##*/}"
     fi
     grep -qF -- "- src: $src" "$_HI_NFPM" || {
       _hi_cecho "   no apk entry for $m" "$RED"
@@ -124,7 +124,7 @@ function test_nfpm_apk_entries_match_package_contents() {
 function test_nfpm_apk_globs_cover_the_staged_depth() {
   local dest deep
   dest="$(stage_fixture)"
-  deep="$(find "$dest/usr/share/hi.d" -mindepth 2 -type d)"
+  deep="$(find "$dest/usr/share/say-hi" -mindepth 2 -type d)"
   [ -z "$deep" ] || {
     _hi_cecho "   nested dirs need their own apk glob entries: $deep" "$RED"
     return 1
@@ -137,7 +137,7 @@ function test_nfpm_apk_globs_cover_the_staged_depth() {
 # shellcheck disable=SC2016 # ${HI_APK_KEY} is nfpm's to expand, quoted as literal text
 function test_nfpm_declares_the_apk_signature() {
   grep -qF 'key_file: ${HI_APK_KEY}' "$_HI_NFPM" &&
-    grep -qF 'key_name: hi.d.rsa.pub' "$_HI_NFPM"
+    grep -qF 'key_name: say-hi.rsa.pub' "$_HI_NFPM"
 }
 
 # The formula cannot call install.sh (install_tree hardcodes /usr/bin and
@@ -146,20 +146,20 @@ function test_nfpm_declares_the_apk_signature() {
 function test_formula_file_list_matches_package_contents() {
   local expected actual
   expected="$(printf '%s\n' "${_HI_PACKAGE_CONTENTS[@]}" | LC_ALL=C sort)"
-  # The quoted strings in the (libexec/"hi.d").install call, which wraps over
+  # The quoted strings in the (libexec/"say-hi").install call, which wraps over
   # several lines. Bounded by "the last line that does not end in a comma"
   # rather than by a blank line: the next statement is chmod 0755,
-  # libexec/"hi.d/hi.sh", and swallowing that put a phantom entry in the list.
-  # "hi.d" itself is the destination directory, not a content, so it is dropped.
-  actual="$(awk '/\(libexec\/"hi\.d"\)\.install/ { inside = 1 }
+  # libexec/"say-hi/hi.sh", and swallowing that put a phantom entry in the list.
+  # "say-hi" itself is the destination directory, not a content, so it is dropped.
+  actual="$(awk '/\(libexec\/"say-hi"\)\.install/ { inside = 1 }
                  inside { print; if (!/,[[:space:]]*$/) exit }' "$_HI_FORMULA" |
-    grep -oE '"[^"]+"' | tr -d '"' | grep -v '^hi\.d$' | LC_ALL=C sort)"
+    grep -oE '"[^"]+"' | tr -d '"' | grep -v '^say-hi$' | LC_ALL=C sort)"
   [ "$expected" = "$actual" ]
 }
 
-# the tree has to land in a directory called hi.d, or $_HI_HOME/hi.d misses it
-function test_formula_installs_into_a_hi_d_directory() {
-  grep -qF '(libexec/"hi.d").install' "$_HI_FORMULA"
+# the tree has to land in a directory called say-hi, or $_HI_HOME/say-hi misses it
+function test_formula_installs_into_a_say_hi_directory() {
+  grep -qF '(libexec/"say-hi").install' "$_HI_FORMULA"
 }
 
 # hi.sh never locates itself, so a bare symlink on PATH would resolve the tree
@@ -196,19 +196,19 @@ function test_pkgbuilds_call_install_sh() {
   done
 }
 
-# install.sh resolves $_HI_HOME as <checkout>/.. and then wants $_HI_HOME/hi.d,
-# so each PKGBUILD has to arrange for a $srcdir/hi.d - by symlink in the
-# versioned one, by the `hi.d::` source alias in the git one.
+# install.sh resolves $_HI_HOME as <checkout>/.. and then wants $_HI_HOME/say-hi,
+# so each PKGBUILD has to arrange for a $srcdir/say-hi - by symlink in the
+# versioned one, by the `say-hi::` source alias in the git one.
 # shellcheck disable=SC2016 # makepkg's variables as literal text, see above
-function test_pkgbuilds_give_install_sh_a_hi_d_named_checkout() {
-  grep -qF 'ln -sfn "$srcdir/$pkgname-$pkgver" "$srcdir/hi.d"' "$_HI_PKGBUILD" &&
-    grep -qF 'source=("hi.d::git+' "$_HI_PKGBUILD_GIT"
+function test_pkgbuilds_give_install_sh_a_say_hi_named_checkout() {
+  grep -qF 'ln -sfn "$srcdir/$pkgname-$pkgver" "$srcdir/say-hi"' "$_HI_PKGBUILD" &&
+    grep -qF 'source=("say-hi::git+' "$_HI_PKGBUILD_GIT"
 }
 
 # a VCS package that does not conflict with the versioned one gets both installed
 function test_git_pkgbuild_provides_and_conflicts() {
-  grep -qF "provides=('hi.d')" "$_HI_PKGBUILD_GIT" &&
-    grep -qF "conflicts=('hi.d')" "$_HI_PKGBUILD_GIT"
+  grep -qF "provides=('say-hi')" "$_HI_PKGBUILD_GIT" &&
+    grep -qF "conflicts=('say-hi')" "$_HI_PKGBUILD_GIT"
 }
 
 function test_pkgbuild_and_formula_agree_on_the_version() {
@@ -220,7 +220,7 @@ function test_pkgbuild_and_formula_agree_on_the_version() {
 function test_srcinfo_agrees_with_its_pkgbuild() {
   local pkgver
   pkgver="$(sed -n 's/^pkgver=//p' "$_HI_PKGBUILD" | head -1)"
-  grep -qF "pkgver = $pkgver" "$_HI_PKG_DIR/aur/hi.d/.SRCINFO"
+  grep -qF "pkgver = $pkgver" "$_HI_PKG_DIR/aur/say-hi/.SRCINFO"
 }
 
 # .SRCINFO is generated from the PKGBUILD but committed by hand, and only its
@@ -354,10 +354,10 @@ function test_bump_check_rejects_a_version_the_manifests_do_not_carry() {
 function bump_fixture() {
   local dir="$_HI_WORKDIR/bump"
   rm -rf "$dir"
-  mkdir -p "$dir/aur/hi.d" "$dir/homebrew" "$dir/src"
-  cp "$_HI_PKG_DIR/aur/hi.d/PKGBUILD" "$dir/aur/hi.d/PKGBUILD"
-  cp "$_HI_PKG_DIR/aur/hi.d/.SRCINFO" "$dir/aur/hi.d/.SRCINFO"
-  cp "$_HI_PKG_DIR/homebrew/hi.d.rb" "$dir/homebrew/hi.d.rb"
+  mkdir -p "$dir/aur/say-hi" "$dir/homebrew" "$dir/src"
+  cp "$_HI_PKG_DIR/aur/say-hi/PKGBUILD" "$dir/aur/say-hi/PKGBUILD"
+  cp "$_HI_PKG_DIR/aur/say-hi/.SRCINFO" "$dir/aur/say-hi/.SRCINFO"
+  cp "$_HI_PKG_DIR/homebrew/say-hi.rb" "$dir/homebrew/say-hi.rb"
   printf 'hello\n' >"$dir/src/file"
   tar -czf "$dir/src.tar.gz" -C "$dir" src
 }
@@ -404,7 +404,7 @@ function test_bump_srcinfo_fallback_rewrites_the_three_lines() {
     _hi_bump_env
     rewrite_srcinfo_lines feedbeef
     grep -qF 'pkgver = 9.9.9' "$_HI_SRCINFO" &&
-      grep -qF 'source = hi.d-9.9.9.tar.gz::' "$_HI_SRCINFO" &&
+      grep -qF 'source = say-hi-9.9.9.tar.gz::' "$_HI_SRCINFO" &&
       grep -qF 'v9.9.9.tar.gz' "$_HI_SRCINFO" &&
       grep -qF 'b2sums = feedbeef' "$_HI_SRCINFO" &&
       grep -q $'^\tpkgver' "$_HI_SRCINFO" # the leading tab survived the sed
@@ -434,7 +434,7 @@ function test_bump_check_catches_stale_srcinfo_b2sums() {
 }
 
 function test_bump_check_catches_stale_srcinfo_source() {
-  _hi_bump_check_rejects 's|^\([[:space:]]*\)source = .*|\1source = hi.d-0.0.1.tar.gz::x/v0.0.1.tar.gz|'
+  _hi_bump_check_rejects 's|^\([[:space:]]*\)source = .*|\1source = say-hi-0.0.1.tar.gz::x/v0.0.1.tar.gz|'
 }
 
 # a wrong tool or wrong output field shows up as a wrong constant
@@ -502,7 +502,7 @@ function test_every_channel_stamps_through_stamp_sh() {
 function test_no_channel_kept_a_private_stamp() {
   local f
   for f in "$_HI_PKG_DIR/mkpkg.sh" "$_HI_PKGBUILD" "$_HI_PKGBUILD_GIT" "$_HI_FORMULA"; do
-    grep -qE 's/\^_HI_RELEASE=|inreplace libexec/"hi\.d/hi\.sh"' "$f" && {
+    grep -qE 's/\^_HI_RELEASE=|inreplace libexec/"say-hi/hi\.sh"' "$f" && {
       _hi_cecho " | $f still carries its own stamp" "$RED"
       return 1
     }
@@ -520,7 +520,7 @@ function test_formula_stamps_the_th_date_with_the_version() {
 function test_package_sh_stamps_the_staged_launcher() {
   local out
   out="$(_hi_staged_999)" &&
-    grep -qF '_HI_RELEASE="9.9.9"' "$out/staging/usr/share/hi.d/hi.sh"
+    grep -qF '_HI_RELEASE="9.9.9"' "$out/staging/usr/share/say-hi/hi.sh"
 }
 
 # through the same --stage-only run as the launcher's check: the staged gz
@@ -529,7 +529,7 @@ function test_package_sh_stamps_the_staged_man_page() {
   local out
   out="$(_hi_staged_999)" &&
     gzip -dc "$out/staging/usr/share/man/man1/hi.1.gz" |
-    grep -qE '^\.TH HI 1 "[0-9]{4}-[0-9]{2}-[0-9]{2}" "hi\.d 9\.9\.9"'
+    grep -qE '^\.TH HI 1 "[0-9]{4}-[0-9]{2}-[0-9]{2}" "say-hi 9\.9\.9"'
 }
 
 # write_checksums also writes dist/ARTIFACTS, which is what release.yml reads
@@ -538,9 +538,9 @@ function test_package_sh_stamps_the_staged_man_page() {
 function test_write_checksums_lists_the_artifacts() {
   local d="$_HI_WORKDIR/artifacts"
   mkdir -p "$d"
-  : >"$d/hi.d_1.0.0_amd64.deb"
-  : >"$d/hi.d-1.0.0.x86_64.rpm"
-  : >"$d/hi.d-1.0.0.apk"
+  : >"$d/say-hi_1.0.0_amd64.deb"
+  : >"$d/say-hi-1.0.0.x86_64.rpm"
+  : >"$d/say-hi-1.0.0.apk"
   # sourced in a subshell rather than at suite level: mkpkg.sh's
   # `[[ BASH_SOURCE == $0 ]] || return 0` guard is the seam, and the suite
   # already sources bump.sh at the top - two of them would collide
@@ -556,7 +556,7 @@ function test_write_checksums_lists_the_artifacts() {
   }
   # every built file, plus SHA256SUMS, basenames only - and nothing else
   diff <(sort "$d/ARTIFACTS") \
-    <(printf '%s\n' hi.d-1.0.0.apk hi.d-1.0.0.x86_64.rpm hi.d_1.0.0_amd64.deb SHA256SUMS | sort) ||
+    <(printf '%s\n' say-hi-1.0.0.apk say-hi-1.0.0.x86_64.rpm say-hi_1.0.0_amd64.deb SHA256SUMS | sort) ||
     return 1
   # ...and it agrees with what SHA256SUMS covers
   diff <(awk '{ print $2 }' "$d/SHA256SUMS" | sort) \
@@ -571,10 +571,10 @@ function test_write_checksums_lists_the_artifacts() {
 # shellcheck disable=SC2016 # hi.sh's ${...:-} default, written as literal text
 function _hi_stamp_fixture() {
   local dir="$_HI_WORKDIR/stamp.$$.$RANDOM"
-  mkdir -p "$dir/usr/share/hi.d" "$dir/usr/share/man/man1"
-  printf '#!/bin/bash\n_HI_RELEASE="${_HI_RELEASE:-}"\n' >"$dir/usr/share/hi.d/hi.sh"
-  chmod 755 "$dir/usr/share/hi.d/hi.sh"
-  printf '.TH HI 1 "1970-01-01" "hi.d 0.0.0" "User Commands"\n.SH NAME\n' \
+  mkdir -p "$dir/usr/share/say-hi" "$dir/usr/share/man/man1"
+  printf '#!/bin/bash\n_HI_RELEASE="${_HI_RELEASE:-}"\n' >"$dir/usr/share/say-hi/hi.sh"
+  chmod 755 "$dir/usr/share/say-hi/hi.sh"
+  printf '.TH HI 1 "1970-01-01" "say-hi 0.0.0" "User Commands"\n.SH NAME\n' \
     >"$dir/usr/share/man/man1/hi.1"
   [ "${1:-}" = plain ] || gzip -9n "$dir/usr/share/man/man1/hi.1"
   printf '%s' "$dir"
@@ -586,7 +586,7 @@ function test_stamp_writes_the_release_line() {
   local d
   d="$(_hi_stamp_fixture)"
   _hi_stamp --root "$d" --version 9.9.9 --date 2026-01-02 &&
-    grep -qF '_HI_RELEASE="9.9.9"' "$d/usr/share/hi.d/hi.sh"
+    grep -qF '_HI_RELEASE="9.9.9"' "$d/usr/share/say-hi/hi.sh"
 }
 
 function test_stamp_writes_the_th_line() {
@@ -594,7 +594,7 @@ function test_stamp_writes_the_th_line() {
   d="$(_hi_stamp_fixture)"
   _hi_stamp --root "$d" --version 9.9.9 --date 2026-01-02 &&
     gzip -dc "$d/usr/share/man/man1/hi.1.gz" |
-    grep -qF '.TH HI 1 "2026-01-02" "hi.d 9.9.9" "User Commands"'
+    grep -qF '.TH HI 1 "2026-01-02" "say-hi 9.9.9" "User Commands"'
 }
 
 # no --date: the day of $SOURCE_DATE_EPOCH, which is what makes the packaged
@@ -622,10 +622,10 @@ function test_stamp_is_idempotent() {
   local d
   d="$(_hi_stamp_fixture)"
   _hi_stamp --root "$d" --version 3.3.3 --date 2026-01-02 || return 1
-  cp "$d/usr/share/hi.d/hi.sh" "$d/launcher.first"
+  cp "$d/usr/share/say-hi/hi.sh" "$d/launcher.first"
   cp "$d/usr/share/man/man1/hi.1.gz" "$d/man.first"
   _hi_stamp --root "$d" --version 3.3.3 --date 2026-01-02 || return 1
-  cmp -s "$d/launcher.first" "$d/usr/share/hi.d/hi.sh" &&
+  cmp -s "$d/launcher.first" "$d/usr/share/say-hi/hi.sh" &&
     cmp -s "$d/man.first" "$d/usr/share/man/man1/hi.1.gz"
 }
 
@@ -635,9 +635,9 @@ function test_stamp_is_idempotent() {
 function test_stamp_keeps_the_launcher_exec_bit() {
   local d before after
   d="$(_hi_stamp_fixture)"
-  before="$(ls -l "$d/usr/share/hi.d/hi.sh" | awk '{ print $1 }')"
+  before="$(ls -l "$d/usr/share/say-hi/hi.sh" | awk '{ print $1 }')"
   _hi_stamp --root "$d" --version 4.4.4 --date 2026-01-02 || return 1
-  after="$(ls -l "$d/usr/share/hi.d/hi.sh" | awk '{ print $1 }')"
+  after="$(ls -l "$d/usr/share/say-hi/hi.sh" | awk '{ print $1 }')"
   [ "$before" = "$after" ]
 }
 
@@ -646,7 +646,7 @@ function test_stamp_keeps_the_launcher_exec_bit() {
 function test_stamp_fails_on_a_missing_release_line() {
   local d
   d="$(_hi_stamp_fixture)"
-  printf '#!/bin/bash\necho hi\n' >"$d/usr/share/hi.d/hi.sh"
+  printf '#!/bin/bash\necho hi\n' >"$d/usr/share/say-hi/hi.sh"
   _hi_stamp --root "$d" --version 1.0.0 --date 2026-01-02 >/dev/null 2>&1 && return 1
   return 0
 }
@@ -656,10 +656,10 @@ function test_stamp_takes_explicit_paths() {
   local d
   d="$(_hi_stamp_fixture plain)"
   _hi_stamp --version 5.5.5 --date 5.5.5 \
-    --launcher "$d/usr/share/hi.d/hi.sh" \
+    --launcher "$d/usr/share/say-hi/hi.sh" \
     --man "$d/usr/share/man/man1/hi.1" || return 1
-  grep -qF '_HI_RELEASE="5.5.5"' "$d/usr/share/hi.d/hi.sh" &&
-    grep -qF '.TH HI 1 "5.5.5" "hi.d 5.5.5"' "$d/usr/share/man/man1/hi.1" &&
+  grep -qF '_HI_RELEASE="5.5.5"' "$d/usr/share/say-hi/hi.sh" &&
+    grep -qF '.TH HI 1 "5.5.5" "say-hi 5.5.5"' "$d/usr/share/man/man1/hi.1" &&
     [ ! -f "$d/usr/share/man/man1/hi.1.gz" ]
 }
 
@@ -670,19 +670,19 @@ function test_stamp_skips_a_missing_man_page() {
   d="$(_hi_stamp_fixture)"
   rm -f "$d/usr/share/man/man1/hi.1.gz"
   _hi_stamp --root "$d" --version 6.6.6 --date 2026-01-02 &&
-    grep -qF '_HI_RELEASE="6.6.6"' "$d/usr/share/hi.d/hi.sh"
+    grep -qF '_HI_RELEASE="6.6.6"' "$d/usr/share/say-hi/hi.sh"
 }
 
 function test_package_sh_stage_only_needs_no_nfpm() {
   local out="$_HI_WORKDIR/pkgdist"
   "$_HI_PKG_DIR/mkpkg.sh" --stage-only --outdir "$out" >/dev/null 2>&1 &&
-    [ -f "$out/staging/usr/share/hi.d/hi.sh" ]
+    [ -f "$out/staging/usr/share/say-hi/hi.sh" ]
 }
 
 function test_package_sh_version_flag_wins() {
   local out
   out="$("$_HI_PKG_DIR/mkpkg.sh" --version 7.7.7 --stage-only --outdir "$_HI_WORKDIR/pkgdist2" 2>&1)"
-  [[ "$out" == *"Packaging hi.d 7.7.7"* ]]
+  [[ "$out" == *"Packaging say-hi 7.7.7"* ]]
 }
 
 # Two stagings under the same pinned SOURCE_DATE_EPOCH carry identical - and
@@ -694,8 +694,8 @@ function test_stage_mtimes_are_clamped_and_reproducible() {
   SOURCE_DATE_EPOCH=946684800 "$_HI_PKG_DIR/mkpkg.sh" --stage-only --outdir "$a" >/dev/null 2>&1 &&
     SOURCE_DATE_EPOCH=946684800 "$_HI_PKG_DIR/mkpkg.sh" --stage-only --outdir "$b" >/dev/null 2>&1 ||
     return 1
-  a="$a/staging/usr/share/hi.d/hi.sh"
-  b="$b/staging/usr/share/hi.d/hi.sh"
+  a="$a/staging/usr/share/say-hi/hi.sh"
+  b="$b/staging/usr/share/say-hi/hi.sh"
   touch "$ref"
   [ ! "$a" -nt "$b" ] && [ ! "$b" -nt "$a" ] && [ "$a" -ot "$ref" ]
 }
@@ -704,7 +704,7 @@ function test_package_sh_rejects_unknown_arguments() {
   ! "$_HI_PKG_DIR/mkpkg.sh" --bogus >/dev/null 2>&1
 }
 
-# a checkout not named hi.d (CI paths, worktrees) gets the shim
+# a checkout not named say-hi (CI paths, worktrees) gets the shim
 function test_staged_launcher_shims_a_misnamed_checkout() {
   ln -sfn "$_HI_ROOT" "$_HI_WORKDIR/checkout"
   (
@@ -714,7 +714,7 @@ function test_staged_launcher_shims_a_misnamed_checkout() {
     _HI_ROOT="$_HI_WORKDIR/checkout"
     _HI_DIST="$_HI_WORKDIR/pkgdist3"
     out="$(staged_launcher)"
-    [ "$out" = "$_HI_DIST/shim/hi.d/scripts/install.sh" ] && [ -x "$out" ]
+    [ "$out" = "$_HI_DIST/shim/say-hi/scripts/install.sh" ] && [ -x "$out" ]
   )
 }
 
@@ -743,14 +743,14 @@ function run_packaging_tests() {
 
   _hi_h2 "Testing: the Homebrew formula"
   _hi_check "File list matches _HI_PACKAGE_CONTENTS" test_formula_file_list_matches_package_contents
-  _hi_check "Installs into a hi.d/ directory" test_formula_installs_into_a_hi_d_directory
+  _hi_check "Installs into a say-hi/ directory" test_formula_installs_into_a_say_hi_directory
   _hi_check "Wrapper exports _HI_HOME" test_formula_ships_a_wrapper_that_exports_hi_home
   _hi_check "Caveats point at --no-link" test_formula_caveats_use_no_link
 
   _hi_h2 "Testing: the PKGBUILDs"
   _hi_check "Both call install.sh --prefix" test_pkgbuilds_call_install_sh
-  _hi_check "Both give it a hi.d-named checkout" test_pkgbuilds_give_install_sh_a_hi_d_named_checkout
-  _hi_check "hi.d-git provides/conflicts hi.d" test_git_pkgbuild_provides_and_conflicts
+  _hi_check "Both give it a say-hi-named checkout" test_pkgbuilds_give_install_sh_a_say_hi_named_checkout
+  _hi_check "say-hi-git provides/conflicts say-hi" test_git_pkgbuild_provides_and_conflicts
 
   _hi_h2 "Testing: versions agree"
   _hi_check "PKGBUILD and formula agree" test_pkgbuild_and_formula_agree_on_the_version

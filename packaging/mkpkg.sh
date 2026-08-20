@@ -19,27 +19,27 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
 _HI_PACKAGERS=(deb rpm apk)
 _HI_NFPM_CONFIG="$_HI_ROOT/packaging/nfpm/nfpm.yaml"
-_HI_PKGBUILD="$_HI_ROOT/packaging/aur/hi.d/PKGBUILD"
+_HI_PKGBUILD="$_HI_ROOT/packaging/aur/say-hi/PKGBUILD"
 _HI_DIST="$_HI_ROOT/dist"
 _HI_STAGE_ONLY=""
 _HI_VERSION=""
 _HI_USAGE="Usage: mkpkg.sh [--version <x.y.z>] [--stage-only] [--outdir <dir>]"
 
-# install.sh insists on a checkout named exactly hi.d ($_HI_HOME/hi.d is how it
-# finds everything). A clone directory called anything else - hi.d-main, a
+# install.sh insists on a checkout named exactly say-hi ($_HI_HOME/say-hi is how it
+# finds everything). A clone directory called anything else - say-hi-main, a
 # worktree, a CI checkout path - would otherwise fail here rather than in the
 # packager's build, so give it the name it wants under a scratch parent.
 function staged_launcher() {
   local shim
-  if [ "$(basename "$_HI_ROOT")" = hi.d ]; then
+  if [ "$(basename "$_HI_ROOT")" = say-hi ]; then
     printf '%s' "$_HI_ROOT/scripts/install.sh"
     return 0
   fi
   shim="$_HI_DIST/shim"
   rm -rf "$shim"
   mkdir -p "$shim"
-  ln -sfn "$_HI_ROOT" "$shim/hi.d"
-  printf '%s' "$shim/hi.d/scripts/install.sh"
+  ln -sfn "$_HI_ROOT" "$shim/say-hi"
+  printf '%s' "$shim/say-hi/scripts/install.sh"
 }
 
 function stage_tree() {
@@ -150,12 +150,12 @@ while [ $# -gt 0 ]; do
     cat <<EOF
 $_HI_USAGE
 
-Stages hi.d the way a package manager would (scripts/install.sh --prefix
+Stages say-hi the way a package manager would (scripts/install.sh --prefix
 /usr/share, into dist/staging) and then builds ${_HI_PACKAGERS[*]} packages
 from that staging root with nfpm.
 
   --version <x.y.z>  Version to stamp. Defaults to the pkgver in
-                     packaging/aur/hi.d/PKGBUILD, which packaging/bump.sh
+                     packaging/aur/say-hi/PKGBUILD, which packaging/bump.sh
                      owns - that file is the one version of record.
   --stage-only       Stop after staging. Needs no nfpm, and is the quickest
                      way to see exactly what a package would contain.
@@ -187,7 +187,7 @@ if [ -z "$SOURCE_DATE_EPOCH" ]; then
 fi
 export SOURCE_DATE_EPOCH
 
-_hi_h1 "Packaging hi.d $_HI_VERSION"
+_hi_h1 "Packaging say-hi $_HI_VERSION"
 _hi_cecho " | root: $_HI_ROOT | outdir: $_HI_DIST" "$BLUE"
 
 stage_tree

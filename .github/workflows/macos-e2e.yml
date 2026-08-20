@@ -52,8 +52,8 @@ jobs:
           # hi.sh derives its own tree now (GLOSSARY: HI.33), so this export is
           # belt and braces rather than the thing that makes the run work. It
           # stays because a wrong tree here is invisible - this job's first real
-          # run sourced a /Users/runner/hi.d that was never there - and saying
-          # which tree is meant costs one line. The workspace *is* the hi.d
+          # run sourced a tree under /Users/runner that was never there - and saying
+          # which tree is meant costs one line. The workspace *is* the say-hi
           # directory, so _HI_HOME is its parent.
           _HI_HOME="$(cd .. && pwd)"
           export _HI_HOME

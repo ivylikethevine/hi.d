@@ -65,24 +65,24 @@ function _hi_bench() {
 
 function bench_bash_startup() {
   _hi_bench "bash rc (shells/bash.sh)" 500 10 \
-    _hi_bench_env bash -c 'source "$_HI_HOME/hi.d/shells/bash.sh"'
+    _hi_bench_env bash -c 'source "$_HI_HOME/say-hi/shells/bash.sh"'
 }
 
 function bench_zsh_startup() {
   _hi_bench "zsh rc (shells/zsh.zsh)" 500 10 \
-    _hi_bench_env zsh -c 'source "$_HI_HOME/hi.d/shells/zsh.zsh"'
+    _hi_bench_env zsh -c 'source "$_HI_HOME/say-hi/shells/zsh.zsh"'
 }
 
 function bench_fish_startup() {
   _hi_bench "fish rc (shells/config.fish)" 500 10 \
-    _hi_bench_env fish -c 'source $_HI_HOME/hi.d/shells/config.fish'
+    _hi_bench_env fish -c 'source $_HI_HOME/say-hi/shells/config.fish'
 }
 
 # the connect banner the user watches before getting a shell; backend probes
 # are capped at 1s each by the env above
 function bench_header() {
   _hi_bench "header (hi_header Online)" 3000 3 \
-    _hi_bench_env bash -c 'source "$_HI_HOME/hi.d/common/header.sh"; hi_header Online'
+    _hi_bench_env bash -c 'source "$_HI_HOME/say-hi/common/header.sh"; hi_header Online'
 }
 
 # per-prompt cost: many calls inside ONE shell, so the number is the
@@ -90,9 +90,9 @@ function bench_header() {
 function bench_git_prompt() {
   _hi_bench "git prompt (50 calls, one shell)" 2500 1 \
     _hi_bench_env bash -c '
-      source "$_HI_HOME/hi.d/common/core.sh"
-      source "$_HI_HOME/hi.d/common/git_prompt.sh"
-      cd "$_HI_HOME/hi.d" || exit 1
+      source "$_HI_HOME/say-hi/common/core.sh"
+      source "$_HI_HOME/say-hi/common/git_prompt.sh"
+      cd "$_HI_HOME/say-hi" || exit 1
       for ((i = 0; i < 50; i++)); do _hi_git_prompt out; done'
 }
 

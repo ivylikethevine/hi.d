@@ -1,29 +1,37 @@
 # Configuration
 
-Your config lives **outside the checkout**, in `${XDG_CONFIG_HOME:-$HOME/.config}/hi.d/` (`$_HI_CONFIG_DIR`).
+Your config lives **outside the checkout**, in `${XDG_CONFIG_HOME:-$HOME/.config}/say-hi/` (`$_HI_CONFIG_DIR`).
 `colors` and `packages` there override the tree's copies, one file at a time - anything you haven't
 overridden keeps tracking the default the tree ships, so `hi --update` still delivers changes to the rest.
 `settings.sh` has no in-tree counterpart at all: `hi --configure` only ever writes it here.
 
 | overlay file                 | overrides        | what it is                                                                                                                            |
 | ----------------------------- | ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `~/.config/hi.d/settings.sh` | -                | what `hi --configure` writes                                                                                                            |
-| `~/.config/hi.d/colors`      | `misc/colors`    | your color pins                                                                                                                       |
-| `~/.config/hi.d/packages`    | `misc/packages`  | what the package check looks for                                                                                                      |
-| `~/.config/hi.d/tmux.conf`   | `misc/tmux.conf` | your tmux config                                                                                                                      |
-| `~/.config/hi.d/aliases.sh`  | -                | your own aliases, sourced **after** `misc/aliases.sh` and `misc/personal.sh` so yours win - additive, never a replacement, and in the same POSIX+fish subset |
+| `~/.config/say-hi/settings.sh` | -                | what `hi --configure` writes                                                                                                            |
+| `~/.config/say-hi/colors`      | `misc/colors`    | your color pins                                                                                                                       |
+| `~/.config/say-hi/packages`    | `misc/packages`  | what the package check looks for                                                                                                      |
+| `~/.config/say-hi/tmux.conf`   | `misc/tmux.conf` | your tmux config                                                                                                                      |
+| `~/.config/say-hi/aliases.sh`  | -                | your own aliases, sourced **after** `misc/aliases.sh` and `misc/personal.sh` so yours win - additive, never a replacement, and in the same POSIX+fish subset |
 
-This is what keeps configuring hi.d from dirtying the checkout (so `hi --update`'s `git pull` keeps applying
+**Coming from `hi.d`?** The tree used to be called `hi.d`, and so did this
+directory. An existing `~/.config/hi.d` is still read exactly where it is - hi
+prefers `~/.config/say-hi` and falls back to the old name when only that one
+exists, so nothing breaks by ignoring the rename. `hi --install` offers to move
+it across once (a `mv`, so a `hi --overlay-init` git history comes with it), and
+`hi --doctor` says which one it is reading. The fallback is a migration aid and
+will be dropped a release or two after v1.
+
+This is what keeps configuring say-hi from dirtying the checkout (so `hi --update`'s `git pull` keeps applying
 cleanly), and why the tree never has to be writable at all - it can be root-owned, installed by a package
 manager. All of it rides along to every host you say `hi` to, in its own small archive.
 
-Want history on it? `hi --overlay-init` makes `~/.config/hi.d` a git repo _in place_: from then on
+Want history on it? `hi --overlay-init` makes `~/.config/say-hi` a git repo _in place_: from then on
 `hi --configure` commits its own settings writes, `hi --doctor` reports the commit count, and a push remote is one
 `git remote add` away. Entirely optional. (Keeping the same directory in chezmoi or yadm works just as well -
 see [ALTERNATIVES.md](ALTERNATIVES.md).)
 
 Everything below is an environment variable, checked where it's used. `hi --configure` writes your answers to
-`~/.config/hi.d/settings.sh`, which every shell sources ahead of `common/paths.sh` - a plain `#!/bin/sh` script
+`~/.config/say-hi/settings.sh`, which every shell sources ahead of `common/paths.sh` - a plain `#!/bin/sh` script
 of `export NAME=value` lines, valid in sh, bash, zsh and fish alike. You never have to use `hi --configure`:
 exporting any of these by hand works just as well, and takes precedence for that shell. The one exception is
 marked read-only in its row: `common/paths.sh` derives it on every source, so an exported value never lasts.
@@ -69,7 +77,7 @@ everything else; `shells/osc52.sh` is the whole implementation if you want to re
 
 Every username and hostname resolves to a color derived from its own name, so an unpinned host looks the
 same from every machine you say `hi` from - nothing to generate, nothing that can go missing. Pin the ones
-that matter in `~/.config/hi.d/colors`: `username,root,red`, `hostname,bastion,yellow`, or
+that matter in `~/.config/say-hi/colors`: `username,root,red`, `hostname,bastion,yellow`, or
 `hosttag,prod,red` to color every host carrying a `# Tags: prod` comment above its `Host` line in
 `~/.ssh/config`. A pin always beats the hash.
 
@@ -81,7 +89,7 @@ of, drawn in the colors themselves, each row naming the rule it matched:
 ## tmux
 
 `misc/tmux.conf` is reached the way `vim.rc` is - through an alias, `tmux -f <conf>` - and overridden the same
-way, by dropping your own `~/.config/hi.d/tmux.conf`. Beyond the usual defaults it does one hi-specific thing:
+way, by dropping your own `~/.config/say-hi/tmux.conf`. Beyond the usual defaults it does one hi-specific thing:
 it appends the `_HI_*` variables to tmux's `update-environment`, so a window opened **after** attaching gets a
 shell that can still find hi. Without it, `tmux new-window` on a remote box gives a bare prompt, the tmux
 server predating the connection and knowing nothing about `$_HI_HOME`.
@@ -91,7 +99,7 @@ Two limits worth stating plainly:
 - `-f` is read when the tmux **server** starts, not when a client attaches, so attaching to an already-running
   server applies none of the config - tmux's rule, not hi's. The `update-environment` half still works, being
   refreshed on every attach.
-- The alias is defined **only where hi.d is permanent** - your own machine, or a target where
+- The alias is defined **only where say-hi is permanent** - your own machine, or a target where
   `scripts/install.sh` has been run. On a disposable target hi deletes the tree on exit and a detached tmux
   outlives the session, so every shell inside it would wake up reading a directory that is gone. Plain `tmux`
   still works there, without hi's config.
@@ -131,7 +139,7 @@ Each is **on by default**; set it to `0` to hide that line. All are ignored when
 | variable               | default               | what it does                                                                                                                                                                                                                                                                                                   |
 | ----------------------- | ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `_HI_MAX_WIDTH`        | `80`                  | terminal columns the header and banner are drawn to                                                                                                                                                                                                                                                            |
-| `_HI_HOME`             | derived               | the **parent** of your `hi.d` directory - everything resolves `$_HI_HOME/hi.d`. Each entry point derives it from its own path when unset; set it to override                                                                                                                                                                                                                                 |
+| `_HI_HOME`             | derived               | the **parent** of your `say-hi` directory - everything resolves `$_HI_HOME/say-hi`. Each entry point derives it from its own path when unset; set it to override                                                                                                                                                                                                                                 |
 | `_HI_TARGETS_TTL`      | `5`                   | seconds `hi <TAB>` reuses its target list for; `0` disables the cache                                                                                                                                                                                                                                          |
 | `_HI_PROBE_TIMEOUT`    | `2`                   | seconds any one backend CLI gets, during completion and in the header                                                                                                                                                                                                                                          |
 | `_HI_SSH_CONFIG`       | `~/.ssh/config`       | read-only: where ssh hosts and their `# Tags:` comments are read from. Derived from `$HOME` by `common/paths.sh` every time it is sourced, so exporting your own value does not survive - point `$HOME` at another tree if you need a different config                                                          |

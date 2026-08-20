@@ -3,7 +3,7 @@
 # hi.sh's real ssh path over actual ssh, which is what proves _say_hi's
 # armor and quoting survive whatever shell sshd hands the command to. The
 # images cover: bash/dash/zsh/fish logins; bash 3.2 (what macOS ships, and what
-# keeps hi free of bash-4 builtins); a pre-installed hi.d, to prove _say_hi
+# keeps hi free of bash-4 builtins); a pre-installed say-hi, to prove _say_hi
 # loads it in place rather than shipping a tree, and the same install at a
 # non-default path, which only _hi_remote_root's rc-reading probe can find;
 # bash-less alpine with only zsh
@@ -316,7 +316,7 @@ function run_ssh_tests() {
     -f "$(_hi_dockerfile sshd-bash32)" "$_hi_ctx" && _HI_BASH32_OK=1
 
   # the repo itself is this one's build context - it is the working tree that
-  # lands at ~/hi.d in the image
+  # lands at ~/say-hi in the image
   _HI_INSTALLED_OK=0
   if [ "$_HI_DEBIAN_OK" -eq 1 ]; then
     _hi_build_image debian-installed "hi-sshtest-debian-installed-$$" "the pre-installed case" \
@@ -324,7 +324,7 @@ function run_ssh_tests() {
       -f "$(_hi_dockerfile installed)" "$_HI_ROOT" && _HI_INSTALLED_OK=1
   fi
 
-  # The same tree, installed away from ~/hi.d - the shape _hi_remote_root's
+  # The same tree, installed away from ~/say-hi - the shape _hi_remote_root's
   # probe exists for. Same build context (the repo) as the image above.
   _HI_NESTED_OK=0
   if [ "$_HI_DEBIAN_OK" -eq 1 ]; then
@@ -348,7 +348,7 @@ function run_ssh_tests() {
   # find runs inside the container so the file list and the parser agree on
   # what a path is
   function test_bash32_parses_every_file() {
-    docker run --rm -v "$_HI_HOME/hi.d":/w:ro bash:3.2 bash -c '
+    docker run --rm -v "$_HI_HOME/say-hi":/w:ro bash:3.2 bash -c '
       rc=0
       for f in $(find /w -name "*.sh" -not -path "*/.git/*"); do
         out=$(bash -n "$f" 2>&1) || {
@@ -423,14 +423,14 @@ function run_ssh_tests() {
 
   if [ "$_HI_INSTALLED_OK" -eq 1 ]; then
     _hi_par_case installed _hi_run_case installed "hi-sshtest-debian-installed-$$" /bin/bash "$(_hi_probe_cmd "$_HI_TEST_MARKER" installed)" \
-      'test -f /home/hitest/hi.d/.installed_sentinel'
+      'test -f /home/hitest/say-hi/.installed_sentinel'
     # the one case that catches load.sh's clean_all deleting the target's own
     # permanent install: a command-shaped case can't, since $CMDARG means
     # clean_all never runs at all. Also asserts the rc graft came back out.
     _hi_par_case installed-interactive _hi_run_interactive_case installed-interactive "hi-sshtest-debian-installed-$$" /bin/bash \
-      'test -f /home/hitest/hi.d/.installed_sentinel && test -x /home/hitest/hi.d/hi.sh && ! grep -q hi-config-start /home/hitest/.bashrc'
+      'test -f /home/hitest/say-hi/.installed_sentinel && test -x /home/hitest/say-hi/hi.sh && ! grep -q hi-config-start /home/hitest/.bashrc'
     # The same permanent install behind a *fish* login shell. _hi_remote_root's
-    # probe reaches that shell before any sh does, and `_r="$HOME/hi.d"` is not
+    # probe reaches that shell before any sh does, and `_r="$HOME/say-hi"` is not
     # an assignment in fish - unwrapped, this answered "nothing installed" and
     # hi shipped a tree the target already had. The marker asserts $_HI_ROOT is
     # the permanent one, so a regression here fails rather than merely wasting
@@ -439,23 +439,23 @@ function run_ssh_tests() {
       "$(_hi_probe_cmd "$_HI_TEST_MARKER" installed)"
   fi
 
-  # A permanent hi.d that is not at ~/hi.d. Asserted on the *connect path*
+  # A permanent say-hi that is not at ~/say-hi. Asserted on the *connect path*
   # twice over, because a session that merely works proves nothing here - hi
   # copying its payload over would produce one too: $_HI_ROOT has to be the
   # nested tree, and the transcript has to carry the connect prefix _say_hi
   # only prints when _hi_remote_root answered. The post-check pins the other
-  # half: nothing was written to ~/hi.d, so the answer came from install.sh's
+  # half: nothing was written to ~/say-hi, so the answer came from install.sh's
   # rc line rather than from a tree that happened to be at the default path.
   if [ "$_HI_NESTED_OK" -eq 1 ]; then
     _hi_par_case installed-nested _hi_run_case installed-nested "hi-sshtest-debian-nested-$$" /bin/bash \
       "$(_hi_probe_cmd "$_HI_TEST_MARKER" installed_nested)" \
-      'test -f /home/hitest/opt/nested/hi.d/.installed_sentinel && ! test -e /home/hitest/hi.d' \
-      'local hi.d install'
+      'test -f /home/hitest/opt/nested/say-hi/.installed_sentinel && ! test -e /home/hitest/say-hi' \
+      'local say-hi install'
     # and behind a fish login shell, which is where the probe is reached by a
     # shell that parses none of it - the same trap the installed-fish case
     # below catches for the default path
     _hi_par_case installed-nested-fish _hi_run_case installed-nested-fish "hi-sshtest-debian-nested-$$" /usr/bin/fish \
-      "$(_hi_probe_cmd "$_HI_TEST_MARKER" installed_nested)" "" 'local hi.d install'
+      "$(_hi_probe_cmd "$_HI_TEST_MARKER" installed_nested)" "" 'local say-hi install'
   fi
 
   if [ "$_HI_TMUX_OK" -eq 1 ]; then

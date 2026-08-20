@@ -68,7 +68,7 @@ jobs:
           # stays because under Git Bash a wrong tree resolves to
           # /c/Users/runneradmin rather than the checkout on D:, and that is
           # invisible until the session is already wrong. The workspace *is* the
-          # hi.d directory, so _HI_HOME is its parent; derived with `cd ..`
+          # say-hi directory, so _HI_HOME is its parent; derived with `cd ..`
           # because $GITHUB_WORKSPACE is a backslashed path bash cannot walk.
           _HI_HOME="$(cd .. && pwd)"
           export _HI_HOME

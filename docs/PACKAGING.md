@@ -90,15 +90,15 @@ two e2e workflows deliberately carry none: `ci.yml` calls them on every push to
 
 `hi.sh` locates itself - it walks `$0` through any symlinks and takes the tree from where it lands, so
 `/usr/bin/hi` pointing into a package prefix resolves correctly on its own (GLOSSARY: HI.33). Everything
-then resolves against `$_HI_ROOT="$_HI_HOME/hi.d"`. What a channel still owes is the layout and the
-handoff: put the tree in a directory literally named `hi.d`, and make sure `_HI_HOME` names that
+then resolves against `$_HI_ROOT="$_HI_HOME/say-hi"`. What a channel still owes is the layout and the
+handoff: put the tree in a directory literally named `say-hi`, and make sure `_HI_HOME` names that
 directory's **parent** in the environment, because a _new_ process with no tree to derive from - a login
 shell, tmux's `update-environment`, another machine's `hi` probing this one - has nothing else to read.
 
 | channel            | tree                 | how `_HI_HOME` gets set                                    |
 | ------------------ | -------------------- | ---------------------------------------------------------- |
-| AUR, deb, rpm, apk | `/usr/share/hi.d`    | `/etc/profile.d/hi.d.sh`, written by `install_tree`        |
-| Homebrew           | `<keg>/libexec/hi.d` | the `bin/hi` wrapper, plus the rc line `install.sh` writes |
+| AUR, deb, rpm, apk | `/usr/share/say-hi`    | `/etc/profile.d/say-hi.sh`, written by `install_tree`        |
+| Homebrew           | `<keg>/libexec/say-hi` | the `bin/hi` wrapper, plus the rc line `install.sh` writes |
 
 `scripts/install.sh --prefix /usr/share` (with `$DESTDIR`) does all of this and is the single decider of
 what a packaged install contains — `_HI_PACKAGE_CONTENTS` and `install_tree()` in that file. Both AUR
@@ -113,9 +113,9 @@ prefix. `tests/packaging/packaging_test.sh` fails if that copy drifts.
 | `mkpkg.sh`         | stages the tree, stamps it, then builds deb/rpm/apk with nfpm                       |
 | `stamp.sh`         | writes the version into a built tree's `hi.sh` and man page; every channel calls it |
 | `bump.sh`          | writes the version + real checksums into every manifest; `--check` verifies         |
-| `aur/hi.d/`        | the versioned AUR package (`PKGBUILD`, `.SRCINFO`)                                  |
-| `aur/hi.d-git/`    | the same package built from `main`                                                  |
-| `homebrew/hi.d.rb` | the tap formula                                                                     |
+| `aur/say-hi/`        | the versioned AUR package (`PKGBUILD`, `.SRCINFO`)                                  |
+| `aur/say-hi-git/`    | the same package built from `main`                                                  |
+| `homebrew/say-hi.rb` | the tap formula                                                                     |
 | `nfpm/nfpm.yaml`   | deb/rpm/apk, built from the staged tree                                             |
 
 **The version stamp.** `packaging/stamp.sh` writes `_HI_RELEASE=` into the `hi.sh` a channel installs and
@@ -167,15 +167,15 @@ are pushed by CI once their secrets exist — the checks each section describes 
 ### AUR
 
 Not done yet — no account, no submission. When you do, run the gate below for **each** package:
-`aur/hi.d-git` today, `aur/hi.d` once v1.0.0 exists. namcap is the hard step, not a suggestion — push
+`aur/say-hi-git` today, `aur/say-hi` once v1.0.0 exists. namcap is the hard step, not a suggestion — push
 nothing while either its `PKGBUILD` or its built-package run has complaints.
 
 ```bash
-cd packaging/aur/hi.d-git        # then again in packaging/aur/hi.d
+cd packaging/aur/say-hi-git        # then again in packaging/aur/say-hi
 makepkg -f                       # builds it
 namcap PKGBUILD                  # lints the recipe itself
 namcap ./*.pkg.tar.zst           # catches hardcoded paths and bad permissions
-pacman -Qlp ./*.pkg.tar.zst      # /usr/share/hi.d/..., /usr/bin/hi, /etc/profile.d/hi.d.sh
+pacman -Qlp ./*.pkg.tar.zst      # /usr/share/say-hi/..., /usr/bin/hi, /etc/profile.d/say-hi.sh
 ```
 
 **What a clean run looks like.** `namcap PKGBUILD` is silent. `namcap` on the built package prints exactly
@@ -190,7 +190,7 @@ W: Dependency included, but may not be needed ('openssh')          # hi runs ssh
 Anything else is a real finding. (`coreutils` is deliberately not in `depends` — it is in `base`, which
 packaging guidelines say to assume.)
 
-**The end-to-end check**, which is what caught the `hi.d-git` package shipping no version stamp:
+**The end-to-end check**, which is what caught the `say-hi-git` package shipping no version stamp:
 
 ```bash
 docker run --rm -v "$PWD:/pkgs:ro" archlinux:base bash -c '
@@ -202,18 +202,18 @@ Both packages have been through all of this against a local clone (the only subs
 the repo not being published yet): built, linted, installed into a clean Arch container, exercised, and
 removed with nothing left behind.
 
-Then push `PKGBUILD` + `.SRCINFO` — only those two — to `ssh://aur@aur.archlinux.org/hi.d-git.git`,
-`hi.d-git` first since it needs no tag. **That first push is the manual one**, because it is where namcap
-gates. After it, `release.yml`'s `aur` job pushes the versioned `hi.d` on every release, given the
-`AUR_SSH_KEY` secret; `hi.d-git` has no version to bump and CI never touches it.
+Then push `PKGBUILD` + `.SRCINFO` — only those two — to `ssh://aur@aur.archlinux.org/say-hi-git.git`,
+`say-hi-git` first since it needs no tag. **That first push is the manual one**, because it is where namcap
+gates. After it, `release.yml`'s `aur` job pushes the versioned `say-hi` on every release, given the
+`AUR_SSH_KEY` secret; `say-hi-git` has no version to bump and CI never touches it.
 
-Never submit the versioned package with `b2sums=('SKIP')` — `SKIP` is correct only on `hi.d-git`, whose
+Never submit the versioned package with `b2sums=('SKIP')` — `SKIP` is correct only on `say-hi-git`, whose
 source is a git ref.
 
 ### Homebrew tap
 
 A tap is just a GitHub repo named `homebrew-tap` with a `Formula/` directory. Copy
-`packaging/homebrew/hi.d.rb` to `Formula/hi.d.rb` there and `brew install ivy/tap/hi.d` works — no review,
+`packaging/homebrew/say-hi.rb` to `Formula/say-hi.rb` there and `brew install ivy/tap/say-hi` works — no review,
 no approval, which is exactly why `brew audit --strict` is a hard gate here.
 
 **The copy is automated, the checks are not.** `release.yml`'s `tap` job (behind the same approval as
@@ -223,21 +223,21 @@ repo with contents + pull-requests write — and without it the job says so and 
 state until the tap repo exists. Merging the PR is yours, as is running these first:
 
 ```bash
-brew install --build-from-source ./packaging/homebrew/hi.d.rb
-brew test hi.d
-brew audit --strict --new hi.d
+brew install --build-from-source ./packaging/homebrew/say-hi.rb
+brew test say-hi
+brew audit --strict --new say-hi
 ```
 
 `brew audit` needs a _named_ formula, so it wants one in a tap: `brew tap-new ivy/tap`, copy the file into
-its `Formula/`, then `brew audit --strict --new ivy/tap/hi.d`. Passing a path is refused outright.
+its `Formula/`, then `brew audit --strict --new ivy/tap/say-hi`. Passing a path is refused outright.
 
 **What a clean run looks like** — this has been run in the `homebrew/brew` container against a local
 tarball, the only substitution being `url`/`sha256`: install and test exit 0, and audit reports only these
 two, which are the unpublished repo and nothing else:
 
 ```text
-* The homepage URL https://github.com/ivylikethevine/hi.d is not reachable (HTTP status code 404)
-* HEAD: The URL https://github.com/ivylikethevine/hi.d.git is not a valid Git URL
+* The homepage URL https://github.com/ivylikethevine/say-hi is not reachable (HTTP status code 404)
+* HEAD: The URL https://github.com/ivylikethevine/say-hi.git is not a valid Git URL
 ```
 
 Two real findings came out of that run and are fixed: the description had to start with a capital, and
@@ -253,7 +253,7 @@ rather than a keg under `/opt/homebrew` — but nothing about the formula itself
 Built by `mkpkg.sh` and attached to the GitHub Release. Users install the file:
 
 ```bash
-sudo apt install ./hi.d_1.0.0_all.deb
+sudo apt install ./say-hi_1.0.0_all.deb
 ```
 
 The apk is signed (once the `APK_SIGNING_KEY` secret exists — see the ROADMAP checklist) with a key apk
@@ -261,9 +261,9 @@ verifies against `/etc/apk/keys/`, so Alpine users install the public key once a
 `--allow-untrusted`:
 
 ```sh
-wget -O /etc/apk/keys/hi.d.rsa.pub \
-  https://raw.githubusercontent.com/ivylikethevine/hi.d/main/packaging/apk/hi.d.rsa.pub
-apk add ./hi.d_1.0.0_noarch.apk
+wget -O /etc/apk/keys/say-hi.rsa.pub \
+  https://raw.githubusercontent.com/ivylikethevine/say-hi/main/packaging/apk/say-hi.rsa.pub
+apk add ./say-hi_1.0.0_noarch.apk
 ```
 
 A quirk worth knowing: the apk enumerates its contents per `_HI_PACKAGE_CONTENTS` member in `nfpm.yaml`
@@ -282,7 +282,7 @@ tests/test_runner.sh packaging install header   # the offline drift guards
 packaging/mkpkg.sh --stage-only               # inspect exactly what ships
 find dist/staging \( -type f -o -type l \)
 packaging/mkpkg.sh                            # needs nfpm on PATH
-dpkg-deb -c dist/hi.d_*_all.deb
+dpkg-deb -c dist/say-hi_*_all.deb
 ```
 
 ### Reproducibility
@@ -306,7 +306,7 @@ The honest end-to-end check for the `/etc/profile.d` snippet, which is the part 
 
 ```bash
 docker run --rm -it -v "$PWD/dist:/dist" debian:stable \
-  bash -lc 'apt-get update -qq && apt-get install -y /dist/hi.d_*_all.deb && echo "$_HI_HOME" && hi'
+  bash -lc 'apt-get update -qq && apt-get install -y /dist/say-hi_*_all.deb && echo "$_HI_HOME" && hi'
 ```
 
 ## After installing from a package
@@ -314,9 +314,9 @@ docker run --rm -it -v "$PWD/dist:/dist" debian:stable \
 The tree is root-owned and holds nobody's settings. Each user runs, once:
 
 ```bash
-/usr/share/hi.d/scripts/install.sh --no-link
+/usr/share/say-hi/scripts/install.sh --no-link
 ```
 
-`--no-link` skips the `/usr/bin/hi` symlink the package already owns. Answers go to `~/.config/hi.d/`,
+`--no-link` skips the `/usr/bin/hi` symlink the package already owns. Answers go to `~/.config/say-hi/`,
 never into the tree, which is what lets a root-owned checkout work at all. `hi --update` correctly refuses to
 `git pull` and points at the package manager instead.

@@ -1,6 +1,6 @@
 # Glossary of deliberate oddities
 
-hi.d's shell code has three masters: **bash 3.2** (macOS's `/bin/bash`, the
+say-hi's shell code has three masters: **bash 3.2** (macOS's `/bin/bash`, the
 floor CI enforces), **POSIX sh** (dash/ash/busybox source parts of it), and
 **fish** (which parses `common/paths.sh`, `misc/aliases.sh` and
 `settings.sh` natively). On top of that, targets split between **GNU and BSD
@@ -237,7 +237,7 @@ target as local and strips hi for anyone with `_HI_DISABLE_LOCAL=1`.
 `settings.sh` keeps its `[ -f ]` guard because nothing writes it until
 install.sh runs, and a bare `.` on a missing file abandons the rest of the
 file in ash/dash. `_HI_CONFIG_DIR` points at the target's own `config/`, where
-the shipped overlay was unpacked - not a `~/.config/hi.d` belonging to
+the shipped overlay was unpacked - not a `~/.config/say-hi` belonging to
 whoever we logged in as, and not `misc/`, which holds the _shipped_ copies of
 the same names.
 
@@ -306,7 +306,7 @@ configs are grafted onto every rc file either way; the user's are not.
 ## HI.26 completion probe knobs
 
 `targets.sh` runs on every TAB after `hi` and a space - the most latency-sensitive path
-in hi.d and the slowest (four of five backends are a subprocess each). Two
+in say-hi and the slowest (four of five backends are a subprocess each). Two
 knobs keep it honest: `_HI_PROBE_TIMEOUT` is the seconds any one backend CLI
 gets (default 2, needs GNU `timeout`; shared with `common/core.sh`'s
 `_hi_probe`) or an unreachable daemon hangs completion unbounded, and
@@ -318,7 +318,7 @@ paying ~110ms per TAB.
 
 Two rules for `misc/tmux.conf`: `-f` is read when the _server_ starts, not
 when a client attaches, so attaching to someone else's server applies none of
-it; and the `tmux` alias exists only where hi.d is permanent (no
+it; and the `tmux` alias exists only where say-hi is permanent (no
 `$_HI_CLEANUP`) - a detached tmux outlives the ssh session, and on a
 disposable target the tree it reads is deleted on exit.
 
@@ -374,12 +374,12 @@ silently.
 
 ## HI.33 derived tree location
 
-`$_HI_HOME` is the directory _containing_ `hi.d`, and every file that needs the
+`$_HI_HOME` is the directory _containing_ `say-hi`, and every file that needs the
 tree derives it from its own path rather than defaulting to `$HOME`. The
 default was a guess that is right for a standard install and wrong everywhere
 else - and when it was wrong it did not fail, it silently read _another tree_.
-Both platform e2e jobs spent their first real run sourcing a
-`/Users/runner/hi.d` that was never there.
+Both platform e2e jobs spent their first real run sourcing a tree under
+`/Users/runner` that was never there.
 
 Each dialect asks the question its own way, and each asks it only when
 `$_HI_HOME` is unset, so an outer layer's export (`hi.sh`'s ssh preamble,
@@ -414,7 +414,7 @@ from `${BASH_SOURCE[0]}` - but only as the fallback:
 ```sh
 _hi_d="${BASH_SOURCE[0]}"
 case "$_hi_d" in */*) _hi_d="${_hi_d%/*}/.." ;; *) _hi_d=".." ;; esac
-[ -z "${_HI_HOME:-}" ] || _hi_d="$_HI_HOME/hi.d"
+[ -z "${_HI_HOME:-}" ] || _hi_d="$_HI_HOME/say-hi"
 ```
 
 When `$_HI_HOME` is set, _everything_ has to come from there, core.sh included.
@@ -429,13 +429,20 @@ derived path holds no tree. And on a _target_ - the one machine with no
 checkout to derive from - `_hi_remote_root`'s probe asks in this order:
 
 1. `export _HI_HOME=` / `set -gx _HI_HOME` in `~/.bashrc`, `~/.zshrc`,
-   `~/.config/fish/config.fish`, and `/etc/profile.d/hi.d.sh` for a packaged
+   `~/.config/fish/config.fish`, and `/etc/profile.d/say-hi.sh` for a packaged
    install. Read as _files_: the probe runs under `sh -c` over ssh, which is
    neither a login nor an interactive shell and sources none of them.
-2. `$HOME/hi.d`.
+2. `$HOME`.
+
+Each candidate is then tried under **both** tree names, `say-hi` first and
+`hi.d` second. That is the one place the pre-rename name is still load-bearing
+rather than historical: the probe reads what a _target_ wrote, and a target
+nobody has updated still has `~/hi.d` and an rc line naming it. `/etc/profile.d`
+is read under both names for the same reason. Dropping the old name is a
+migration decision, not a cleanup - `docs/ROADMAP.md` holds it.
 
 The first is the point. A curated tree is exactly the one most likely to live
-somewhere else, and a probe that only knew `$HOME/hi.d` made those targets
+somewhere else, and a probe that only knew `$HOME/say-hi` made those targets
 invisible - hi copied its payload over a checkout already sitting there, the
 slow path, silently. `--tmux` rides on the same answer, since `load.sh` refuses
 it on a disposable tree.

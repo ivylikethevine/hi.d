@@ -36,12 +36,12 @@ set -euo pipefail
 # one on the author's machine) points somewhere else entirely.
 _HI_GEN_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 export _HI_HOME="${_HI_GEN_ROOT%/*}"
-if [ -z "$_HI_HOME" ] || [ "$_HI_HOME/hi.d" != "$_HI_GEN_ROOT" ]; then
-  echo "generate.sh: the checkout has to be named hi.d; this one is $_HI_GEN_ROOT" >&2
+if [ -z "$_HI_HOME" ] || [ "$_HI_HOME/say-hi" != "$_HI_GEN_ROOT" ]; then
+  echo "generate.sh: the checkout has to be named say-hi; this one is $_HI_GEN_ROOT" >&2
   exit 1
 fi
 # shellcheck source=../../common/core.sh
-source "$_HI_HOME/hi.d/common/core.sh"
+source "$_HI_HOME/say-hi/common/core.sh"
 # core.sh clears all three on its way out (it is sourced into interactive
 # shells, where an error must not close the session). This is a batch tool, so
 # take two of them back - but not errexit: one tape failing has to leave the

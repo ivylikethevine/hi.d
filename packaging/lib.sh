@@ -5,7 +5,7 @@
 # this file; that boundary-forced copy is documented there, as is hi.sh's - the
 # third copy, for the same reason.
 
-# Locate hi.d relative to the script that sourced this file, resolving
+# Locate say-hi relative to the script that sourced this file, resolving
 # symlinks - BASH_SOURCE[1] is that script, and packaging/ is one level down
 # from the tree root, so the home is its ../../.
 # The same walk as hi.sh's and scripts/install.sh's: fix one, fix all three.
@@ -24,7 +24,7 @@ _HI_HOME="$(cd -P "$(dirname "$_HI_SELF")/../.." && pwd)"
 export _HI_HOME
 
 # shellcheck source=../common/core.sh
-source "$_HI_HOME/hi.d/common/core.sh"
+source "$_HI_HOME/say-hi/common/core.sh"
 
 # sha256 lines ("<sum>  <file>" per argument) and single-file sha256/blake2b,
 # each with a non-coreutils fallback so these also run on a mac (no sha256sum,

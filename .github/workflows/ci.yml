@@ -388,8 +388,8 @@ jobs:
         run: |
           set -euo pipefail
           docker run --rm -v "$PWD/dist:/dist:ro" \
-            -v "$RUNNER_TEMP/smoke.rsa.pub:/etc/apk/keys/hi.d.rsa.pub:ro" \
-            alpine:3.24 sh -c 'apk add /dist/hi.d_*_noarch.apk && sh -lc "hi --version" && ls /usr/share/hi.d/common/core.sh'
+            -v "$RUNNER_TEMP/smoke.rsa.pub:/etc/apk/keys/say-hi.rsa.pub:ro" \
+            alpine:3.24 sh -c 'apk add /dist/say-hi_*_noarch.apk && sh -lc "hi --version" && ls /usr/share/say-hi/common/core.sh'
 
       # the reproducibility contract: the same commit builds byte-identical
       # deb/rpm/apk (SOURCE_DATE_EPOCH from HEAD plus clamped staging mtimes),
@@ -414,7 +414,7 @@ jobs:
       - name: Measure what the packages actually cost
         run: |
           set -euo pipefail
-          deb="$(stat -c%s dist/hi.d_*_all.deb)"
+          deb="$(stat -c%s dist/say-hi_*_all.deb)"
           installed="$(du -sb dist/staging | cut -f1)"
           printf '%s %s\n' "$deb" "$installed" >"${{ runner.temp }}/sizes"
           {

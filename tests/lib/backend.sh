@@ -69,7 +69,7 @@ function _hi_backend_interactive_case() {
     "$timeout_s" "$_HI_LAUNCHER" "$_HI_CONTAINER"; then
     ok=1
     if "$_HI_BACKEND" exec "$_HI_CONTAINER" sh -c 'ls -d /tmp/*.hi.log.* >/dev/null 2>&1'; then
-      _hi_align " | [$label] -- hi.d's copy was left behind in the container" "FAILED" "$RED"
+      _hi_align " | [$label] -- say-hi's copy was left behind in the container" "FAILED" "$RED"
       ok=0
     fi
   fi

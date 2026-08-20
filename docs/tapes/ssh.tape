@@ -1,4 +1,4 @@
-# The ssh permanent-install demo: the target carries its own ~/hi.d, so
+# The ssh permanent-install demo: the target carries its own ~/say-hi, so
 # nothing ships over the wire - hi loads the tree in place and leaves it
 # alone on exit. Render with `vhs docs/tapes/ssh.tape` from the repo root,
 # with docker running and hi on PATH; docs/tapes/fixtures.sh builds the
@@ -7,7 +7,7 @@
 #
 # Its configuration: a trimmed header - _HI_HEADER_TIMESTAMP=0 and
 # _HI_HEADER_SYSINFO=0 - written by docs/tapes/fixtures.sh into the *box's* own
-# ~/.config/hi.d, not the client's. It has to be: the permanent-install path
+# ~/.config/say-hi, not the client's. It has to be: the permanent-install path
 # ships no overlay, so this is the one demo whose knob lives on the target, and
 # that is the story anyway. Both sentinels below come from load.sh rather than
 # the header, so they survive any header toggle.
@@ -34,7 +34,7 @@ Enter
 Show
 
 Sleep 1s
-Type "# an ssh host with a permanent ~/hi.d - nothing ships"
+Type "# an ssh host with a permanent ~/say-hi - nothing ships"
 Enter
 Type "hi -F /tmp/hi-demo/ssh_config web-1"
 Enter

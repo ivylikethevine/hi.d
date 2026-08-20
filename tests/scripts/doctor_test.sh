@@ -65,7 +65,7 @@ EOF
 
     # connect ok; -O teardown ok; the install probe answers per $HI_FAKE_ROOT;
     # the tool-inventory loop answers per $HI_FAKE_TOOLS. Each is matched on a
-    # string only that one script contains - /etc/profile.d/hi.d.sh is in
+    # string only that one script contains - /etc/profile.d/say-hi.sh is in
     # hi.sh's _hi_remote_root_probe and nowhere else it could be confused with.
     cat >"$dir/ssh" <<'EOF'
 #!/bin/sh
@@ -73,7 +73,7 @@ for a in "$@"; do
   [ "$a" = -O ] && exit 0
   [ "$a" = true ] && exit 0
   case "$a" in
-  */etc/profile.d/hi.d.sh*) printf '%s' "${HI_FAKE_ROOT:-}"; exit 0 ;;
+  */etc/profile.d/say-hi.sh*) printf '%s' "${HI_FAKE_ROOT:-}"; exit 0 ;;
   *'for c in base64'*) printf '%s' "${HI_FAKE_TOOLS:-}"; exit 0 ;;
   esac
 done
@@ -177,9 +177,9 @@ function test_target_falls_through_to_ssh() {
 
 function test_ssh_target_reports_a_permanent_install() {
   local out
-  out="$(PATH="$(_hi_doctor_shims):$(_hi_doctor_path)" HI_FAKE_ROOT=/home/u/hi.d \
+  out="$(PATH="$(_hi_doctor_shims):$(_hi_doctor_path)" HI_FAKE_ROOT=/home/u/say-hi \
   HI_FAKE_TOOLS="base64 bash " doctor_ssh_target somewhere)"
-  [[ "$out" == *"permanent /home/u/hi.d"* ]]
+  [[ "$out" == *"permanent /home/u/say-hi"* ]]
 }
 
 function test_ssh_target_flags_a_missing_base64() {

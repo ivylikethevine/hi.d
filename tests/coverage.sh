@@ -5,7 +5,7 @@
 # not gating on a number.
 #
 # Usage: tests/coverage.sh [outdir] [runner args...]
-#   outdir       where kcov writes its report (default: $TMPDIR/hi.d-coverage)
+#   outdir       where kcov writes its report (default: $TMPDIR/say-hi-coverage)
 #   runner args  passed straight to test_runner.sh (default: --group fast -
 #                the e2e groups need real backends and add little coverage of
 #                the client-side scripts). The `shellcheck` suite is dropped
@@ -35,7 +35,7 @@
 # `--group fast` run reports for the file, while its 17 cases pass. The cause is
 # inside kcov's bash instrumentation (it drives a DEBUG trap; something in
 # test_lib.sh's source-time work loses it), not in test_lib.sh or in the suites,
-# and it is not hi.d's to fix. Nothing here is a code smell to go chasing.
+# and it is not say-hi's to fix. Nothing here is a code smell to go chasing.
 #
 # What that means in practice: a low number here is not evidence that tests are
 # missing, and a high one is not evidence that they are not. Do not write tests
@@ -58,17 +58,17 @@ if [ -z "${_HI_HOME:-}" ]; then
 fi
 export _HI_HOME
 # shellcheck source=../common/core.sh
-source "$_HI_HOME/hi.d/common/core.sh"
+source "$_HI_HOME/say-hi/common/core.sh"
 
 if ! command -v kcov >/dev/null 2>&1; then
   _hi_cecho " | coverage: kcov not installed - skipping (a dev-only tool, and outside a PPA Debian/Ubuntu do not carry it: build it from github.com/SimonKagstrom/kcov, as CI does)" "$YELLOW"
   exit 0
 fi
 
-_HI_COV_DIR="${1:-${TMPDIR:-/tmp}/hi.d-coverage}"
+_HI_COV_DIR="${1:-${TMPDIR:-/tmp}/say-hi-coverage}"
 shift 2>/dev/null || true
 [ $# -gt 0 ] || set -- --group fast
-_HI_RUNNER="$_HI_HOME/hi.d/tests/test_runner.sh"
+_HI_RUNNER="$_HI_HOME/say-hi/tests/test_runner.sh"
 
 rm -rf "$_HI_COV_DIR"
 mkdir -p "$_HI_COV_DIR/parts"
@@ -133,8 +133,8 @@ for _hi_i in $(seq 0 $((${#_HI_PATHS[@]} - 1))); do
   _hi_suite="${_HI_NAMES[$_hi_i]}"
   _hi_path="${_HI_PATHS[$_hi_i]}"
   _hi_cecho " | coverage: tracing $_hi_suite" "$BRCYAN"
-  kcov --include-path="$_HI_HOME/hi.d" \
-    --exclude-path="$_HI_HOME/hi.d/tests" \
+  kcov --include-path="$_HI_HOME/say-hi" \
+    --exclude-path="$_HI_HOME/say-hi/tests" \
     "$_HI_COV_DIR/parts/$_hi_suite" \
     "$_hi_path" >/dev/null 2>&1 ||
     _HI_FAILED="$_HI_FAILED $_hi_suite"
@@ -157,7 +157,7 @@ _hi_cecho " | coverage: report in $_HI_COV_DIR/merged/index.html" "$GREEN"
 # `percent_covered` as two separate lines.
 _HI_COV_JSON="$(find "$_HI_COV_DIR/merged" -name coverage.json 2>/dev/null | head -1)"
 if [ -n "$_HI_COV_JSON" ] && [ -f "$_HI_COV_JSON" ]; then
-  awk -F'"' -v root="$_HI_HOME/hi.d/" '
+  awk -F'"' -v root="$_HI_HOME/say-hi/" '
     /"file"/ {
       for (i = 1; i < NF; i++)
         if ($i == "percent_covered") {

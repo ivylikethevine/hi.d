@@ -9,10 +9,10 @@
 # sed out four times with nothing but greps holding the four together.
 #
 # Standalone on purpose: it sources no packaging/lib.sh. lib.sh derives
-# $_HI_HOME as <script>/../.. and then sources $_HI_HOME/hi.d/common/core.sh,
-# which needs the checkout to be named exactly hi.d. That holds for mkpkg and
-# both PKGBUILDs (the AUR recipe symlinks $srcdir/hi.d in prepare()), but
-# Homebrew unpacks to hi.d-<version>, where sourcing lib.sh would abort before
+# $_HI_HOME as <script>/../.. and then sources $_HI_HOME/say-hi/common/core.sh,
+# which needs the checkout to be named exactly say-hi. That holds for mkpkg and
+# both PKGBUILDs (the AUR recipe symlinks $srcdir/say-hi in prepare()), but
+# Homebrew unpacks to say-hi-<version>, where sourcing lib.sh would abort before
 # this script ran. The `rewrite` below is core.sh's _hi_rewrite, copied for that
 # reason - the same boundary that makes scripts/install.sh carry its own
 # _hi_write_back.
@@ -94,7 +94,7 @@ unset _hi_opt _hi_row _hi_var _hi_noun
 # --root fills in whichever of the two targets was not named explicitly, so a
 # channel can take the layout wholesale or point at one file and not the other
 if [ -n "$_HI_ROOT_DIR" ]; then
-  [ -n "$_HI_LAUNCHER_FILE" ] || _HI_LAUNCHER_FILE="$_HI_ROOT_DIR/usr/share/hi.d/hi.sh"
+  [ -n "$_HI_LAUNCHER_FILE" ] || _HI_LAUNCHER_FILE="$_HI_ROOT_DIR/usr/share/say-hi/hi.sh"
   [ -n "$_HI_MAN_FILE" ] || _HI_MAN_FILE="$_HI_ROOT_DIR/usr/share/man/man1/hi.1"
 fi
 [ -n "$_HI_LAUNCHER_FILE" ] || {
@@ -132,7 +132,7 @@ function rewrite() {
 }
 
 # A bare sed per channel makes a renamed line a silent no-op - which is how
-# hi.d-git can ship answering "unknown (no stamp, no git)". Counting the
+# say-hi-git can ship answering "unknown (no stamp, no git)". Counting the
 # matches first turns that into a build failure.
 function require_one_match() {
   local file="$1" pattern="$2" n
@@ -169,7 +169,7 @@ if [ -n "$_HI_MAN_FILE" ]; then
     [ -n "$_hi_gz" ] && gzip -d "$_hi_gz"
     require_one_match "$_hi_page" '^\.TH '
     rewrite "$_hi_page" \
-      "s/^\.TH .*/.TH HI 1 \"$_HI_DATE\" \"hi.d $_HI_VERSION\" \"User Commands\"/"
+      "s/^\.TH .*/.TH HI 1 \"$_HI_DATE\" \"say-hi $_HI_VERSION\" \"User Commands\"/"
     [ -n "$_hi_gz" ] && gzip -9n "$_hi_page"
   fi
 fi

@@ -1,10 +1,10 @@
 # Testing
 
-Every script resolves against `$_HI_HOME/hi.d`. The runner defaults `_HI_HOME` to this checkout's parent, so
-a fresh clone works with no setup - but never point anything at your real `~/hi.d`:
+Every script resolves against `$_HI_HOME/say-hi`. The runner defaults `_HI_HOME` to this checkout's parent, so
+a fresh clone works with no setup - but never point anything at your real `~/say-hi`:
 
 ```sh
-export _HI_HOME=/path/to/parent-of-hi.d
+export _HI_HOME=/path/to/parent-of-say-hi
 tests/test_runner.sh
 ```
 

@@ -119,12 +119,12 @@ function test_timestamp_runs_and_has_three_cells() {
 }
 
 # the version is the middle cell, between the two clocks, and is printed bare
-# - no "hi.d" in front of it. The palette is blanked for the row rather than
+# - no "say-hi" in front of it. The palette is blanked for the row rather than
 # stripped after: the cells are `| `-joined and field 1 is the empty lead.
 function test_timestamp_puts_the_version_between_the_clocks() {
   local out
   out="$(NC='' GREEN='' BRBLUE='' BRYELLOW='' _HI_RELEASE=1.2.3 timestamp)"
-  [ "$(cut -d'|' -f3 <<<"$out" | tr -d ' ')" = "1.2.3" ] && [[ "$out" != *"hi.d"* ]]
+  [ "$(cut -d'|' -f3 <<<"$out" | tr -d ' ')" = "1.2.3" ] && [[ "$out" != *"say-hi"* ]]
 }
 
 # ...and a shell with no stamp still gets one: this checkout answers with git

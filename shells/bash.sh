@@ -8,7 +8,7 @@
 # both set $_HI_HOME first. GLOSSARY: HI.33
 : "${_HI_HOME:=$(cd -P "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 # shellcheck source=../common/core.sh
-source "$_HI_HOME/hi.d/common/core.sh"
+source "$_HI_HOME/say-hi/common/core.sh"
 # shellcheck source=../common/git_prompt.sh
 source "$_HI_GIT_PROMPT"
 # shellcheck source=../misc/aliases.sh

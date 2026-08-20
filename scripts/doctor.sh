@@ -17,7 +17,7 @@ set -euo pipefail
 # GLOSSARY: HI.33 - the standalone-entry form, and why $_HI_HOME wins in it
 _hi_d="${BASH_SOURCE[0]}"
 case "$_hi_d" in */*) _hi_d="${_hi_d%/*}/.." ;; *) _hi_d=".." ;; esac
-[ -z "${_HI_HOME:-}" ] || _hi_d="$_HI_HOME/hi.d"
+[ -z "${_HI_HOME:-}" ] || _hi_d="$_HI_HOME/say-hi"
 # shellcheck source=../common/core.sh
 source "$_hi_d/common/core.sh"
 unset _hi_d
@@ -28,7 +28,7 @@ case "${1:-}" in
 Usage: doctor.sh [target]
 
 Prints, in order:
-  the local tree     where hi.d is, git state, payload size, local shells
+  the local tree     where say-hi is, git state, payload size, local shells
   the config overlay settings.sh (and whether every shell can parse it),
                      colors/packages overrides, non-default toggles
   the backends       ssh config, docker, podman, nomad, kubectl - each probed
@@ -102,6 +102,11 @@ function doctor_local() {
 function doctor_config() {
   local f t v any=0
   _hi_h2 "The config overlay ($_HI_CONFIG_DIR)"
+  # core.sh reads an unmigrated overlay where it lies; this is the row that
+  # says so, since the heading above is the only other place it shows
+  case "$_HI_CONFIG_DIR" in
+  */hi.d) doctor_row location "under the old tree name - still read; \`hi --install\` offers to move it to say-hi" warn ;;
+  esac
   if [ -f "$_HI_SETTINGS" ]; then
     if ! sh -n "$_HI_SETTINGS" 2>/dev/null; then
       doctor_row settings.sh "does NOT parse as sh - every shell sources this file" bad
@@ -313,6 +318,12 @@ function doctor_ssh_target() {
   root="$(_hi_remote_root "${ctl_opts[@]}")"
   if [ -n "$root" ]; then
     doctor_row install "permanent $root - hi loads it in place, ships nothing"
+    # the probe accepts both tree names (hi.sh's _hi_remote_root_probe); say so
+    # when it matched the old one, since that is a target still to be updated
+    # and the only place the difference is visible
+    case "$root" in
+    */hi.d) doctor_row install "that tree still has the old name - hi finds it, but \`hi --update\` there and a rename to say-hi will keep it working when the fallback goes" warn ;;
+    esac
   else
     doctor_row install "none - hi ships $(_hi_wire_estimate) each session"
   fi

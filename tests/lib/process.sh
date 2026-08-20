@@ -18,9 +18,9 @@
 #   fallback_fish     the same, in fish's dialect (its aliases are functions)
 #   ssh_fallback      the ssh fallback rc *does* source paths.sh, so hi_info is
 #   ssh_fallback_fish ssh_fallback in fish's dialect
-#   installed         a permanent hi.d: asserts $_HI_ROOT is ~/hi.d, i.e.
+#   installed         a permanent say-hi: asserts $_HI_ROOT is ~/say-hi, i.e.
 #                     _say_hi loaded it in place rather than shipping a tree
-#   installed_nested  the same, for a permanent hi.d that is *not* at ~/hi.d:
+#   installed_nested  the same, for a permanent say-hi that is *not* at ~/say-hi:
 #                     only _hi_remote_root reading install.sh's rc line can
 #                     have found it, so the path itself is the assertion
 #
@@ -34,8 +34,8 @@ function _hi_probe_cmd() {
   fallback_fish) printf '%s%s' 'functions -q sudo; and echo ' "$marker" ;;
   ssh_fallback) printf '%s%s' 'test -f "$_HI_ROOT/hi.sh" && alias hi_info >/dev/null 2>&1 && echo ' "$marker" ;;
   ssh_fallback_fish) printf '%s%s' 'test -f "$_HI_ROOT/hi.sh"; and functions -q hi_info; and echo ' "$marker" ;;
-  installed) printf '%s%s' 'test "$_HI_ROOT" = "$HOME/hi.d" && source "$_HI_ALIASES" && alias hi_info >/dev/null 2>&1 && echo ' "$marker" ;;
-  installed_nested) printf '%s%s' 'test "$_HI_ROOT" = "$HOME/opt/nested/hi.d" && source "$_HI_ALIASES" && alias hi_info >/dev/null 2>&1 && echo ' "$marker" ;;
+  installed) printf '%s%s' 'test "$_HI_ROOT" = "$HOME/say-hi" && source "$_HI_ALIASES" && alias hi_info >/dev/null 2>&1 && echo ' "$marker" ;;
+  installed_nested) printf '%s%s' 'test "$_HI_ROOT" = "$HOME/opt/nested/say-hi" && source "$_HI_ALIASES" && alias hi_info >/dev/null 2>&1 && echo ' "$marker" ;;
   *)
     _hi_cecho "unknown probe shape: $2" "$RED"
     return 1

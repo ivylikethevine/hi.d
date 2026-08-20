@@ -162,14 +162,14 @@ function test_group_preview_width_sums_its_hosts() {
 function _hi_render_preview() {
   HOME="$_HI_WORKDIR/tree" _HI_HOME="$_HI_WORKDIR/tree" \
     _HI_LOCAL_USER=localdev _HI_LOCAL_HOSTNAME=localbox \
-    "$_HI_WORKDIR/tree/hi.d/scripts/color_preview.sh" 2>&1
+    "$_HI_WORKDIR/tree/say-hi/scripts/color_preview.sh" 2>&1
 }
 
 function _hi_write_preview_tree() {
   local home
   home="$(_hi_scratch_tree tree common misc scripts)"
   mkdir -p "$home/.ssh"
-  cp "$_HI_WORKDIR/colors" "$home/hi.d/misc/colors"
+  cp "$_HI_WORKDIR/colors" "$home/say-hi/misc/colors"
   cp "$_HI_WORKDIR/ssh_config" "$home/.ssh/config"
 }
 

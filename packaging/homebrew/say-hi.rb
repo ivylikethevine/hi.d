@@ -1,17 +1,17 @@
-# The tap formula. Publish by copying this file to Formula/hi.d.rb in a repo
-# named ivylikethevine/homebrew-tap; `brew install ivy/tap/hi.d` then works with
+# The tap formula. Publish by copying this file to Formula/say-hi.rb in a repo
+# named ivylikethevine/homebrew-tap; `brew install ivy/tap/say-hi` then works with
 # no review and no approval. packaging/bump.sh rewrites the url and sha256.
 #
-# hi.d.rb -> class HiD: Homebrew's Formulary.class_s camel-cases across the dot.
-class HiD < Formula
+# say-hi.rb -> class SayHi: Homebrew's Formulary.class_s camel-cases across the dash.
+class SayHi < Formula
   # capitalised because `brew audit --strict` requires it; the other channels
   # keep the "sshrc supercharged" phrasing, which no linter of theirs objects to
   desc "Your shell config, on every host you say hi to - sshrc supercharged"
-  homepage "https://github.com/ivylikethevine/hi.d"
-  url "https://github.com/ivylikethevine/hi.d/archive/refs/tags/v0.0.0.tar.gz"
+  homepage "https://github.com/ivylikethevine/say-hi"
+  url "https://github.com/ivylikethevine/say-hi/archive/refs/tags/v0.0.0.tar.gz"
   sha256 "0000000000000000000000000000000000000000000000000000000000000000"
   license "MIT"
-  head "https://github.com/ivylikethevine/hi.d.git", branch: "main"
+  head "https://github.com/ivylikethevine/say-hi.git", branch: "main"
 
   # No dependencies at all, deliberately.
   #
@@ -32,11 +32,11 @@ class HiD < Formula
     # packaging suite (tests/packaging/packaging_test.sh) fails if the two lists
     # drift apart.
     #
-    # It must land in a directory named hi.d - every path in the project
-    # resolves against $_HI_HOME/hi.d, so libexec is the _HI_HOME here.
-    (libexec/"hi.d").install "common", "misc", "scripts", "shells",
+    # It must land in a directory named say-hi - every path in the project
+    # resolves against $_HI_HOME/say-hi, so libexec is the _HI_HOME here.
+    (libexec/"say-hi").install "common", "misc", "scripts", "shells",
                              "hi.sh", "load.sh", "LICENSE.md", "README.md"
-    chmod 0755, libexec/"hi.d/hi.sh"
+    chmod 0755, libexec/"say-hi/hi.sh"
 
     # The keg's copy of hi.sh, and the man page's .TH footer, answer with the
     # formula's version. The tarball carries no stamp - every channel writes it
@@ -54,7 +54,7 @@ class HiD < Formula
     # plain, on brew's manpath, rather than gzipped into /usr/share.
     system buildpath/"packaging/stamp.sh", "--version", version,
            "--date", version,
-           "--launcher", libexec/"hi.d/hi.sh",
+           "--launcher", libexec/"say-hi/hi.sh",
            "--man", buildpath/"docs/hi.1"
     man1.install "docs/hi.1"
 
@@ -66,7 +66,7 @@ class HiD < Formula
     (bin/"hi").write <<~SH
       #!/bin/sh
       export _HI_HOME="#{libexec}"
-      exec "#{libexec}/hi.d/hi.sh" "$@"
+      exec "#{libexec}/say-hi/hi.sh" "$@"
     SH
   end
 
@@ -75,15 +75,15 @@ class HiD < Formula
       `hi` is on your PATH now, but your shells are not wired up yet. To get the
       header, prompt, aliases and editor configs in your own shells, run:
 
-        #{libexec}/hi.d/scripts/install.sh --no-link
+        #{libexec}/say-hi/scripts/install.sh --no-link
 
-      That writes only to your rc files and ~/.config/hi.d - never into the keg.
+      That writes only to your rc files and ~/.config/say-hi - never into the keg.
       --no-link is what skips the /usr/bin/hi symlink: Homebrew already put `hi`
       on your PATH, and on macOS /usr/bin is read-only under SIP anyway.
 
       Re-run it as `hi --configure` any time to revisit the feature toggles.
       `hi --update` will tell you to update through Homebrew, which is correct -
-      run `brew upgrade hi.d` instead.
+      run `brew upgrade say-hi` instead.
     EOS
   end
 
@@ -91,8 +91,8 @@ class HiD < Formula
     # The wiring that actually matters and the thing most likely to break: the
     # tree is where _HI_HOME says it is, and sourcing core.sh from the keg
     # resolves _HI_ROOT back to the keg rather than to $HOME.
-    assert_equal "#{libexec}/hi.d", shell_output(
-      "_HI_HOME=#{libexec} /bin/bash -c 'source #{libexec}/hi.d/common/core.sh; printf %s \"$_HI_ROOT\"'",
+    assert_equal "#{libexec}/say-hi", shell_output(
+      "_HI_HOME=#{libexec} /bin/bash -c 'source #{libexec}/say-hi/common/core.sh; printf %s \"$_HI_ROOT\"'",
     )
 
     # ...and that the wrapper exports it for a caller who has not.

@@ -7,7 +7,7 @@ set -euo pipefail
 # GLOSSARY: HI.33 - the standalone-entry form, and why $_HI_HOME wins in it
 _hi_d="${BASH_SOURCE[0]}"
 case "$_hi_d" in */*) _hi_d="${_hi_d%/*}/.." ;; *) _hi_d=".." ;; esac
-[ -z "${_HI_HOME:-}" ] || _hi_d="$_HI_HOME/hi.d"
+[ -z "${_HI_HOME:-}" ] || _hi_d="$_HI_HOME/say-hi"
 # shellcheck source=../common/core.sh
 source "$_hi_d/common/core.sh"
 unset _hi_d

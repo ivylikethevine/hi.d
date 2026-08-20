@@ -95,7 +95,7 @@ jobs:
           set -euo pipefail
           if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
             echo "HI_VERSION=$REHEARSAL_VERSION" >>"$GITHUB_ENV"
-            git archive --prefix "hi.d-$REHEARSAL_VERSION/" -o /tmp/rehearsal.tar.gz HEAD
+            git archive --prefix "say-hi-$REHEARSAL_VERSION/" -o /tmp/rehearsal.tar.gz HEAD
             echo "HI_TARBALL=/tmp/rehearsal.tar.gz" >>"$GITHUB_ENV"
           else
             echo "HI_VERSION=${GITHUB_REF_NAME#v}" >>"$GITHUB_ENV"
@@ -135,9 +135,9 @@ jobs:
         run: |
           set -euo pipefail
           if [ -n "$APK_SIGNING_KEY" ]; then
-            printf '%s\n' "$APK_SIGNING_KEY" >"$RUNNER_TEMP/hi.d-apk.rsa"
-            chmod 600 "$RUNNER_TEMP/hi.d-apk.rsa"
-            echo "HI_APK_KEY=$RUNNER_TEMP/hi.d-apk.rsa" >>"$GITHUB_ENV"
+            printf '%s\n' "$APK_SIGNING_KEY" >"$RUNNER_TEMP/say-hi-apk.rsa"
+            chmod 600 "$RUNNER_TEMP/say-hi-apk.rsa"
+            echo "HI_APK_KEY=$RUNNER_TEMP/say-hi-apk.rsa" >>"$GITHUB_ENV"
           else
             echo "no APK_SIGNING_KEY secret - the apk will be unsigned"
           fi
@@ -169,11 +169,11 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p dist/manifests
-          cp packaging/aur/hi.d/PKGBUILD dist/manifests/PKGBUILD
-          cp packaging/aur/hi.d/.SRCINFO dist/manifests/.SRCINFO
-          cp packaging/aur/hi.d-git/PKGBUILD dist/manifests/PKGBUILD.git
-          cp packaging/aur/hi.d-git/.SRCINFO dist/manifests/.SRCINFO.git
-          cp packaging/homebrew/hi.d.rb dist/manifests/hi.d.rb
+          cp packaging/aur/say-hi/PKGBUILD dist/manifests/PKGBUILD
+          cp packaging/aur/say-hi/.SRCINFO dist/manifests/.SRCINFO
+          cp packaging/aur/say-hi-git/PKGBUILD dist/manifests/PKGBUILD.git
+          cp packaging/aur/say-hi-git/.SRCINFO dist/manifests/.SRCINFO.git
+          cp packaging/homebrew/say-hi.rb dist/manifests/say-hi.rb
 
       # Signed build provenance for everything the release will carry - pairs
       # with SHA256SUMS: the sums say what the bytes are, the attestation says
@@ -249,7 +249,7 @@ jobs:
           if [ -n "$MINISIGN_SECRET_KEY" ]; then
             printf '%s\n' "$MINISIGN_SECRET_KEY" >"$RUNNER_TEMP/minisign.key"
             minisign -S -s "$RUNNER_TEMP/minisign.key" -m dist/SHA256SUMS \
-              -t "hi.d $GITHUB_REF_NAME"
+              -t "say-hi $GITHUB_REF_NAME"
           else
             echo "no MINISIGN_SECRET_KEY secret - SHA256SUMS ships unsigned"
           fi
@@ -284,9 +284,9 @@ jobs:
       - name: Commit the manifests to main
         run: |
           set -euo pipefail
-          cp dist/manifests/PKGBUILD main/packaging/aur/hi.d/PKGBUILD
-          cp dist/manifests/.SRCINFO main/packaging/aur/hi.d/.SRCINFO
-          cp dist/manifests/hi.d.rb main/packaging/homebrew/hi.d.rb
+          cp dist/manifests/PKGBUILD main/packaging/aur/say-hi/PKGBUILD
+          cp dist/manifests/.SRCINFO main/packaging/aur/say-hi/.SRCINFO
+          cp dist/manifests/say-hi.rb main/packaging/homebrew/say-hi.rb
           cd main
           if git diff --quiet; then
             echo "manifests already current on main - nothing to commit"
@@ -294,7 +294,7 @@ jobs:
           fi
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add packaging/aur/hi.d/PKGBUILD packaging/aur/hi.d/.SRCINFO packaging/homebrew/hi.d.rb
+          git add packaging/aur/say-hi/PKGBUILD packaging/aur/say-hi/.SRCINFO packaging/homebrew/say-hi.rb
           git commit -m "packaging: manifests for $GITHUB_REF_NAME"
           git push origin main
 
@@ -332,22 +332,22 @@ jobs:
           set -euo pipefail
           if [ -z "${GH_TOKEN:-}" ]; then
             echo "no HOMEBREW_TAP_TOKEN secret - the tap formula was NOT updated;"
-            echo "copy dist/manifests/hi.d.rb to Formula/hi.d.rb by hand (docs/PACKAGING.md)"
+            echo "copy dist/manifests/say-hi.rb to Formula/say-hi.rb by hand (docs/PACKAGING.md)"
             exit 0
           fi
-          branch="hi.d-$GITHUB_REF_NAME"
+          branch="say-hi-$GITHUB_REF_NAME"
           gh repo clone "$TAP_REPO" tap -- --depth 1
           cd tap
           git checkout -b "$branch"
           mkdir -p Formula
-          cp ../dist/manifests/hi.d.rb Formula/hi.d.rb
+          cp ../dist/manifests/say-hi.rb Formula/say-hi.rb
           if git diff --quiet; then
             echo "tap formula already current - nothing to open"
             exit 0
           fi
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git commit -am "hi.d $GITHUB_REF_NAME"
+          git commit -am "say-hi $GITHUB_REF_NAME"
           git push origin "$branch"
           # The checklist rides in the body: this is the one channel with no
           # review of its own, and the audit cannot run in this CI. Built with
@@ -355,15 +355,15 @@ jobs:
           # unindented, which ends the YAML block scalar this whole step is.
           # shellcheck disable=SC2016 # the backticks are markdown, not substitution
           body="$(printf '%s\n' \
-            "Formula for hi.d $GITHUB_REF_NAME, generated by the release workflow." \
+            "Formula for say-hi $GITHUB_REF_NAME, generated by the release workflow." \
             "" \
             "Before merging, from a mac (or Homebrew on Linux):" \
             "" \
-            '- [ ] `brew install --build-from-source Formula/hi.d.rb`' \
-            '- [ ] `brew test hi.d`' \
-            '- [ ] `brew audit --strict --new hi.d`')"
+            '- [ ] `brew install --build-from-source Formula/say-hi.rb`' \
+            '- [ ] `brew test say-hi`' \
+            '- [ ] `brew audit --strict --new say-hi`')"
           gh pr create --repo "$TAP_REPO" --head "$branch" \
-            --title "hi.d $GITHUB_REF_NAME" --body "$body"
+            --title "say-hi $GITHUB_REF_NAME" --body "$body"
 
   # The AUR half of the same job. It is a plain git push over ssh - the AUR has
   # no PR mechanism to hold anything for review - so the safety here is the gate
@@ -376,7 +376,7 @@ jobs:
   #     Arch box, which this runner is not. The first push of each package is
   #     therefore still a manual, namcap'd one (docs/PACKAGING.md); this job
   #     is for the releases after that.
-  #   - touch hi.d-git. That package builds from `main` and has no version to
+  #   - touch say-hi-git. That package builds from `main` and has no version to
   #     bump, so a release has nothing to say to it.
   #
   # No secret, no push: it prints what to copy and exits 0, exactly as the tap
@@ -403,7 +403,7 @@ jobs:
           set -euo pipefail
           if [ -z "${AUR_SSH_KEY:-}" ]; then
             echo "no AUR_SSH_KEY secret - the AUR package was NOT updated;"
-            echo "copy dist/manifests/PKGBUILD and .SRCINFO to the aur/hi.d repo by hand,"
+            echo "copy dist/manifests/PKGBUILD and .SRCINFO to the aur/say-hi repo by hand,"
             echo "after running the namcap gate in docs/PACKAGING.md"
             exit 0
           fi
@@ -415,7 +415,7 @@ jobs:
           ssh-keyscan -t ed25519 aur.archlinux.org >"$RUNNER_TEMP/ssh/known_hosts" 2>/dev/null
           export GIT_SSH_COMMAND="ssh -i $RUNNER_TEMP/ssh/aur -o IdentitiesOnly=yes -o UserKnownHostsFile=$RUNNER_TEMP/ssh/known_hosts"
 
-          git clone --depth 1 ssh://aur@aur.archlinux.org/hi.d.git aur
+          git clone --depth 1 ssh://aur@aur.archlinux.org/say-hi.git aur
           cp dist/manifests/PKGBUILD aur/PKGBUILD
           cp dist/manifests/.SRCINFO aur/.SRCINFO
           cd aur
@@ -433,5 +433,5 @@ jobs:
           fi
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git commit -am "hi.d $GITHUB_REF_NAME"
+          git commit -am "say-hi $GITHUB_REF_NAME"
           git push origin master

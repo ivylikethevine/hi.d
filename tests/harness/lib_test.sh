@@ -54,7 +54,7 @@ function test_require_backend_skips_when_the_backend_is_unreachable() {
 }
 
 function _hi_probe_fixture() {
-  local root="$1/hi.d"
+  local root="$1/say-hi"
   mkdir -p "$root"
   : >"$root/hi.sh"
   printf '%s\n' "alias hi_info='echo hi_info'" "alias sudo='command sudo '" >"$root/aliases.sh"
@@ -72,7 +72,7 @@ function _hi_probe_says_ok() {
 
 function test_probe_cmd_bash_shape_fires_only_with_a_real_root() {
   _hi_probe_says_ok bash "" &&
-    ! _hi_probe_says_ok bash "" /nonexistent/hi.d
+    ! _hi_probe_says_ok bash "" /nonexistent/say-hi
 }
 
 function test_probe_cmd_fallback_shape_fires_only_with_the_alias() {
@@ -82,12 +82,12 @@ function test_probe_cmd_fallback_shape_fires_only_with_the_alias() {
 
 function test_probe_cmd_ssh_fallback_fires_only_with_hi_info() {
   _hi_probe_says_ok ssh_fallback "alias hi_info='x'; " &&
-    ! _hi_probe_says_ok ssh_fallback "alias hi_info='x'; " /nonexistent/hi.d
+    ! _hi_probe_says_ok ssh_fallback "alias hi_info='x'; " /nonexistent/say-hi
 }
 
 function test_probe_cmd_installed_shape_fires_only_when_root_is_home() {
   _hi_probe_says_ok installed "" &&
-    ! _hi_probe_says_ok installed "" /somewhere/else/hi.d
+    ! _hi_probe_says_ok installed "" /somewhere/else/say-hi
 }
 
 function test_probe_cmd_fish_shapes_run_under_fish() {
@@ -95,7 +95,7 @@ function test_probe_cmd_fish_shapes_run_under_fish() {
   _hi_probe_says_ok fallback_fish "function sudo; end; " "" fish &&
     ! _hi_probe_says_ok fallback_fish "" "" fish &&
     _hi_probe_says_ok ssh_fallback_fish "function hi_info; end; " "" fish &&
-    ! _hi_probe_says_ok ssh_fallback_fish "function hi_info; end; " /nonexistent/hi.d fish
+    ! _hi_probe_says_ok ssh_fallback_fish "function hi_info; end; " /nonexistent/say-hi fish
 }
 
 # $_HI_ROOT is read at call time, so a case can point the tree check anywhere
@@ -422,7 +422,7 @@ function run_lib_process_tests() {
   _hi_check "Container fallback fires only with the alias" test_probe_cmd_fallback_shape_fires_only_with_the_alias
   _hi_check "Ssh fallback fires only with hi_info" test_probe_cmd_ssh_fallback_fires_only_with_hi_info
   _hi_check "Fish shapes run under fish" test_probe_cmd_fish_shapes_run_under_fish
-  _hi_check "Installed shape fires only when \$_HI_ROOT is ~/hi.d" test_probe_cmd_installed_shape_fires_only_when_root_is_home
+  _hi_check "Installed shape fires only when \$_HI_ROOT is ~/say-hi" test_probe_cmd_installed_shape_fires_only_when_root_is_home
   _hi_check "Every shape ends with the marker" test_probe_cmd_every_shape_ends_with_the_marker
   _hi_check "Rejects an unknown shape" test_probe_cmd_rejects_an_unknown_shape
 

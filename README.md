@@ -10,14 +10,14 @@ This is a hobby project.
 
 ---
 
-[![tests](https://img.shields.io/endpoint?url=https%3A%2F%2Fivylikethevine.github.io%2Fhi.d%2Fbadges%2Ftests.json)](https://github.com/ivylikethevine/hi.d/actions/workflows/ci.yml)
-[![Linux](https://img.shields.io/github/actions/workflow/status/ivylikethevine/hi.d/ci.yml?branch=main&label=Linux)](https://github.com/ivylikethevine/hi.d/actions/workflows/ci.yml)
-[![macOS](https://img.shields.io/github/actions/workflow/status/ivylikethevine/hi.d/macos-e2e.yml?branch=main&label=macOS)](https://github.com/ivylikethevine/hi.d/actions/workflows/macos-e2e.yml)
-[![Windows](https://img.shields.io/github/actions/workflow/status/ivylikethevine/hi.d/windows-e2e.yml?branch=main&label=Windows)](https://github.com/ivylikethevine/hi.d/actions/workflows/windows-e2e.yml)
-![ssh payload](https://img.shields.io/badge/ssh_payload-78KB_per_session-4c1)
-[![package](https://img.shields.io/endpoint?url=https%3A%2F%2Fivylikethevine.github.io%2Fhi.d%2Fbadges%2Fpackage.json)](https://github.com/ivylikethevine/hi.d/releases)
-[![kcov](https://img.shields.io/endpoint?url=https%3A%2F%2Fivylikethevine.github.io%2Fhi.d%2Fbadges%2Fcoverage.json)](docs/TESTING.md#coverage-and-profiling)
-[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/ivylikethevine/hi.d/badge)](https://scorecard.dev/viewer/?uri=github.com/ivylikethevine/hi.d)
+[![tests](https://img.shields.io/endpoint?url=https%3A%2F%2Fivylikethevine.github.io%2Fsay-hi%2Fbadges%2Ftests.json)](https://github.com/ivylikethevine/say-hi/actions/workflows/ci.yml)
+[![Linux](https://img.shields.io/github/actions/workflow/status/ivylikethevine/say-hi/ci.yml?branch=main&label=Linux)](https://github.com/ivylikethevine/say-hi/actions/workflows/ci.yml)
+[![macOS](https://img.shields.io/github/actions/workflow/status/ivylikethevine/say-hi/macos-e2e.yml?branch=main&label=macOS)](https://github.com/ivylikethevine/say-hi/actions/workflows/macos-e2e.yml)
+[![Windows](https://img.shields.io/github/actions/workflow/status/ivylikethevine/say-hi/windows-e2e.yml?branch=main&label=Windows)](https://github.com/ivylikethevine/say-hi/actions/workflows/windows-e2e.yml)
+![ssh payload](https://img.shields.io/badge/ssh_payload-79KB_per_session-4c1)
+[![package](https://img.shields.io/endpoint?url=https%3A%2F%2Fivylikethevine.github.io%2Fsay-hi%2Fbadges%2Fpackage.json)](https://github.com/ivylikethevine/say-hi/releases)
+[![kcov](https://img.shields.io/endpoint?url=https%3A%2F%2Fivylikethevine.github.io%2Fsay-hi%2Fbadges%2Fcoverage.json)](docs/TESTING.md#coverage-and-profiling)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/ivylikethevine/say-hi/badge)](https://scorecard.dev/viewer/?uri=github.com/ivylikethevine/say-hi)
 ![bash](https://img.shields.io/badge/bash-3.2%2B-4EAA25?logo=gnubash&logoColor=white)
 ![license](https://img.shields.io/badge/license-MIT-blue)
 
@@ -45,7 +45,7 @@ _Don't `ssh`ush your hosts, say `hi`!_
   - [Nomad allocations](#nomad-allocations)
   - [Kubernetes pods](#kubernetes-pods)
   - [Windows hosts](#windows-hosts)
-- [hi.d and the alternatives](#hid-and-the-alternatives)
+- [say-hi and the alternatives](#hid-and-the-alternatives)
   - [Compatibility](#compatibility)
 - [Testing](#testing)
 - [More docs](#more-docs)
@@ -68,13 +68,13 @@ regenerate them, is at the bottom:
 
 ### ssh, with a permanent install
 
-The target carries its own `~/hi.d`, so nothing ships over the wire — hi
+The target carries its own `~/say-hi`, so nothing ships over the wire — hi
 loads the tree in place and leaves it alone on exit. Client: bash.
 Showing `_HI_HEADER_TIMESTAMP=0` and `_HI_HEADER_SYSINFO=0` — set on the _box_,
 not the client: a permanent install reads its own config, so this is the demo
 whose knob lives on the target.
 
-![hi over ssh into a host with a permanent ~/hi.d](docs/demos/ssh.gif)
+![hi over ssh into a host with a permanent ~/say-hi](docs/demos/ssh.gif)
 
 ### docker
 
@@ -119,23 +119,23 @@ Showing `_HI_DISABLE_GIT_STATUS=1` — the same prompt, without the git segment.
 
 ## Installation/Usage
 
-- `hi.d/scripts/install.sh` (re-run it any time; it repairs its own lines, even if hi.d moved) - before touching your shell rc files it validates whichever of `~/.bashrc`, `~/.zshrc` and `~/.config/fish/config.fish` are installed with each shell's own syntax checker, and asks whether to continue if any have issues
+- `say-hi/scripts/install.sh` (re-run it any time; it repairs its own lines, even if say-hi moved) - before touching your shell rc files it validates whichever of `~/.bashrc`, `~/.zshrc` and `~/.config/fish/config.fish` are installed with each shell's own syntax checker, and asks whether to continue if any have issues
 - reload your shell!
-- run `hi --configure` any time afterward to revisit the feature toggle prompts - header, prompt, personal settings, git status, editors, aliases, header details, terminal width, and whether hi styles this machine too or only the hosts you say `hi` to - without touching the shell rc wiring. Answers land in `~/.config/hi.d/settings.sh`; see [Configuration](#configuration) below
+- run `hi --configure` any time afterward to revisit the feature toggle prompts - header, prompt, personal settings, git status, editors, aliases, header details, terminal width, and whether hi styles this machine too or only the hosts you say `hi` to - without touching the shell rc wiring. Answers land in `~/.config/say-hi/settings.sh`; see [Configuration](#configuration) below
 - run `hi --check-configs` any time to just re-run that shell rc validation, without the rest of the install
 - run `hi --help` (or `hi -h`) for the short version of all of this: the synopsis, the target resolution order, and every flag hi answers itself. `man hi` is the long version. Everything hi does not answer is passed to `ssh` unchanged
 - run `hi --version` to see what is installed - the packaged version, or `git describe` in a checkout; the doctor and the connect header show it too
-- run `hi --tmux <target>` to have the session live inside a named tmux on the target, so a dropped connection detaches instead of losing work - run it again to reattach (`_HI_TMUX_ATTACH=1` makes it the default, `--no-tmux` turns it off, `_HI_TMUX_SESSION` names the session). Offered only where hi.d is permanent on the target: a disposable tree is deleted when the session ends, and hi says so rather than leaving a tmux pointing at nothing
+- run `hi --tmux <target>` to have the session live inside a named tmux on the target, so a dropped connection detaches instead of losing work - run it again to reattach (`_HI_TMUX_ATTACH=1` makes it the default, `--no-tmux` turns it off, `_HI_TMUX_SESSION` names the session). Offered only where say-hi is permanent on the target: a disposable tree is deleted when the session ends, and hi says so rather than leaving a tmux pointing at nothing
 - run `hi --doctor` (or `hi --doctor <target>`, to test one host) when something is slow or failing: it reports the tree, the config overlay, every backend probed and timed with the same ceilings the header and completion use, and - with a target - which backend the name resolves to plus an ssh reachability/tooling check, all read-only
 - configure `~/.ssh/config` tags via sshm
-- [optional] pin specific colors in `~/.config/hi.d/colors` - everything else gets a color automatically. Copy `hi.d/misc/colors` there to start from the shipped defaults
+- [optional] pin specific colors in `~/.config/say-hi/colors` - everything else gets a color automatically. Copy `say-hi/misc/colors` there to start from the shipped defaults
   - run `hi --color-preview` to preview what every ssh host/your user resolves to
-- [optional] copy `hi.d/misc/packages` to `~/.config/hi.d/packages` and edit it to your preferences
+- [optional] copy `say-hi/misc/packages` to `~/.config/say-hi/packages` and edit it to your preferences
   - run `hi --packages-preview` to see what each priority means, the colors it renders installed and missing packages in, one real example of each from your own file, and the check itself as a connect will print it
 - say `hi`!
-- [optional] modify `~/hi.d/misc/*` and `~/hi.d/shells/*` to your liking - though anything with an overlay (`settings.sh`, `colors`, `packages`, `tmux.conf`, `aliases.sh`) is better edited in `~/.config/hi.d/`, which keeps the checkout clean for `hi --update`
-  - tip: `~/hi.d` is a git checkout, so if you do edit it, push to your own fork and clone that on your next device - same setup everywhere, kept in sync by `hi --update`
-- done with it? `hi.d/scripts/uninstall.sh` is the install's inverse: it strips hi's lines back out of your rc files, removes the `settings.sh` it wrote, and unlinks `/usr/bin/hi`. It leaves the `hi.d` directory alone, and your `colors`/`packages` too - delete those yourself if you want them gone
+- [optional] modify `~/say-hi/misc/*` and `~/say-hi/shells/*` to your liking - though anything with an overlay (`settings.sh`, `colors`, `packages`, `tmux.conf`, `aliases.sh`) is better edited in `~/.config/say-hi/`, which keeps the checkout clean for `hi --update`
+  - tip: `~/say-hi` is a git checkout, so if you do edit it, push to your own fork and clone that on your next device - same setup everywhere, kept in sync by `hi --update`
+- done with it? `say-hi/scripts/uninstall.sh` is the install's inverse: it strips hi's lines back out of your rc files, removes the `settings.sh` it wrote, and unlinks `/usr/bin/hi`. It leaves the `say-hi` directory alone, and your `colors`/`packages` too - delete those yourself if you want them gone
 
 ---
 
@@ -147,7 +147,7 @@ Reminder - place local only changes after the "`# hi-config-end`" comment in the
 
 ## Configuration
 
-Your config lives **outside the checkout**, in `${XDG_CONFIG_HOME:-$HOME/.config}/hi.d/`, and rides along to
+Your config lives **outside the checkout**, in `${XDG_CONFIG_HOME:-$HOME/.config}/say-hi/`, and rides along to
 every host you say `hi` to in its own small archive - `colors`, `packages`, `tmux.conf` and `aliases.sh`
 overlay the tree's copies one file at a time, and `settings.sh` (what `hi --configure` writes) has no in-tree
 counterpart at all. The full picture - the overlay file table, every `_HI_DISABLE_*` feature toggle, the
@@ -157,15 +157,15 @@ header-line toggles, tmux's `update-environment` behavior, and every other envir
 
 ### Hostname, username, and group/tag colors
 
-Every username and hostname gets a color deterministically derived from its name - nothing to generate, nothing that can go missing. To pin one instead, add a line to `~/hi.d/misc/colors` (`username,root,red` / `hostname,prod-db,yellow` / `hosttag,desktop,green`); `hosttag` entries match the _leftmost_ tag in a `# Tags: ...` comment directly above a `Host` line in `~/.ssh/config`. `hi --color-preview` shows what every ssh host and your user currently resolve to, in their actual colors.
+Every username and hostname gets a color deterministically derived from its name - nothing to generate, nothing that can go missing. To pin one instead, add a line to `~/say-hi/misc/colors` (`username,root,red` / `hostname,prod-db,yellow` / `hosttag,desktop,green`); `hosttag` entries match the _leftmost_ tag in a `# Tags: ...` comment directly above a `Host` line in `~/.ssh/config`. `hi --color-preview` shows what every ssh host and your user currently resolve to, in their actual colors.
 
 ### How it works
 
-1. `hi.sh` runs on the client, tars `hi.d/` and sends it to the target, which unpacks it into a `/tmp`
+1. `hi.sh` runs on the client, tars `say-hi/` and sends it to the target, which unpacks it into a `/tmp`
    directory. `$_HI_PAYLOAD` at the top of `hi.sh` is the authoritative allow list - no `.git`, `scripts/`,
    `tests/`, `docs/` or CI. Your overlay (see [Configuration](#configuration)) follows in a second, much
    smaller archive, landing in a `config/` of its own so your `aliases.sh` stays additive. A target that
-   already has its own `hi.d` gets neither: hi loads that tree in place and it reads its own overlay.
+   already has its own `say-hi` gets neither: hi loads that tree in place and it reads its own overlay.
 2. Both are base64-armored into one script and written over the **stdin** of an ssh connection the session
    then reuses - not argv, which Linux caps at 128KB however big `ARG_MAX` says it is. That script is what
    `hi` prints the size of on connect, and what the payload badge measures - for a _default_ configuration:
@@ -184,13 +184,14 @@ Every username and hostname gets a color deterministically derived from its name
 
 The bootstrap is plain POSIX `sh`, so a target with no `bash` still gets a session - the best plain shell it
 has, with the aliases loaded, rather than the full `load.sh`. For ssh targets hi first checks, over the same
-connection so it costs no extra authentication, whether a permanent hi.d is already there; if so it uses
-that in place and copies nothing. It does not assume `~/hi.d`: the check reads the `_HI_HOME` line
+connection so it costs no extra authentication, whether a permanent say-hi is already there; if so it uses
+that in place and copies nothing. It does not assume `~/say-hi`: the check reads the `_HI_HOME` line
 `install.sh` wrote into that target's login rc files (or `/etc/profile.d` for a packaged install) and falls
-back to `~/hi.d`, so a tree installed anywhere is still found and reused. `hi --doctor` prints the wire size
-and the unpacked size, labeled.
+back to the home directory, so a tree installed anywhere is still found and reused. Each candidate is tried
+under both `say-hi` and the old `hi.d` name, so a target installed before the rename is still recognised.
+`hi --doctor` prints the wire size and the unpacked size, labeled.
 
-**_IMPORTANT: Local-only changes MUST stay in `~/.bashrc`, `~/.zshrc`, `~/.config/fish/config.fish`, etc. - anything in `${XDG_CONFIG_HOME:-$HOME/.config}/hi.d/` is copied to every host you say `hi` to._**
+**_IMPORTANT: Local-only changes MUST stay in `~/.bashrc`, `~/.zshrc`, `~/.config/fish/config.fish`, etc. - anything in `${XDG_CONFIG_HOME:-$HOME/.config}/say-hi/` is copied to every host you say `hi` to._**
 
 ## Built from/with/in mind
 
@@ -201,7 +202,7 @@ and the unpacked size, labeled.
 
 ### Docker / Podman containers
 
-`hi <name>` also works against a running docker or podman container. If `<name>` isn't a `Host` in `~/.ssh/config` but is a running container (by name or ID, docker checked first), `hi` copies `~/hi.d` in and chainloads `load.sh` exactly as the ssh path does, for an identical session. No armoring is needed (`docker exec -i`/`podman exec -i` pass stdin as raw bytes), and cleanup happens on exit. Podman's CLI is close enough to reuse the same command shapes. The container needs `bash` for the full experience; without it `hi` drops you into the best plain shell available (`zsh`/`fish`/`ksh`/`sh`) with the aliases and a warning.
+`hi <name>` also works against a running docker or podman container. If `<name>` isn't a `Host` in `~/.ssh/config` but is a running container (by name or ID, docker checked first), `hi` copies `~/say-hi` in and chainloads `load.sh` exactly as the ssh path does, for an identical session. No armoring is needed (`docker exec -i`/`podman exec -i` pass stdin as raw bytes), and cleanup happens on exit. Podman's CLI is close enough to reuse the same command shapes. The container needs `bash` for the full experience; without it `hi` drops you into the best plain shell available (`zsh`/`fish`/`ksh`/`sh`) with the aliases and a warning.
 
 ### Nomad allocations
 
@@ -216,13 +217,13 @@ and the unpacked size, labeled.
 `hi <target>` works against Windows OpenSSH targets too, at whatever level the target supports:
 
 - **WSL, Git Bash, Cygwin or MSYS2 reachable on `PATH`**: the full experience (header, colors, git prompt, aliases) - same code path as any other ssh host.
-- **Stock Windows OpenSSH with no `bash` at all**: `hi` falls back to a plain interactive PowerShell session (no hi.d styling - that's bash-only) rather than failing outright. It still costs one authentication: hi writes its bootloader over the first of two calls multiplexed on the _same ssh connection_, and a target where that write cannot run `sh -c` is a target with no POSIX shell, which is exactly what the fallback is for. `DefaultShell` set to PowerShell lands in the same place.
+- **Stock Windows OpenSSH with no `bash` at all**: `hi` falls back to a plain interactive PowerShell session (no say-hi styling - that's bash-only) rather than failing outright. It still costs one authentication: hi writes its bootloader over the first of two calls multiplexed on the _same ssh connection_, and a target where that write cannot run `sh -c` is a target with no POSIX shell, which is exactly what the fallback is for. `DefaultShell` set to PowerShell lands in the same place.
 
-**Installing hi _on_ Windows:** use WSL. The `.deb` from the releases page installs into a WSL distribution unchanged - `/etc/profile.d/hi.d.sh`, `/usr/bin/hi`, everything as on any Debian - and WSL is where a Windows developer already using `ssh`/`docker`/`kubectl` most likely works.
+**Installing hi _on_ Windows:** use WSL. The `.deb` from the releases page installs into a WSL distribution unchanged - `/etc/profile.d/say-hi.sh`, `/usr/bin/hi`, everything as on any Debian - and WSL is where a Windows developer already using `ssh`/`docker`/`kubectl` most likely works.
 
-## hi.d and the alternatives
+## say-hi and the alternatives
 
-How hi.d compares to `sshrc`, `xxh`, `kyrat`, `sshdot` and `homeshick`, which
+How say-hi compares to `sshrc`, `xxh`, `kyrat`, `sshdot` and `homeshick`, which
 adjacent tools compose with it rather than compete, what actually makes it
 different, and where another tool is the better choice:
 [docs/ALTERNATIVES.md](docs/ALTERNATIVES.md).
@@ -288,7 +289,7 @@ the parallel container cases, the lint gate, relaying, `_HI_HOME`, and why the t
 ## More docs
 
 - [docs/CONFIGURATION.md](docs/CONFIGURATION.md) - the config overlay, every feature toggle and environment variable hi reads
-- [docs/ALTERNATIVES.md](docs/ALTERNATIVES.md) - sshrc, xxh, kyrat, sshdot and homeshick side by side; what makes hi.d different, and when another tool is the better choice
+- [docs/ALTERNATIVES.md](docs/ALTERNATIVES.md) - sshrc, xxh, kyrat, sshdot and homeshick side by side; what makes say-hi different, and when another tool is the better choice
 - [docs/TESTING.md](docs/TESTING.md) - the test runner, suite groups, parallel cases, the lint gate, relaying
 - [docs/GLOSSARY.md](docs/GLOSSARY.md) - the named idioms the code's `GLOSSARY:` comment tags point at; load-bearing for reading `common/`, and drift-checked by the lint suite
 - [docs/SECURITY.md](docs/SECURITY.md) - reporting, and what hi touches on a target
@@ -339,7 +340,7 @@ signature over the sums (the offline half — no `gh`, no network, one static pu
 ```sh
 sha256sum -c --ignore-missing SHA256SUMS                        # the bytes match the release
 minisign -Vm SHA256SUMS -P 'RWTDcJ3LGWayrAxK6mbMysyOF8mNLOmMUGRl4YSWk5KIoayS+lW0Fy1L'
-gh attestation verify hi.d_*_all.deb --repo ivylikethevine/hi.d # which CI run built them
+gh attestation verify say-hi_*_all.deb --repo ivylikethevine/say-hi # which CI run built them
 ```
 
 <!-- The -P value above is a placeholder until the first release's keypair is

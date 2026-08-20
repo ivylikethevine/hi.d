@@ -2,7 +2,7 @@ name: CodeQL
 
 # CodeQL over the one language in this repo it can read: GitHub Actions.
 #
-# **It cannot analyse the product.** hi.d is bash, and CodeQL has no shell
+# **It cannot analyse the product.** say-hi is bash, and CodeQL has no shell
 # analyser - not a gap in this config, a gap in CodeQL. The shell is covered by
 # shellcheck, checkbashisms, the bash-3.2 grep and `zsh -n`/`fish --no-execute`,
 # all of them inside `--group fast` (docs/TESTING.md). Nothing here changes

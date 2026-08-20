@@ -306,7 +306,7 @@ function test_help_lists_hi_s_own_flags() {
 # so a flag added there is guarded the moment it exists - with a floor on the
 # scrape's size, so a broken scrape can't pass as an empty loop.
 function test_help_flags_are_all_in_the_man_page() {
-  local man="$_HI_HOME/hi.d/docs/hi.1" out flags flag
+  local man="$_HI_HOME/say-hi/docs/hi.1" out flags flag
   [ -f "$man" ] || return 1
   out="$(_hi_help_out --help)" || return 1
   _hi_read_lines flags < <(printf '%s\n' "$out" | grep -oE -- '\-\-[a-z][a-z-]+' | sort -u)
@@ -325,7 +325,7 @@ function test_help_flags_are_all_in_the_man_page() {
 # because load.sh's default ranking is a literal inside _hi_session_shell -
 # a stale copy of it fails this test the same way a stale man page would.
 function test_shell_ladders_are_in_the_man_page() {
-  local man="$_HI_HOME/hi.d/docs/hi.1" shell
+  local man="$_HI_HOME/say-hi/docs/hi.1" shell
   [ -f "$man" ] || return 1
   for shell in $_HI_SHELL_LADDER fish zsh bash; do
     # -w keeps "sh" from riding on "ssh"
@@ -354,9 +354,9 @@ function test_the_shell_tree_is_the_documented_order() {
 # and it is the reason $_HI_NO_CHECKOUT exists.
 function _hi_subcmd_home() {
   local home="$_HI_WORKDIR/$1" f
-  mkdir -p "$home/hi.d"
+  mkdir -p "$home/say-hi"
   for f in common misc shells load.sh hi.sh; do
-    ln -sfn "$_HI_ROOT/$f" "$home/hi.d/$f"
+    ln -sfn "$_HI_ROOT/$f" "$home/say-hi/$f"
   done
   printf '%s' "$home"
 }
@@ -368,11 +368,11 @@ function _hi_subcmd_home() {
 function _hi_subcmd_stubs() {
   local home stub dir
   home="$(_hi_subcmd_home subcmd-stubs)"
-  mkdir -p "$home/hi.d/scripts" "$home/hi.d/tests"
+  mkdir -p "$home/say-hi/scripts" "$home/say-hi/tests"
   for stub in install:scripts/install.sh uninstall:scripts/uninstall.sh \
     color_preview:scripts/color_preview.sh doctor:scripts/doctor.sh \
     packages_preview:scripts/packages_preview.sh test_runner:tests/test_runner.sh; do
-    dir="$home/hi.d/${stub#*:}"
+    dir="$home/say-hi/${stub#*:}"
     printf '#!/bin/sh\nprintf %s\nfor a in "$@"; do printf " %%s" "$a"; done\nprintf "\\n"\n' \
       "'STUB ${stub%%:*}'" >"$dir"
     chmod +x "$dir"
@@ -383,7 +383,7 @@ function _hi_subcmd_stubs() {
 function _hi_subcmd_run() {
   local home="$1"
   shift
-  (_HI_HOME="$home" "$home/hi.d/hi.sh" "$@" 2>&1)
+  (_HI_HOME="$home" "$home/say-hi/hi.sh" "$@" 2>&1)
 }
 
 # every one of them names itself rather than dying on a missing path
@@ -396,7 +396,7 @@ function test_local_subcommands_refuse_without_the_checkout() {
       _hi_cecho " | $flag exited 0 without a checkout" "$RED"
       return 1
     }
-    [[ "$out" == *"hi $flag needs the full hi.d checkout"* ]] || {
+    [[ "$out" == *"hi $flag needs the full say-hi checkout"* ]] || {
       _hi_cecho " | $flag said: $out" "$RED"
       return 1
     }
@@ -417,7 +417,7 @@ function test_packages_preview_falls_back_to_the_shipped_check() {
   local home out
   home="$(_hi_subcmd_home subcmd-bare)"
   out="$(_hi_subcmd_run "$home" --packages-preview)" || return 1
-  [ -n "$out" ] && [[ "$out" != *"needs the full hi.d checkout"* ]]
+  [ -n "$out" ] && [[ "$out" != *"needs the full say-hi checkout"* ]]
 }
 
 # the mapping itself: which script, with which arguments

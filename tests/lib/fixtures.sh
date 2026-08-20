@@ -176,12 +176,12 @@ function _hi_alias_probe() {
   env -u _HI_CLEANUP _HI_HOME="$_HI_HOME" "$@" "$shell" -c "$script" 2>/dev/null
 }
 
-# _hi_scratch_tree <name> <dir...> - a throwaway hi.d under $_HI_WORKDIR/<name>
+# _hi_scratch_tree <name> <dir...> - a throwaway say-hi under $_HI_WORKDIR/<name>
 # holding copies of the named top-level directories, and prints the _HI_HOME
 # that points at it. What a "minimal shipped tree" needs is one edit here
 # rather than one per suite that stands one up.
 function _hi_scratch_tree() {
-  local name="$1" root="$_HI_WORKDIR/$1/hi.d" dir
+  local name="$1" root="$_HI_WORKDIR/$1/say-hi" dir
   shift
   mkdir -p "$root"
   for dir in "$@"; do cp -r "$_HI_ROOT/$dir" "$root/"; done

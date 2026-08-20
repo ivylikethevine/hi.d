@@ -52,7 +52,7 @@ function test_path_prefers_a_user_copy() {
   printf '# mine\n' >"$dir/tmux.conf"
   # shellcheck disable=SC2016 # the probe expands in the child sh, not here
   out="$(env _HI_HOME="$_HI_HOME" _HI_CONFIG_DIR="$dir" \
-    sh -c '. "$_HI_HOME/hi.d/common/paths.sh"; printf "%s" "$_HI_TMUXCONF"')"
+    sh -c '. "$_HI_HOME/say-hi/common/paths.sh"; printf "%s" "$_HI_TMUXCONF"')"
   [ "$out" = "$dir/tmux.conf" ]
 }
 

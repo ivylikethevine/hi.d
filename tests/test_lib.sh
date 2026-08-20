@@ -12,13 +12,13 @@ set -euo pipefail
 # Isolation, and it has to happen before bootstrap.sh: that resolves
 # $_HI_SETTINGS/$_HI_COLORS/$_HI_PACKAGES against $_HI_CONFIG_DIR once, so by
 # the time a suite runs it is too late to stop the developer's own
-# ~/.config/hi.d from deciding what those point at. Deliberately a path that
+# ~/.config/say-hi from deciding what those point at. Deliberately a path that
 # does not exist yet, so the baseline every suite starts from is "no overlay,
 # in-tree defaults"; a test wanting an overlay mkdir's this and writes into it,
 # and _hi_test_cleanup takes it away again. Same rule as never touching the
-# real ~/hi.d.
+# real ~/say-hi.
 export XDG_CONFIG_HOME="${TMPDIR:-/tmp}/hi.testcfg.$$"
-export _HI_CONFIG_DIR="$XDG_CONFIG_HOME/hi.d"
+export _HI_CONFIG_DIR="$XDG_CONFIG_HOME/say-hi"
 
 # The one place the test side resolves a tree. GLOSSARY: HI.33
 _hi_d="${BASH_SOURCE[0]}"

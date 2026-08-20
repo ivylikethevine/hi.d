@@ -1,7 +1,7 @@
 #!/bin/bash
 # Unit tests for common/paths.sh's local-only gate: the toggle flip at the
 # bottom of the file, which is what _HI_DISABLE_LOCAL means. It turns every
-# toggle off on the machine hi.d is *installed* on while leaving them on when
+# toggle off on the machine say-hi is *installed* on while leaving them on when
 # that machine says `hi` elsewhere, told apart by _HI_REMOTE_SESSION (load.sh
 # exports it; a local rc never does). Backwards, it would either strip hi from
 # every target or leave it running where the user asked it not to.
@@ -27,7 +27,7 @@ _HI_GATED_VARS=(_HI_DISABLE_HEADER _HI_DISABLE_PROMPT _HI_DISABLE_PERSONAL
 # have to exist), so the child goes through it exactly like a real shell.
 function _hi_gate() {
   _HI_DISABLE_LOCAL="$1" _HI_REMOTE_SESSION="$2" bash -c '
-    source "$_HI_HOME/hi.d/common/core.sh"
+    source "$_HI_HOME/say-hi/common/core.sh"
     for v in "$@"; do printf "%s=%s\n" "$v" "${!v:-}"; done
   ' _ "${_HI_GATED_VARS[@]}"
 }
@@ -105,7 +105,7 @@ function test_fish_toggle_list_matches_core() {
 function test_paths_sources_cleanly_under_strict_mode() {
   _HI_DISABLE_LOCAL=0 _HI_REMOTE_SESSION=0 bash -c '
     set -euo pipefail
-    source "$_HI_HOME/hi.d/common/core.sh"
+    source "$_HI_HOME/say-hi/common/core.sh"
     [ -n "$_HI_ROOT" ]
   '
 }
@@ -136,13 +136,13 @@ function _hi_none_unset() {
 # `bash -c` reaches directly
 function test_core_defines_every_toggle() {
   # shellcheck disable=SC2016 # this is source for a child bash, not for us
-  _hi_none_unset "$(_hi_defaults_via 'source "$_HI_HOME/hi.d/common/core.sh"')"
+  _hi_none_unset "$(_hi_defaults_via 'source "$_HI_HOME/say-hi/common/core.sh"')"
 }
 
 # the whole point: sourcing aliases.sh under `set -u` must not be fatal
 function test_aliases_source_cleanly_under_nounset() {
   bash -c 'set -euo pipefail
-    source "$_HI_HOME/hi.d/common/core.sh"
+    source "$_HI_HOME/say-hi/common/core.sh"
     source "$_HI_ALIASES"' 2>/dev/null
 }
 
@@ -156,7 +156,7 @@ function test_aliases_source_cleanly_under_nounset() {
 # would take the whole suite down with it.
 function test_aliases_do_not_source_themselves() {
   _HI_CONFIG_DIR="$_HI_ROOT/misc" bash -c 'set -eu
-    . "$_HI_HOME/hi.d/common/paths.sh"
+    . "$_HI_HOME/say-hi/common/paths.sh"
     . "$_HI_ALIASES"' >/dev/null 2>&1 &
   _hi_wait_pid "$!" 10
   [ "$_HI_WAIT_EXIT" != 124 ]
@@ -167,32 +167,32 @@ function test_settings_beat_the_defaults() {
   dir="$(_hi_overlay_dir)"
   printf 'export _HI_DISABLE_PROMPT=1\n' >"$dir/settings.sh"
   [ "$(_HI_CONFIG_DIR="$dir" bash -c \
-    'source "$_HI_HOME/hi.d/common/core.sh"; printf "%s" "$_HI_DISABLE_PROMPT"')" = 1 ]
+    'source "$_HI_HOME/say-hi/common/core.sh"; printf "%s" "$_HI_DISABLE_PROMPT"')" = 1 ]
 }
 
 # an explicit export from the caller's environment outranks the default too,
 # which is what makes `_HI_DISABLE_PROMPT=1 bash` work as a one-off
 function test_environment_beats_the_defaults() {
   [ "$(_HI_DISABLE_EDITORS=1 bash -c \
-    'source "$_HI_HOME/hi.d/common/core.sh"; printf "%s" "$_HI_DISABLE_EDITORS"')" = 1 ]
+    'source "$_HI_HOME/say-hi/common/core.sh"; printf "%s" "$_HI_DISABLE_EDITORS"')" = 1 ]
 }
 
 # colors and packages each resolve to $_HI_CONFIG_DIR's copy when the user has
 # made one and to the tree's otherwise, per file rather than all-or-nothing;
 # settings.sh only ever resolves to the overlay, since that is the only place
-# install.sh writes it. That is what keeps configuring hi.d from dirtying the
+# install.sh writes it. That is what keeps configuring say-hi from dirtying the
 # checkout - and what lets the tree be root-owned, which is the whole reason a
 # distro package can work.
 #
 # test_lib.sh points $_HI_CONFIG_DIR at a scratch path that doesn't exist, so
-# the un-overridden direction is the default here and a real ~/.config/hi.d
+# the un-overridden direction is the default here and a real ~/.config/say-hi
 # can't decide the result.
 
 # Print $1's value from a child shell that went through core.sh, with
 # $_HI_CONFIG_DIR pointed at $2.
 function _hi_resolved() {
   _HI_CONFIG_DIR="$2" bash -c \
-    'source "$_HI_HOME/hi.d/common/core.sh"; printf "%s" "${!1}"' _ "$1"
+    'source "$_HI_HOME/say-hi/common/core.sh"; printf "%s" "${!1}"' _ "$1"
 }
 
 function _hi_overlay_dir() {

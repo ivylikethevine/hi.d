@@ -1,7 +1,7 @@
 #!/bin/bash
 # Sets the release version across every manifest, with real checksums, so that
 # cutting a release is one command rather than four hand-edits that can
-# disagree. The version of record is packaging/aur/hi.d/PKGBUILD's pkgver -
+# disagree. The version of record is packaging/aur/say-hi/PKGBUILD's pkgver -
 # packaging/mkpkg.sh reads it back from there.
 #
 # Two modes:
@@ -21,10 +21,10 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 # One overridable seam - the test suite points it at a fixture directory with
 # the same layout; the three paths always derive from it.
 : "${_HI_PKG_DIR:=$_HI_ROOT/packaging}"
-_HI_PKGBUILD="$_HI_PKG_DIR/aur/hi.d/PKGBUILD"
-_HI_SRCINFO="$_HI_PKG_DIR/aur/hi.d/.SRCINFO"
-_HI_FORMULA="$_HI_PKG_DIR/homebrew/hi.d.rb"
-_HI_URL_BASE="https://github.com/ivylikethevine/hi.d/archive"
+_HI_PKGBUILD="$_HI_PKG_DIR/aur/say-hi/PKGBUILD"
+_HI_SRCINFO="$_HI_PKG_DIR/aur/say-hi/.SRCINFO"
+_HI_FORMULA="$_HI_PKG_DIR/homebrew/say-hi.rb"
+_HI_URL_BASE="https://github.com/ivylikethevine/say-hi/archive"
 # what a manifest reads before any release has been cut; --check rejects both
 _HI_PLACEHOLDER_SHA="0000000000000000000000000000000000000000000000000000000000000000"
 _HI_USAGE="Usage: bump.sh [--check] [--tarball <file>] <version>"
@@ -148,7 +148,7 @@ function rewrite_srcinfo_lines() {
   local b2="$1"
   _hi_rewrite "$_HI_SRCINFO" \
     "s/^\\([[:space:]]*\\)pkgver = .*/\\1pkgver = $_HI_VERSION/" \
-    "s|^\\([[:space:]]*\\)source = .*|\\1source = hi.d-$_HI_VERSION.tar.gz::$_HI_URL_BASE/v$_HI_VERSION.tar.gz|" \
+    "s|^\\([[:space:]]*\\)source = .*|\\1source = say-hi-$_HI_VERSION.tar.gz::$_HI_URL_BASE/v$_HI_VERSION.tar.gz|" \
     "s/^\\([[:space:]]*\\)b2sums = .*/\\1b2sums = $b2/"
 }
 
@@ -173,8 +173,8 @@ while [ $# -gt 0 ]; do
     cat <<EOF
 $_HI_USAGE
 
-Writes <version> (no leading v) into packaging/aur/hi.d/PKGBUILD, its
-.SRCINFO, and packaging/homebrew/hi.d.rb, along with the b2sum and sha256
+Writes <version> (no leading v) into packaging/aur/say-hi/PKGBUILD, its
+.SRCINFO, and packaging/homebrew/say-hi.rb, along with the b2sum and sha256
 of the matching GitHub release tarball.
 
   --check            Verify the manifests already agree on <version> and
@@ -185,7 +185,7 @@ of the matching GitHub release tarball.
                      for when GitHub is unreachable but the artifact is in
                      hand. It must be byte-identical to the tag's tarball.
 
-packaging/aur/hi.d-git/ is untouched: its pkgver() derives from the branch.
+packaging/aur/say-hi-git/ is untouched: its pkgver() derives from the branch.
 EOF
     exit 0
     ;;
@@ -217,7 +217,7 @@ if [ -n "$_HI_CHECK_ONLY" ]; then
   exit 1
 fi
 
-_hi_h1 "Bumping hi.d to $_HI_VERSION"
+_hi_h1 "Bumping say-hi to $_HI_VERSION"
 write_manifests "$_HI_TARBALL"
 _hi_h1 "Bumped!"
 _hi_cecho " | review the diff, commit it - the release workflow re-derives and verifies the same sums from the tag" "$BLUE"

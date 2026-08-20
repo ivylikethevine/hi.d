@@ -2,7 +2,7 @@
 
 > Copy your shell config to a target, start a session there, and clean up on exit.
 > Targets resolve in order: SSH host, Docker/Podman container, Nomad allocation, Kubernetes pod.
-> More information: <https://github.com/ivylikethevine/hi.d>.
+> More information: <https://github.com/ivylikethevine/say-hi>.
 
 - Start an interactive session on an SSH host, with your own prompt, colors and aliases:
 

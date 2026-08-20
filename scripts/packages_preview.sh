@@ -8,7 +8,7 @@ set -euo pipefail
 # GLOSSARY: HI.33 - the standalone-entry form, and why $_HI_HOME wins in it
 _hi_d="${BASH_SOURCE[0]}"
 case "$_hi_d" in */*) _hi_d="${_hi_d%/*}/.." ;; *) _hi_d=".." ;; esac
-[ -z "${_HI_HOME:-}" ] || _hi_d="$_HI_HOME/hi.d"
+[ -z "${_HI_HOME:-}" ] || _hi_d="$_HI_HOME/say-hi"
 # shellcheck source=../common/core.sh
 source "$_hi_d/common/core.sh"
 unset _hi_d
@@ -32,7 +32,7 @@ exactly as a connect will print it.
 
 Takes no arguments. Reads:
   misc/packages      the package:priority lines (override with $_HI_PACKAGES;
-                     ~/.config/hi.d/packages wins automatically when present)
+                     ~/.config/say-hi/packages wins automatically when present)
   common/header.sh   the priority meanings and their two color tables
 
 A cell reading "hidden" is not a color: at that priority the header prints

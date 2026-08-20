@@ -1,11 +1,11 @@
 # Color pins, one "type,name,color" per line. Copy this file to
-# ~/.config/hi.d/colors and edit it there - the copy in the tree is the default
-# hi.d ships, and editing it dirties the checkout `hi --update` pulls into.
+# ~/.config/say-hi/colors and edit it there - the copy in the tree is the default
+# say-hi ships, and editing it dirties the checkout `hi --update` pulls into.
 #
 # type  = hosttag | username | hostname | usertag
 # color = red, green, yellow, blue, magenta, cyan, brred, brgreen, bryellow, brblue, brmagenta, brcyan
 # LOCALUSER and LOCALHOSTNAME are special username/hostname names that match
-# the user/host of the machine hi.d is installed on, wherever that user/host
+# the user/host of the machine say-hi is installed on, wherever that user/host
 # shows up - e.g. "username,LOCALUSER,green" colors your own username green
 # even after ssh'ing into a machine where you're logged in under that same
 # name, without hardcoding the name itself. an exact "username,jeff,..." or

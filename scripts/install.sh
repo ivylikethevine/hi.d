@@ -1,5 +1,5 @@
 #!/bin/bash
-# Points the local shells at hi.d's configs and links hi.sh onto $PATH.
+# Points the local shells at say-hi's configs and links hi.sh onto $PATH.
 # Safe to re-run: it repairs the lines it owns and leaves everything else alone.
 #
 # --uninstall is the exact inverse and lives here rather than in a script of its
@@ -48,12 +48,12 @@ while [ $# -gt 0 ]; do
     cat <<EOF
 $_HI_USAGE
 
-Wires up the local shells to source this hi.d checkout and links hi.sh onto
+Wires up the local shells to source this say-hi checkout and links hi.sh onto
 PATH. Safe to re-run any time - it repairs its own lines and leaves
 everything else alone. The install location is always wherever this script
-lives (hi.d's parent directory), not a path you pass in - hi.d installs in
+lives (say-hi's parent directory), not a path you pass in - say-hi installs in
 place. Your own answers never land in the tree: they go to
-\${XDG_CONFIG_HOME:-\$HOME/.config}/hi.d/, so this works against a checkout
+\${XDG_CONFIG_HOME:-\$HOME/.config}/say-hi/, so this works against a checkout
 you don't own.
 
 Note: this needs sudo to link hi.sh into /usr/bin, and every prompt keeps
@@ -61,20 +61,20 @@ its current setting when there is no tty to answer on.
 
   --features-only  Skip the shell rc wiring and the hi.sh symlink - just
                    re-run the feature toggle prompts. This is what
-                   \`hi --configure\` calls once hi.d is installed.
+                   \`hi --configure\` calls once say-hi is installed.
   --check-configs  Only run the pre-install validation of your existing
                    ~/.bashrc, ~/.zshrc and ~/.config/fish/config.fish -
                    skip everything else. This is what \`hi --check-configs\`
                    calls.
   --overlay-init   Version the config overlay: \`git init\` plus a first
-                   commit in \${XDG_CONFIG_HOME:-\$HOME/.config}/hi.d, in
+                   commit in \${XDG_CONFIG_HOME:-\$HOME/.config}/say-hi, in
                    place. From then on \`hi --configure\` commits its own
                    settings writes; an overlay you never init never hears
                    about git. This is what \`hi --overlay-init\` calls.
   --uninstall      The inverse: strip hi's lines back out of those three rc
                    files, remove the settings.sh this wrote, and unlink
-                   /usr/bin/hi if it points at this hi.d. Safe to re-run.
-                   hi.d itself is left in place - rm -rf it yourself once
+                   /usr/bin/hi if it points at this say-hi. Safe to re-run.
+                   say-hi itself is left in place - rm -rf it yourself once
                    you're done with it - and so is the one-time
                    <rc-file>.hi-orig backup the install took before its
                    first write to each rc file. This is what
@@ -89,7 +89,7 @@ its current setting when there is no tty to answer on.
                    macOS the symlink cannot be made at all - /usr/bin is
                    read-only under SIP even for root.
   --prefix <dir>   Packaging mode (also entered by setting \$DESTDIR): copy
-                   the tree to \$DESTDIR<dir>/hi.d, link <dir>/hi.d/hi.sh in
+                   the tree to \$DESTDIR<dir>/say-hi, link <dir>/say-hi/hi.sh in
                    /usr/bin, and drop an /etc/profile.d snippet - then stop.
                    Touches no shell rc file, asks nothing, runs no sudo.
                    Defaults to /usr/share. This is what a PKGBUILD's
@@ -114,7 +114,7 @@ _HI_PACKAGING=""
 if [ -n "$_HI_PREFIX" ] || [ -n "${DESTDIR:-}" ]; then _HI_PACKAGING=1; fi
 : "${_HI_PREFIX:=/usr/share}"
 
-# Locate hi.d relative to this script (resolving symlinks) - hi.d's parent
+# Locate say-hi relative to this script (resolving symlinks) - say-hi's parent
 # directory is always the install dir, since this installs in place.
 # The same walk as hi.sh's and packaging/lib.sh's: fix one, fix all three.
 _HI_SELF="${BASH_SOURCE[0]}"
@@ -132,10 +132,10 @@ _HI_HOME="$(cd -P "$(dirname "$_HI_SELF")/../.." && pwd)"
 export _HI_HOME
 
 # shellcheck source=../common/core.sh
-source "$_HI_HOME/hi.d/common/core.sh"
+source "$_HI_HOME/say-hi/common/core.sh"
 # the measure-then-render primitives; deliberately outside the shipped common/
 # shellcheck source=./table.sh
-source "$_HI_HOME/hi.d/scripts/table.sh"
+source "$_HI_HOME/say-hi/scripts/table.sh"
 
 # The live previews borrow header.sh's banner/timestamp/system_info/identity/
 # full_check and git_prompt.sh's segment. Sourced on first use (the two
@@ -162,7 +162,7 @@ function _hi_load_preview_sources() {
 
 # Rewrite the hi-managed block (tagged with $_HI_MARKER) in $target to be
 # exactly $@, leaving other content untouched - so this both installs on a fresh
-# machine and repairs stale lines if hi.d has moved. Empty arguments are
+# machine and repairs stale lines if say-hi has moved. Empty arguments are
 # skipped, so a setting left at its default contributes nothing.
 function config_shell() {
   local name="$1" target="$2" line existing desired="" tmpfile
@@ -214,7 +214,7 @@ function strip_marker() {
   config_shell "$name" "$target"
 }
 
-# The rc line that states where hi.d is. Written for every install, not only
+# The rc line that states where say-hi is. Written for every install, not only
 # for one outside $HOME - "$HOME is a safe default" was the half of that rule
 # GLOSSARY: HI.33 retired. It is now the one place a *new* process can read the
 # answer without a tree to derive it from: a login shell, tmux's
@@ -343,7 +343,7 @@ function _hi_prompt_preview() {
   printf '%b\n' "$(_hi_userhost) $BRBLUE$cwd$NC"
 }
 
-# the real git prompt segment against hi.d's own checkout (always a git repo),
+# the real git prompt segment against say-hi's own checkout (always a git repo),
 # so the preview shows this machine's actual status. _HI_DISABLE_GIT_STATUS is
 # unset for the call, or a toggle the user has switched off makes it return
 # empty.
@@ -401,7 +401,7 @@ _HI_FEATURE_PROMPTS=(
   "_HI_DISABLE_ALIASES|1|_hi_aliases_preview| Enable the personal aliases in misc/aliases.sh (sudo, cat/eza, git, docker, pacman/apt, etc)?"
   "_HI_DISABLE_OSC52|1|_hi_osc52_preview| Enable the OSC 52 clipboard (a yank on a target lands in your local clipboard)?"
   "_HI_DISABLE_TMUX|1|_hi_tmux_preview| Enable hi's tmux config (permanent installs only - a detached tmux would outlive a disposable tree)?"
-  "_HI_DISABLE_LOCAL|1|| Enable all of the above on this machine (the one hi.d is installed on), not just when you hi elsewhere?"
+  "_HI_DISABLE_LOCAL|1|| Enable all of the above on this machine (the one say-hi is installed on), not just when you hi elsewhere?"
 )
 
 _HI_HEADER_PROMPTS=(
@@ -431,7 +431,7 @@ function ask_prompt_group() {
 
 # Prompt for the optional pieces of hi's shell config. $_HI_SETTINGS is sourced
 # by every shell (including fish) ahead of common/paths.sh, so the choice
-# applies locally and on every host hi.d gets copied to.
+# applies locally and on every host say-hi gets copied to.
 function config_features() {
   _hi_h2 "Choosing features"
   _hi_load_preview_sources
@@ -522,6 +522,56 @@ function config_prompt_ends() {
 # rather than an anonymous fragment. Any other shebang is replaced rather than
 # left alongside: dash and fish both source this, so sh is the only correct one.
 # config_shell rewrites only its own marker-tagged block, so this line stays.
+# The hi.d -> say-hi rename left existing overlays under the old name. Nothing
+# is broken by leaving one there - common/core.sh resolves $_HI_CONFIG_DIR to
+# an unmigrated ~/.config/hi.d and reads it where it lies - so this is an offer
+# to tidy, not a repair, and declining costs the user nothing.
+#
+# A move, never a merge or a copy: the overlay may be a git repo (overlay_init)
+# with a remote the user pushes to, and `mv` carries the .git with it in one
+# rename. Two overlays at once means they started a new one by hand, and
+# choosing a winner for them is not this script's call.
+function overlay_migrate() {
+  local base old new reply=""
+  base="${XDG_CONFIG_HOME:-$HOME/.config}"
+  old="$base/hi.d"
+  new="$base/say-hi"
+  # only when the old name is the one actually in use: an explicit
+  # $_HI_CONFIG_DIR (hi.sh points targets at a shipped copy) is not ours to move
+  [ -d "$old" ] && [ "$_HI_CONFIG_DIR" = "$old" ] || return 0
+  _hi_h2 "Checking the config overlay"
+  # core.sh only picks the old name when the new one is absent, so this is a
+  # race, not a state - but `mv` onto an existing directory moves *into* it
+  [ -e "$new" ] && {
+    _hi_cecho " both $old and $new exist - leaving both alone" "$YELLOW"
+    return 0
+  }
+  _hi_cecho " your overlay is at $old, under the old tree name" "$YELLOW"
+  if [ "$_HI_ASSUME_YES" != 1 ]; then
+    if [ ! -t 0 ]; then
+      _hi_cecho " leaving it there - it is still read. Re-run with --yes to move it to $new" "$BLUE"
+      return 0
+    fi
+    read -r -p " Move it to $new? [Y/n] " reply || reply=""
+    [ -z "$reply" ] && reply=y
+    [[ "$reply" =~ ^[Yy] ]] || {
+      _hi_cecho " leaving it at $old - it is still read" "$BLUE"
+      return 0
+    }
+  fi
+  mv "$old" "$new" || {
+    _hi_cecho " could not move $old - leaving it there, it is still read" "$RED"
+    return 0
+  }
+  # everything paths.sh derived from the old value is now stale; it is plain
+  # exports, so re-sourcing it is how the rest of this run sees the new home
+  _HI_CONFIG_DIR="$new"
+  export _HI_CONFIG_DIR
+  # shellcheck source=../common/paths.sh
+  source "$_HI_ROOT/common/paths.sh"
+  _hi_cecho " moved your overlay to $new :)" "$GREEN"
+}
+
 # `hi --overlay-init` - version the overlay where it lives. A repo *in*
 # $_HI_CONFIG_DIR versions exactly the files that are the user's, and dodges
 # the checkout's own .git (hi --update reads $_HI_ROOT/.git as "this is a
@@ -542,11 +592,11 @@ function overlay_init() {
   # a repo-local identity only when the user has none - a committed overlay
   # must not fail on a fresh machine that never ran `git config`
   git -C "$_HI_CONFIG_DIR" config user.email >/dev/null 2>&1 || {
-    git -C "$_HI_CONFIG_DIR" config user.name "hi.d"
-    git -C "$_HI_CONFIG_DIR" config user.email "hi.d@localhost"
+    git -C "$_HI_CONFIG_DIR" config user.name "say-hi"
+    git -C "$_HI_CONFIG_DIR" config user.email "say-hi@localhost"
   }
   git -C "$_HI_CONFIG_DIR" add -A &&
-    git -C "$_HI_CONFIG_DIR" commit -q --allow-empty -m "hi.d overlay: initial commit" || return 1
+    git -C "$_HI_CONFIG_DIR" commit -q --allow-empty -m "say-hi overlay: initial commit" || return 1
   _hi_cecho " $_HI_CONFIG_DIR is now a git repo - push it wherever you like (git remote add ...)" "$GREEN"
 }
 
@@ -717,7 +767,7 @@ function strip_settings() {
 function unlink_hi() {
   _hi_h2 "Checking hi.sh"
   if [ "$(readlink "$_HI_LINK" 2>/dev/null)" != "$_HI_LAUNCHER" ]; then
-    _hi_cecho " $_HI_LINK doesn't point at this hi.d, leaving it alone" "$GREEN"
+    _hi_cecho " $_HI_LINK doesn't point at this say-hi, leaving it alone" "$GREEN"
     return 0
   fi
   # same non-fatal ladder as config_hi
@@ -734,7 +784,7 @@ function unlink_hi() {
 }
 
 # Strips hi's marker-tagged lines from the local shell rc files, removes the
-# settings file, and unlinks /usr/bin/hi if it points at this hi.d. Leaves the
+# settings file, and unlinks /usr/bin/hi if it points at this say-hi. Leaves the
 # checkout itself in place - delete that yourself once you're done with it.
 function run_uninstall() {
   local row shell label target check
@@ -758,19 +808,19 @@ function run_uninstall() {
 # install_tree's cp lands file entries flat by basename either way.
 _HI_PACKAGE_CONTENTS=(common misc scripts shells hi.sh load.sh LICENSE.md README.md)
 
-# Packaging mode. hi.d normally installs *in place*, which assumes the tree is
+# Packaging mode. say-hi normally installs *in place*, which assumes the tree is
 # somewhere you own; here the tree is copied to a staging root for a package
 # manager to own instead, and every part of the normal install that reaches
 # outside that root - rc files, sudo, the settings the user hasn't chosen yet -
 # is skipped. Each user runs `hi --install` themselves afterwards; their answers
 # go to $_HI_CONFIG_DIR, so that works against a root-owned tree.
 function install_tree() {
-  local dest="${DESTDIR:-}$_HI_PREFIX/hi.d" bindir="${DESTDIR:-}/usr/bin"
-  local profile="${DESTDIR:-}/etc/profile.d/hi.d.sh" item line
+  local dest="${DESTDIR:-}$_HI_PREFIX/say-hi" bindir="${DESTDIR:-}/usr/bin"
+  local profile="${DESTDIR:-}/etc/profile.d/say-hi.sh" item line
   _hi_h2 "Installing the tree"
 
   # cp -R merges, so clear a pre-existing dest or removed files keep shipping
-  # ($dest is built two lines up and always ends in /hi.d)
+  # ($dest is built two lines up and always ends in /say-hi)
   rm -rf "$dest"
   mkdir -p "$dest"
   for item in "${_HI_PACKAGE_CONTENTS[@]}"; do
@@ -784,11 +834,11 @@ function install_tree() {
   # deliberately has no $DESTDIR on it - that staging prefix isn't there at
   # runtime and a link pointing into it would dangle
   mkdir -p "$bindir"
-  ln -sfn "$_HI_PREFIX/hi.d/hi.sh" "$bindir/hi"
-  _hi_cecho " $bindir/hi -> $_HI_PREFIX/hi.d/hi.sh :)" "$GREEN"
+  ln -sfn "$_HI_PREFIX/say-hi/hi.sh" "$bindir/hi"
+  _hi_cecho " $bindir/hi -> $_HI_PREFIX/say-hi/hi.sh :)" "$GREEN"
 
   # The man page lands outside the tree - man(1) won't look inside
-  # /usr/share/hi.d - and gzipped, deterministically (-n), which is the form
+  # /usr/share/say-hi - and gzipped, deterministically (-n), which is the form
   # lintian and namcap both prefer. Guarded on the source file: docs/ is not
   # in $_HI_PACKAGE_CONTENTS, so an already-installed tree has no copy to
   # re-stage from.
@@ -805,7 +855,7 @@ function install_tree() {
   # checkout, and the line has to name where the package lands.
   line="$(tmpdir_line sh "$_HI_PREFIX")"
   mkdir -p "$(dirname "$profile")"
-  printf '#!/bin/sh\n# added by hi.d during packaging\n%s\n' "$line" >"$profile"
+  printf '#!/bin/sh\n# added by say-hi during packaging\n%s\n' "$line" >"$profile"
   _hi_cecho " $profile :)" "$GREEN"
 }
 
@@ -833,7 +883,7 @@ _hi_cecho " | hi_home: $_HI_HOME | hi_root: $_HI_ROOT | login shell: ${SHELL##*/
 if [ -n "$_HI_UNINSTALL_MODE" ]; then
   run_uninstall
   _hi_h1 "Uninstalled!"
-  _hi_cecho " | hi.d itself is still at $_HI_ROOT - rm -rf it yourself if you're done with it" "$BLUE"
+  _hi_cecho " | say-hi itself is still at $_HI_ROOT - rm -rf it yourself if you're done with it" "$BLUE"
   exit 0
 fi
 
@@ -843,7 +893,7 @@ if [ -n "$_HI_PACKAGING" ]; then
   _hi_cecho " | destdir: ${DESTDIR:-<none>} | prefix: $_HI_PREFIX" "$BLUE"
   install_tree
   _hi_h1 "Packaged!"
-  _hi_cecho " | each user runs hi --install once for their own shells; their settings go to \$XDG_CONFIG_HOME/hi.d" "$BLUE"
+  _hi_cecho " | each user runs hi --install once for their own shells; their settings go to \$XDG_CONFIG_HOME/say-hi" "$BLUE"
   exit 0
 fi
 
@@ -851,6 +901,10 @@ if [ -n "$_HI_CHECK_CONFIGS_ONLY" ]; then
   check_shell_configs
   exit $?
 fi
+
+# Ahead of everything that reads or writes the overlay, and after the modes
+# that must not touch a user's home (packaging, uninstall) have already exited.
+overlay_migrate
 
 if [ -n "$_HI_OVERLAY_INIT" ]; then
   overlay_init

@@ -1,4 +1,4 @@
-# CLAUDE.md — working on hi.d
+# CLAUDE.md — working on say-hi
 
 Conventions for agent sessions in this repo. The README and docs/ describe the
 product; this file is only what a session needs to work here safely.
@@ -7,11 +7,18 @@ product; this file is only what a session needs to work here safely.
 
 Always set `_HI_HOME` explicitly — to this checkout's parent, e.g.
 `_HI_HOME=/home/ivy/projects/claude` — on every hi.sh, script, or test
-invocation. This machine's login profile exports `_HI_HOME=/home/ivy`, so the
-inherited value silently points every run at `~/hi.d`: the user's real,
-unrelated install. Never inspect or touch `~/hi.d`, even if it looks dirty.
-Symptom of forgetting: suites report fewer/MISSING cases, or a script runs
-"clean" because it ran against the wrong tree.
+invocation. This machine's login profile exports `_HI_HOME=/home/ivy`, and the
+user's real, unrelated install lives at `~/hi.d`. Never inspect or touch
+`~/hi.d`, even if it looks dirty. Symptom of forgetting: suites report
+fewer/MISSING cases, or a script runs "clean" because it ran against the wrong
+tree.
+
+The tree rename (`hi.d` → `say-hi`) changed the *shape* of that hazard without
+removing it. `$_HI_ROOT` now resolves as `$_HI_HOME/say-hi`, so an inherited
+`_HI_HOME=/home/ivy` no longer lands on the user's install — it lands on a
+`~/say-hi` that does not exist, and fails loudly instead of quietly. That is an
+improvement, not an all-clear: the second half below is unchanged and is still
+silent.
 
 **`_HI_HOME` alone is not enough to run one suite directly.** The same login
 profile also exports `_HI_ROOT` and `_HI_TEST_LIB`, and a suite's source line
@@ -28,7 +35,7 @@ or, when a suite really has to run on its own, set both:
 
 ```sh
 export _HI_HOME=/home/ivy/projects/claude
-export _HI_TEST_LIB=$_HI_HOME/hi.d/tests/test_lib.sh
+export _HI_TEST_LIB=$_HI_HOME/say-hi/tests/test_lib.sh
 ```
 
 ## Testing

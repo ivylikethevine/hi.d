@@ -1,8 +1,8 @@
-pkgbase = hi.d-git
+pkgbase = say-hi-git
 	pkgdesc = sshrc supercharged - your shell config, on every host you say hi to (git)
 	pkgver = r0.0000000
 	pkgrel = 1
-	url = https://github.com/ivylikethevine/hi.d
+	url = https://github.com/ivylikethevine/say-hi
 	arch = any
 	license = MIT
 	makedepends = git
@@ -14,9 +14,9 @@ pkgbase = hi.d-git
 	optdepends = podman: container targets
 	optdepends = nomad: allocation targets
 	optdepends = kubectl: pod targets
-	provides = hi.d
-	conflicts = hi.d
-	source = hi.d::git+https://github.com/ivylikethevine/hi.d.git#branch=main
+	provides = say-hi
+	conflicts = say-hi
+	source = say-hi::git+https://github.com/ivylikethevine/say-hi.git#branch=main
 	b2sums = SKIP
 
-pkgname = hi.d-git
+pkgname = say-hi-git

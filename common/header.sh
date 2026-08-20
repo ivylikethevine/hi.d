@@ -27,7 +27,7 @@ function _hi_header_version() {
   printf '%s\n' "$_HI_HEADER_VERSION"
 }
 
-# UTC | version | local: no "hi.d" label - the banner above already says whose
+# UTC | version | local: no "say-hi" label - the banner above already says whose
 function timestamp() {
   header_row "$BRBLUE$(date -u "$_HI_HUMAN_CENTRIC_DATE") " \
     "$GREEN$(_hi_header_version)" \
@@ -210,7 +210,7 @@ function identity() {
   header_row "${cells[@]}"
 }
 
-# "~~~ <label> [host] ~~~" prefixed with hi.d's local change count, always
+# "~~~ <label> [host] ~~~" prefixed with say-hi's local change count, always
 # _HI_MAX_WIDTH columns wide
 function banner() {
   [[ "${_HI_HEADER_BANNER:-1}" == 0 ]] && return 0

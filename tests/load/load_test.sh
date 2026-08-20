@@ -1,7 +1,7 @@
 #!/bin/bash
 # Unit tests for load.sh, the target-side half of hi: the marker-delimited block
 # it grafts onto the host's rc files, and the cleanup that takes it - and, only
-# for a disposable tree, hi.d itself - back out. Sourced with
+# for a disposable tree, say-hi itself - back out. Sourced with
 # _HI_LOAD_NO_INIT=1 for the functions alone, with _HI_CONFIGS and _HI_ROOT
 # reassigned into the scratch dir.
 #
@@ -116,8 +116,8 @@ function test_dead_graft_is_silent_in_bash() {
 function test_live_graft_still_runs_in_bash() {
   local out
   _hi_fake_rcs livegraft
-  mkdir -p "$_HI_FAKE_HOME/hi.d/common"
-  : >"$_HI_FAKE_HOME/hi.d/common/core.sh"
+  mkdir -p "$_HI_FAKE_HOME/say-hi/common"
+  : >"$_HI_FAKE_HOME/say-hi/common/core.sh"
   printf 'echo graft-ran\n' >"$_HI_FAKE_HOME/src.bashrc"
   configure_files
   out="$(env -i HOME="$_HI_FAKE_HOME" TERM=dumb PATH="$PATH" _HI_HOME="$_HI_FAKE_HOME" \
@@ -126,14 +126,14 @@ function test_live_graft_still_runs_in_bash() {
 }
 
 # The bystander HI.24 names: a shell opened mid-session with none of the
-# session's env. The tree is right there at $HOME/hi.d and the graft still has
+# session's env. The tree is right there at $HOME/say-hi and the graft still has
 # to stay out of it - that shell was never given a tree, and picking one for it
 # is the guess this guard exists to refuse.
 function test_live_graft_is_silent_without_a_tree_in_the_env() {
   local out
   _hi_fake_rcs bystander
-  mkdir -p "$_HI_FAKE_HOME/hi.d/common"
-  : >"$_HI_FAKE_HOME/hi.d/common/core.sh"
+  mkdir -p "$_HI_FAKE_HOME/say-hi/common"
+  : >"$_HI_FAKE_HOME/say-hi/common/core.sh"
   printf 'echo graft-ran\n' >"$_HI_FAKE_HOME/src.bashrc"
   configure_files
   out="$(env -i HOME="$_HI_FAKE_HOME" TERM=dumb PATH="$PATH" \
@@ -267,8 +267,8 @@ function _hi_shell_answer() {
   env -i "$@" PATH="$dir:$(_hi_real_path shell-tools id awk getent sh)" \
     HOME="$_HI_WORKDIR" _HI_HOME="$_HI_HOME" "$BASH" -c '
     _HI_LOAD_NO_INIT=1
-    source "$_HI_HOME/hi.d/common/core.sh"
-    source "$_HI_HOME/hi.d/load.sh"
+    source "$_HI_HOME/say-hi/common/core.sh"
+    source "$_HI_HOME/say-hi/load.sh"
     _hi_session_shell' 2>/dev/null
 }
 
@@ -317,8 +317,8 @@ function _hi_tmux_answer() {
   local out rc=0
   out="$(env "$@" bash -c '
     _HI_LOAD_NO_INIT=1
-    source "$_HI_HOME/hi.d/common/core.sh"
-    source "$_HI_HOME/hi.d/load.sh"
+    source "$_HI_HOME/say-hi/common/core.sh"
+    source "$_HI_HOME/say-hi/load.sh"
     if _hi_tmux_wanted; then echo yes; else echo no; fi' 2>&1)" || rc=$?
   printf '%s' "$out"
   return "$rc"

@@ -23,12 +23,12 @@ function _hi_restore_profile() {
 set -euo pipefail
 
 # only hi's remote paths chainload this file - how common/paths.sh tells
-# "reached via hi" from "the machine hi.d lives on"
+# "reached via hi" from "the machine say-hi lives on"
 export _HI_REMOTE_SESSION=1
 
 : "${_HI_HOME:=$(cd -P "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 # shellcheck source=./common/core.sh
-source "$_HI_HOME/hi.d/common/core.sh"
+source "$_HI_HOME/say-hi/common/core.sh"
 # shellcheck source=./common/header.sh
 source "$_HI_HEADER"
 
@@ -64,11 +64,11 @@ function configure_files() {
     # shellcheck disable=SC2016 # single quotes are the point: the guard expands at shell start, not graft time
     case "$shell" in
     fish)
-      open='if set -q _HI_HOME; and test -f $_HI_HOME/hi.d/common/core.sh'
+      open='if set -q _HI_HOME; and test -f $_HI_HOME/say-hi/common/core.sh'
       body="$open"$'\n'"$(<"$src")"$'\n'"end"
       ;;
     *)
-      open='if [ -f "${_HI_HOME:-}/hi.d/common/core.sh" ]; then'
+      open='if [ -f "${_HI_HOME:-}/say-hi/common/core.sh" ]; then'
       body="$open"$'\n'"$(<"$src")"$'\n'"fi"
       ;;
     esac
@@ -130,7 +130,7 @@ function _hi_session_shell() {
 function _hi_tmux_wanted() {
   [ "${_HI_TMUX_ATTACH:-0}" = 1 ] || return 1
   if [ -n "${_HI_CLEANUP:-}" ]; then
-    _hi_cecho " --tmux needs a permanent hi.d here (scripts/install.sh) - this tree is disposable, so a detached session would outlive it. Continuing without tmux." "$YELLOW"
+    _hi_cecho " --tmux needs a permanent say-hi here (scripts/install.sh) - this tree is disposable, so a detached session would outlive it. Continuing without tmux." "$YELLOW"
     return 1
   fi
   if ! command -v tmux >/dev/null 2>&1; then

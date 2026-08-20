@@ -87,7 +87,7 @@ function test_ksh_glyphs_match_core() {
 }
 
 # fish renders its git segment with its own __fish_git_prompt, so config.fish
-# carries a third copy of the glyphs and palette - one hi.d never guarded. The
+# carries a third copy of the glyphs and palette - one say-hi never guarded. The
 # cases below read the file rather than running fish: the copy is a set of
 # literals, so parsing them is the whole check, and it holds on a runner with
 # no fish installed (which is where the drift would land unnoticed).

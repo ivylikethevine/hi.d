@@ -2,14 +2,14 @@
 #
 # The versioned package, cut from a tagged release tarball. packaging/bump.sh
 # rewrites pkgver and b2sums together; do not edit either by hand.
-# hi.d-git/ is the same package built from the branch instead.
+# say-hi-git/ is the same package built from the branch instead.
 
-pkgname=hi.d
+pkgname=say-hi
 pkgver=0.0.0
 pkgrel=1
 pkgdesc="sshrc supercharged - your shell config, on every host you say hi to"
 arch=('any')
-url="https://github.com/ivylikethevine/hi.d"
+url="https://github.com/ivylikethevine/say-hi"
 license=('MIT')
 # tar, coreutils, gawk and sed are used too, but they are in base - namcap
 # flags depending on those explicitly.
@@ -28,28 +28,28 @@ b2sums=('SKIP')
 
 prepare() {
   # scripts/install.sh derives $_HI_HOME as <checkout>/.. and then looks for
-  # $_HI_HOME/hi.d, so the checkout has to be named exactly hi.d - and GitHub's
-  # tarball unpacks to hi.d-$pkgver. A symlink rather than a mv: it is
+  # $_HI_HOME/say-hi, so the checkout has to be named exactly say-hi - and GitHub's
+  # tarball unpacks to say-hi-$pkgver. A symlink rather than a mv: it is
   # idempotent, so `makepkg -e` over an existing $srcdir stays a no-op.
-  ln -sfn "$srcdir/$pkgname-$pkgver" "$srcdir/hi.d"
+  ln -sfn "$srcdir/$pkgname-$pkgver" "$srcdir/say-hi"
 }
 
 package() {
   # install.sh's packaging mode is the whole of package(): it copies
-  # $_HI_PACKAGE_CONTENTS to $DESTDIR/usr/share/hi.d, links /usr/bin/hi at the
+  # $_HI_PACKAGE_CONTENTS to $DESTDIR/usr/share/say-hi, links /usr/bin/hi at the
   # *installed* location (no $pkgdir in the link target), and writes the
   # /etc/profile.d snippet that exports _HI_HOME=/usr/share. Copying by hand
   # here instead would be a second copy of that list, free to drift.
-  DESTDIR="$pkgdir" "$srcdir/hi.d/scripts/install.sh" --prefix /usr/share
+  DESTDIR="$pkgdir" "$srcdir/say-hi/scripts/install.sh" --prefix /usr/share
 
   # `hi --version` and `man hi`'s footer answer with pkgver. Stamped at build
   # time because the tarball cannot carry it: bump.sh's manifest pass runs
   # after the tag exists, so a committed stamp would always be stale here.
   # packaging/stamp.sh is the one implementation every channel calls; makepkg
   # sets SOURCE_DATE_EPOCH, so the man page's date is reproducible.
-  "$srcdir/hi.d/packaging/stamp.sh" --root "$pkgdir" --version "$pkgver"
+  "$srcdir/say-hi/packaging/stamp.sh" --root "$pkgdir" --version "$pkgver"
 
   # Arch wants the licence here as well; install_tree's copy lives inside the
   # tree, where it is what `hi` ships to a target rather than what pacman reads.
-  install -Dm644 "$srcdir/hi.d/LICENSE.md" "$pkgdir/usr/share/licenses/$pkgname/LICENSE.md"
+  install -Dm644 "$srcdir/say-hi/LICENSE.md" "$pkgdir/usr/share/licenses/$pkgname/LICENSE.md"
 }

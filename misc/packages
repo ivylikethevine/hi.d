@@ -1,6 +1,6 @@
 # The packages hi's header checks for. Copy this file to
-# ~/.config/hi.d/packages and edit it there - the copy in the tree is the
-# default hi.d ships, and editing it dirties the checkout `hi --update` pulls into.
+# ~/.config/say-hi/packages and edit it there - the copy in the tree is the
+# default say-hi ships, and editing it dirties the checkout `hi --update` pulls into.
 # `hi --packages-preview` renders what the priorities below do: each one's
 # colors, a real example of each from this file, then the check itself.
 #group,package:priority,package2:priority2...

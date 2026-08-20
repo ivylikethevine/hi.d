@@ -34,7 +34,7 @@ function demo_sshd_image() {
   # The ssh demo's configuration, and the only one that lives on the target.
   # hi.sh's permanent-install branch (_say_hi, the $remote_root arm) sets
   # $_HI_HOME and $_HI_ROOT and stops, leaving core.sh to default
-  # $_HI_CONFIG_DIR to the box's own ~/.config/hi.d - no overlay ships, which
+  # $_HI_CONFIG_DIR to the box's own ~/.config/say-hi - no overlay ships, which
   # is the point of a permanent install. So this rides in the image, where the
   # rest of the box's identity already is, and `docker run hi-demo-sshd` alone
   # is the demo's box rather than one that still needs configuring.

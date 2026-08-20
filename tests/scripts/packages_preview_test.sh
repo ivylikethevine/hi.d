@@ -182,13 +182,13 @@ function test_example_cell_marks_a_priority_with_nothing_to_show() {
 # way to point the script at one is to give it a scratch tree to derive it from.
 function _hi_render_preview() {
   PATH="$(_hi_pkg_path)" HOME="$_HI_WORKDIR/tree" _HI_HOME="$_HI_WORKDIR/tree" \
-    "$_HI_WORKDIR/tree/hi.d/scripts/packages_preview.sh" 2>&1
+    "$_HI_WORKDIR/tree/say-hi/scripts/packages_preview.sh" 2>&1
 }
 
 function _hi_write_preview_tree() {
   local home
   home="$(_hi_scratch_tree tree common misc scripts)"
-  cp "$_HI_WORKDIR/packages" "$home/hi.d/misc/packages"
+  cp "$_HI_WORKDIR/packages" "$home/say-hi/misc/packages"
 }
 
 # One render (the slowest thing this suite does) shared by the cases below;
@@ -230,9 +230,9 @@ function test_preview_ends_with_the_real_check() {
 function test_preview_reports_a_missing_packages_file() {
   local home out
   home="$(_hi_scratch_tree nopackages common misc scripts)"
-  rm -f "$home/hi.d/misc/packages"
+  rm -f "$home/say-hi/misc/packages"
   out="$(PATH="$(_hi_pkg_path)" HOME="$home" _HI_HOME="$home" \
-    "$home/hi.d/scripts/packages_preview.sh" 2>&1)" && return 1
+    "$home/say-hi/scripts/packages_preview.sh" 2>&1)" && return 1
   [[ "$out" == *"No packages file"* ]]
 }
 

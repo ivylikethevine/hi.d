@@ -284,17 +284,37 @@ function _hi_par_check() {
   _hi_par_case "$1" _hi_assert "$@"
 }
 
+# _hi_check_eq / _hi_par_check_eq <label> <want> <cmd...> - the _hi_expect_eq
+# twins of _hi_check / _hi_par_check.
+function _hi_check_eq() {
+  _hi_case _hi_expect_eq "$@"
+}
+
+function _hi_par_check_eq() {
+  _hi_par_case "$1" _hi_expect_eq "$@"
+}
+
 function _hi_par_check_requires() {
   local bin="$1"
   shift
-  _hi_par_case "$1" _hi_par_requires_body "$bin" "$@"
+  _hi_par_case "$1" _hi_par_requires_body "$bin" _hi_assert "$@"
 }
 
-function _hi_par_requires_body() {
+# _hi_par_check_requires_eq <bin> <label> <want> <cmd...> - the _hi_expect_eq
+# arm of the same guard.
+function _hi_par_check_requires_eq() {
   local bin="$1"
   shift
+  _hi_par_case "$1" _hi_par_requires_body "$bin" _hi_expect_eq "$@"
+}
+
+# The assertion is a parameter so both wrappers above share one guard: which of
+# _hi_assert / _hi_expect_eq runs is the only thing that differs between them.
+function _hi_par_requires_body() {
+  local bin="$1" assert="$2"
+  shift 2
   if command -v "$bin" >/dev/null 2>&1; then
-    _hi_assert "$@"
+    "$assert" "$@"
   else
     _hi_skip "$1" "no $bin"
   fi
@@ -315,11 +335,20 @@ function _hi_par_wait() {
       _hi_align " | [$label] -- the case left no verdict (killed, or it exited the subshell)" "FAILED" "$RED"
       _hi_note_failure "[$label] left no verdict"
     fi
-    _HI_TOTAL=$((_HI_TOTAL + 1))
-    [ "$rc" -eq 0 ] || {
+    # $_HI_TOTAL counts cases that reached a verdict, pass or fail - a skipped
+    # one is tracked in $_HI_SKIPPED alone. That is the serial twin's rule
+    # (_hi_check_requires reaches _hi_skip *without* going through _hi_case, so
+    # nothing is added there), and counting it in both columns here made
+    # test_runner.sh's `pass = cases - failed` report every stand-down as a
+    # green pass - inflating the number that feeds --totals-file and the README
+    # badge. A case that skipped and then failed is still a failure.
+    if [ "$rc" -ne 0 ]; then
+      _HI_TOTAL=$((_HI_TOTAL + 1))
       _HI_FAILED=$((_HI_FAILED + 1))
       _hi_note_failure_unless_named "$label" "[$label] exited $rc before reporting a verdict"
-    }
+    elif [ "$skipped" -eq 0 ]; then
+      _HI_TOTAL=$((_HI_TOTAL + 1))
+    fi
     # shellcheck disable=SC2031 # this is the parent's copy, which is the point
     _HI_SKIPPED=$((${_HI_SKIPPED:-0} + skipped))
   done
@@ -684,14 +713,55 @@ function _hi_note_failure() {
 }
 
 # _hi_note_failure_unless_named <label> <text> - the parallel path's backstop. A
-# case that dies before _hi_case_result (a container that never started, say)
-# has named nothing, and the recap then says only "suite exited N with no
-# per-case detail". One that died after has already named itself, and must not
-# be listed twice - hence the check for its "[label]" prefix.
+# case that dies before naming itself (a container that never started, say) has
+# named nothing, and the recap then says only "suite exited N with no per-case
+# detail". One that died after has already named itself, and must not be listed
+# twice.
+#
+# Both naming forms have to be checked, because the two case runners write
+# different ones: _hi_case_result (the e2e path) writes "[label] ...", while
+# _hi_assert (what _hi_par_check uses, so every fast-group parallel case) writes
+# the bare label. Checking only the bracketed form listed every failed fast
+# parallel case twice - once truthfully, then again as "exited 1 before
+# reporting a verdict", which reads as a crash rather than a false assertion.
 function _hi_note_failure_unless_named() {
   [ -n "${_HI_FAILS_FILE:-}" ] || return 0
+  grep -qxF "$1" "$_HI_FAILS_FILE" 2>/dev/null && return 0
   grep -qF "[$1]" "$_HI_FAILS_FILE" 2>/dev/null && return 0
   _hi_note_failure "$2"
+}
+
+# _hi_expect_eq <label> <want> <cmd...> - _hi_assert's twin for a value rather
+# than a predicate: it runs <cmd>, compares its stdout to <want>, and says what
+# it got. A bare `[ "$a" = "$b" ]` inside a case reports FAILED and nothing else,
+# so a red run on a machine you cannot reach - CI, someone else's laptop -
+# replays a transcript that names the case and withholds the one fact that
+# would explain it. Both values print at _hi_dump_log's six-space indent, and
+# quoted, so an empty result and a trailing newline are visible rather than
+# guessed at.
+#
+# It reports its own verdict exactly as _hi_assert does, so it drops into
+# either case runner - _hi_check_eq and _hi_par_check_eq, up beside the pair
+# they mirror, are its _hi_check / _hi_par_check. The parallel path captures a
+# case's stdout and replays it in submission order, which this writes to like
+# any other case output.
+function _hi_expect_eq() {
+  local label="$1" want="$2" got
+  shift 2
+  # `|| true`, because the assertion is about what <cmd> *printed*: the bare
+  # `[ "$(cmd)" = ... ]` this replaces discarded the exit status too, and a
+  # plain assignment would instead hand it to `set -e` and lose the diagnostic
+  # in the one case it exists for.
+  got="$("$@" || true)"
+  if [ "$got" = "$want" ]; then
+    _hi_align " | $label" "OK" "$GREEN"
+    return 0
+  fi
+  _hi_align " | $label" "FAILED" "$RED"
+  _hi_cecho "      want: \"$want\"" "$RED"
+  _hi_cecho "      got:  \"$got\"" "$RED"
+  _hi_note_failure "$label"
+  return 1
 }
 
 # _hi_dump_log <message> <file> [color] - a failure line and the output that

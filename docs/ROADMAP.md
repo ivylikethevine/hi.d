@@ -18,18 +18,69 @@ here: git history is the ledger, and this file is only what is left to do.
 - [In-repo code work](#in-repo-code-work)
   - [Release & packaging](#release--packaging)
   - [Tooling](#tooling)
+  - [Testing & CI](#testing--ci)
   - [Demos](#demos)
 - [Outside this repo](#outside-this-repo)
   - [Secrets & keys](#secrets--keys)
   - [Release channels](#release-channels)
-  - [CI runs to dispatch](#ci-runs-to-dispatch)
+  - [CI runs waiting on a first green](#ci-runs-waiting-on-a-first-green)
   - [Docs & submissions](#docs--submissions)
 
 ## In-repo code work
 
 ### Release & packaging
 
-- [ ] **Source tarball under the provenance chain** — _Blocked on: v1._ Both
+- [ ] **Say what v1.0.0 means** — README says EXPERIMENTAL UNTIL v1.0.0 and two
+      entries here are already _Blocked on: v1_, with nothing anywhere stating
+      what v1 is. That makes "blocked on v1" a mood rather than a date: no entry
+      can be scheduled against it, and nobody can tell whether shipping it is a
+      week away or a quarter. The fix is a list, not a release — write down what
+      has to be true, and the blocked entries become orderable behind it.
+
+  - **The obvious candidates**, each already tracked somewhere in this file: the
+    CLI surface frozen (the tldr entry is blocked on exactly that), both keypairs
+    generated, `macos-e2e.yml` and `windows-e2e.yml` green at least once rather
+    than merely written, and every release channel published once by hand before
+    the automation is trusted with it.
+  - **It is a gate, not a wish list.** Anything that would be nice by v1 but does
+    not block calling the thing stable belongs in its own entry, unticked, rather
+    than padding this one — the point is a list short enough to finish.
+  - **Ticks when:** the criteria are written down, every one of them names the
+    entry or file that satisfies it, and the two _Blocked on: v1_ entries point
+    at this one instead of at a version number.
+
+- [ ] **Rename the tree from `hi.d` to `say-hi`** — the directory name is
+      load-bearing in more places than it looks. Every path in the product
+      resolves as `$_HI_HOME/hi.d` (`common/core.sh`, `common/paths.sh`, `hi.sh`,
+      `load.sh`, `scripts/install.sh`, `packaging/lib.sh`), all four packages are
+      named `hi.d`, the packaged profile hook is `/etc/profile.d/hi.d.sh`, and
+      `packaging/apk/hi.d.rsa.pub` is matched by filename out of `/etc/apk/keys/`.
+      Nothing is published to any channel yet, which is exactly why this is a
+      _now_ item: the cost is at its floor today and rises the moment the first
+      channel goes live, so it belongs **before** v1 rather than after it.
+
+  - **The transition is the hard half, not the rename.** An existing install has
+    `~/hi.d` and rc lines pointing at it. `scripts/install.sh` repairs its own
+    lines, but `hi.sh`'s permanent-install probe reads the `_HI_HOME` line a
+    _target_ wrote and falls back to `~/hi.d` when there is none — so a target
+    nobody has updated still answers with the old name. That fallback has to
+    accept both names for a release or two, and `hi --doctor` should say which
+    one it found.
+  - **Four names, four decisions.** The tree (`hi.d`), the command (`hi`), the
+    env prefix (`_HI_*`) and the config directory (`~/.config/hi.d/`) are
+    independent. This entry is the **tree only**; renaming the other three is a
+    much larger change and each would need its own entry and its own migration.
+  - **Everything with the name baked in has to move together:** the four package
+    manifests and their tests, the apk key filename (`nfpm.yaml`'s `key_name`
+    must keep matching it), the repo URL in every manifest and doc, and the demo
+    GIFs, which show real paths on screen and would have to be re-rendered.
+  - **Ticks when:** a fresh install lands in `$_HI_HOME/say-hi`, an existing
+    `~/hi.d` is still found and still connects, `tests/scripts/install_location_test.sh`
+    covers both names, and no file in the tree names `hi.d` except where it is
+    deliberately describing the old name.
+
+- [ ] **Source tarball under the provenance chain** — _Blocked on **Say what
+      v1.0.0 means**, above._ Both
       manifests checksum GitHub's auto-generated `/archive/` tarball, the one
       released artifact with no attestation and no signature over it. The
       release already builds the identical shape (`git archive` in the
@@ -37,6 +88,107 @@ here: git history is the ledger, and this file is only what is left to do.
       `url=`s at it. Touches `bump.sh`, both manifests and their tests.
 
 ### Tooling
+
+- [ ] **`hi --<TAB>` completes hi's own flags** — completion answers targets and
+      nothing else: `complete -F _hi_complete hi` (`shells/bash.sh`),
+      `compdef _hi hi` (`shells/zsh.zsh`) and `complete -c hi -f -a '(sh
+      $_HI_TARGETS)'` (`shells/config.fish`) all resolve `common/targets.sh` and
+      stop there. So none of the flags `hi --help` lists complete, in any shell —
+      the one part of the CLI a user cannot discover by pressing TAB, in a tool
+      whose pitch is that the session is the same everywhere.
+
+  - **Single-home the roster or it will drift.** The flags are spelled out in
+    `hi.sh`'s `--help` heredoc and again in `docs/hi.1`; three completions would
+    make five copies. Put the list where `$_HI_SHELL_TABLE` lives and have the
+    lint suite check the four consumers agree, the way it already drift-checks
+    the `GLOSSARY:` tags.
+  - **Not every flag exists on a target.** `--install`, `--test`,
+    `--configure`, `--check-configs` and `--color-preview` need `scripts/`, which
+    the payload does not carry, so a session offering them completes straight
+    into `$_HI_NO_CHECKOUT`. Filter on `$_HI_REMOTE_SESSION` rather than shipping
+    a list that is wrong on half the machines it runs on.
+  - **It costs wire.** The completions ship, and the payload is CI-budgeted
+    twice; check both numbers, not just the badge.
+  - **Ticks when:** `hi --<TAB>` completes flags in bash, zsh and fish, a remote
+    session offers only the flags that work there, and a lint case fails when the
+    roster and `--help` disagree.
+
+- [ ] **Pick the container or task on multi-container targets** — README
+      documents the same limitation twice and it is the only place `hi <target>`
+      is knowingly less capable than the CLI underneath it. A multi-task Nomad
+      allocation needs `nomad alloc exec -task <name>` and a multi-container pod
+      needs `kubectl exec -c <name>`; `hi` passes through neither, so an
+      allocation needs a single unambiguous task and a pod silently gets its
+      first container — `kubectl`'s own default, with `kubectl`'s warning, which
+      is not the same thing as a choice.
+
+  - **Where it plugs in:** `_say_hi_container` (`hi.sh`) already builds a
+    `probe`/`cp`/`attach` triple per backend, and every one of the three needs
+    the same flag — that triple is the whole surface this touches.
+  - **Decide the spelling first.** A `--task`/`--container` flag, a setting, or
+    `pod/container` on the target itself are three different answers with
+    different completion stories; `common/targets.sh` would have to emit the
+    inner names for the last one.
+  - **Ticks when:** a multi-container pod and a multi-task allocation each get a
+    named session, `tests/targets/kube_test.sh` and `tests/targets/nomad_test.sh`
+    cover both, and README's two caveats are replaced by the syntax.
+
+- [ ] **`hi --doctor <container>` reaches as deep as the ssh arm** —
+      `doctor_target` (`scripts/doctor.sh`) walks the resolution chain for any
+      target, then hands off to `doctor_ssh_target` **only** for an ssh host. A
+      docker, podman, nomad or kube target therefore gets one `resolves` row and
+      stops: no bash/`base64` inventory, no shell-ladder verdict, no size. That
+      is precisely the report wanted when a container session comes up in the
+      aliases-only tier, and it is the half the doctor does not answer.
+
+  - **The ssh arm is the template**, and the probe commands already exist —
+      `_say_hi_container`'s `probe` triple is the same call this needs, so this
+      is a second consumer of an existing roster rather than new plumbing.
+  - **Say what a disposable target costs.** The ssh arm prints whether a
+    permanent tree is there and what a session ships otherwise; the container
+    arm has the same two answers to give.
+  - **Ticks when:** `hi --doctor <container>` reports the target's shells,
+    `base64` and the tier a session would land in, for all four backends, and
+    `tests/scripts/doctor_test.sh` covers one of them.
+
+- [ ] **Do not ship what the toggles turned off** — `$_HI_PAYLOAD` is whole
+      directories, so every session sends `misc/vim.rc` and `misc/nano.rc` under
+      `_HI_DISABLE_EDITORS=1`, `shells/osc52.sh` under `_HI_DISABLE_OSC52=1`, and
+      `misc/aliases.sh` — the single biggest file in `misc/` — under
+      `_HI_DISABLE_ALIASES=1`. The client already knows all three answers before
+      it builds the tar, so this costs no probe, no round trip and no protocol.
+
+  - **Read the overlay, not the environment.** The toggle that applies on the
+    target is the one in the overlay's `settings.sh`, which rides along and is
+    sourced there; the client shell's own exported value is a different thing
+    entirely. Trim on the wrong one and a locally-disabled feature silently stops
+    shipping to hosts that never disabled it.
+  - **Both budgets start measuring a _default_ configuration** once the payload
+    varies — `bench_payload_size`'s gzipped ceiling and README's wire badge alike.
+    Say so where each is documented, or the next person to read them will think
+    the number is the number.
+  - **Ticks when:** a client with a toggle off sends a measurably smaller
+    payload, the session on the far side is unchanged for everyone else, and a
+    case pins one toggle to the file it stops shipping.
+
+- [ ] **A floor for the packages check** — `../misc/packages` ranks every entry
+      1–5 and `full_check` (`../common/header.sh`) gives each rank its own pair
+      of colors, hiding the "not installed" half from 4 down. What no setting
+      can do is show _less_: every rank that resolves gets printed, and the
+      header is the first thing a session puts on screen. A minimum-priority
+      setting — `_HI_PACKAGES_MIN_PRIORITY` in `settings.sh`, alongside the
+      other knobs — would let a host say "4 and up" and get a two-line header
+      instead of a paragraph.
+
+  - **One number, two consumers.** The check and `hi --packages-preview`
+    (`../scripts/packages_preview.sh`) read the same file and have to agree; the
+    preview's legend should name the ranks the floor is hiding rather than
+    quietly dropping their rows, the way it already explains a "hidden" cell.
+  - **Ticks when:** the setting exists, both consumers honor it,
+    `CONFIGURATION.md` documents it next to the other toggles, and a case pins
+    the boundary — a package exactly at the floor shows, one below it does not.
+
+### Testing & CI
 
 - [ ] **timep profiling for the paths the bench suite guards** — `_hi_bench`
       (`../tests/bench/bench_test.sh`) gives one average per hot path against a
@@ -69,22 +221,59 @@ here: git history is the ledger, and this file is only what is left to do.
     least the header and git-prompt paths, and its header says what the numbers
     do and do not mean as bluntly as `coverage.sh`'s does.
 
-- [ ] **A floor for the packages check** — `../misc/packages` ranks every entry
-      1–5 and `full_check` (`../common/header.sh`) gives each rank its own pair
-      of colors, hiding the "not installed" half from 4 down. What no setting
-      can do is show *less*: every rank that resolves gets printed, and the
-      header is the first thing a session puts on screen. A minimum-priority
-      setting — `_HI_PACKAGES_MIN_PRIORITY` in `settings.sh`, alongside the
-      other knobs — would let a host say "4 and up" and get a two-line header
-      instead of a paragraph.
+- [ ] **The Windows client-side job** — `windows-e2e.yml` is the _target_-side
+      job: it stands up sshd and drives `hi localhost` into it. The client-side
+      half — the fast suites run under Git Bash, proving `hi.sh` itself works
+      when the machine you are sitting at is Windows — has never been written,
+      and README's compatibility table rests on it. It ticks on its own schedule
+      and blocks nothing else, which is why it is its own entry rather than a
+      clause inside the target-side one.
 
-  - **One number, two consumers.** The check and `hi --packages-preview`
-    (`../scripts/packages_preview.sh`) read the same file and have to agree; the
-    preview's legend should name the ranks the floor is hiding rather than
-    quietly dropping their rows, the way it already explains a "hidden" cell.
-  - **Ticks when:** the setting exists, both consumers honor it,
-    `CONFIGURATION.md` documents it next to the other toggles, and a case pins
-    the boundary — a package exactly at the floor shows, one below it does not.
+  - **Scope it to the suites that can run there.** The fast group is
+    dependency-free by design, which is what makes it the candidate; anything
+    needing a container backend is out of scope on a Windows runner.
+  - **Ticks when:** a workflow runs the fast group under Git Bash and has been
+    green once, and README's Windows row says which half is proven.
+
+- [ ] **Pin what two concurrent sessions to one host do** — `configure_files`
+      (`load.sh`) skips the graft when the marker is already there, and
+      `clean_all` strips it on exit. So of two overlapping sessions to the same
+      target, the first to leave removes the block the second is still relying
+      on. Nothing is lost — session trees are per-`mktemp`, running shells read
+      their rc once, and the graft is guarded on `$_HI_HOME` so it can never
+      source a stranger's tree — but a shell started _afterwards_ inside the
+      surviving session (`tmux new-window`, `su`, a nested login) comes up bare.
+
+  - **The entry's job is to decide, not to fix.** Refcount the graft, or state
+    it as a known limit beside the tmux limits already in `CONFIGURATION.md`.
+    Both are defensible; what is not defensible is that neither the docs nor a
+    test currently says which one is true.
+  - **Ticks when:** the behaviour is whichever of the two was chosen, and a case
+    pins it — two overlapping sessions, the first one exiting, then a fresh shell
+    in the second.
+
+- [ ] **Break up the three test files over 1000 lines** — `tests/test_lib.sh`
+      (~1680), `tests/shells/hi_test.sh` (~1250) and
+      `tests/harness/lib_test.sh` (~1130) are the only source files in the tree
+      past that mark, and they are the three a session is most likely to have to
+      read end to end. `test_lib.sh` is the worst of them because every suite
+      sources it: it is the harness, the assertions, the parallel-case runner,
+      the container ledger, the fixture builders and the host report in one file.
+
+  - **Split on the seams that already exist.** The file is written in labelled
+    blocks — counters and assertions, the parallel batch, workdir and cleanup,
+    container and key fixtures, reporting — and each has its own header comment
+    already. Sourcing one file that sources the parts keeps every suite's
+    `source "${_HI_TEST_LIB:-...}"` line working unchanged.
+  - **The two suites split by subject**, not by size: `hi_test.sh` covers
+    argument parsing, payload assembly and the remote suffix, and `lib_test.sh`
+    covers the harness's own contracts.
+  - **Nothing here ships**, so neither payload budget moves — but the lint suite
+    walks every `*.sh` in the tree, so a split adds files to shellcheck's count
+    rather than work to a session.
+  - **Ticks when:** no file under `tests/` is over 1000 lines, the suite list in
+    `tests/test_runner.sh` is unchanged, and `--group fast` passes the same
+    number of cases it did before.
 
 ### Demos
 
@@ -108,7 +297,7 @@ here: git history is the ledger, and this file is only what is left to do.
     line under each GIF names the knob that demo is showing.
 
 - [ ] **A completion demo** — `hi <TAB>` is the feature nothing shows.
-      `../common/targets.sh` answers with ssh hosts *and* every running
+      `../common/targets.sh` answers with ssh hosts _and_ every running
       container across docker, podman, nomad and kube, tagged by backend, and
       fish renders that list with its description column — the one shell where
       a still frame carries the whole idea. The fixture is the gap: every
@@ -119,6 +308,9 @@ here: git history is the ledger, and this file is only what is left to do.
     fixtures rather than writing a new one, and let the tape stand down the way
     the others do when a backend is missing — a half-populated completion list
     is a worse artifact than a skipped render.
+  - **If flag completion lands first**, this demo is where it shows: **`hi
+    --<TAB>` completes hi's own flags** (Tooling) is the other half of the same
+    feature, and a tape rendered before it would need re-rendering after.
   - **Ticks when:** `demos/complete.gif` renders from a tape listed in
     `_HI_GEN_TAPES` (`tapes/generate.sh`), with ssh hosts and all four container
     backends in the same completion pane, and the README shows it.
@@ -203,9 +395,16 @@ human steps and their tick conditions.
   - **Ticks when:** `brew install ivy/tap/hi.d` works, from a release the
     `tap` job opened a PR for.
 
-### CI runs to dispatch
+### CI runs waiting on a first green
 
-Written, committed, and waiting on a real run. The two e2e workflows are no longer dispatch-only: `ci.yml` calls both on every push to `main`, once the ubuntu and macOS fast-suite jobs are green, so the next push to `main` runs them. Dispatch still works for running one on its own.
+Written, committed, and never yet run — each of the three ticks on its first
+green run and on nothing else, which is why they sit here rather than in the
+in-repo half: no file in this checkout can close one.
+
+Two of them are no longer dispatch-only. `ci.yml` calls both e2e workflows on
+every push to `main`, once the ubuntu and macOS fast-suite jobs are green, so
+the next push to `main` runs them; dispatch still works for running one on its
+own. The Scorecard job is the one that is still dispatch-only.
 
 - [ ] **macOS loopback e2e** (`macos-e2e.yml`) — CI's macos job runs only the
       fast suites, so the BSD userland (`sed -i ''`, `mktemp -t`, `base64 -D`,
@@ -220,9 +419,9 @@ Written, committed, and waiting on a real run. The two e2e workflows are no long
 
 - [ ] **Windows target e2e** (`windows-e2e.yml`) — the README documents the
       Git Bash/WSL/PowerShell fallback ladder but no Windows job has ever run.
-      This is the _target_-side job; the client-side one the README's "Windows
-      channels" gates on (the fast suites under Git Bash) is not written yet.
-      It configures the stock sshd, sets the admin `authorized_keys` ACL,
+      This is the _target_-side job; the client-side half is its own entry now
+      ([The Windows client-side job](#testing--ci)) and neither waits on the
+      other. It configures the stock sshd, sets the admin `authorized_keys` ACL,
       drives `hi localhost` from Git Bash, and asserts the PowerShell greeting
       — the cmd `||` fallback is the case to watch. Explicitly experimental;
       `.gitattributes` pins LF repo-wide, so the classic CRLF-checkout
@@ -246,5 +445,7 @@ Written, committed, and waiting on a real run. The two e2e workflows are no long
       review, so this is a submission, not a file here; the draft is at
       `docs/tldr.md`.
 
-  - **Do:** open the PR against tldr-pages **after v1**, once the CLI surface is frozen — examples that churn are worse than no page.
+  - **Do:** open the PR against tldr-pages once the CLI surface is frozen —
+    which is one of the criteria **Say what v1.0.0 means** exists to write down.
+    Examples that churn are worse than no page.
   - **Ticks when:** it is merged upstream.

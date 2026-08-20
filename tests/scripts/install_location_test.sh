@@ -107,22 +107,28 @@ function test_the_install_wrote_nothing_into_the_tree() {
 
 # --- a fresh shell in each dialect ----------------------------------------
 
+# Value producers rather than predicates: _hi_par_check_eq compares and, on a
+# mismatch, prints what came back. A bare `[ "$(...)" = "$..." ]` here reported
+# FAILED and nothing else, which is worth little on a run you cannot reach -
+# an empty $_HI_ROOT (the rc wiring never loaded), one pointing at $HOME/hi.d
+# (a surviving $HOME default) and one carrying stray rc stdout are three
+# different bugs behind one identical red line.
 function test_bash_resolves_the_nested_tree() {
-  [ "$(_hi_loc_shell bash 'printf %s "$_HI_ROOT"')" = "$_HI_LOC_ROOT" ]
+  _hi_loc_shell bash 'printf %s "$_HI_ROOT"'
 }
 
 function test_zsh_resolves_the_nested_tree() {
-  [ "$(_hi_loc_shell zsh 'printf %s "$_HI_ROOT"')" = "$_HI_LOC_ROOT" ]
+  _hi_loc_shell zsh 'printf %s "$_HI_ROOT"'
 }
 
 function test_fish_resolves_the_nested_tree() {
-  [ "$(_hi_loc_shell fish 'printf %s "$_HI_ROOT"')" = "$_HI_LOC_ROOT" ]
+  _hi_loc_shell fish 'printf %s "$_HI_ROOT"'
 }
 
 # sh has no rc of its own to wire up - it reaches paths.sh directly, told where
 # the tree is, which is the shape hi.sh's bash-less fallback rc builds
 function test_sh_sources_paths_from_the_nested_tree() {
-  [ "$(_hi_loc_sh 'printf %s "$_HI_ROOT"')" = "$_HI_LOC_ROOT" ]
+  _hi_loc_sh 'printf %s "$_HI_ROOT"'
 }
 
 # --- prompt, header, doctor ----------------------------------------------
@@ -204,8 +210,10 @@ function _hi_loc_outside_env() {
   _hi_loc_env "$_HI_WORKDIR/elsewhere" "$@"
 }
 
+# the same shape as the nested cases above: what the shell resolved, printed,
+# for _hi_par_check_eq to compare against $_HI_LOC_OUT_ROOT
 function _hi_loc_outside_resolves() {
-  [ "$(_hi_loc_outside_env "$1" -c "$2" </dev/null 2>/dev/null)" = "$_HI_LOC_OUT_ROOT" ]
+  _hi_loc_outside_env "$1" -c "$2" </dev/null 2>/dev/null
 }
 
 function test_outside_bash_derives_the_tree() {
@@ -283,10 +291,10 @@ function run_install_location_tests() {
   # `hi --doctor` runs at ~350ms each were most of this suite's wall clock.
   _hi_h2 "Testing: a fresh shell finds the nested tree"
   _hi_par_begin cases
-  _hi_par_check "bash" test_bash_resolves_the_nested_tree
-  _hi_par_check_requires zsh "zsh" test_zsh_resolves_the_nested_tree
-  _hi_par_check_requires fish "fish" test_fish_resolves_the_nested_tree
-  _hi_par_check "sh, through common/paths.sh" test_sh_sources_paths_from_the_nested_tree
+  _hi_par_check_eq "bash" "$_HI_LOC_ROOT" test_bash_resolves_the_nested_tree
+  _hi_par_check_requires_eq zsh "zsh" "$_HI_LOC_ROOT" test_zsh_resolves_the_nested_tree
+  _hi_par_check_requires_eq fish "fish" "$_HI_LOC_ROOT" test_fish_resolves_the_nested_tree
+  _hi_par_check_eq "sh, through common/paths.sh" "$_HI_LOC_ROOT" test_sh_sources_paths_from_the_nested_tree
   _hi_par_wait
 
   _hi_h2 "Testing: prompt, header and hi --doctor out of it"
@@ -306,10 +314,10 @@ function run_install_location_tests() {
 
   _hi_h2 "Testing: a tree outside \$HOME, with \$_HI_HOME unset"
   _hi_par_begin cases
-  _hi_par_check "bash.sh derives it" test_outside_bash_derives_the_tree
-  _hi_par_check_requires zsh "zsh.zsh derives it" test_outside_zsh_derives_the_tree
-  _hi_par_check_requires fish "config.fish derives it" test_outside_fish_derives_the_tree
-  _hi_par_check "core.sh derives it" test_outside_core_derives_the_tree
+  _hi_par_check_eq "bash.sh derives it" "$_HI_LOC_OUT_ROOT" test_outside_bash_derives_the_tree
+  _hi_par_check_requires_eq zsh "zsh.zsh derives it" "$_HI_LOC_OUT_ROOT" test_outside_zsh_derives_the_tree
+  _hi_par_check_requires_eq fish "config.fish derives it" "$_HI_LOC_OUT_ROOT" test_outside_fish_derives_the_tree
+  _hi_par_check_eq "core.sh derives it" "$_HI_LOC_OUT_ROOT" test_outside_core_derives_the_tree
   _hi_par_check "hi.sh runs from it" test_outside_launcher_runs
   _hi_par_check "hi.sh runs through a symlink onto it" test_outside_launcher_runs_through_a_symlink
   _hi_par_check "A missing tree is named and refused" test_a_missing_tree_is_named_and_refused

@@ -354,6 +354,10 @@ function _hi_par_rendezvous() {
   _hi_poll_bool "$3" 0.25 test -f "$_HI_PAR_RV_DIR/$2"
 }
 
+# Three cases in, but $_HI_TOTAL is 2: a skipped case is counted in
+# $_HI_SKIPPED alone, exactly as the serial twin does it (_hi_check_requires
+# reaches _hi_skip without going through _hi_case). The next case pins why that
+# matters.
 function test_par_case_tallies_pass_fail_and_skip() {
   (
     _hi_suite_begin
@@ -362,8 +366,46 @@ function test_par_case_tallies_pass_fail_and_skip() {
     _hi_par_case bad _hi_par_bad
     _hi_par_case skipped _hi_par_skipper
     _hi_par_wait
-    [ "$_HI_TOTAL" -eq 3 ] && [ "$_HI_FAILED" -eq 1 ] && [ "$_HI_SKIPPED" -eq 1 ]
+    [ "$_HI_TOTAL" -eq 2 ] && [ "$_HI_FAILED" -eq 1 ] && [ "$_HI_SKIPPED" -eq 1 ]
   ) >/dev/null
+}
+
+# test_runner.sh reports `pass = cases - failed` (its _hi_pass), so a skipped
+# case left in $_HI_TOTAL is reported as a green pass *and* a yellow skip - the
+# arithmetic that quietly inflated the count feeding --totals-file and the
+# README badge. A stand-down is never green: this is that rule, in numbers.
+function test_par_skip_is_not_reported_as_a_pass() {
+  local tally="$_HI_WORKDIR/par-skip-tally" total failed skipped
+  # the tally through a file, not a process substitution: _hi_par_begin and
+  # _hi_par_case narrate to stdout, and their lines would be what `read` got
+  (
+    _hi_suite_begin
+    _hi_par_begin "harness probe"
+    _hi_par_case ok _hi_par_ok
+    _hi_par_case skipped _hi_par_skipper
+    _hi_par_wait
+    printf '%s %s %s\n' "$_HI_TOTAL" "$_HI_FAILED" "${_HI_SKIPPED:-0}" >"$tally"
+  ) >/dev/null 2>&1
+  read -r total failed skipped <"$tally"
+  [ "$((total - failed))" -eq 1 ] && [ "$skipped" -eq 1 ]
+}
+
+# _hi_par_check reports through _hi_assert, which names the case by its bare
+# label; _hi_par_wait's backstop then must not list it a second time as
+# "exited 1 before reporting a verdict", which reads as a crash rather than a
+# false assertion. It checked only for the bracketed "[label]" _hi_case_result
+# writes, so every failed fast-group parallel case was recapped twice.
+function test_par_failed_assertion_is_recapped_once() {
+  local fails="$_HI_WORKDIR/par-fails-once"
+  : >"$fails"
+  (
+    _HI_FAILS_FILE="$fails"
+    _hi_suite_begin
+    _hi_par_begin "recap probe"
+    _hi_par_check "a failing case" _hi_par_bad
+    _hi_par_wait
+  ) >/dev/null 2>&1 || true
+  [ "$(grep -c . "$fails")" -eq 1 ] && grep -qxF "a failing case" "$fails"
 }
 
 # a case that never reaches its verdict is a failure, not a case that vanishes
@@ -380,6 +422,33 @@ function test_par_case_without_a_verdict_counts_as_a_failure() {
     [ "$_HI_TOTAL" -eq 1 ] && [ "$_HI_FAILED" -eq 1 ]
   ) >/dev/null || return 1
   grep -q 'vanished' "$fails"
+}
+
+# _hi_expect_eq's whole reason to exist is the failure transcript: a bare
+# `[ "$a" = "$b" ]` reports FAILED and withholds the values, which is what made
+# an install_location failure on a runner nobody can reach undiagnosable.
+function _hi_expect_probe() { printf '%s' "${1:-}"; }
+
+function test_expect_eq_passes_on_a_match() {
+  _hi_expect_eq "match" wanted _hi_expect_probe wanted >/dev/null
+}
+
+function test_expect_eq_prints_want_and_got_on_a_mismatch() {
+  local out
+  out="$(_hi_expect_eq "mismatch" wanted _hi_expect_probe "" 2>&1)" && return 1
+  out="$(_hi_strip_ansi "$out")"
+  [[ "$out" == *FAILED* ]] && [[ "$out" == *'want: "wanted"'* ]] && [[ "$out" == *'got:  ""'* ]]
+}
+
+# and it has to name the failing case for the recap, exactly as _hi_assert does
+function test_expect_eq_names_the_case_for_the_recap() {
+  local fails="$_HI_WORKDIR/expect-fails"
+  : >"$fails"
+  (
+    _HI_FAILS_FILE="$fails"
+    _hi_expect_eq "a mismatched case" wanted _hi_expect_probe other
+  ) >/dev/null 2>&1 || true
+  grep -qxF "a mismatched case" "$fails"
 }
 
 function test_par_wait_replays_in_submission_order() {
@@ -967,12 +1036,19 @@ function run_test_lib_tests() {
 
   _hi_h2 "Testing: _hi_par_case / _hi_par_wait"
   _hi_check "Tallies pass, fail and skip" test_par_case_tallies_pass_fail_and_skip
+  _hi_check "A skipped case is not a pass" test_par_skip_is_not_reported_as_a_pass
+  _hi_check "A failed assertion is recapped once" test_par_failed_assertion_is_recapped_once
   _hi_check "A case with no verdict is a failure" test_par_case_without_a_verdict_counts_as_a_failure
   _hi_check "Transcripts replay in submission order" test_par_wait_replays_in_submission_order
   _hi_check "The cases really do overlap" test_par_cases_really_run_at_once
   _hi_check "_HI_PAR_WIDTH=1 really serializes" test_par_width_one_really_serializes
   _hi_check "The width is announced, capped or not" test_par_begin_announces_the_width
   _hi_check "The default width stays within bounds" test_par_width_defaults_within_bounds
+
+  _hi_h2 "Testing: _hi_expect_eq"
+  _hi_check "Passes on a match" test_expect_eq_passes_on_a_match
+  _hi_check "Prints want and got on a mismatch" test_expect_eq_prints_want_and_got_on_a_mismatch
+  _hi_check "Names the case for the recap" test_expect_eq_names_the_case_for_the_recap
 
   _hi_h2 "Testing: _hi_require / _hi_require_backend"
   _hi_check "Returns for an installed command" test_require_returns_for_an_installed_command

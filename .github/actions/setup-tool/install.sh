@@ -75,10 +75,19 @@ cmake)
   # for. Only the built binary is cached and installed, so the caller is the
   # one that has to keep kcov's runtime libs (libdw1, libelf1, libcurl4,
   # zlib1g, libstdc++6) around - see coverage.yml's apt step.
+  #
+  # libssl-dev is named explicitly and is not redundant: kcov's
+  # src/CMakeLists.txt does `find_package(OpenSSL REQUIRED)`, and the OpenSSL
+  # headers reach libcurl4-openssl-dev only as a *recommendation* - which
+  # --no-install-recommends is precisely there to drop. Without it cmake gets
+  # as far as "Could NOT find OpenSSL (missing: OPENSSL_CRYPTO_LIBRARY
+  # OPENSSL_INCLUDE_DIR)" and configuring stops. (The "Could NOT find Bfd"
+  # line above it in that log is not an error: bfd is optional here, and kcov
+  # builds and runs without it.)
   sudo apt-get update
   sudo apt-get install -y --no-install-recommends \
     build-essential cmake libcurl4-openssl-dev libdw-dev libelf-dev \
-    python3 zlib1g-dev
+    libssl-dev python3 zlib1g-dev
   curl -sSfL -o "$_hi_tmp/archive" "$_hi_url"
   tar -xzf "$_hi_tmp/archive" -C "$_hi_tmp"
   _hi_src="$(find "$_hi_tmp" -mindepth 1 -maxdepth 1 -type d | head -1)"

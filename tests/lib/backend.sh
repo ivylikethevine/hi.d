@@ -133,7 +133,7 @@ function _hi_container_backend_test() {
       _hi_par_case "$shell" _hi_backend_case "$shell" "hi-${backend}test-$shell-$$" "$(_hi_probe_cmd "$_HI_TEST_MARKER" "${spec#*:}")"
     fi
   done
-  _hi_par_case sh _hi_backend_case sh alpine:3.20 "$(_hi_probe_cmd "$_HI_TEST_MARKER" fallback)"
+  _hi_par_case sh _hi_backend_case sh alpine:3.24 "$(_hi_probe_cmd "$_HI_TEST_MARKER" fallback)"
   _hi_par_wait
 
   # $$-suffixed like the container names: without it a second run of this
@@ -163,7 +163,7 @@ function _hi_container_backend_test() {
 # before the cases run, and a preload that drifts from what the cases ask for is
 # a silent 20-second wait, not an error.
 _HI_PAIR_IMAGE_BASH="debian:bookworm-slim"
-_HI_PAIR_IMAGE_SH="alpine:3.20"
+_HI_PAIR_IMAGE_SH="alpine:3.24"
 
 # _hi_backend_pair_cases <label> <thing> [extra-case-fn...] - the bash/sh pair
 # every backend runs, plus any case only one backend has. The extras go inside

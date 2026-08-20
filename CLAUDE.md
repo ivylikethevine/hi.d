@@ -13,6 +13,24 @@ unrelated install. Never inspect or touch `~/hi.d`, even if it looks dirty.
 Symptom of forgetting: suites report fewer/MISSING cases, or a script runs
 "clean" because it ran against the wrong tree.
 
+**`_HI_HOME` alone is not enough to run one suite directly.** The same login
+profile also exports `_HI_ROOT` and `_HI_TEST_LIB`, and a suite's source line
+is `${_HI_TEST_LIB:-…}` — the inherited value wins, so the *harness* is loaded
+out of `~/hi.d` while `core.sh` quietly corrects `$_HI_ROOT` to the tree you
+asked for. The run half-succeeds against two trees at once. Either go through
+the runner, which sources the harness by absolute path:
+
+```sh
+_HI_HOME=/home/ivy/projects/claude tests/test_runner.sh <suite>
+```
+
+or, when a suite really has to run on its own, set both:
+
+```sh
+export _HI_HOME=/home/ivy/projects/claude
+export _HI_TEST_LIB=$_HI_HOME/hi.d/tests/test_lib.sh
+```
+
 ## Testing
 
 - `tests/test_runner.sh` runs everything; `--group fast` is the CI gate. Lint

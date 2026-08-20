@@ -3,8 +3,15 @@
 # the e2e fixtures (tests/test_lib.sh) but standalone - a tape render happens
 # outside the test harness, on a machine that just has the backends installed.
 # Everything lands under /tmp/hi-demo so `down` can remove it wholesale, and
-# every resource is named hi-demo-* so a crashed render can't leak anonymous
-# containers. Not sourced by anything; invoked from the tapes' Hide blocks:
+# every container carries `--label hi.demo=1` so a crashed render can't leak
+# one: `down` sweeps the label rather than a list of names it has to be kept in
+# step with. The label and not a `hi-demo-*` name prefix, because **a target is
+# named for its own hostname** - the tape types `hi db-prod` and the prompt that
+# comes back says `db-prod`, which a prefix would break. Nomad is the exception
+# and cannot help it: an alloc is addressed by ID, so `hi <alloc-id>` lands on
+# `batch-7` and no naming can make those match.
+#
+# Not sourced by anything; invoked from the tapes' Hide blocks:
 #
 #   docs/tapes/fixtures.sh up demo|ssh|docker|podman|nomad|kube|colors
 #   docs/tapes/fixtures.sh down
@@ -71,17 +78,19 @@ EOF
 function up_ssh() {
   demo_keypair
   demo_sshd_image
-  docker rm -f hi-demo-ssh >/dev/null 2>&1 || true
-  # --hostname: docker's own default is a random 12-char hex ID, which makes
-  # for an ugly, meaningless color in the header's user@host line. web-1
-  # gives the color-hash demo something real to hash.
-  docker run -d --rm --name hi-demo-ssh --hostname web-1 -p 127.0.0.1::22 \
+  docker rm -f web-1 >/dev/null 2>&1 || true
+  # --hostname as well as --name: docker's own default hostname is a random
+  # 12-char hex ID, which makes for an ugly, meaningless color in the header's
+  # user@host line. The two match so the ssh_config Host below, the name the
+  # tape types, and the prompt that answers are all one word.
+  docker run -d --rm --name web-1 --hostname web-1 --label hi.demo=1 \
+    -p 127.0.0.1::22 \
     -e PUBKEY="$(cat "$_HI_DEMO_DIR/key.pub")" hi-demo-sshd >/dev/null
   local port
-  port="$(docker port hi-demo-ssh 22/tcp | head -1)"
+  port="$(docker port web-1 22/tcp | head -1)"
   port="${port##*:}"
   cat >"$_HI_DEMO_DIR/ssh_config" <<EOF
-Host hi-demo-box
+Host web-1
   HostName 127.0.0.1
   Port $port
   User hitest
@@ -92,23 +101,23 @@ Host hi-demo-box
 EOF
   # wait for sshd to answer before the tape types anything
   for _ in $(seq 1 30); do
-    ssh -F "$_HI_DEMO_DIR/ssh_config" hi-demo-box true 2>/dev/null && return 0
+    ssh -F "$_HI_DEMO_DIR/ssh_config" web-1 true 2>/dev/null && return 0
     sleep 1
   done
   echo "sshd never answered on port $port" >&2
   return 1
 }
 
-# a bare shell-only image per flavor, the docker/podman e2e shape. <hostname>
-# is optional - pass one to give the header's color-hash line something
-# meaningful to hash instead of the backend's random container ID; omitted
-# for the tapes that are demonstrating hi against whatever a target happens
-# to be named.
-function up_container() { # <backend> <name> <flavor: debian|zsh|fish|ash> [hostname]
-  local backend="$1" name="$2" flavor="$3" hostname="${4:-}" image
+# a bare shell-only image per flavor, the docker/podman e2e shape. <name> is
+# both the container's name and its hostname: the tape types the first and the
+# prompt shows the second, and a demo where those differ reads as a bug in hi.
+# It also gives the header's color-hash line something meaningful to hash
+# instead of the backend's random container ID.
+function up_container() { # <backend> <name> <flavor: debian|zsh|fish|ash>
+  local backend="$1" name="$2" flavor="$3" image
   case "$flavor" in
   debian) image=debian:bookworm-slim ;;
-  ash) image=alpine:3.20 ;;
+  ash) image=alpine:3.24 ;;
   zsh | fish)
     "$backend" build -q -t "hi-demo-$flavor-img" --build-arg "PKGS=$flavor git" \
       -f "$_HI_ROOT/tests/dockerfiles/alpine-shell.Dockerfile" "$_HI_DEMO_DIR" >/dev/null
@@ -120,11 +129,8 @@ function up_container() { # <backend> <name> <flavor: debian|zsh|fish|ash> [host
     ;;
   esac
   "$backend" rm -f "$name" >/dev/null 2>&1 || true
-  if [ -n "$hostname" ]; then
-    "$backend" run -d --rm --name "$name" --hostname "$hostname" "$image" tail -f /dev/null >/dev/null
-  else
-    "$backend" run -d --rm --name "$name" "$image" tail -f /dev/null >/dev/null
-  fi
+  "$backend" run -d --rm --name "$name" --hostname "$name" --label hi.demo=1 \
+    "$image" tail -f /dev/null >/dev/null
 }
 
 function up_nomad() {
@@ -173,10 +179,13 @@ function up_kube() {
   }
   kind get clusters 2>/dev/null | grep -qx hi-demo ||
     kind create cluster --name hi-demo --wait 120s >/dev/null 2>&1
-  kubectl --context kind-hi-demo delete pod hi-demo-pod --ignore-not-found >/dev/null 2>&1
-  kubectl --context kind-hi-demo run hi-demo-pod --image=alpine:3.20 \
+  # a pod's hostname *is* its name, so naming it for the host is all it takes
+  # for `hi api-7` to answer as api-7. The cluster keeps the hi-demo name: it
+  # is never on screen, and `kind delete cluster` is what tears it down.
+  kubectl --context kind-hi-demo delete pod api-7 --ignore-not-found >/dev/null 2>&1
+  kubectl --context kind-hi-demo run api-7 --image=alpine:3.24 \
     --restart=Never --command -- sleep infinity >/dev/null
-  kubectl --context kind-hi-demo wait --for=condition=Ready pod/hi-demo-pod --timeout=120s >/dev/null
+  kubectl --context kind-hi-demo wait --for=condition=Ready pod/api-7 --timeout=120s >/dev/null
 }
 
 # The *client* side of every tape: an rc the tape sources so the outside shell
@@ -335,9 +344,18 @@ hosttag,desktop,green
 EOF
 }
 
+# The label, not a list of names: a name list has to be edited in step with
+# every fixture and silently leaks the one somebody forgot, where the label is
+# on every container up_container and up_ssh start. Both backends, because a
+# render can crash between docker's fixtures and podman's.
 function demo_down() {
-  docker rm -f hi-demo-ssh hi-demo hi-demo-zsh >/dev/null 2>&1 || true
-  podman rm -f hi-demo-fish >/dev/null 2>&1 || true
+  local backend ids
+  for backend in docker podman; do
+    command -v "$backend" >/dev/null 2>&1 || continue
+    ids="$("$backend" ps -aq --filter label=hi.demo=1 2>/dev/null || true)"
+    # shellcheck disable=SC2086 # ids is a list of container IDs, split on purpose
+    [ -n "$ids" ] && "$backend" rm -f $ids >/dev/null 2>&1
+  done
   if [ -f "$_HI_DEMO_DIR/nomad.pid" ]; then
     nomad job stop -purge hi-demo >/dev/null 2>&1 || true
     kill "$(cat "$_HI_DEMO_DIR/nomad.pid")" 2>/dev/null || true
@@ -351,9 +369,9 @@ function demo_down() {
 mkdir -p "$_HI_DEMO_DIR"
 case "${1:-}:${2:-}" in
 # Client identities, chosen per tape rather than taken from the renderer. The
-# spread is the point: docker's client is cache-1 and one of its targets is
-# cache-1 too (the same box, reached two ways), while the rest say hi somewhere
-# they are not.
+# spread is the point: every tape but one says hi somewhere it is not. The
+# exception is docker's second target, where client and target are both cache-1
+# - the same box reached two ways, which is worth one frame of the set.
 up:ssh)
   # No demo_settings here: this demo's trimmed header is baked into the box's
   # own image, because a permanent install reads its own config and never the
@@ -370,20 +388,20 @@ up:docker)
 export _HI_PROMPT_END_ZSH='❯'
 export _HI_HEADER_CHECK='0'
 EOF
-  up_container docker hi-demo debian db-prod
-  up_container docker hi-demo-zsh zsh cache-1
+  up_container docker db-prod debian
+  up_container docker cache-1 zsh
   ;;
 up:podman)
   client_rc fish ops bastion
   # fish's own prompt separator. _HI_ENABLE_FISH_ALIAS_ABBR belongs to this
   # demo on paper - it is the one fish-only knob and this is the only tape with
   # fish on both ends - but it cannot be shown here: hi is itself an alias, so
-  # the abbr expands the `hi hi-demo-fish` the tape types into the shim's
+  # the abbr expands the `hi edge-1` the tape types into the shim's
   # absolute path, rewriting the command the GIF exists to show.
   demo_settings <<'EOF'
 export _HI_PROMPT_END_FISH='»'
 EOF
-  up_container podman hi-demo-fish fish edge-1
+  up_container podman edge-1 fish
   ;;
 up:nomad)
   client_rc bash ivy workshop
@@ -420,7 +438,7 @@ up:demo)
   # No demo_settings, deliberately. Every other demo turns something off or
   # swaps something out; the README's top GIF is the one that shows what you
   # get having configured nothing, which is only legible if it stays stock.
-  up_container docker hi-demo debian db-prod
+  up_container docker db-prod debian
   ;;
 down:) demo_down ;;
 *)

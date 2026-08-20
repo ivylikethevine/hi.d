@@ -389,7 +389,7 @@ jobs:
           set -euo pipefail
           docker run --rm -v "$PWD/dist:/dist:ro" \
             -v "$RUNNER_TEMP/smoke.rsa.pub:/etc/apk/keys/hi.d.rsa.pub:ro" \
-            alpine:3.20 sh -c 'apk add /dist/hi.d_*_noarch.apk && sh -lc "hi --version" && ls /usr/share/hi.d/common/core.sh'
+            alpine:3.24 sh -c 'apk add /dist/hi.d_*_noarch.apk && sh -lc "hi --version" && ls /usr/share/hi.d/common/core.sh'
 
       # the reproducibility contract: the same commit builds byte-identical
       # deb/rpm/apk (SOURCE_DATE_EPOCH from HEAD plus clamped staging mtimes),

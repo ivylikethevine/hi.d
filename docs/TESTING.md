@@ -13,7 +13,9 @@ tests/test_runner.sh
 - [Running the tests](#running-the-tests)
   - [Where a suite lives](#where-a-suite-lives)
   - [The container suites run their cases in parallel](#the-container-suites-run-their-cases-in-parallel)
+  - [Coverage and profiling](#coverage-and-profiling)
   - [The images are files; the build contexts are not](#the-images-are-files-the-build-contexts-are-not)
+    - [What is pinned, and what deliberately is not](#what-is-pinned-and-what-deliberately-is-not)
 - [The lint gate](#the-lint-gate)
 - [Relaying](#relaying)
 - [Local-only](#local-only)
@@ -89,10 +91,36 @@ _HI_PAR_WIDTH=8 tests/test_runner.sh ssh   # a big machine, if the daemon can ta
 `nomad` pins itself to `_HI_PAR_WIDTH=1`: its jobs are tracked in a shell array its cleanup hook purges,
 which is the one fixture in the tree that is not case-scoped.
 
+### Coverage and profiling
+
+Two hand-run tools sit beside the suites, both deliberately out of CI.
+
 `tests/coverage.sh` runs the fast suites under kcov when you want to know which arms of
-`install.sh`/`bump.sh` the cases never touch. It's deliberately not in CI and its numbers are currently
-untrustworthy (kcov loses the DEBUG trap once `test_lib.sh` is sourced) - don't write tests to move those
-figures.
+`install.sh`/`bump.sh` the cases never touch. Its numbers are currently untrustworthy: kcov loses the DEBUG
+trap once the harness is sourced, so a figure describes what ran while things were *loading* rather than
+what the suites cover — `common/git_prompt.sh` reads 2.56% with seventeen cases passing against it. Don't
+write tests to move those figures.
+
+README's **kcov badge** is that aggregate, published by the dispatch-only `coverage.yml` and picked up by
+`pages.yml` from the last successful run. It is grey and says `load-time` rather than green and `coverage`
+for exactly the reason above; until someone dispatches the workflow it reads `not measured`.
+
+`tests/profile.sh` is what to run when a `--group bench` ceiling trips: `_hi_bench` says *whether* a path
+got slower, and this says *which command in it* did. It profiles the four bash paths the bench guards
+through [timep](https://github.com/jkool702/timep), and it runs **in a container** —
+`tests/dockerfiles/timep.Dockerfile`, the one file there that is a tool environment rather than a target.
+
+The container is not incidental. timep is packaged nowhere and is not a binary: `timep.bash` carries
+base64-encoded loadable-builtin `.so` files, unpacks them at source time and `enable -f`'s them into the
+running shell, so it is worth sandboxing on its own. The box also settles three requirements timep has and
+does not check — glibc ≥ 2.38, a bash with `enable -f`, and a writable **exec-capable** `/dev/shm` (Docker
+mounts that `noexec`, hence `--tmpfs /dev/shm:rw,exec`). Missing any of them, timep exits 0 and writes
+arithmetic errors instead of times, which is why `profile.sh` grades the output and not the status.
+
+The checkout is mounted read-only and only the output directory is writable, so nothing the profiler runs
+can touch the tree. timep is fetched inside the box; set `$_HI_TIMEP` to mount a local copy you have read
+instead. The numbers therefore come from that container rather than from your machine — one more reason
+the header says to read the ranking, not the milliseconds.
 
 ### The images are files; the build contexts are not
 
@@ -110,6 +138,33 @@ a tape render happens outside the test harness, so it does not source `test_lib.
 The lint gate checks both directions: no Dockerfile without a caller, no caller naming a Dockerfile that
 isn't there. Inline heredocs could not get that wrong; files can, and the failure would otherwise surface
 as "the image just didn't build" in an e2e run on a machine with a container backend.
+
+### What is pinned, and what deliberately is not
+
+Scorecard's Pinned-Dependencies check reports every line below and will keep reporting some of them. The
+answer, so it does not get re-decided each time that report is read:
+
+**Base images are digest-pinned, and that is not negotiable.** `alpine`, `debian:bookworm-slim` and
+`bash:3.2` each carry a `@sha256:` in their `FROM`. A digest is what makes a failed e2e run reproducible,
+and it is what makes a base-image move a deliberate, reviewable act instead of a green run going red for
+reasons nobody changed. Dependabot bumps the digests weekly. The upgrade from Alpine 3.20 to 3.24 in August
+2026 is the case for it: 3.20 had been past EOL since 2026-04-01 and the pin is why nothing had silently
+drifted off it in the meantime, and why the bump could be run against the whole e2e set as one change.
+
+**The same tags named in shell and YAML are guarded, not watched.** `alpine:` and `debian:` also appear as
+plain tags in `tests/lib/backend.sh`, `docs/tapes/fixtures.sh` and `ci.yml`'s packaging smoke - places
+Dependabot cannot see, because it reads Dockerfiles. Rather than leave them to drift, `lint_image_tags`
+fails the build when a tag named anywhere in the tree disagrees with the digest-pinned one in
+`tests/dockerfiles/`. Dependabot bumps one place; the gate makes the others follow.
+
+**The three `curl | sh` framework installers are deliberately not pinned.** `framework-atuin`,
+`framework-mise` and `framework-starship` each exist to test hi against whatever that framework
+*currently* installs. Pinning them would test a frozen framework, which is the opposite of the question
+they are asked. They carry `SHELL ["/bin/bash", "-o", "pipefail", "-c"]` so a 404 fails the build rather
+than shipping an image with the framework missing - that, not a pin, is what makes them trustworthy.
+
+Nothing in `tests/dockerfiles/` reaches a release; the workflows and actions the release path uses are
+SHA-pinned separately.
 
 ## The lint gate
 

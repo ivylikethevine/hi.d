@@ -96,15 +96,18 @@ here: git history is the ledger, and this file is only what is left to do.
       `.github/actions/setup-tool/tools.txt` (eight curl-installed tools) has no
       ecosystem, which is exactly why `tool-versions.yml` exists — a bespoke
       weekly script that reads the same rows and warns on drift. A third class
-      has no watcher at all: the same three images named as plain tags in
-      `tests/test_lib.sh` and `docs/tapes/fixtures.sh`, which dependabot cannot
-      see because it reads Dockerfiles.
+      has no watcher but does have a gate: the same images named as plain tags
+      in `tests/lib/backend.sh`, `docs/tapes/fixtures.sh` and `ci.yml`, which
+      dependabot cannot see because it reads Dockerfiles - `lint_image_tags`
+      fails the build when one of them disagrees with the digest-pinned
+      version, so dependabot bumps one place and the gate makes the rest
+      follow.
 
   - **What Renovate would buy:** `customManagers` match arbitrary files by
     regex, so `tools.txt`'s version column and the tag strings in shell both
-    become ordinary managed dependencies. That is one tool watching all three
-    classes, and `.github/scripts/check_tool_versions.sh` plus its workflow
-    delete.
+    become ordinary managed dependencies - the tag strings would be _bumped_
+    rather than merely guarded. That is one tool watching all three classes,
+    and `.github/scripts/check_tool_versions.sh` plus its workflow delete.
   - **What it costs:** a second bot app on the repo, a `renovate.json` that is
     its own dialect to learn, and the loss of something the current setup has —
     `tool-versions.yml` fails loudly with `::warning` annotations in a run,
@@ -114,77 +117,31 @@ here: git history is the ledger, and this file is only what is left to do.
     dependabot, say so here and in `.github/dependabot.yml`'s header so the
     question stops being reopened.
 
-- [ ] **Trim misc/aliases.sh from the payload too** — the leftover half of
-      "do not ship what the toggles turned off", and the half that is not
-      obviously worth doing. `_hi_payload_tar` now drops `misc/vim.rc`,
-      `misc/nano.rc` and `shells/osc52.sh` when the overlay has switched them
-      off, measured at −2071 bytes gzipped with both toggles set. `aliases.sh`
-      is the biggest file in `misc/` at 8.7KB and would be the headline
-      saving, but it is deliberately excluded.
-
-  - **Why it is excluded.** `_HI_DISABLE_ALIASES` turns off the _personal_
-    aliases, and the file installs the `vim`/`nano`, `hi_copy` and `tmux`
-    aliases, plus fish's toggle backstop `eval`, **above** its own early
-    return — its comments say so explicitly ("above the early return, so
-    disabling personal aliases still leaves the theme"). Trimming it is a
-    behaviour change wearing a size saving's clothes, and
-    `tests/hi/payload_test.sh` now pins that it keeps shipping.
-  - **What it would take:** split the file, so the always-on half and the
-    personal-aliases half are separate payload members and only the second is
-    trimmed. That is a real refactor of a file three shells parse under a
-    shared dialect constraint, for 8.7KB uncompressed on the sessions of people
-    who turned aliases off.
-  - **Ticks when:** the split exists and a case pins the personal half leaving
-    the payload while the editor aliases stay — or when this is closed as not
-    worth doing, which is a legitimate answer and should be written here.
-
 ### Testing & CI
 
-- [ ] **Settle the fixture images' pinning** — Scorecard's Pinned-Dependencies
-      scores 3 on nineteen findings, and every one of them is in
-      `tests/dockerfiles/`: sixteen tag-pinned `FROM` lines (`alpine:3.20`,
-      `debian:bookworm-slim`, `bash:3.2`, `${BASE}`) and three `curl | sh`
-      installers in the atuin, mise and starship framework fixtures. Nothing
-      here ships — these are test fixtures, and the workflows and actions the
-      release path actually uses are already SHA-pinned, which is why the score
-      is 3 rather than 0.
-
-  - **The case for leaving it:** a digest-pinned fixture base has to be bumped
-    by hand forever, and buys no user-facing safety, since no byte of these
-    images reaches a release. The three `curl | sh` lines are worse to pin than
-    to keep: each fixture exists to test hi against whatever that framework
-    currently installs, so pinning them tests a frozen framework instead.
-  - **The case for pinning anyway:** a fixture base that moves under the suite
-    turns a green run red for reasons nobody changed, and the digest is the
-    only thing that makes a failed e2e run reproducible.
-  - **Ticks when:** the decision is written down — in `docs/TESTING.md` if the
-    answer is "deliberately not pinned", or in the Dockerfiles if it is not.
-    Either way Scorecard keeps reporting it, so the point is to stop
-    re-deciding it every time the report is read.
-
 - [ ] **Trivy over the pinned base images, `--ignore-unfixed`** — the missing
-      half of digest-pinning. `tests/dockerfiles` now pins `alpine:3.20`,
+      half of digest-pinning. `tests/dockerfiles` now pins `alpine:3.24`,
       `debian:bookworm-slim` and `bash:3.2` by digest, which is what makes a
       fixture build reproducible and also what freezes whatever CVEs those
       layers carried that day. Dependabot opens a bump PR weekly, but it bumps
-      on _release_, not on severity — nothing currently says "the digest you are
+      on _releasalsoe_, not on severity — nothing currently says "the digest you are
       pinned to now has a fixable hole".
 
   - **`--ignore-unfixed` is the whole design, not a detail.** Measured on the
-      current pins: `debian:bookworm-slim` reports **17 HIGH and 5 CRITICAL**,
-      and **every one of the 22 has no fix available** — Debian won't-fix
-      entries, eight of them `perl-base`. A gate on the raw number is red
-      forever and teaches everyone to skip it. With `--ignore-unfixed` all three
-      images report **0** today, so the job is green until something actionable
-      lands and its going red means exactly one thing: bump the pin.
+    current pins: `debian:bookworm-slim` reports **17 HIGH and 5 CRITICAL**,
+    and **every one of the 22 has no fix available** — Debian won't-fix
+    entries, eight of them `perl-base`. A gate on the raw number is red
+    forever and teaches everyone to skip it. With `--ignore-unfixed` all three
+    images report **0** today, so the job is green until something actionable
+    lands and its going red means exactly one thing: bump the pin.
   - **The code half is in place.** `.github/workflows/image-scan.yml` runs it weekly and on
-      dispatch, advisory like markdownlint and link-check. trivy is pinned in
-      `setup-tool`'s `tools.txt`, so it caches and the weekly drift check
-      watches it like every other tool — no new action dependency. The scan
-      list is `sed`'d out of the `FROM …@sha256:` lines rather than repeated,
-      so a base image added or repinned is covered without editing that file.
+    dispatch, advisory like markdownlint and link-check. trivy is pinned in
+    `setup-tool`'s `tools.txt`, so it caches and the weekly drift check
+    watches it like every other tool — no new action dependency. The scan
+    list is `sed`'d out of the `FROM …@sha256:` lines rather than repeated,
+    so a base image added or repinned is covered without editing that file.
   - **Ticks when:** it has been seen green in CI. Measured locally at the
-      current pins: all three images report zero fixable HIGH/CRITICAL.
+    current pins: all three images report zero fixable HIGH/CRITICAL.
 
 - [ ] **hadolint over the seventeen fixture Dockerfiles** — nothing lints them
       today, and a sweep finds real things rather than style noise. Counted
@@ -194,53 +151,22 @@ here: git history is the ledger, and this file is only what is left to do.
       `DL3008` and `DL3018`.
 
   - **Expect to silence some of it.** `DL3008`/`DL3018` want every apt and apk
-      package version-pinned, which for throwaway fixtures is the same argument
-      the pinning entry above settles the other way — pin the base image,
-      not every package inside it. `DL3002` (last USER is root) is what an
-      sshd fixture is. A `.hadolint.yaml` naming those, with the reason, is
-      part of the work.
+    package version-pinned, which for throwaway fixtures is the same argument
+    the pinning entry above settles the other way — pin the base image,
+    not every package inside it. `DL3002` (last USER is root) is what an
+    sshd fixture is. A `.hadolint.yaml` naming those, with the reason, is
+    part of the work.
   - **`DL4006` is the one that is a bug**, and it is fixed rather than
-      ignored: piping curl into sh with no `pipefail` lets a 404 build a green
-      image with the framework missing, and the suite then tests an absence.
-      `framework-atuin`, `framework-mise` and `framework-starship` all carry
-      `SHELL ["/bin/bash", "-o", "pipefail", "-c"]`.
+    ignored: piping curl into sh with no `pipefail` lets a 404 build a green
+    image with the framework missing, and the suite then tests an absence.
+    `framework-atuin`, `framework-mise` and `framework-starship` all carry
+    `SHELL ["/bin/bash", "-o", "pipefail", "-c"]`.
   - **The code half is in place.** `ci.yml`'s `hadolint` job, advisory, on every PR rather
-      than only ones touching `tests/dockerfiles/**` — a job-level paths filter
-      does not exist and the job costs seconds, so the superset is the simpler
-      honest answer. `.hadolint.yaml` carries a reason per silenced rule and
-      says which findings are deliberately left visible (`DL3009`, `DL3015`).
+    than only ones touching `tests/dockerfiles/**` — a job-level paths filter
+    does not exist and the job costs seconds, so the superset is the simpler
+    honest answer. `.hadolint.yaml` carries a reason per silenced rule and
+    says which findings are deliberately left visible (`DL3009`, `DL3015`).
   - **Ticks when:** it has been seen green in CI.
-
-- [ ] **timep profiling for the paths the bench suite guards** — `_hi_bench`
-      (`../tests/bench/bench_test.sh`) gives one average per hot path against a
-      generous ceiling, which answers _whether_ something got slower and never
-      _which command inside it did_ — so every regression starts by
-      hand-bisecting an rc file. [timep](https://github.com/jkool702/timep) is
-      the missing half: a trap-based bash profiler that maps the call-stack tree
-      and emits per-command SELF and TOTAL wall time, TOTAL CPU time, and an
-      optional flamegraph. Shape it like `tests/coverage.sh` — a
-      `tests/profile.sh` run by hand, deliberately **not** in CI. The bench
-      ceilings stay the gate; this is what you run once one of them trips.
-      `tests/` ships in neither `$_HI_PAYLOAD` nor `$_HI_PACKAGE_CONTENTS`,
-      which is why `coverage.sh` lives there and why this belongs beside it.
-
-  - **Point it at the product, never at a suite.** timep drives the DEBUG trap —
-    the same mechanism `coverage.sh`'s header documents kcov losing the moment
-    `test_lib.sh` is sourced. Profile the argv `_hi_bench_env` already builds
-    (`bash -c 'source shells/bash.sh'`; `header.sh` then `hi_header Online`; the
-    50-call `_hi_git_prompt` loop; `hi.sh`'s payload assembly) rather than
-    wrapping `test_runner.sh`, or this lands in kcov's hole for the same reason.
-  - **bash arms only.** It profiles bash, so `shells/config.fish`,
-    `shells/zsh.zsh` and `common/targets.sh`-under-`sh` stay bench-only. Scope is
-    `shells/bash.sh`, `common/header.sh`, `common/git_prompt.sh` and `hi.sh`.
-  - **Dev-only dependencies, so state them and skip cleanly:** bash loadable
-    builtins, `/dev/shm` (or `$TMPDIR`), and perl for the flamegraph. Print a
-    yellow skip naming where to get it rather than failing, as `coverage.sh`
-    does for a missing kcov, and say which backend actually ran, as `_hi_bench`
-    does for hyperfine.
-  - **Ticks when:** `tests/profile.sh` produces a per-command profile for at
-    least the header and git-prompt paths, and its header says what the numbers
-    do and do not mean as bluntly as `coverage.sh`'s does.
 
 - [ ] **The Windows client-side job** — `windows-e2e.yml` is the _target_-side
       job: it stands up sshd and drives `hi localhost` into it. The client-side
@@ -255,23 +181,6 @@ here: git history is the ledger, and this file is only what is left to do.
     needing a container backend is out of scope on a Windows runner.
   - **Ticks when:** a workflow runs the fast group under Git Bash and has been
     green once, and README's Windows row says which half is proven.
-
-- [ ] **Pin what two concurrent sessions to one host do** — `configure_files`
-      (`load.sh`) skips the graft when the marker is already there, and
-      `clean_all` strips it on exit. So of two overlapping sessions to the same
-      target, the first to leave removes the block the second is still relying
-      on. Nothing is lost — session trees are per-`mktemp`, running shells read
-      their rc once, and the graft is guarded on `$_HI_HOME` so it can never
-      source a stranger's tree — but a shell started _afterwards_ inside the
-      surviving session (`tmux new-window`, `su`, a nested login) comes up bare.
-
-  - **The entry's job is to decide, not to fix.** Refcount the graft, or state
-    it as a known limit beside the tmux limits already in `CONFIGURATION.md`.
-    Both are defensible; what is not defensible is that neither the docs nor a
-    test currently says which one is true.
-  - **Ticks when:** the behaviour is whichever of the two is chosen, and a case
-    pins it — two overlapping sessions, the first one exiting, then a fresh shell
-    in the second.
 
 ### Demos
 
@@ -288,7 +197,7 @@ here: git history is the ledger, and this file is only what is left to do.
     the others do when a backend is missing — a half-populated completion list
     is a worse artifact than a skipped render.
   - **If flag completion lands first**, this demo is where it shows: **`hi
-    --<TAB>` completes hi's own flags** (Tooling) is the other half of the same
+--<TAB>` completes hi's own flags** (Tooling) is the other half of the same
     feature, and a tape rendered before it would need re-rendering after.
   - **Ticks when:** `demos/complete.gif` renders from a tape listed in
     `_HI_GEN_TAPES` (`tapes/generate.sh`), with ssh hosts and all four container
@@ -354,6 +263,8 @@ gate namcap needs. The full walkthrough (commands, what a clean run prints,
 what's already been verified) is [PACKAGING.md](PACKAGING.md)'s
 _Publishing each channel_ section — these two entries are just the remaining
 human steps and their tick conditions.
+
+NOTE: AUR registration is closed due to spam so... :shrug:
 
 - [ ] **AUR** — register an account; `ssh-keygen -t ed25519`, add the public
       half there, add the private half as the `AUR_SSH_KEY` repo secret and
@@ -437,8 +348,12 @@ half: no file here can close one.
       with: the MIT text is `LICENSE.md` at the root, which is the one place
       github.com and Scorecard both look. What is left is judgement. **Code-Review 0/26** and **CI-Tests 0/1** are what a
       single maintainer merging their own work scores no matter how good the CI
-      is. **SAST 0** is Scorecard not counting shellcheck, actionlint or zizmor,
-      and CodeQL has no shell support to offer instead. **Fuzzing 0** has no
+      is. **SAST** is the one that moved: Scorecard counts none of shellcheck,
+      actionlint or zizmor, and CodeQL has no shell analyser to offer instead -
+      but `codeql.yml` now runs CodeQL's `actions` pack over the workflows,
+      which Scorecard does count. Worth having on its own merits; a poor reason
+      to believe the resulting number, since the product is still bash and
+      still unread by it. **Fuzzing 0** has no
       obvious target in a shell tree, though `common/targets.sh` and the colors
       parser are the two that take untrusted-ish input. **CII-Best-Practices 0**
       is a self-certification questionnaire nobody has filled in. Everything
@@ -446,10 +361,11 @@ half: no file here can close one.
       Binary-Artifacts, Packaging, Dependency-Update-Tool, Security-Policy,
       Vulnerabilities, Maintained, Signed-Releases and Contributors.
 
-  - **The real question** is not how to raise the number but whether to publish
-    it: `scorecard.yml` still sets `publish_results: false`, and a README badge
-    needs it on. A score dominated by "solo maintainer" is not obviously worth
-    displaying — which is the call to make here.
+  - **The real question** is not how to raise the number but whether to show
+    it. `scorecard.yml` sets `publish_results: true`, so the score is on the
+    OpenSSF API; what is undecided is the README badge. A score dominated by
+    "solo maintainer" is not obviously worth displaying — which is the call to
+    make here.
   - **The code half is in place.** The workflow runs weekly rather than on dispatch, so the
     answer arrives as a trend instead of whenever someone remembers. Its
     `manual-dispatch` environment went with the change — a schedule cannot

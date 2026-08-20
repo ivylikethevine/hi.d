@@ -10,6 +10,13 @@ name: Coverage
 # margin. A monthly 45-minute run that mints a 90-day artifact nobody should act
 # on is the one kind of automation worth removing. Put the schedule back the day
 # the numbers mean something - the topology in coverage.sh is already right.
+#
+# The run does publish a figure for README's badge (pages.yml turns it into
+# badges/coverage.json), and that badge says `load-time` in grey rather than
+# `coverage` in green for the same reason this workflow has no schedule: it
+# measures what executes while the harness loads, not what the suites cover.
+# Nobody should read it as a quality gate, and the badge is written so nobody
+# can.
 on:
   workflow_dispatch:
 
@@ -63,3 +70,40 @@ jobs:
           path: coverage-report
           if-no-files-found: error
           retention-days: 90
+
+      # One line for pages.yml to turn into README's kcov badge. Separate from
+      # the report above because the two have different lifetimes: the report
+      # is a 90-day artifact somebody downloads, this is a number the site
+      # re-reads on every deploy until the next coverage run replaces it.
+      #
+      # sed, not jq: the self-hosted runner is not guaranteed to have jq. The
+      # anchor is load-bearing - kcov writes "percent_covered" nineteen times
+      # in this file, once per traced file inline inside a `{...}`, and once
+      # for the whole run on a line of its own. Only the aggregate starts a
+      # line, so `^[[:space:]]*` is what picks it out; without it the first
+      # per-file figure wins and the badge shows whichever file kcov happened
+      # to list first.
+      - name: Write the badge figure
+        run: |
+          set -euo pipefail
+          src=coverage-report/merged/kcov-merged/coverage.json
+          if [ ! -f "$src" ]; then
+            echo "::warning::$src is missing - no badge figure to publish"
+            exit 0
+          fi
+          pct="$(sed -n 's/^[[:space:]]*"percent_covered"[[:space:]]*:[[:space:]]*"\{0,1\}\([0-9.]*\).*/\1/p' "$src" | tail -1)"
+          case "$pct" in '' | *[!0-9.]*)
+            echo "::warning::could not read percent_covered out of $src"
+            exit 0
+            ;;
+          esac
+          mkdir -p coverage-pct
+          printf '%s\n' "$pct" >coverage-pct/pct
+          echo "kcov reports ${pct}% of lines executed"
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: hashFiles('coverage-pct/pct') != ''
+        with:
+          name: coverage-pct
+          path: coverage-pct
+          if-no-files-found: error

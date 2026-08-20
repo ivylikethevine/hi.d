@@ -39,7 +39,7 @@ Show
 Sleep 1s
 Type "# a k8s pod - resolved after the rest"
 Enter
-Type "hi hi-demo-pod"
+Type "hi api-7"
 Enter
 Wait+Screen@60s /aliases/
 Sleep 3s

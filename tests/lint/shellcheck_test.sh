@@ -25,7 +25,7 @@ source "${_HI_TEST_LIB:-${BASH_SOURCE[0]%/*}/../test_lib.sh}"
 #
 # The rest are files shellcheck *does* read - as sh or bash - that another shell
 # also sources for real, so they have to parse in both. misc/aliases.sh and
-# common/paths.sh are the two fish sources directly, and the failure mode there
+# common/paths.sh (and misc/personal.sh, which aliases.sh sources) are what fish reads directly, and the failure mode there
 # is silent: a perfectly good `${X:-0}` is a fish parse error that aborts the
 # whole file, taking every alias (or every path) with it. zsh reaches
 # common/core.sh, common/git_prompt.sh and both of those through shells/zsh.zsh.
@@ -33,8 +33,10 @@ _HI_NATIVE_LINT=(
   "shells/zsh.zsh:zsh:-n"
   "shells/config.fish:fish:--no-execute"
   "misc/aliases.sh:fish:--no-execute"
+  "misc/personal.sh:fish:--no-execute"
   "common/paths.sh:fish:--no-execute"
   "misc/aliases.sh:zsh:-n"
+  "misc/personal.sh:zsh:-n"
   "common/paths.sh:zsh:-n"
   "common/core.sh:zsh:-n"
   "common/git_prompt.sh:zsh:-n"
@@ -238,6 +240,74 @@ function lint_checkbashisms() {
     fi
   done
   return "$bad"
+}
+
+# The base images are digest-pinned in tests/dockerfiles/ (docs/TESTING.md says
+# why), but the same images are also named as plain tags in shell and YAML -
+# tests/lib/backend.sh, docs/tapes/fixtures.sh, ci.yml's packaging smoke. Those
+# are the class dependabot cannot see: it reads Dockerfiles, so a digest bump
+# lands there and leaves every plain tag behind, and the suite quietly tests two
+# different distro versions at once. This makes the tags follow the pins.
+#
+# "the pins", plural, and the set is what a reference is checked against rather
+# than one tag per image: `debian` is legitimately pinned twice, bookworm-slim
+# for every fixture and trixie-slim for timep.Dockerfile, which needs a glibc
+# new enough for timep's prebuilt .so. So the rule is "every tag named in shell
+# or YAML is *one of* the pinned tags", not "every tag matches the pin".
+#
+# A tag counts as an image reference only where it reads like one: preceded by a
+# space, `=` or a quote, in a `*.sh`/`*.yml` line that is not a comment. Each
+# of those filters earns its place - `nobash:alpine:ssh_fallback` is a case
+# spec, `/bin/bash:bash` a framework row and `bash:5` a packages fixture, all
+# the same characters meaning something else; prose in `.md` and `#` comments
+# names old versions on purpose (dependabot.yml explains bash:5 by naming it).
+# So does docs/PACKAGING.md, whose runbook installs the .deb on `debian:stable`
+# deliberately - a hand-run check wants current stable, not the fixture pin.
+# The Dockerfiles are excluded too: they carry the digest, and they are what
+# everything else is compared against.
+function lint_image_tags() {
+  local image tag ref pinned images hit bad=0 hits line
+  _hi_h2 "Checking image tags against the tests/dockerfiles pins"
+
+  # "<image>:<tag>" per pinned FROM, and the distinct image names among them
+  _hi_read_lines _HI_PINS < <(
+    sed -n 's/^FROM \([^:@ ]*\):\([^@ ]*\)@sha256:.*/\1:\2/p' \
+      "$_HI_ROOT/tests/dockerfiles"/*.Dockerfile | sort -u
+  )
+  pinned=" ${_HI_PINS[*]} "
+  _hi_read_lines images < <(printf '%s\n' ${_HI_PINS[@]+"${_HI_PINS[@]}"} |
+    sed 's/:.*//' | sort -u)
+
+  for image in ${images[@]+"${images[@]}"}; do
+    [ -n "$image" ] || continue
+    _HI_LINT_TOTAL=$((_HI_LINT_TOTAL + 1))
+    hits=""
+    while IFS= read -r line; do
+      [ -n "$line" ] || continue
+      # the tag as written, off the end of the matched reference
+      ref="$(printf '%s' "$line" | grep -oE "[ =\"']${image}:[A-Za-z0-9][A-Za-z0-9._-]*" | head -1)"
+      tag="${ref#*:}"
+      case "$pinned" in *" $image:$tag "*) continue ;; esac
+      hits="$hits$line
+"
+    done < <(grep -rnE "[ =\"']${image}:[A-Za-z0-9][A-Za-z0-9._-]*" "$_HI_ROOT" \
+      --include='*.sh' --include='*.yml' \
+      --exclude-dir=.git --exclude-dir=dist --exclude-dir=dockerfiles 2>/dev/null |
+      grep -vE '^[^:]*:[0-9]+:[[:space:]]*#' || true)
+
+    hit="$(printf '%s' "$pinned" | tr ' ' '\n' | grep "^$image:" | tr '\n' ' ')"
+    if [ -z "$hits" ]; then
+      _hi_align " | $image: every tag is one of the pins ($hit)" "OK" "$GREEN"
+    else
+      _hi_align " | $image: a tag matches no pin ($hit)" "FAILED" "$RED"
+      printf '%s' "$hits" | sed "s#^$_HI_ROOT/#      #"
+      _hi_note_failure "image tag drift: $image (pinned $hit)"
+      bad=$((bad + 1))
+    fi
+  done
+
+  [ "$bad" -eq 0 ] || return "$bad"
+  return 0
 }
 
 # Every GLOSSARY tag in the tree has to name a real `## HI.NN` heading in
@@ -504,7 +574,10 @@ function run_shellcheck() {
   _HI_DOCKERFILE_FAILED=0
   lint_dockerfiles || _HI_DOCKERFILE_FAILED=$?
 
-  _HI_LINT_FAILED=$((_HI_SC_FAILED + _HI_NATIVE_FAILED + _HI_BASH32_FAILED + _HI_HOME_FAILED + _HI_SHFMT_FAILED + _HI_CB_FAILED + _HI_GLOSSARY_FAILED + _HI_DOCKERFILE_FAILED))
+  _HI_IMAGE_TAG_FAILED=0
+  lint_image_tags || _HI_IMAGE_TAG_FAILED=$?
+
+  _HI_LINT_FAILED=$((_HI_SC_FAILED + _HI_NATIVE_FAILED + _HI_BASH32_FAILED + _HI_HOME_FAILED + _HI_SHFMT_FAILED + _HI_CB_FAILED + _HI_GLOSSARY_FAILED + _HI_DOCKERFILE_FAILED + _HI_IMAGE_TAG_FAILED))
   _hi_report_counts "$_HI_LINT_TOTAL" "$_HI_LINT_FAILED" "$_HI_SKIPPED"
 
   local skipped=""

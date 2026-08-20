@@ -167,6 +167,12 @@ function _hi_payload_tar() {
   if [ "$(_hi_overlay_toggle _HI_DISABLE_OSC52)" = 1 ]; then
     excl+=(--exclude=hi.d/shells/osc52.sh)
   fi
+  # the personal half only. misc/aliases.sh always ships: the toggle turns off
+  # one person's preferences, not the vim/nano, hi_copy and tmux aliases hi
+  # installs, and those live above the source line in aliases.sh.
+  if [ "$(_hi_overlay_toggle _HI_DISABLE_ALIASES)" = 1 ]; then
+    excl+=(--exclude=hi.d/misc/personal.sh)
+  fi
   tar czf - -h ${excl[@]+"${excl[@]}"} -C "$_HI_HOME" "${_HI_PAYLOAD[@]/#/hi.d/}"
 }
 
@@ -297,7 +303,8 @@ EOF
 # The no-bash target's rc: every line valid in sh, zsh *and* fish at once.
 # GLOSSARY: HI.20 - the three-shell subset, and why each line is there.
 # With --aliases-only <dir>, the container fallback's shape: that path ships
-# aliases.sh alone into <dir>, with no tree and no $_HI_ROOT to source from.
+# aliases.sh (and personal.sh, when the overlay has not turned it off) into
+# <dir>, with no tree and no $_HI_ROOT to source from.
 function _hi_fallback_rc() {
   local t aliases_dir=""
   [ "${1:-}" = --aliases-only ] && aliases_dir="$2"
@@ -313,6 +320,11 @@ function _hi_fallback_rc() {
     printf 'export _HI_ASCII=%s\n' "${_HI_ASCII:-$(_hi_ascii_flag)}"
     [ -n "${NO_COLOR:-}" ] && printf 'export NO_COLOR=1\n'
     printf '. %s/aliases.sh 2>/dev/null\n' "$aliases_dir"
+    # after aliases.sh, which resolves $_HI_EDITOR_BIN and the rest this reads.
+    # Unconditional: aliases.sh's own source of it is keyed on $_HI_ROOT, which
+    # this path has no tree for, and `2>/dev/null` already makes the trimmed
+    # case (no file copied) a no-op.
+    printf '. %s/personal.sh 2>/dev/null\n' "$aliases_dir"
   else
     # shellcheck disable=SC2016 # $_HI_ROOT is the target's to expand
     printf 'export _HI_CONFIG_DIR=$_HI_ROOT/config\n'
@@ -669,6 +681,15 @@ function _say_hi_container() {
       _hi_cecho " failed to copy aliases.sh into [$DOMAIN]" "$BRRED"
       "${attach[@]}" "$fallback"
       return $?
+    fi
+
+    # personal.sh rides along, for the same reason ksh.sh does below: this path
+    # ships files rather than the tree, and aliases.sh's `. $_HI_ROOT/misc/
+    # personal.sh` has nothing to resolve against here. Sourced by absolute
+    # path out of the fallback rc instead. Skipped when the overlay turned the
+    # personal aliases off, so this arm trims exactly what _hi_payload_tar does.
+    if [ "$(_hi_overlay_toggle _HI_DISABLE_ALIASES)" != 1 ] && [ -f "$_HI_ROOT/misc/personal.sh" ]; then
+      "${cp[@]}" sh -c "cat > '$root/personal.sh'" <"$_HI_ROOT/misc/personal.sh" 2>"$tmp" || true
     fi
 
     # ksh/mksh get the live git segment as on the ssh path - but that path has

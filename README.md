@@ -14,8 +14,10 @@ This is a hobby project.
 [![Linux](https://img.shields.io/github/actions/workflow/status/ivylikethevine/hi.d/ci.yml?branch=main&label=Linux)](https://github.com/ivylikethevine/hi.d/actions/workflows/ci.yml)
 [![macOS](https://img.shields.io/github/actions/workflow/status/ivylikethevine/hi.d/macos-e2e.yml?branch=main&label=macOS)](https://github.com/ivylikethevine/hi.d/actions/workflows/macos-e2e.yml)
 [![Windows](https://img.shields.io/github/actions/workflow/status/ivylikethevine/hi.d/windows-e2e.yml?branch=main&label=Windows)](https://github.com/ivylikethevine/hi.d/actions/workflows/windows-e2e.yml)
-![ssh payload](https://img.shields.io/badge/ssh_payload-76KB_per_session-4c1)
+![ssh payload](https://img.shields.io/badge/ssh_payload-78KB_per_session-4c1)
 [![package](https://img.shields.io/endpoint?url=https%3A%2F%2Fivylikethevine.github.io%2Fhi.d%2Fbadges%2Fpackage.json)](https://github.com/ivylikethevine/hi.d/releases)
+[![kcov](https://img.shields.io/endpoint?url=https%3A%2F%2Fivylikethevine.github.io%2Fhi.d%2Fbadges%2Fcoverage.json)](docs/TESTING.md#coverage-and-profiling)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/ivylikethevine/hi.d/badge)](https://scorecard.dev/viewer/?uri=github.com/ivylikethevine/hi.d)
 ![bash](https://img.shields.io/badge/bash-3.2%2B-4EAA25?logo=gnubash&logoColor=white)
 ![license](https://img.shields.io/badge/license-MIT-blue)
 
@@ -235,7 +237,7 @@ every run · 🟡 expected to work, nobody has proven it · ⚠️ works, reduce
 | target OS                                     | result                                                                                                                                                    | proven by                                                                                   |
 | --------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
 | Linux, glibc (Debian/Ubuntu/Fedora/Arch…)     | ✅ full session                                                                                                                                           | `tests/targets/ssh_test.sh`, on Debian bookworm                                             |
-| Linux, musl + busybox (Alpine…)               | ✅ full session with `bash` installed, ⚠️ aliases-only without                                                                                            | `ssh_test.sh`, on Alpine 3.20                                                               |
+| Linux, musl + busybox (Alpine…)               | ✅ full session with `bash` installed, ⚠️ aliases-only without                                                                                            | `ssh_test.sh`, on Alpine 3.24                                                               |
 | macOS                                         | 🟡 full session — bash 3.2 is what it ships, and the suite runs a real bash 3.2 target; the client half (BSD `sed`/`mktemp`/`base64`) is unit-tested only | `ssh_test.sh` bash-3.2 case; `.github/workflows/macos-e2e.yml` is written but has never run |
 | WSL                                           | 🟡 it is Linux, and the `.deb` installs into it unchanged                                                                                                 | —                                                                                           |
 | Windows, with Git Bash/Cygwin/MSYS2 on `PATH` | 🟡 full session, same code path as any ssh host                                                                                                           | `.github/workflows/windows-e2e.yml`, written, never run                                     |

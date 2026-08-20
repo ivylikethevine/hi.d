@@ -34,7 +34,7 @@ Show
 Sleep 1s
 Type "# a debian container, bash inside"
 Enter
-Type "hi hi-demo"
+Type "hi db-prod"
 Enter
 Wait+Screen@60s /hi loaded with/
 Sleep 3s
@@ -48,7 +48,7 @@ Sleep 2s
 
 Type "# an alpine box with no bash - one-off command"
 Enter
-Type "hi hi-demo-zsh 'zsh --version'"
+Type "hi cache-1 'zsh --version'"
 Enter
 Wait+Screen@60s /zsh 5/
 Sleep 3s

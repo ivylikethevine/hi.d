@@ -1,0 +1,82 @@
+name: CodeQL
+
+# CodeQL over the one language in this repo it can read: GitHub Actions.
+#
+# **It cannot analyse the product.** hi.d is bash, and CodeQL has no shell
+# analyser - not a gap in this config, a gap in CodeQL. The shell is covered by
+# shellcheck, checkbashisms, the bash-3.2 grep and `zsh -n`/`fish --no-execute`,
+# all of them inside `--group fast` (docs/TESTING.md). Nothing here changes
+# that, and nothing here should be read as "the code is scanned now".
+#
+# What it does cover is real: ten workflows and a composite action, where the
+# interesting bugs are expression injection into `run:`, an untrusted checkout
+# feeding a privileged job, and artifact or cache poisoning. That is the set
+# CodeQL's `actions` pack asks about.
+#
+# It overlaps with zizmor, which already gates every PR in ci.yml, and the
+# overlap is the point rather than an accident: zizmor is a fast opinionated
+# linter that fails the build, CodeQL is a slower dataflow analysis whose
+# findings land in the Security tab with a trace. Where they agree, a finding
+# is cheap to trust; where only one fires, it is worth reading. Neither
+# replaces the other, and zizmor stays the gate.
+#
+# Scorecard's SAST check counts this and does not count shellcheck, actionlint
+# or zizmor - a real reason to run it, and a bad reason to believe the score.
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/**"
+      - ".github/actions/**"
+  pull_request:
+    paths:
+      - ".github/workflows/**"
+      - ".github/actions/**"
+  # the default-branch baseline code scanning diffs a PR against. Without a
+  # scheduled run the first PR to touch a workflow has nothing to compare to.
+  schedule:
+    - cron: "17 6 * * 2"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  analyze:
+    name: CodeQL (actions)
+    runs-on: ${{ vars.RUNNER_LABEL || 'ubuntu-latest' }}
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      # the SARIF upload, and the workflow definitions being analysed
+      security-events: write
+      actions: read
+    steps:
+      # hands the persistent self-hosted workspace back to the runner user, so
+      # checkout's own cleanup can always finish - see docs/PACKAGING.md
+      - name: Reclaim the workspace
+        if: ${{ runner.environment != 'github-hosted' }}
+        run: |
+          set -euo pipefail
+          sudo chown -R "$(id -u):$(id -g)" "$GITHUB_WORKSPACE"
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # `actions` is the whole matrix on purpose - see the header. build-mode
+      # none is the only mode it has: there is nothing to compile.
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4
+        with:
+          languages: actions
+          build-mode: none
+
+      - name: Analyze
+        uses: github/codeql-action/analyze@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4
+        with:
+          category: "/language:actions"

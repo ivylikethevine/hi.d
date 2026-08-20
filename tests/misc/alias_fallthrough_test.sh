@@ -176,7 +176,13 @@ function _hi_run_scenario() {
   fi
 
   t0="$(_hi_now)"
+  # $_HI_ROOT is what aliases.sh resolves misc/personal.sh through - the same
+  # variable its overlay-source tail already uses, and the only answer three
+  # dialects share (sh and fish have no $BASH_SOURCE). Without it here the
+  # personal half is simply absent and every _HI_DISABLE_ALIASES=0 case fails
+  # on a missing `sudo`.
   if env -i HOME="$_HI_FAKEHOME" PATH="$fakepath" _HI_ALIASES="$_HI_ALIASES" \
+    _HI_ROOT="$_HI_ROOT" \
     _HI_NANORC="$_HI_WORKDIR/nanorc" _HI_VIMRC="$_HI_WORKDIR/vimrc" \
     _HI_DISABLE_EDITORS="${_HI_DISABLE_EDITORS:-0}" _HI_DISABLE_ALIASES="${_HI_DISABLE_ALIASES:-0}" \
     "$@" "$shell_bin" "$script" 2>"$_HI_WORKDIR/err"; then

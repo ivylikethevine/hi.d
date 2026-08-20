@@ -36,7 +36,7 @@ Show
 Sleep 1s
 Type "# an ssh host with a permanent ~/hi.d - nothing ships"
 Enter
-Type "hi -F /tmp/hi-demo/ssh_config hi-demo-box"
+Type "hi -F /tmp/hi-demo/ssh_config web-1"
 Enter
 Wait+Screen@60s /hi loaded with/
 Sleep 3s

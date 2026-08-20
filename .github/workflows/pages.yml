@@ -6,7 +6,7 @@ name: Pages
 # ROADMAP and tldr - which interlink with relative links link-check.yml keeps
 # honest.
 #
-# It also carries one file Jekyll never sees: badges/tests.json, the shields
+# It also carries files Jekyll never sees: badges/*.json, the shields
 # endpoint README's tests badge reads. Publishing the figure here rather than
 # sed'ing it into README.md and committing it back keeps the number generated
 # and keeps every push free of a bot commit on top of the author's - which is
@@ -137,10 +137,43 @@ jobs:
           run-id: ${{ steps.ci-run.outputs.run_id }}
           github-token: ${{ github.token }}
 
+      # Coverage is its own lookup, not the CI run above: coverage.yml is
+      # dispatch-only and slow, so its newest successful run is almost never
+      # the run that triggered this deploy. The badge therefore shows the last
+      # figure anyone measured and keeps showing it until somebody measures
+      # again - which is the honest behaviour for a number nobody runs weekly.
+      - name: Find the last coverage run
+        id: cov-run
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          run_id="$(gh api \
+            "repos/$REPO/actions/workflows/coverage.yml/runs?branch=main&status=success&per_page=1" \
+            --jq '.workflow_runs[0].id // empty')"
+          echo "run_id=$run_id" >>"$GITHUB_OUTPUT"
+          if [ -n "$run_id" ]; then
+            echo "kcov figure from coverage run $run_id"
+          else
+            echo "no successful coverage run on main - the kcov badge stays grey"
+          fi
+
+      - name: Fetch that run's kcov figure
+        if: steps.cov-run.outputs.run_id != ''
+        continue-on-error: true
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: coverage-pct
+          path: ${{ runner.temp }}/cov
+          run-id: ${{ steps.cov-run.outputs.run_id }}
+          github-token: ${{ github.token }}
+
       - name: Write the shields endpoint
         env:
           TOTALS: ${{ runner.temp }}/totals/totals
           SIZES: ${{ runner.temp }}/sizes/sizes
+          COVPCT: ${{ runner.temp }}/cov/pct
         run: |
           set -euo pipefail
           # jekyll-build-pages is a *container* action - it runs as root inside
@@ -179,6 +212,28 @@ jobs:
             printf '{"schemaVersion":1,"label":"package","message":"unknown","color":"inactive","cacheSeconds":300}\n' \
               >_site/badges/package.json
             echo "::warning::no package-sizes to read - package badge published as unknown"
+          fi
+
+          # README's kcov badge. Grey and labelled "load-time", never green and
+          # never "coverage": tests/coverage.sh's header explains at length that
+          # kcov loses its DEBUG trap once the harness is sourced, so this
+          # figure is the share of lines that ran while things were loading and
+          # understates real coverage by a wide, uneven margin
+          # (common/git_prompt.sh reads 2.56% with seventeen cases passing
+          # against it). A green "coverage: 60%" here would be a false claim on
+          # the front page, so the badge is written to be unmistakable instead.
+          # No warning on the empty branch: no coverage run yet is the normal
+          # state for a dispatch-only workflow, not something to flag.
+          pct=""
+          [ -f "$COVPCT" ] && read -r pct <"$COVPCT" || true
+          if [ -n "$pct" ]; then
+            printf '{"schemaVersion":1,"label":"kcov","message":"%s%% load-time","color":"inactive","cacheSeconds":300}\n' \
+              "$pct" >_site/badges/coverage.json
+            echo "kcov badge: $pct% load-time"
+          else
+            printf '{"schemaVersion":1,"label":"kcov","message":"not measured","color":"inactive","cacheSeconds":300}\n' \
+              >_site/badges/coverage.json
+            echo "kcov badge: no figure published yet"
           fi
 
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0

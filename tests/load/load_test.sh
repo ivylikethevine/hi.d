@@ -166,6 +166,32 @@ function test_clean_all_strips_block_and_keeps_user_lines() {
   [ "$(cat "$_HI_FAKE_HOME/.zshrc")" = "$_HI_USER_LINE" ]
 }
 
+# Two overlapping sessions to one host, which is the shape neither the docs nor
+# a test used to state. configure_files skips the graft when the marker is
+# already there, so the second session adds nothing; clean_all strips on the way
+# out unconditionally, so the *first* session to leave takes the block away from
+# the one still running. Not "the owner cleans up after itself" - whoever exits
+# first does.
+#
+# This is a known limit, not a bug, and docs/CONFIGURATION.md says so: nothing
+# the survivor is using breaks (a running shell read its rc once, and the
+# session trees are per-mktemp so neither can delete the other's), but a shell
+# opened inside it afterwards - tmux new-window, su, a nested login - comes up
+# bare. Refcounting the graft is the alternative, and it needs shared state on
+# the target that would outlive a crashed session, which is the thing hi's
+# footprint promise (docs/SECURITY.md) exists to avoid.
+#
+# If this case ever fails because the block survived, the graft has been
+# refcounted: CONFIGURATION.md's note has to change in the same commit.
+function test_second_session_adds_no_block_and_first_exit_strips_it() {
+  _hi_fake_rcs concurrent
+  configure_files # session A connects and grafts
+  configure_files # session B connects, sees the marker, adds nothing
+  [ "$(_hi_block_count "$_HI_FAKE_HOME/.bashrc")" -eq 1 ] || return 1
+  _hi_clean_all # ...and whichever of the two exits first strips it
+  [ "$(cat "$_HI_FAKE_HOME/.bashrc")" = "$_HI_USER_LINE" ]
+}
+
 function test_clean_all_removes_lone_start_marker() {
   _hi_fake_rcs lonemarker
   printf '%s\n%s\n' "$_HI_CONFIG_START" 'orphaned line' >>"$_HI_FAKE_HOME/.bashrc"
@@ -340,6 +366,7 @@ function run_load_tests() {
 
   _hi_h2 "Testing: clean_all"
   _hi_check "Strips the block, keeps user lines" test_clean_all_strips_block_and_keeps_user_lines
+  _hi_check "A second session adds no block; the first exit strips it" test_second_session_adds_no_block_and_first_exit_strips_it
   _hi_check "Removes a start marker with no end marker" test_clean_all_removes_lone_start_marker
   _hi_check "Keeps \$_HI_ROOT when _HI_CLEANUP is unset" test_clean_all_keeps_permanent_install
   _hi_check "Removes \$_HI_ROOT when _HI_CLEANUP is set" test_clean_all_removes_disposable_copy

@@ -20,7 +20,7 @@ updates:
 
   # The three upstream base images the test fixtures build on, pinned by digest
   # in tests/dockerfiles/*.Dockerfile. A digest never moves, which is the point
-  # and also the hazard: without this, `alpine:3.20` would keep meaning whatever
+  # and also the hazard: without this, `alpine:3.24` would keep meaning whatever
   # it meant the day it was pinned, security fixes included, and nothing would
   # say so. The `docker` ecosystem reads Dockerfiles specifically - the same
   # images named in shell (tests/test_lib.sh, docs/tapes/fixtures.sh) are out of

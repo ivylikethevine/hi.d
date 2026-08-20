@@ -30,7 +30,7 @@ Enter
 Show
 
 Sleep 1s
-Type "hi hi-demo"
+Type "hi db-prod"
 Enter
 Wait+Screen@60s /hi loaded with/
 Sleep 3s

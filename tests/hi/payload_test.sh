@@ -65,17 +65,32 @@ function test_payload_ships_everything_by_default() {
   return 1
 }
 
-# misc/aliases.sh is deliberately never trimmed: _HI_DISABLE_ALIASES turns off
-# the personal aliases, but the file installs the vim/nano, hi_copy and tmux
-# aliases above its own early return. Pinned so a later "obvious" saving cannot
-# quietly take those with it.
-function test_payload_keeps_aliases_even_when_disabled() {
+# _HI_DISABLE_ALIASES cuts along the seam between the two alias files and not
+# through either: misc/personal.sh leaves the payload, misc/aliases.sh stays.
+# Both halves matter. aliases.sh installs the vim/nano, hi_copy and tmux
+# aliases above the source line, so trimming it would be a behaviour change
+# wearing a size saving's clothes; personal.sh is preference the target will
+# not read, so shipping it is bytes on the wire for nothing.
+function test_payload_trims_personal_but_keeps_aliases() {
   local dir="$_HI_WORKDIR/noalias" listing
   mkdir -p "$dir"
   printf "#!/bin/sh\nexport _HI_DISABLE_ALIASES='1'\n" >"$dir/settings.sh"
   listing="$(_HI_CONFIG_DIR="$dir" _hi_payload_tar | tar tzf - 2>/dev/null)"
-  case "$listing" in *hi.d/misc/aliases.sh*) return 0 ;; esac
-  _hi_cecho " | _HI_DISABLE_ALIASES=1 dropped misc/aliases.sh, which still carries other aliases" "$RED"
+  case "$listing" in
+  *hi.d/misc/personal.sh*)
+    _hi_cecho " | _HI_DISABLE_ALIASES=1 still shipped misc/personal.sh" "$RED"
+    return 1
+    ;;
+  esac
+  case "$listing" in *hi.d/misc/aliases.sh*) ;; *)
+    _hi_cecho " | _HI_DISABLE_ALIASES=1 dropped misc/aliases.sh, which still carries the editor, hi_copy and tmux aliases" "$RED"
+    return 1
+    ;;
+  esac
+  # and the default client ships both
+  listing="$(_hi_payload_tar | tar tzf - 2>/dev/null)"
+  case "$listing" in *hi.d/misc/personal.sh*) return 0 ;; esac
+  _hi_cecho " | a default client did not ship misc/personal.sh" "$RED"
   return 1
 }
 
@@ -202,7 +217,7 @@ function run_hi_payload_tests() {
   _hi_check "Ships exactly common/misc/shells/load.sh" test_payload_ships_exactly_the_travelled_paths
   _hi_check "Overlay trims what it disabled" test_payload_trims_what_the_overlay_disabled
   _hi_check "A default client ships everything" test_payload_ships_everything_by_default
-  _hi_check "aliases.sh ships even when disabled" test_payload_keeps_aliases_even_when_disabled
+  _hi_check "The toggle trims personal.sh and keeps aliases.sh" test_payload_trims_personal_but_keeps_aliases
   _hi_check "ksh.sh rides the payload" test_payload_carries_ksh_sh
 
   _hi_h2 "Testing: the config overlay stream"

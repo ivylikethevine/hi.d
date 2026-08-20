@@ -33,7 +33,7 @@ Show
 Sleep 1s
 Type "# a fish-only alpine container, via podman"
 Enter
-Type "hi hi-demo-fish"
+Type "hi edge-1"
 Enter
 Wait+Screen@60s /plain fish/
 Sleep 3s

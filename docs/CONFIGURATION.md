@@ -11,7 +11,7 @@ overridden keeps tracking the default the tree ships, so `hi --update` still del
 | `~/.config/hi.d/colors`      | `misc/colors`    | your color pins                                                                                                                       |
 | `~/.config/hi.d/packages`    | `misc/packages`  | what the package check looks for                                                                                                      |
 | `~/.config/hi.d/tmux.conf`   | `misc/tmux.conf` | your tmux config                                                                                                                      |
-| `~/.config/hi.d/aliases.sh`  | -                | your own aliases, sourced **after** `misc/aliases.sh` so yours win - additive, never a replacement, and in the same POSIX+fish subset |
+| `~/.config/hi.d/aliases.sh`  | -                | your own aliases, sourced **after** `misc/aliases.sh` and `misc/personal.sh` so yours win - additive, never a replacement, and in the same POSIX+fish subset |
 
 This is what keeps configuring hi.d from dirtying the checkout (so `hi --update`'s `git pull` keeps applying
 cleanly), and why the tree never has to be writable at all - it can be root-owned, installed by a package
@@ -33,6 +33,7 @@ marked read-only in its row: `common/paths.sh` derives it on every source, so an
 - [Features](#features)
 - [Colors](#colors)
 - [tmux](#tmux)
+- [Two sessions to the same host](#two-sessions-to-the-same-host)
 - [Header details](#header-details)
 - [Everything else](#everything-else)
 
@@ -47,7 +48,7 @@ Each is **on by default**; set it to `1` to turn that piece off.
 | `_HI_DISABLE_PERSONAL`   | personal shell settings - history size, keybindings, completion tweaks                                                                |
 | `_HI_DISABLE_GIT_STATUS` | the git segment in the prompt                                                                                                         |
 | `_HI_DISABLE_EDITORS`    | the `vim`/`nano` config overrides                                                                                                     |
-| `_HI_DISABLE_ALIASES`    | the personal aliases in `misc/aliases.sh` |
+| `_HI_DISABLE_ALIASES`    | the personal aliases in `misc/personal.sh` - not the editor, `hi_copy` and `tmux` aliases `misc/aliases.sh` installs, which are the product. Setting it also keeps `personal.sh` off the ssh payload entirely |
 | `_HI_DISABLE_OSC52`      | the OSC 52 clipboard - yanks in `vim` and the `hi_copy` alias                                                                         |
 | `_HI_DISABLE_TMUX`       | the `tmux` config override (offered on permanent installs only)                                                                       |
 | `_HI_DISABLE_LOCAL`      | all of the above **on this machine only** - hi still styles the hosts you visit                                                       |
@@ -94,6 +95,24 @@ Two limits worth stating plainly:
   `scripts/install.sh` has been run. On a disposable target hi deletes the tree on exit and a detached tmux
   outlives the session, so every shell inside it would wake up reading a directory that is gone. Plain `tmux`
   still works there, without hi's config.
+
+## Two sessions to the same host
+
+hi grafts its rc block into the target's `~/.bashrc` (and `~/.zshrc`, and fish's config) on connect, and
+strips it on exit. The block is grafted **once** and removed by **whoever leaves first** - not by whoever
+put it there. So of two overlapping sessions to one host, the first to exit takes the block away from the
+one still running.
+
+Nothing you are already using breaks. A running shell read its rc when it started, the session trees are
+per-`mktemp` so neither session can delete the other's, and the graft is guarded on `$_HI_HOME` so it could
+never source a stranger's tree anyway. What you lose is a shell started **afterwards** inside the surviving
+session - `tmux new-window`, `su`, a nested login - which comes up bare, exactly as if you had ssh'd in
+without hi.
+
+This is deliberate rather than unnoticed. Refcounting the graft is the alternative, and a refcount has to
+live somewhere on the target that survives a crashed session - persistent state on a machine hi promises to
+leave as it found it ([SECURITY.md](SECURITY.md)'s footprint section). Reconnecting is the workaround, and
+`tests/load/load_test.sh` pins the behaviour so it cannot change by accident.
 
 ## Header details
 

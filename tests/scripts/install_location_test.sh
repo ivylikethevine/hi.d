@@ -278,24 +278,6 @@ function test_a_missing_tree_is_named_and_refused() {
     [[ "$out" == *"set _HI_HOME"* ]]
 }
 
-# The rename's other half. A checkout cloned as hi.d and only ever pulled is
-# complete and correct - it sits right beside the path hi reports missing,
-# under its old name - so the generic "set _HI_HOME to the directory that holds
-# it" is advice that cannot work: _HI_HOME is already right. hi.sh names the
-# rename instead, and this is what keeps it doing so.
-function test_an_old_named_checkout_is_told_to_rename() {
-  local parent="$_HI_WORKDIR/oldname" out rc=0
-  rm -rf "$parent"
-  mkdir -p "$parent"
-  cp -a "$_HI_LOC_OUT_ROOT" "$parent/hi.d"
-  # unset, not pointed elsewhere: the whole case is hi.sh deriving $_HI_HOME
-  # from its own path and finding the tree there under the wrong name
-  out="$(env -u _HI_HOME "$parent/hi.d/hi.sh" --version 2>&1)" || rc=$?
-  [ "$rc" -ne 0 ] &&
-    [[ "$out" == *"still named hi.d"* ]] &&
-    [[ "$out" == *"mv '$parent/hi.d' '$parent/say-hi'"* ]]
-}
-
 # --- the inverse ----------------------------------------------------------
 
 # --uninstall takes its own line back out of all three rc files, wherever the
@@ -360,7 +342,6 @@ function run_install_location_tests() {
   _hi_par_check "hi.sh runs from it" test_outside_launcher_runs
   _hi_par_check "hi.sh runs through a symlink onto it" test_outside_launcher_runs_through_a_symlink
   _hi_par_check "A missing tree is named and refused" test_a_missing_tree_is_named_and_refused
-  _hi_par_check "A checkout still named hi.d is told to rename" test_an_old_named_checkout_is_told_to_rename
   _hi_par_wait
 
   # serial, and last: it rewrites the rc files every case above reads

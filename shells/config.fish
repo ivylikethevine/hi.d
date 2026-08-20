@@ -17,16 +17,11 @@ for _hi_toggle in _HI_DISABLE_LOCAL _HI_REMOTE_SESSION _HI_DISABLE_HEADER \
 end
 set -e _hi_toggle
 # the overlay's home (fish can't expand the XDG default); only when unset, so
-# hi.sh can point a target at its shipped copy. The hi.d fallback is core.sh's,
-# in fish's dialect - see there for why an old overlay is read where it lies.
+# hi.sh can point a target at its shipped copy.
 if not set -q _HI_CONFIG_DIR
   set -l _hi_cfg_base ~/.config
   set -q XDG_CONFIG_HOME; and set _hi_cfg_base $XDG_CONFIG_HOME
-  if not test -d $_hi_cfg_base/say-hi; and test -d $_hi_cfg_base/hi.d
-    set -gx _HI_CONFIG_DIR $_hi_cfg_base/hi.d
-  else
-    set -gx _HI_CONFIG_DIR $_hi_cfg_base/say-hi
-  end
+  set -gx _HI_CONFIG_DIR $_hi_cfg_base/say-hi
 end
 # settings ahead of paths.sh, whose gate reads them - plain `export NAME=value`
 # lines, which fish parses natively

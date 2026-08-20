@@ -49,34 +49,20 @@ here: git history is the ledger, and this file is only what is left to do.
     entry or file that satisfies it, and the two _Blocked on: v1_ entries point
     at this one instead of at a version number.
 
-- [ ] **Finish the `hi.d` → `say-hi` rename** — _the in-repo half has shipped._
-      The tree resolves as `$_HI_HOME/say-hi`, the config overlay defaults to
+- [ ] **Finish the `hi.d` → `say-hi` rename** — _everything but the GIFs has
+      shipped._ The tree resolves as `$_HI_HOME/say-hi`, the config overlay is
       `~/.config/say-hi`, all four packages are named `say-hi`, the profile hook
       is `/etc/profile.d/say-hi.sh` and the apk key is
-      `packaging/apk/say-hi.rsa.pub`. Both old names are still accepted:
-      `hi.sh`'s permanent-install probe tries `say-hi` then `hi.d` under every
-      candidate home, and `common/core.sh` reads an unmigrated
-      `~/.config/hi.d` where it lies (`scripts/install.sh`'s `overlay_migrate`
-      offers to move it, and `hi --doctor` flags both cases). What is left is
-      three steps no file here can perform.
+      `packaging/apk/say-hi.rsa.pub`. The old name is accepted nowhere — the
+      probe fallback, the overlay fallback and `overlay_migrate` are all out.
+      The GitHub repo is renamed, and the AUR had nothing to rename. One step is
+      left, and it is the one no file here can perform; **ticks when it is
+      done.**
 
-  - **Rename the GitHub repo** to `say-hi` (Settings → General → Repository
-    name). Every manifest and doc already points at
-    `github.com/ivylikethevine/say-hi`, so **they are wrong until this is
-    done** — GitHub redirects the old URL, which is what keeps that survivable
-    rather than urgent. Afterwards, `git remote set-url origin` in every
-    checkout.
   - **Re-render the seven demo GIFs** in `docs/demos/` — they show `~/hi.d` on
     screen, and `docs/tapes/generate.sh` refuses to run unless the checkout is
     named `say-hi`. Needs docker and a clean tree; its own commit, since it is
     seven binary files.
-  - **Rename the AUR repos** if either was created before this landed:
-    `ssh://aur@aur.archlinux.org/say-hi.git` and `say-hi-git`. The AUR has no
-    rename — it is a new repo and a deletion request for the old one, so do it
-    before the first push if at all possible.
-  - **When the fallbacks come out.** They are a migration aid, not a feature,
-    and they are the only places the old name survives on purpose. Drop both a
-    release or two after v1, together with this entry.
 
 - [ ] **Source tarball under the provenance chain** — _Blocked on **Say what
       v1.0.0 means**, above._ Both
@@ -92,7 +78,7 @@ here: git history is the ledger, and this file is only what is left to do.
       a consolidation to weigh, not an obvious win. Three classes of pin move
       here and only two have a watcher: dependabot handles the `uses:` SHAs and
       now the `tests/dockerfiles` digests, while
-      `.github/actions/setup-tool/tools.txt` (eight curl-installed tools) has no
+      `.github/actions/setup-tool/tools.txt` (ten curl-installed tools) has no
       ecosystem, which is exactly why `tool-versions.yml` exists — a bespoke
       weekly script that reads the same rows and warns on drift. A third class
       has no watcher but does have a gate: the same images named as plain tags
@@ -110,7 +96,7 @@ here: git history is the ledger, and this file is only what is left to do.
   - **What it costs:** a second bot app on the repo, a `renovate.json` that is
     its own dialect to learn, and the loss of something the current setup has —
     `tool-versions.yml` fails loudly with `::warning` annotations in a run,
-    where Renovate opens PRs. For eight pins that is arguably a downgrade in
+    where Renovate opens PRs. For ten pins that is arguably a downgrade in
     signal.
   - **Ticks when:** the answer is written down either way. If it stays
     dependabot, say so here and in `.github/dependabot.yml`'s header so the
@@ -123,7 +109,7 @@ here: git history is the ledger, and this file is only what is left to do.
       `debian:bookworm-slim` and `bash:3.2` by digest, which is what makes a
       fixture build reproducible and also what freezes whatever CVEs those
       layers carried that day. Dependabot opens a bump PR weekly, but it bumps
-      on _releasalsoe_, not on severity — nothing currently says "the digest you are
+      on release, not on severity — nothing currently says "the digest you are
       pinned to now has a fixable hole".
 
   - **`--ignore-unfixed` is the whole design, not a detail.** Measured on the
@@ -132,7 +118,7 @@ here: git history is the ledger, and this file is only what is left to do.
     entries, eight of them `perl-base`. A gate on the raw number is red
     forever and teaches everyone to skip it. With `--ignore-unfixed` all three
     images report **0** today, so the job is green until something actionable
-    lands and its going red means exactly one thing: bump the pin.
+    lands and it's going red means exactly one thing: bump the pin.
   - **The code half is in place.** `.github/workflows/image-scan.yml` runs it weekly and on
     dispatch, advisory like markdownlint and link-check. trivy is pinned in
     `setup-tool`'s `tools.txt`, so it caches and the weekly drift check
@@ -142,7 +128,7 @@ here: git history is the ledger, and this file is only what is left to do.
   - **Ticks when:** it has been seen green in CI. Measured locally at the
     current pins: all three images report zero fixable HIGH/CRITICAL.
 
-- [ ] **hadolint over the seventeen fixture Dockerfiles** — nothing lints them
+- [ ] **hadolint over the eighteen fixture Dockerfiles** — nothing lints them
       today, and a sweep finds real things rather than style noise. Counted
       across the set: `DL3009` (apt lists left in the layer) ×10, `DL3015`
       (no `--no-install-recommends`) ×10, `DL4006` (a piped `RUN` with no
@@ -324,8 +310,8 @@ half: no file here can close one.
   - **Ticks when:** both are on, and the CONTRIBUTING/SECURITY note says what a
     contributor should do when a push is refused.
 
-- [ ] **A job-started hook on the self-hosted runner** — eleven jobs across
-      six workflows open with the same `Reclaim the workspace` step: a
+- [ ] **A job-started hook on the self-hosted runner** — thirteen jobs across
+      eight workflows open with the same `Reclaim the workspace` step: a
       `sudo chown -R` of `$GITHUB_WORKSPACE`, guarded on
       `runner.environment != 'github-hosted'`, because that box's `_work`
       persists between jobs and one root-owned file from a container test makes
@@ -338,7 +324,7 @@ half: no file here can close one.
     runner itself — a script the runner executes before every job, which is
     exactly this step's scope. Setting it is a file and an env var on that
     machine, which is why this is here and not in the in-repo half.
-  - **Ticks when:** the hook is in place and the eleven copies are deleted in
+  - **Ticks when:** the hook is in place and the thirteen copies are deleted in
     one commit. Do both at once: the copies are harmless, but leaving them
     after the hook exists means two mechanisms for one problem.
 
@@ -372,16 +358,14 @@ half: no file here can close one.
     output so it needs none. `publish_results` is on and the SARIF uploads to
     code scanning, so findings land in the Security tab rather than inside an
     artifact.
-  - **The README badge is deliberately not there yet.**
-    `api.securityscorecards.dev` 404s for this repo until a
-    _scheduled_ run has published, and shields renders that as
-    `openssf scorecard: invalid repo path` while scorecard.dev's viewer errors
-    outright. A `workflow_dispatch` will not fix it — the action only publishes
-    on a schedule. Add the badge after the first Tuesday run, once
-    `curl -s https://api.securityscorecards.dev/projects/github.com/ivylikethevine/say-hi`
-    answers 200.
-  - **Ticks when:** `publish_results` is settled either way, and the README
-    badge decision follows from it.
+  - **The badge shipped, which settles half of it.** `README.md` now carries
+    `api.scorecard.dev/projects/github.com/ivylikethevine/say-hi/badge`, so the
+    scheduled run has published and the 404 that blocked it is gone. What that
+    proves is only that the number _renders_ — not that a score dominated by
+    "solo maintainer" is worth showing. Removing it again is still a live
+    option, and is the decision this entry is now about.
+  - **Ticks when:** `publish_results` is settled either way in writing, and the
+    badge either stays with a sentence here saying why, or comes back out.
 
 ### Docs & submissions
 

@@ -30,19 +30,8 @@ export _HI_HOME
 # Checked before the source, because bash's own "No such file or directory"
 # names a path nobody typed - which is what a tree that is not laid out as
 # $_HI_HOME/say-hi looks like. No _hi_cecho: core.sh is the file that's gone.
-#
-# The hi.d arm is the one worth spelling out. A checkout that was cloned before
-# the rename and only ever pulled is *complete and correct* - it is sitting
-# right beside the path being reported missing, under its old name - so the
-# generic "set _HI_HOME" is advice that cannot work here. Say what actually
-# fixes it instead.
 [ -r "$_HI_HOME/say-hi/common/core.sh" ] || {
-  if [ -r "$_HI_HOME/hi.d/common/core.sh" ]; then
-    echo "hi: this checkout is still named hi.d - the tree is now say-hi." >&2
-    echo "    mv '$_HI_HOME/hi.d' '$_HI_HOME/say-hi' and re-run $_HI_HOME/say-hi/scripts/install.sh" >&2
-  else
-    echo "hi: no say-hi at $_HI_HOME/say-hi - set _HI_HOME to the directory that holds it" >&2
-  fi
+  echo "hi: no say-hi at $_HI_HOME/say-hi - set _HI_HOME to the directory that holds it" >&2
   exit 1
 }
 # shellcheck source=./common/core.sh
@@ -274,30 +263,19 @@ function _hi_ctl_close() {
 # out of it. The unwrapping sed's `-e` order matters: they run in sequence over
 # one pattern space, so the comment strip goes first, addressed to unquoted
 # lines - after unquoting it would eat a `#` from inside the quotes.
-#
-# Each candidate home is tried under BOTH tree names, new first. The tree was
-# renamed hi.d -> say-hi, and this probe is the one place that cannot assume
-# the rename has reached the other end: it reads what a *target* wrote, and a
-# target nobody has updated still has ~/hi.d and an rc line pointing at it.
-# Dropping the old name here would turn every un-updated permanent install into
-# a disposable copy - silently, and only visible as a slower connect.
 function _hi_remote_root_probe() {
   cat <<'PROBE'
-_c=$(for _f in "$HOME/.bashrc" "$HOME/.zshrc" "$HOME/.config/fish/config.fish" /etc/profile.d/say-hi.sh /etc/profile.d/hi.d.sh; do
+_c=$(for _f in "$HOME/.bashrc" "$HOME/.zshrc" "$HOME/.config/fish/config.fish" /etc/profile.d/say-hi.sh; do
   [ -f "$_f" ] && sed -n -e 's/^[[:space:]]*export  *_HI_HOME=//p' -e 's/^[[:space:]]*set -gx  *_HI_HOME  *//p' "$_f"
 done | sed -e '/^"/!s/[[:space:]]*#.*$//' -e 's/^"\([^"]*\)".*$/\1/' -e 's/[[:space:]]*$//')
 IFS='
 '
 for _h in $_c "$HOME"; do
   [ -n "$_h" ] || continue
-  # new name first: a home holding both is a half-finished migration, and the
-  # renamed tree is the one being kept
-  for _n in say-hi hi.d; do
-    [ -x "$_h/$_n/hi.sh" ] && [ -f "$_h/$_n/common/paths.sh" ] && {
-      printf "%s" "$_h/$_n"
-      exit 0
-    }
-  done
+  [ -x "$_h/say-hi/hi.sh" ] && [ -f "$_h/say-hi/common/paths.sh" ] && {
+    printf "%s" "$_h/say-hi"
+    exit 0
+  }
 done
 PROBE
 }
@@ -553,7 +531,7 @@ REMOTE
 }
 
 # Connect, copy say-hi over, hand off to load.sh. Everything up to the bash
-# branch is plain POSIX under one `sh -c` (GLOSSARY: sh -c wrapping)
+# branch is plain POSIX under one `sh -c` (GLOSSARY: HI.18)
 function _say_hi() {
   local size hi_esc nc_esc script middle boot_tmp remote_root tmp_root ctl_path ec=0
   local bootloader="" tree="" overlay_line=""
@@ -562,7 +540,7 @@ function _say_hi() {
   # only this path armors (containers stream via their CLI); a target with no
   # base64 fails the one-liner loudly on its own
   command -v base64 >/dev/null 2>&1 || {
-    _hi_cecho >&2 "hi requires base64 on [$(_hi_hostname)] to reach an ssh target, but it is not installed. Aborting..." "$RED"
+    _hi_cecho >&2 "hi: requires base64 on [$(_hi_hostname)] to reach an ssh target, but it is not installed. Aborting..." "$RED"
     return 1
   }
 
@@ -859,7 +837,7 @@ function _hi() {
   local copy_start tmp exit_code errors backend
 
   [ -d "$_HI_ROOT" ] || {
-    _hi_cecho "No such directory: $_HI_ROOT" "$RED" >&2
+    _hi_cecho "hi: no such directory: $_HI_ROOT" "$RED" >&2
     exit 1
   }
 

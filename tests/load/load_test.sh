@@ -110,9 +110,9 @@ function test_dead_graft_is_silent_in_bash() {
 }
 
 # $_HI_HOME is what the guard asks for - it never falls back to $HOME, since a
-# guessed tree is how a session ends up reading someone else's (GLOSSARY:
-# HI.33). In a real session hi.sh's preamble has exported it, which is what
-# this passes.
+# guessed tree is how a session ends up reading someone else's
+# (GLOSSARY: HI.33). In a real session hi.sh's preamble has exported it, which
+# is what this passes.
 function test_live_graft_still_runs_in_bash() {
   local out
   _hi_fake_rcs livegraft

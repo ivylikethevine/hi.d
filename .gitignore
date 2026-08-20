@@ -28,7 +28,6 @@
 *.envrc
 *.rsa
 *.crt
-*.pub
 *.pfx
 *.bmp
 *.cert

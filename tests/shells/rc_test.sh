@@ -207,10 +207,9 @@ function test_prompt_end_empty_falls_back() {
 # --- config.fish's $_HI_CONFIG_DIR ladder ------------------------------------
 #
 # fish cannot call a bash helper, so shells/config.fish carries its own copy of
-# common/core.sh's overlay-directory resolution - including the hi.d fallback
-# the tree rename left behind. Two copies of one decision is exactly the shape
-# that drifts, so these cases run fish's and compare with the answers
-# tests/common/core_test.sh pins bash's against.
+# common/core.sh's overlay-directory resolution. Two copies of one decision is
+# exactly the shape that drifts, so these cases run fish's and compare with the
+# answers tests/common/core_test.sh pins bash's against.
 #
 # _HI_CONFIG_DIR has to come out of the environment here (the helper above sets
 # it for every other case), which is why this runs fish directly.
@@ -219,10 +218,7 @@ function _hi_fish_cfg_answer() {
   rm -rf "$base"
   mkdir -p "$base"
   case "$1" in
-  old | both) mkdir -p "$base/hi.d" ;;
-  esac
-  case "$1" in
-  new | both) mkdir -p "$base/say-hi" ;;
+  new) mkdir -p "$base/say-hi" ;;
   esac
   out="$(env -i HOME="$_HI_WORKDIR" TERM=dumb PATH="$PATH" \
     _HI_HOME="$_HI_HOME" XDG_CONFIG_HOME="$base" \
@@ -232,16 +228,14 @@ function _hi_fish_cfg_answer() {
 
 function test_fish_config_dir_matches_bash() {
   [ "$(_hi_fish_cfg_answer neither)" = say-hi ] &&
-    [ "$(_hi_fish_cfg_answer new)" = say-hi ] &&
-    [ "$(_hi_fish_cfg_answer old)" = hi.d ] &&
-    [ "$(_hi_fish_cfg_answer both)" = say-hi ]
+    [ "$(_hi_fish_cfg_answer new)" = say-hi ]
 }
 
 # hi.sh points a target at its shipped overlay; fish must honour that too
 function test_fish_config_dir_explicit_value_wins() {
   local base="$_HI_WORKDIR/fishxdg.explicit" out
   rm -rf "$base"
-  mkdir -p "$base/hi.d" "$base/say-hi"
+  mkdir -p "$base/say-hi"
   out="$(env -i HOME="$_HI_WORKDIR" TERM=dumb PATH="$PATH" \
     _HI_HOME="$_HI_HOME" XDG_CONFIG_HOME="$base" _HI_CONFIG_DIR="$base/shipped" \
     fish -c 'source $_HI_HOME/say-hi/shells/config.fish 2>/dev/null; printf %s $_HI_CONFIG_DIR' </dev/null)"

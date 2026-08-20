@@ -235,27 +235,22 @@ function test_settings_sh_is_sourced() {
 
 # --- $_HI_CONFIG_DIR resolution ----------------------------------------------
 #
-# The config directory was renamed hi.d -> say-hi along with the tree, and an
-# overlay is the user's own data - settings, colors, a git history they may
-# have pushed - so core.sh reads an unmigrated ~/.config/hi.d where it lies
-# rather than starting an empty new one beside it. Same preamble-in-a-fresh-
-# bash shape as test_settings_sh_is_sourced above, for the same reason.
+# $_HI_CONFIG_DIR is derived from the XDG base, and an explicit value wins.
+# Same preamble-in-a-fresh-bash shape as test_settings_sh_is_sourced above, for
+# the same reason.
 #
-# shells/config.fish carries the same ladder in fish's dialect and is pinned
-# against these answers by tests/shells/rc_test.sh.
+# shells/config.fish carries the same resolution in fish's dialect and is
+# pinned against these answers by tests/shells/rc_test.sh.
 
 # _hi_cfg_answer <case> - what core.sh resolves $_HI_CONFIG_DIR to when the XDG
-# base holds <case>: `old`, `new`, `both` or `neither`. Printed relative to the
-# base, so a case reads as the name rather than a workdir path.
+# base holds <case>: `new` or `neither`. Printed relative to the base, so a
+# case reads as the name rather than a workdir path.
 function _hi_cfg_answer() {
   local base="$_HI_WORKDIR/xdg.$1" out
   rm -rf "$base"
   mkdir -p "$base"
   case "$1" in
-  old | both) mkdir -p "$base/hi.d" ;;
-  esac
-  case "$1" in
-  new | both) mkdir -p "$base/say-hi" ;;
+  new) mkdir -p "$base/say-hi" ;;
   esac
   out="$(env -u _hi_core_loaded -u _HI_CONFIG_DIR _HI_HOME="$_HI_HOME" XDG_CONFIG_HOME="$base" \
     bash -c 'source "$_HI_HOME/say-hi/common/core.sh"; printf "%s" "$_HI_CONFIG_DIR"')"
@@ -266,26 +261,16 @@ function test_config_dir_defaults_to_the_new_name() {
   [ "$(_hi_cfg_answer neither)" = say-hi ]
 }
 
-function test_config_dir_reads_an_unmigrated_overlay() {
-  [ "$(_hi_cfg_answer old)" = hi.d ]
-}
-
 function test_config_dir_uses_the_new_name_when_it_exists() {
   [ "$(_hi_cfg_answer new)" = say-hi ]
 }
 
-# a half-finished migration: the renamed directory is the one being kept
-function test_config_dir_prefers_the_new_name_when_both_exist() {
-  [ "$(_hi_cfg_answer both)" = say-hi ]
-}
-
 # hi.sh points a target at the overlay it shipped, so an explicit value has to
-# beat both names - this is the case that keeps the fallback from reaching into
-# a session it has no business in
+# beat the derived one
 function test_config_dir_explicit_value_wins() {
   local base="$_HI_WORKDIR/xdg.explicit"
   rm -rf "$base"
-  mkdir -p "$base/hi.d" "$base/say-hi"
+  mkdir -p "$base/say-hi"
   [ "$(env -u _hi_core_loaded _HI_HOME="$_HI_HOME" XDG_CONFIG_HOME="$base" \
     _HI_CONFIG_DIR="$base/shipped" \
     bash -c 'source "$_HI_HOME/say-hi/common/core.sh"; printf "%s" "$_HI_CONFIG_DIR"')" = "$base/shipped" ]
@@ -477,9 +462,7 @@ function run_core_tests() {
   _hi_h2 "Testing: the settings overlay"
   _hi_check "settings.sh is sourced" test_settings_sh_is_sourced
   _hi_check "Defaults to ~/.config/say-hi" test_config_dir_defaults_to_the_new_name
-  _hi_check "Reads an unmigrated ~/.config/hi.d" test_config_dir_reads_an_unmigrated_overlay
   _hi_check "Uses say-hi when it exists" test_config_dir_uses_the_new_name_when_it_exists
-  _hi_check "Prefers say-hi when both exist" test_config_dir_prefers_the_new_name_when_both_exist
   _hi_check "An explicit \$_HI_CONFIG_DIR wins" test_config_dir_explicit_value_wins
 
   _hi_h2 "Testing: the same answers in zsh"

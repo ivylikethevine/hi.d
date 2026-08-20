@@ -75,7 +75,10 @@ function run_alias_test() {
   _hi_suite_begin
   for _hi_shell in dash bash zsh fish; do
     if ! command -v "$_hi_shell" >/dev/null 2>&1; then
-      _hi_h2 "$_hi_shell -- not installed, skipped"
+      # counted, not silently dropped: an uninstalled shell has to show up in
+      # the runner's skip column, the way every other suite reports one
+      _hi_skip "$_hi_shell" "not installed"
+      _hi_skip "$_hi_shell strict" "not installed"
       continue
     fi
     _hi_case _hi_test_shell "$_hi_shell" "$_HI_WORKDIR"
@@ -83,7 +86,7 @@ function run_alias_test() {
   done
 
   _hi_suite_end "" \
-    "All installed shells loaded aliases.sh cleanly ($_HI_TOTAL shells)" \
+    "All installed shells loaded aliases.sh cleanly ($_HI_TOTAL cases)" \
     "One or more shells FAILED to load aliases.sh: $_HI_FAILED/$_HI_TOTAL"
 }
 

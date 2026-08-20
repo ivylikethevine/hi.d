@@ -24,12 +24,7 @@ source "$_HI_PACKAGES_PREVIEW"
 # else answers to: a shell builtin or a real tool of the same name would make
 # "installed" an accident of the machine rather than something set up here.
 function _hi_write_fixtures() {
-  local tool
-  mkdir -p "$_HI_WORKDIR/pkgbin"
-  for tool in hialpha hibravo hicharlie hidelta hiecho hifoxtrot; do
-    printf '#!/bin/sh\nexit 0\n' >"$_HI_WORKDIR/pkgbin/$tool"
-    chmod +x "$_HI_WORKDIR/pkgbin/$tool"
-  done
+  _hi_fake_path pkgbin hialpha hibravo hicharlie hidelta hiecho hifoxtrot >/dev/null
 
   cat >"$_HI_WORKDIR/packages" <<'EOF'
 # a comment, and a blank line, both of which the header skips
@@ -52,7 +47,7 @@ EOF
 
 # the fixture's packages, and the coreutils the script itself shells out to
 function _hi_pkg_path() {
-  printf '%s:%s' "$_HI_WORKDIR/pkgbin" "$(_hi_real_path pkgtools awk sort sed cat)"
+  printf '%s:%s' "$(_hi_fake_path pkgbin)" "$(_hi_real_path pkgtools awk sort sed cat)"
 }
 
 # collect once - it is the same work for every case that reads the results

@@ -289,13 +289,21 @@ function test_packages_floor_keeps_a_configured_value() {
   [ "$(_hi_floor_lines floor_keep)" = "export _HI_PACKAGES_MIN_PRIORITY=3" ]
 }
 
-# 0 is header.sh's own default via ${_HI_PACKAGES_MIN_PRIORITY:-0}, so writing
+# 1 is header.sh's own default via ${_HI_PACKAGES_MIN_PRIORITY:-1}, so writing
 # it out would be a line that means nothing - the same rule config_max_width
 # has for 80.
 function test_packages_floor_does_not_write_the_default() {
-  _hi_settings_fixture floor_default _hi_floor_run 'export _HI_PACKAGES_MIN_PRIORITY=0'
+  _hi_settings_fixture floor_default _hi_floor_run 'export _HI_PACKAGES_MIN_PRIORITY=1'
   [ -f "$_HI_WORKDIR/floor_default/config/lines.out" ] || return 1
   [ -z "$(_hi_floor_lines floor_default | tr -d '[:space:]')" ]
+}
+
+# ...and the other side of that rule, which only became a case when the default
+# moved off 0: 0 is now an answer like any other - "put the trivia tier back" -
+# so it has to survive as a line rather than being elided as the default.
+function test_packages_floor_writes_a_zero() {
+  _hi_settings_fixture floor_zero _hi_floor_run 'export _HI_PACKAGES_MIN_PRIORITY=0'
+  [ "$(_hi_floor_lines floor_zero)" = "export _HI_PACKAGES_MIN_PRIORITY=0" ]
 }
 
 function test_packages_floor_is_skipped_when_the_check_is_off() {
@@ -808,6 +816,7 @@ function run_install_tests() {
   _hi_check "Not duplicated on reruns" test_shebang_is_not_duplicated_on_reruns
   _hi_check "Packages floor: an existing value survives" test_packages_floor_keeps_a_configured_value
   _hi_check "Packages floor: the default is not written" test_packages_floor_does_not_write_the_default
+  _hi_check "Packages floor: a zero is written out" test_packages_floor_writes_a_zero
   _hi_check "Packages floor: skipped when the check is off" test_packages_floor_is_skipped_when_the_check_is_off
   _hi_check "Replaces a different shebang" test_shebang_replaces_a_different_one_and_keeps_content
   _hi_check "Preserves settings.sh's mode" test_settings_shebang_preserves_mode

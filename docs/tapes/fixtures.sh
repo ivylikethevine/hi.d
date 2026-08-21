@@ -316,16 +316,24 @@ EOF
   esac
 }
 
-# The color-preview demo needs no backend at all - just an ssh config with
-# enough shape to be worth previewing, and a colors overlay pinning a few of
-# them. The two land in different places because they are found in different
-# ways: paths.sh:53 assigns $_HI_SSH_CONFIG from $HOME every time it is
-# sourced, so that one needs a throwaway $HOME the tape exports, while
-# paths.sh:30 reads `colors` out of $_HI_CONFIG_DIR - which is the same overlay
-# dir every other demo writes its settings.sh into. Getting the first one right
-# is not neatness: reading the renderer's real ~/.ssh/config would put their
-# hostnames into a committed GIF.
-function up_colors() {
+# The demo ssh roster, written outside the overlay because neither thing that
+# reads it looks there: it is the file $_HI_SSH_CONFIG has to end up pointing
+# at. Getting this in front of the two demos that show ssh hosts is not
+# neatness - reading the renderer's real ~/.ssh/config would put their hostnames
+# into a committed GIF.
+#
+# Shared by colors and complete, so the two GIFs name the same boxes - the color
+# demo resolves them, the completion demo lists what carries them - but they
+# reach the file by different routes, and the difference is forced:
+#
+#   colors    exports a throwaway $HOME, which paths.sh:52 derives
+#             $_HI_SSH_CONFIG from. It reads files and starts nothing, so a
+#             fake $HOME costs it nothing.
+#   complete  sets $_HI_SSH_CONFIG directly, *after* the rc. It cannot fake
+#             $HOME: podman keeps its storage there and kubectl its
+#             ~/.kube/config, so a throwaway one empties two of the four
+#             backends the demo exists to show.
+function demo_ssh_config() {
   mkdir -p "$_HI_DEMO_DIR/home/.ssh"
   cat >"$_HI_DEMO_DIR/home/.ssh/config" <<'EOF'
 # Tags: prod
@@ -346,6 +354,13 @@ Host build-box
 Host bastion
   User root
 EOF
+}
+
+# ...and the colors overlay that only the color-preview demo wants, which lands
+# somewhere else again: paths.sh:30 reads `colors` out of $_HI_CONFIG_DIR, the
+# same overlay dir every other demo writes its settings.sh into.
+function up_colors() {
+  demo_ssh_config
   cat >"$_HI_DEMO_DIR/config/colors" <<'EOF'
 # pins beat the name hash; everything unpinned still resolves on its own
 username,root,red
@@ -354,6 +369,30 @@ hosttag,prod,red
 hosttag,staging,yellow
 hosttag,desktop,green
 EOF
+}
+
+# One of everything, at once - the completion demo's whole subject is that
+# `hi <TAB>` answers from every backend in one list, which is the one thing no
+# other fixture sets up: they each bring up the single target their tape
+# connects to.
+#
+# Composed from the existing up_* rather than written fresh, so the names in the
+# completion pane are the ones the other six GIFs already use and nothing here
+# can drift from them. The two container names are picked to *not* collide with
+# demo_ssh_config's hosts: `db-prod` is an ssh host in that roster, and a pane
+# listing it twice - once ssh, once docker - reads as a bug rather than as the
+# feature it actually is.
+#
+# No ssh backend. The ssh rows come from the config file demo_ssh_config writes,
+# which is all targets.sh reads for them (its `emit_targets` awks the file), so
+# a running sshd would cost four minutes of image build and change nothing on
+# screen.
+function up_complete() {
+  demo_ssh_config
+  up_container docker cache-1 zsh || return 1
+  up_container podman edge-1 fish || return 1
+  up_nomad || return 1
+  up_kube || return 1
 }
 
 # The label, not a list of names: a name list has to be edited in step with
@@ -368,10 +407,29 @@ function demo_down() {
     # shellcheck disable=SC2086 # ids is a list of container IDs, split on purpose
     [ -n "$ids" ] && "$backend" rm -f $ids >/dev/null 2>&1
   done
+  # The agent, by its pid file and then by the pattern that started it. The
+  # second half is not belt and braces: demo_down deletes $_HI_DEMO_DIR itself
+  # and generate.sh runs a teardown between every tape, so an agent started
+  # after the first `down` of a run has no pid file left to reap it by, and one
+  # survived a whole render before this line existed. The job cannot stand in
+  # for the pid either - the first teardown purges it, leaving an agent that is
+  # still running and no longer serving anything.
+  #
+  # So it is the same sweep up_nomad does on the way in, which is what makes it
+  # fair: a dev agent is already something the fixtures claim rather than share,
+  # and this takes nothing on the way out that they would not have taken on the
+  # way in.
+  #
+  # One live edge, found the hard way: `pkill -f` matches a whole command line,
+  # so a shell that merely *mentions* the pattern - a person pasting this line
+  # into a terminal, a script quoting it - is killed by its own teardown. Real
+  # enough to write down, and not worth a narrower pattern: `nomad agent -dev`
+  # is already the most specific string there is for the thing being reaped.
   if [ -f "$_HI_DEMO_DIR/nomad.pid" ]; then
     nomad job stop -purge hi-demo >/dev/null 2>&1 || true
     kill "$(cat "$_HI_DEMO_DIR/nomad.pid")" 2>/dev/null || true
   fi
+  pkill -f 'nomad agent -dev' 2>/dev/null || true
   if kind get clusters 2>/dev/null | grep -qx hi-demo; then
     kind delete cluster --name hi-demo >/dev/null 2>&1 || true
   fi
@@ -395,10 +453,13 @@ up:docker)
   client_rc zsh dev cache-1
   # demo.tape connects to this same debian box, so the difference between the
   # README's top GIF and this one has to be the *client* - hence a prompt end
-  # of its own and no packages check, neither of which touches the fixture.
+  # of its own and a package floor, neither of which touches the fixture. The
+  # floor rather than _HI_HEADER_CHECK=0, which this was: on a bare debian the
+  # top rank is one line, so the dial shows *and* the check stays short enough
+  # for two sessions to fit one frame.
   demo_settings <<'EOF'
 export _HI_PROMPT_END_ZSH='❯'
-export _HI_HEADER_CHECK='0'
+export _HI_PACKAGES_MIN_PRIORITY='5'
 EOF
   up_container docker db-prod debian
   up_container docker cache-1 zsh
@@ -420,10 +481,12 @@ up:nomad)
   # the header knobs the other demos leave alone. Note what is *not* here:
   # nomad.tape waits on /Disconnected/, which banner() prints, so this is the
   # one demo that cannot turn _HI_HEADER_BANNER or _HI_DISABLE_HEADER off
-  # without hanging its own render.
+  # without hanging its own render. The floor is load-bearing for the same
+  # reason - see nomad.tape.
   demo_settings <<'EOF'
 export _HI_HEADER_IDENTITY='0'
 export _HI_HEADER_GHZ='1'
+export _HI_PACKAGES_MIN_PRIORITY='5'
 EOF
   up_nomad
   ;;
@@ -437,6 +500,23 @@ up:kube)
 export _HI_DISABLE_GIT_STATUS='1'
 EOF
   up_kube
+  ;;
+up:complete)
+  # The one demo whose subject is the *client* alone - nothing is connected to,
+  # so the fixture exists only to be listed. fish for the client because its
+  # pager is the one shell that renders targets.sh's second column, which is
+  # what makes a still frame carry the idea.
+  #
+  # Its configuration: _HI_TARGETS_TTL=0. targets.sh caches its sweep for 5s in
+  # $XDG_RUNTIME_DIR, which the renderer shares with every other shell on their
+  # box - so a TAB landing inside a stale window would render *their* containers
+  # into the GIF. 0 is the one value that cannot, and on a demo whose subject is
+  # the sweep it is the honest setting anyway.
+  client_rc fish ops bastion
+  demo_settings <<'EOF'
+export _HI_TARGETS_TTL='0'
+EOF
+  up_complete
   ;;
 up:colors)
   # no settings.sh: this demo's configuration is the `colors` overlay up_colors
@@ -454,7 +534,7 @@ up:demo)
   ;;
 down:) demo_down ;;
 *)
-  echo "usage: fixtures.sh up <demo|ssh|docker|podman|nomad|kube|colors> | down" >&2
+  echo "usage: fixtures.sh up <demo|ssh|docker|podman|nomad|kube|colors|complete> | down" >&2
   exit 1
   ;;
 esac

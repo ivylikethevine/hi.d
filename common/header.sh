@@ -277,6 +277,10 @@ function hi_header() {
 # target you visit often is exactly where a nudge to install your own
 # preferred tools belongs, and one that stays quiet about them never nudges.
 #
+# The dial ships at 1, not 0: tier 0 is trivia by its own description, and a
+# stock connect is a better length without it. Nothing is lost - a floor of 0
+# is a setting like any other, and asks for the tier back.
+#
 # Tier 4 is the single exception, and the only `hide` left in the table: it is
 # the core-tool tier, where being present is not news and being absent means
 # this box is bare. Printing 57 `ok` rows on every healthy target to catch that
@@ -348,7 +352,7 @@ function check_line() {
 # quiet instead of dropping them without a word.
 function full_check() {
   local line priority width_item rendered count=0 width=0
-  local min="${_HI_PACKAGES_MIN_PRIORITY:-0}"
+  local min="${_HI_PACKAGES_MIN_PRIORITY:-1}"
   local -a visible=() # appended to by check_line
   while IFS=$' ' read -r line; do
     [[ "$line" == *#* || -z "$line" ]] || check_line "$line"

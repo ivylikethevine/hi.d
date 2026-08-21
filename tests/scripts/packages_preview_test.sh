@@ -172,6 +172,15 @@ function test_example_cell_marks_a_priority_with_nothing_to_show() {
   [ "$text" = "-" ] && [ "$width" -eq 1 ]
 }
 
+# The other reason a cell shows no example, and the one every stock config now
+# hits: the floor defaults to 1, so priority 0 has examples collected but never
+# printed, and the cell says why instead of showing one the header will not.
+function test_example_cell_marks_a_priority_below_the_floor() {
+  local text width
+  IFS=$'\t' read -r text width <<<"$(_hi_example_cell 0)"
+  [ "$text" = "below floor" ] && [ "$width" -eq 11 ]
+}
+
 # Running the real script can't reuse the exported fixture above: paths.sh
 # re-exports $_HI_PACKAGES from $_HI_ROOT every time it's sourced, so the only
 # way to point the script at one is to give it a scratch tree to derive it from.
@@ -210,7 +219,7 @@ function test_preview_says_hidden_where_the_header_prints_nothing() {
 }
 
 function test_preview_counts_what_it_read() {
-  printf '%s\n' "$_HI_PREVIEW_OUT" | grep -q '13 listed, 12 shown, 1 hidden'
+  printf '%s\n' "$_HI_PREVIEW_OUT" | grep -q '13 listed, 10 shown, 1 hidden'
 }
 
 # the check itself is the last thing the preview prints, so a package the
@@ -274,6 +283,7 @@ function run_packages_preview_tests() {
   _hi_h2 "Testing: the example cell"
   _hi_check "Reports its printed width" test_example_cell_reports_its_printed_width
   _hi_check "Marks a priority with nothing to show" test_example_cell_marks_a_priority_with_nothing_to_show
+  _hi_check "Marks a priority below the floor" test_example_cell_marks_a_priority_below_the_floor
 
   _hi_h2 "Testing: the rendered preview"
   _hi_check "Renders without error" test_preview_renders_without_error

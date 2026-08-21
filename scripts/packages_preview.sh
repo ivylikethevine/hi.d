@@ -38,8 +38,9 @@ Takes no arguments. Reads:
 A cell reading "hidden" is not a color: at that priority the header prints
 nothing for that state, which is why it has no example either. An EXAMPLE cell
 reading "below floor" is the same idea one level up: $_HI_PACKAGES_MIN_PRIORITY
-is set above that rank, so the header prints nothing for it whatever its colors
-say. A priority with
+is at or above that rank, so the header prints nothing for it whatever its
+colors say. That floor defaults to 1, so priority 0 reads "below floor" until
+you set one of your own. A priority with
 no example at all has no package of its own in your file.
 EOF
   exit 0
@@ -126,7 +127,7 @@ _HI_EX_OK=() _HI_EX_OK_W=() _HI_EX_NO=() _HI_EX_NO_W=()
 _HI_PKG_LISTED=0 _HI_PKG_SHOWN=0 _HI_PKG_FLOORED=0
 # read once, here, rather than at each use: full_check reads the same setting
 # and this preview has to answer for the floor the header will actually apply
-_HI_PKG_MIN="${_HI_PACKAGES_MIN_PRIORITY:-0}"
+_HI_PKG_MIN="${_HI_PACKAGES_MIN_PRIORITY:-1}"
 
 # Run the real check over the real packages file and keep the first installed
 # and first missing row at each priority. check_line appends what it would print

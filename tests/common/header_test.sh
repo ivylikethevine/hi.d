@@ -433,16 +433,20 @@ function test_full_check_min_priority_above_everything_is_silent() {
   [ -z "$out" ]
 }
 
-# unset behaves as 0: every rank the colors allow still prints
-function test_full_check_min_priority_defaults_to_showing_everything() {
+# unset behaves as 1, not 0: rank 1 prints and rank 0 does not. Both halves
+# again, for the reason the boundary case above gives - a default that hid
+# everything would pass a test that only checked the hidden side.
+function test_full_check_min_priority_defaults_to_one() {
   local pkgfile="$_HI_WORKDIR/floor-default" out
-  printf '%s:1\n' "$_HI_REAL_CMD" >"$pkgfile"
+  printf '%s:1\nbash:0\n' "$_HI_REAL_CMD" >"$pkgfile"
   out="$(
     _HI_PACKAGES="$pkgfile"
     unset _HI_PACKAGES_MIN_PRIORITY
     full_check
   )"
-  _hi_contains "$out" "$_HI_REAL_CMD"
+  _hi_contains "$out" "$_HI_REAL_CMD" || return 1
+  case "$out" in *bash*) return 1 ;; esac
+  return 0
 }
 
 function test_full_check_wraps_at_max_width() {
@@ -538,7 +542,7 @@ function run_header_tests() {
   _hi_check "Empty output when everything is hidden" test_full_check_empty_when_everything_hidden
   _hi_check_requires bash "Min priority: at the floor shows, below is gone" test_full_check_min_priority_boundary
   _hi_check "Min priority above every rank prints nothing" test_full_check_min_priority_above_everything_is_silent
-  _hi_check "Min priority unset shows everything" test_full_check_min_priority_defaults_to_showing_everything
+  _hi_check_requires bash "Min priority unset floors at 1" test_full_check_min_priority_defaults_to_one
   _hi_check_requires bash "Wraps rows at _HI_MAX_WIDTH" test_full_check_wraps_at_max_width
   _hi_check "Real misc/packages file parses cleanly" test_full_check_reads_real_packages_file_without_erroring
   _hi_check "Writes nothing to stderr" test_full_check_is_silent_on_stderr

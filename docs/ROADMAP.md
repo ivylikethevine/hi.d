@@ -103,6 +103,10 @@ here: git history is the ledger, and this file is only what is left to do.
     stale twice over, and one re-render settles both. Look at the colored
     output with fresh eyes when you do: hi's own palette is drawn over these
     backgrounds, and the check's tiers now use cyan and magenta as well.
+  - **A third rides along.** The packages check ships at a floor of 1 rather
+    than 0, and docker and nomad now set a floor of 5 of their own - so every
+    committed GIF shows a longer check than its tape will now render, and
+    docker.gif shows none at all where it now shows one line.
   - Its own commit, since it is seven binary files.
   - **Ticks when:** the GIFs show the current name, on the current themes.
 
@@ -235,43 +239,50 @@ here: git history is the ledger, and this file is only what is left to do.
 
 ### Demos
 
-- [ ] **A completion demo** — `hi <TAB>` is the feature nothing shows.
-      `../common/targets.sh` answers with ssh hosts _and_ every running
-      container across docker, podman, nomad and kube, tagged by backend, and
-      fish renders that list with its description column — the one shell where
-      a still frame carries the whole idea. The fixture is the gap: every
-      backend has to be up at once, where `tapes/fixtures.sh` brings them up one
-      at a time.
+- [ ] **A completion demo — render it and put it in the README.** The tape and
+      its fixture have shipped: `tapes/complete.tape` (fish, for the pager's
+      description column), `up_complete` composing the four existing `up_*`
+      fixtures, and a `complete` row in `_HI_GEN_TAPES`. It renders, and both
+      panes read the way the entry wanted — targets with their backend tags,
+      then `hi --<TAB>` and the flags. What is left is a render nobody can do
+      from a busy machine, and the README line that points at it.
 
-  - **Cheapest path to "one of everything":** compose the existing `up_*`
-    fixtures rather than writing a new one, and let the tape stand down the way
-    the others do when a backend is missing — a half-populated completion list
-    is a worse artifact than a skipped render.
-  - **Flag completion has already shipped**, so the tape can show both halves:
-    `hi --<TAB>` answers out of the same `targets.sh` roster without probing a
-    backend. Two panes in one render, or the target half alone if that reads
-    cleaner.
-  - **Ticks when:** `demos/complete.gif` renders from a tape listed in
-    `_HI_GEN_TAPES` (`tapes/generate.sh`), with ssh hosts and all four container
-    backends in the same completion pane, and the README shows it.
+  - **The render box has to be quiet.** `targets.sh` lists every running
+    container, not the fixture's — the feature, and the hazard — so anything
+    else running on the renderer's docker or podman takes rows in the pane, by
+    name, in a committed GIF. `generate.sh`'s preflight now counts them and
+    warns before the run starts, but stopping them is a person's call.
+  - **The pane truncates at eleven rows** (fish gives its pager half the
+    screen) and a clean box offers twelve. Which eleven is settled by fish's
+    sort, and every backend lands inside them — `complete.tape` works it out in
+    full. Two ssh hosts spill into "…and 1 more row", which is the honest shape
+    rather than something to fix.
+  - **Ticks when:** `demos/complete.gif` is rendered on a box running nothing
+    but the fixtures, reviewed by eye, and the README shows it.
 
-- [ ] **Render the demos in CI** —
-      [vhs-action](https://github.com/charmbracelet/vhs-action) installs vhs,
-      ttyd and ffmpeg on a runner, which is the whole toolchain
-      `tapes/generate.sh` shells out to. Today a tape that stopped rendering is
-      found by hand, months later, by whoever next runs the script; the GIFs are
-      committed artifacts and nothing re-renders them on a pull request.
+- [ ] **Render the demos in CI — see it go green once.**
+      `.github/workflows/demos.yml` has shipped and does what this entry asked:
+      on a PR touching `docs/tapes/**` it installs the toolchain with
+      [vhs-action](https://github.com/charmbracelet/vhs-action) (SHA-pinned;
+      dependabot already covers it), runs
+      `tapes/generate.sh --require-run color_preview` on a hosted runner, and
+      attaches the GIF for seven days. It renders rather than commits, per
+      `tapes/generate.sh`'s own header. The command was proved locally; the
+      runner path — the action's vhs/ttyd/ffmpeg install — has never executed.
 
-  - **Start where nothing is needed:** `tapes/color_preview.tape` wants no
-    backend at all and renders in seconds, so it can gate every PR touching
-    `docs/tapes/**` on a hosted runner. The docker-backed tapes belong on the
-    self-hosted box the e2e jobs already use.
-  - **Render, do not commit.** A GIF is reviewed by eye before it lands
-    (`tapes/generate.sh`'s header says so); CI's job is to prove the tape still
-    runs and to upload the result as an artifact, not to push a binary nobody
-    looked at.
-  - **Ticks when:** a workflow renders at least one tape on every PR that
-    touches `docs/tapes/**`, fails when vhs does, and attaches what it made.
+  - **It calls generate.sh, not vhs.** A tape's `Require hi` is satisfied by any
+    `hi` on `$PATH`, so a runner with one installed would record the wrong tree;
+    the preflight's shim is what makes the render this checkout's.
+  - **vhs itself is deliberately unpinned** (`version` left at the action's
+    default) where everything else this repo installs is pinned to the row: a
+    pinned vhs would hide the upstream break the job exists to catch. The
+    supply-chain half of the pin is the action's SHA.
+  - **The six docker-backed tapes are still not wired up**, and belong on the
+    self-hosted box the e2e jobs already use rather than on a hosted runner.
+    That is a second entry's worth of work, not a condition of this one.
+  - **Ticks when:** the job has run green on a pull request and the artifact is
+    there to download — which the PR carrying `complete.tape` will do on its
+    own, since it touches `docs/tapes/**`.
 
 ## Outside this repo
 

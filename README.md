@@ -175,12 +175,6 @@ normally, not the GIF cut short.
   `ssh` unchanged
 - run `hi --version` to see what is installed — the packaged version, or
   `git describe` in a checkout; the doctor and the connect header show it too
-- run `hi --tmux <target>` to have the session live inside a named tmux on the
-  target, so a dropped connection detaches instead of losing work — run it
-  again to reattach (`_HI_TMUX_ATTACH=1` makes it the default, `--no-tmux`
-  turns it off, `_HI_TMUX_SESSION` names the session). Offered only where
-  say-hi is permanent on the target: a disposable tree is deleted when the
-  session ends, and hi says so rather than leaving a tmux pointing at nothing
 - run `hi --doctor` (or `hi --doctor <target>`, to test one host) when
   something is slow or failing: it reports the tree, the config overlay, every
   backend probed and timed with the same ceilings the header and completion
@@ -208,7 +202,7 @@ normally, not the GIF cut short.
 - [optional] modify `say-hi/misc/*` and `say-hi/shells/*` in your checkout to
   your liking —
   though anything with an overlay (`settings.sh`, `colors`, `packages`,
-  `tmux.conf`, `aliases.sh`) is better edited in `~/.config/say-hi/`, which
+  `aliases.sh`) is better edited in `~/.config/say-hi/`, which
   keeps the checkout clean for `hi --update`
   - tip: the tree is a git checkout, so if you do edit it, push to your own
     fork and clone that on your next device — same setup everywhere, kept in
@@ -232,11 +226,11 @@ the local files.
 
 Your config lives **outside the checkout**, in
 `${XDG_CONFIG_HOME:-$HOME/.config}/say-hi/`, and rides along to every host you
-say `hi` to in its own small archive — `colors`, `packages`, `tmux.conf` and
+say `hi` to in its own small archive — `colors`, `packages` and
 `aliases.sh` overlay the tree's copies one file at a time, and `settings.sh`
 (what `hi --configure` writes) has no in-tree counterpart at all. The full
 picture — the overlay file table, every `_HI_DISABLE_*` feature toggle, the
-header-line toggles, tmux's `update-environment` behavior, and every other
+header-line toggles, and every other
 environment variable hi reads (`_HI_SHELL_PREFERENCE`, `_HI_PROMPT`,
 `_HI_ASCII`, `_HI_HEADER_GHZ`, ...) — is in
 [docs/CONFIGURATION.md](docs/CONFIGURATION.md).

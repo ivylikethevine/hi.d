@@ -41,7 +41,6 @@ if ! declare -p _HI_TESTS >/dev/null 2>&1; then
     "fast:aliases:misc/alias_test.sh"
     "fast:alias_fallthrough:misc/alias_fallthrough_test.sh"
     "fast:osc52:shells/osc52_test.sh"
-    "fast:tmux:misc/tmux_test.sh"
     "fast:shellcheck:lint/shellcheck_test.sh"
     "fast:install:scripts/install_test.sh"
     "fast:install_location:scripts/install_location_test.sh"

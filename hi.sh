@@ -57,7 +57,7 @@ _HI_PAYLOAD=(common misc shells load.sh hi.sh)
 # It lands in a config/ of its own rather than over misc/: misc/aliases.sh
 # sources $_HI_CONFIG_DIR/aliases.sh last, so one directory would make it
 # source itself forever.
-_HI_OVERLAY_FILES=(settings.sh colors packages tmux.conf aliases.sh)
+_HI_OVERLAY_FILES=(settings.sh colors packages aliases.sh)
 
 # What a bash-less target falls back to, best first: core.sh's $_HI_SHELL_TREE
 # minus bash (a missing bash is this ladder's precondition), derived so the two
@@ -90,8 +90,6 @@ function _hi_session_env() {
   printf '_HI_LOCAL_USER\t%s\n' "$(_hi_whoami)"
   printf '_HI_LOCAL_HOSTNAME\t%s\n' "$(_hi_hostname)"
   printf '_HI_RELEASE\t%s\n' "$(_hi_version)"
-  printf '_HI_TMUX_ATTACH\t%s\n' "${_HI_TMUX_ATTACH:-0}"
-  printf '_HI_TMUX_SESSION\t%s\n' "${_HI_TMUX_SESSION:-hi}"
   # the client's glyph verdict, not the target's: see _hi_ascii_flag
   printf '_HI_ASCII\t%s\n' "${_HI_ASCII:-$(_hi_ascii_flag)}"
   # the client's no-color choice travels the same way (nothing when unset,
@@ -173,7 +171,7 @@ AWK
 #
 # misc/aliases.sh is deliberately NOT trimmed under _HI_DISABLE_ALIASES=1: that
 # toggle turns off the *personal* aliases, while the same file installs the
-# vim/nano, hi_copy and tmux aliases and fish's toggle backstop above its own
+# vim/nano and hi_copy aliases and fish's toggle backstop above its own
 # early return. Dropping it would take those too - a behaviour change wearing a
 # size saving's clothes. The two that are trimmed are safe because every
 # consumer of shells/osc52.sh tests the file exists first (misc/aliases.sh's
@@ -317,7 +315,7 @@ function _hi_ctl_close() {
 # login rc files, read as *files* (`sh -c` over ssh sources none of them), then
 # $HOME, then the locations an install lands in when nothing announced it. Its
 # own function so a suite can run it without an ssh hop.
-# GLOSSARY: HI.33 - the candidate order, the two seds, and what `--tmux` gets
+# GLOSSARY: HI.33 - the candidate order and the two seds
 # from it. The unwrapping sed's `-e` order matters: one pattern space in
 # sequence, so the comment strip goes first, addressed to unquoted lines - after
 # unquoting it would eat a `#` from inside the quotes.
@@ -494,9 +492,8 @@ function _hi_env_exports() {
   _hi_env_each '      export %s="%s"\n'
 }
 
-# The bit both _say_hi branches need first; tmux lines settle only "asked for?"
-# - the rest is load.sh's question. Everything expands on the client: no
-# backtick or unescaped $( ) below, not even inside a comment.
+# The bit both _say_hi branches need first. Everything expands on the client:
+# no backtick or unescaped $( ) below, not even inside a comment.
 function _hi_remote_preamble() {
   cat <<REMOTE
       _hi_now() { d=\$(date +%s.%N 2>/dev/null); case "\$d" in *N*|'') date +%s ;; *) printf '%s' "\$d" ;; esac; }
@@ -840,8 +837,6 @@ function _hi_parse() {
       SSHARGS+=("$1" "$2")
       shift
       ;;
-    --tmux) _HI_TMUX_ATTACH=1 ;;
-    --no-tmux) _HI_TMUX_ATTACH=0 ;;
     -*) SSHARGS+=("$1") ;;
     *)
       if [ -z "${DOMAIN:-}" ]; then
@@ -946,7 +941,7 @@ case "${1:-}" in
 $_HI_USAGE
 
 Copies your say-hi to <target> and hands you an identical shell session there -
-header, colors, git prompt, aliases, vim/nano/tmux configs - then strips it all
+header, colors, git prompt, aliases, vim/nano configs - then strips it all
 back out when the session ends. With [command ...], runs that instead, the way
 ssh does.
 
@@ -964,11 +959,6 @@ hi's own options:
                         the local tree, the config overlay, every backend
                         probed and timed, and with a target, which backend the
                         name resolves to plus an ssh reachability check
-      --tmux            run the session inside a named tmux on the target, so a
-                        dropped connection detaches instead of losing the work.
-                        Needs a permanent say-hi there. May appear anywhere
-                        before the target.
-      --no-tmux         turn that back off when settings.sh made it the default
 
 hi's local sub-commands, which act on this machine instead of connecting. They
 need the full say-hi checkout, so inside a hi session each says so and stops:

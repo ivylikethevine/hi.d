@@ -67,7 +67,7 @@ function test_payload_ships_everything_by_default() {
 
 # _HI_DISABLE_ALIASES cuts along the seam between the two alias files and not
 # through either: misc/personal.sh leaves the payload, misc/aliases.sh stays.
-# Both halves matter. aliases.sh installs the vim/nano, hi_copy and tmux
+# Both halves matter. aliases.sh installs the vim/nano and hi_copy
 # aliases above the source line, so trimming it would be a behaviour change
 # wearing a size saving's clothes; personal.sh is preference the target will
 # not read, so shipping it is bytes on the wire for nothing.
@@ -83,7 +83,7 @@ function test_payload_trims_personal_but_keeps_aliases() {
     ;;
   esac
   case "$listing" in *say-hi/misc/aliases.sh*) ;; *)
-    _hi_cecho " | _HI_DISABLE_ALIASES=1 dropped misc/aliases.sh, which still carries the editor, hi_copy and tmux aliases" "$RED"
+    _hi_cecho " | _HI_DISABLE_ALIASES=1 dropped misc/aliases.sh, which still carries the editor and hi_copy aliases" "$RED"
     return 1
     ;;
   esac

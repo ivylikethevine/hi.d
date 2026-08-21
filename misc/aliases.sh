@@ -15,7 +15,7 @@
 # silence compare stderr. `-` not `:-`, so intentional empties survive.
 # GLOSSARY: HI.07
 command -v shift >/dev/null 2>&1 &&
-  eval 'export _HI_DISABLE_EDITORS="${_HI_DISABLE_EDITORS-0}" _HI_DISABLE_ALIASES="${_HI_DISABLE_ALIASES-0}" _HI_DISABLE_OSC52="${_HI_DISABLE_OSC52-0}" _HI_OSC52="${_HI_OSC52-}" _HI_DISABLE_TMUX="${_HI_DISABLE_TMUX-0}" _HI_TMUXCONF="${_HI_TMUXCONF-}" _HI_CLEANUP="${_HI_CLEANUP-}" _HI_CONFIG_DIR="${_HI_CONFIG_DIR-}" _HI_ROOT="${_HI_ROOT-}"' 2>/dev/null || true
+  eval 'export _HI_DISABLE_EDITORS="${_HI_DISABLE_EDITORS-0}" _HI_DISABLE_ALIASES="${_HI_DISABLE_ALIASES-0}" _HI_DISABLE_OSC52="${_HI_DISABLE_OSC52-0}" _HI_OSC52="${_HI_OSC52-}" _HI_CLEANUP="${_HI_CLEANUP-}" _HI_CONFIG_DIR="${_HI_CONFIG_DIR-}" _HI_ROOT="${_HI_ROOT-}"' 2>/dev/null || true
 
 # Resolved before any alias exists: once one is set, zsh/dash `command -v`
 # returns its definition and poisons later fallthrough chains.
@@ -47,10 +47,6 @@ export _HI_EZA_BIN="$(command -v eza || command -v exa || command -v ls)"
 # place: the container fallback ships this file without paths.sh, where an
 # empty $_HI_OSC52 would make `sh ` an alias that opens a shell.
 [ "$_HI_DISABLE_OSC52" != 1 ] && [ -f "$_HI_OSC52" ] && alias hi_copy="sh $_HI_OSC52" || true
-
-# tmux with hi's config, permanent trees only ($_HI_CLEANUP marks disposable
-# ones): a detached tmux would wake up reading a deleted tree.
-[ "$_HI_DISABLE_TMUX" != 1 ] && [ -z "$_HI_CLEANUP" ] && [ -f "$_HI_TMUXCONF" ] && alias tmux="tmux -f $_HI_TMUXCONF" || true
 
 # styles eza itself, not an alias - above the early return, so disabling
 # personal aliases still leaves the theme for a direct eza run

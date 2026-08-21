@@ -19,7 +19,7 @@ source "${_HI_TEST_LIB:-${BASH_SOURCE[0]%/*}/../test_lib.sh}"
 
 _HI_GATED_VARS=(_HI_DISABLE_HEADER _HI_DISABLE_PROMPT _HI_DISABLE_PERSONAL
   _HI_DISABLE_GIT_STATUS _HI_DISABLE_EDITORS _HI_DISABLE_ALIASES
-  _HI_DISABLE_OSC52 _HI_DISABLE_TMUX)
+  _HI_DISABLE_OSC52)
 
 # Source paths.sh in a child shell with $1/$2 as the two gate inputs, then
 # print "<var>=<value>" for every toggle the gate governs. core.sh does the
@@ -68,7 +68,7 @@ function test_toggles_stay_on_remotely_without_local_only() {
 # The gate's list has to be core.sh's _HI_TOGGLES minus the gate's own two
 # inputs - paths.sh can't loop the roster (its four-shell dialect has no
 # loops), so it spells the list out, and a toggle added to core.sh that never
-# reaches it is exactly how _HI_DISABLE_OSC52/_HI_DISABLE_TMUX once went
+# reaches it is exactly how _HI_DISABLE_OSC52 once went
 # missing from "all of the above". The behavioral cases above walk
 # _HI_GATED_VARS, so pinning that list to the roster pins the gate.
 function test_gate_list_matches_the_toggle_roster() {

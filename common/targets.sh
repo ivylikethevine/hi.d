@@ -33,7 +33,7 @@ kind="${1:-all}"
 # so a flag added there and forgotten here fails the fast suite.
 if [ "$kind" = flags ]; then
   # always offered - these work on a client and inside a session alike
-  printf '%s\n' --help --version --doctor --tmux --no-tmux
+  printf '%s\n' --help --version --doctor
   # ...and these do not: every one needs the full checkout, which the payload
   # deliberately does not carry, so offering them on a target completes straight
   # into hi.sh's $_HI_NO_CHECKOUT refusal. Filtered on the same variable the

@@ -45,29 +45,6 @@ function test_parse_handles_several_flags_before_the_target() {
 # a trailing command becomes CMDARG - suffixed with "; exit" so the target
 # shell closes after it - and never a second target. The spacing between the
 # two is incidental (_hi_parse pastes '; ' and ' exit'), so don't pin it.
-# hi's own flags are consumed by the parse, never forwarded - ssh would reject
-# --tmux outright, and the target is still the first bare word after it
-function test_parse_takes_hi_flags_without_forwarding_them() {
-  [ "$(_hi_parse_out --tmux myhost)" = "$(printf 'myhost\n\n')" ] || return 1
-  [ "$(_hi_parse_out -p 2222 --no-tmux myhost)" = "$(printf 'myhost\n\n-p\n2222\n')" ]
-}
-
-function test_parse_tmux_flags_set_the_toggle() {
-  local on off
-  on="$( (
-    unset DOMAIN CMDARG
-    _hi_parse --tmux myhost >/dev/null 2>&1
-    printf '%s' "${_HI_TMUX_ATTACH:-unset}"
-  ))"
-  off="$( (
-    unset DOMAIN CMDARG
-    _HI_TMUX_ATTACH=1
-    _hi_parse --no-tmux myhost >/dev/null 2>&1
-    printf '%s' "${_HI_TMUX_ATTACH:-unset}"
-  ))"
-  [ "$on" = 1 ] && [ "$off" = 0 ]
-}
-
 function test_parse_turns_trailing_words_into_a_command() {
   local out
   out="$(_hi_parse_out myhost echo hello)"
@@ -281,7 +258,7 @@ function test_help_long_flag_prints_usage() {
 function test_help_lists_hi_s_own_flags() {
   local out flag
   out="$(_hi_help_out --help)" || return 1
-  for flag in --doctor --version --tmux --no-tmux; do
+  for flag in --doctor --version; do
     [[ "$out" == *"$flag"* ]] || return 1
   done
   [[ "$out" == *docker* && "$out" == *podman* && "$out" == *nomad* && "$out" == *kubernetes* ]]
@@ -477,8 +454,6 @@ function run_hi_parse_tests() {
   _hi_check "Trailing words become a command" test_parse_turns_trailing_words_into_a_command
   _hi_check "A plain session has no command" test_parse_leaves_cmdarg_empty_for_a_plain_session
   _hi_check "Rejects a flag missing its value" test_parse_rejects_a_flag_missing_its_value
-  _hi_check "hi's own flags aren't forwarded to ssh" test_parse_takes_hi_flags_without_forwarding_them
-  _hi_check "--tmux/--no-tmux set the toggle" test_parse_tmux_flags_set_the_toggle
   _hi_check "Names the offending flag" test_parse_names_the_offending_flag
 
   _hi_h2 "Testing: backend predicates"

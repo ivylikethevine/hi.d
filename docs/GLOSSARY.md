@@ -47,7 +47,6 @@ file doesn't define. This file never ships (the payload is `$_HI_PAYLOAD` in
 - [HI.24 graft crash guard](#hi24-graft-crash-guard)
 - [HI.25 session-shell ranking](#hi25-session-shell-ranking)
 - [HI.26 completion probe knobs](#hi26-completion-probe-knobs)
-- [HI.27 tmux server-start rules](#hi27-tmux-server-start-rules)
 - [HI.28 ksh git segment](#hi28-ksh-git-segment)
 - [HI.29 apostrophes in substitution comments](#hi29-apostrophes-in-substitution-comments)
 - [HI.30 indirect invocation](#hi30-indirect-invocation)
@@ -338,14 +337,6 @@ file. A memo filled from an already-4-second-old file holds it for its own full
 TTL, so worst-case staleness is close to **twice** the TTL, not once. Only
 `_HI_TARGETS_TTL=0` turns both off.
 
-## HI.27 tmux server-start rules
-
-Two rules for `misc/tmux.conf`: `-f` is read when the _server_ starts, not
-when a client attaches, so attaching to someone else's server applies none of
-it; and the `tmux` alias exists only where say-hi is permanent (no
-`$_HI_CLEANUP`) - a detached tmux outlives the ssh session, and on a
-disposable target the tree it reads is deleted on exit.
-
 ## HI.28 ksh git segment
 
 Where bash is present, `common/git_prompt.sh` renders the git segment and
@@ -476,8 +467,7 @@ candidate and no forks.
 The first is the point. A curated tree is exactly the one most likely to live
 somewhere else, and a probe that only knew `$HOME/say-hi` made those targets
 invisible - hi copied its payload over a checkout already sitting there, the
-slow path, silently. `--tmux` rides on the same answer, since `load.sh` refuses
-it on a disposable tree.
+slow path, silently.
 
 Two details in that probe. Its `sed` uses separate `-e` expressions rather than
 one with `\(a\|b\)`, because BRE alternation is a GNU extension and BSD sed is

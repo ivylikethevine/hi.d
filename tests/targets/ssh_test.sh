@@ -8,7 +8,7 @@
 # non-default path, which only _hi_remote_root's rc-reading probe can find;
 # bash-less alpine with only zsh
 # with only fish, and with only mksh, for the fallback tiers the plain alpine
-# image never reaches; and that same install plus tmux, for --tmux. The debian base comes
+# image never reaches. The debian base comes
 # from test_lib.sh's _hi_sshd_image, shared with ssh_disconnect_test.sh.
 #
 # GLOSSARY: HI.30 + HI.34
@@ -35,80 +35,6 @@ function _hi_run_interactive_case() {
   if _hi_interactive_case "$label" "ssh path" "$_HI_TEST_MARKER" 90 "${_HI_SSH_LAUNCH_BARE[@]}"; then
     ok=1
     _hi_post_check "$label" "$name" "$post" || ok=0
-  fi
-
-  _hi_rm_container "$name"
-  [ "$ok" -eq 1 ]
-}
-
-# `hi --tmux <target>`: the session runs inside a named tmux on the target, and
-# the whole point of it is that a dropped connection detaches rather than losing
-# the work. So this case does not drive an interactive session at all - it
-# starts one, waits for the tmux session to exist, *kills the client*, and
-# asserts the session is still there afterwards. Nothing short of that actually
-# tests the promise.
-#
-# The target is the pre-installed image plus tmux, since load.sh refuses --tmux
-# on a disposable tree - a detached tmux would outlive the tree it reads.
-function _hi_tmux_session_listed() {
-  docker exec -u hitest "$1" tmux ls 2>/dev/null | grep -q "^hi:"
-}
-
-function _hi_run_tmux_case() {
-  local name="hi-sshtest-tmux-$$" ok=0 session_pid out cut
-  local _HI_SSH_PORT=""
-  local -a launch
-
-  _hi_h3 "Testing interactive session: tmux (--tmux, permanent install)"
-  _hi_sshd_container "$name" "hi-sshtest-debian-tmux-$$" -e "LOGIN_SHELL=/bin/bash" || return 1
-  _hi_ssh_launch "$_HI_SSH_PORT"
-  # --tmux goes after the launcher and before the target: _hi_parse takes hi's
-  # own flags anywhere ahead of the first bare word
-  launch=("${_HI_SSH_LAUNCH_BARE[0]}" --tmux "${_HI_SSH_LAUNCH_BARE[@]:1}")
-  out="$_HI_WORKDIR/tmux.interactive.out"
-  cut="$_HI_WORKDIR/tmux.cut"
-  : >"$out"
-  rm -f "$cut"
-
-  # Held open rather than fed an `exit`: this session is meant to be
-  # interrupted, not ended politely. What holds it open waits on $cut - a file
-  # touched below the instant the client has been killed - rather than on a
-  # flat `sleep 120`, because `wait` on a background *pipeline* waits for every
-  # process in it: a sleep still counting down after the client it was holding
-  # open for is dead sat here for its full two minutes, which was 120s of this
-  # suite's 157 (the other 22 cases take about a second each). Same 120s
-  # ceiling, reached only if the kill never happens.
-  # TERM is pinned rather than inherited: tmux refuses to start on a terminal
-  # whose terminfo has no `clear`, and `dumb` is exactly such an entry - so
-  # running this suite from a dumb terminal (CI, an editor pane, an agent
-  # session) failed the case with "open terminal failed: terminal does not
-  # support clear" and no fault of hi's. hi passes `dumb` through on purpose
-  # (it is in _HI_TERM_FALLBACK's allow list), which is right for a shell and
-  # useless for tmux. The term-* cases below vary TERM deliberately; this one
-  # is asserting that a session survives a dropped connection, so it holds the
-  # terminal still.
-  # shellcheck disable=SC2094 # separate processes; the reader only polls
-  { _hi_poll_bool 480 0.25 test -f "$cut" || true; } |
-    TERM=xterm-256color "${_HI_PTY_FORCED[@]}" "${launch[@]}" >"$out" 2>&1 &
-  session_pid=$!
-
-  if _hi_poll_bool 60 0.5 _hi_tmux_session_listed "$name"; then
-    kill -9 "$session_pid" 2>/dev/null || true
-    : >"$cut"
-    wait "$session_pid" 2>/dev/null || true
-    # the session outlived the client that started it, which is the feature
-    if _hi_poll_bool 20 0.5 _hi_tmux_session_listed "$name"; then
-      ok=1
-      _hi_align " | [tmux] -- the session survived the dropped connection" "OK" "$GREEN"
-    else
-      _hi_h3 " | [tmux] -- the tmux session died with the client" "$RED"
-    fi
-  else
-    kill -9 "$session_pid" 2>/dev/null || true
-    : >"$cut"
-    wait "$session_pid" 2>/dev/null || true
-    _hi_h3 " | [tmux] -- no tmux session was ever created" "$RED"
-    sed 's/^/      /' "$out" | tail -5
   fi
 
   _hi_rm_container "$name"
@@ -279,15 +205,6 @@ function run_ssh_tests() {
       -f "$(_hi_dockerfile installed-nested)" "$_HI_ROOT" && _HI_NESTED_OK=1
   fi
 
-  # the same permanent install, plus tmux, for the --tmux case below
-  _HI_TMUX_OK=0
-  if [ "$_HI_INSTALLED_OK" -eq 1 ]; then
-    mkdir -p "$_HI_WORKDIR/debian-tmux"
-    _hi_build_image debian-tmux "hi-sshtest-debian-tmux-$$" "the --tmux case" \
-      --build-arg "BASE=hi-sshtest-debian-installed-$$" \
-      -f "$(_hi_dockerfile installed-tmux)" "$_HI_WORKDIR/debian-tmux" && _HI_TMUX_OK=1
-  fi
-
   _HI_TEST_MARKER="HI_SSH_TEST_OK"
 
   # see the registration in the bash32 block below for why this exists; the
@@ -404,14 +321,6 @@ function run_ssh_tests() {
       "$(_hi_probe_cmd "$_HI_TEST_MARKER" installed_nested)" "" 'local say-hi install'
   fi
 
-  if [ "$_HI_TMUX_OK" -eq 1 ]; then
-    if [ "${#_HI_PTY_FORCED[@]}" -eq 0 ]; then
-      _hi_skip "[tmux]" "no python3 to drive an interactive pty"
-    else
-      _hi_par_case tmux _hi_run_tmux_case
-    fi
-  fi
-
   if [ "$_HI_DEBIAN_OK" -eq 1 ]; then
     # the mirror image: a tree hi *did* ship over has to be gone afterwards,
     # so the guard above can't be satisfied by never cleaning up at all
@@ -440,8 +349,8 @@ function run_ssh_tests() {
   # the alpine tags come from the build loop above, so a variant added there
   # is cleaned up without a second list to remember
   docker image rm -f "${_HI_SSH_IMAGES[@]}" \
-    "hi-sshtest-bash32-$$" "hi-sshtest-debian-installed-$$" "hi-sshtest-debian-nested-$$" \
-    "hi-sshtest-debian-tmux-$$" >/dev/null 2>&1 || true
+    "hi-sshtest-bash32-$$" "hi-sshtest-debian-installed-$$" \
+    "hi-sshtest-debian-nested-$$" >/dev/null 2>&1 || true
 
   _hi_suite_end "" \
     "hi's ssh path survived every login shell tested ($_HI_TOTAL cases)" \

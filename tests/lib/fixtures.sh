@@ -180,7 +180,7 @@ function _hi_alias_probe() {
 # aliases.sh *without* paths.sh first, which is the shape the container
 # fallback ships. The named VARs are unset for the probe, since what these
 # cases prove is that an alias whose path variable is undefined does not get
-# defined at all - `sh ` or `tmux -f ` would otherwise be an alias that eats
+# defined at all - `sh ` would otherwise be an alias that eats
 # the user's terminal. POSIX sh only: this shape never reaches fish.
 # GLOSSARY: HI.01 - the guard on an empty unset list.
 function _hi_alias_probe_bare() {

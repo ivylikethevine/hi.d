@@ -218,7 +218,7 @@ function up_kube() {
 # The per-demo configuration, written as the overlay's settings.sh rather than
 # exported into the client shell. That is not a style choice - it is the only
 # lever that reaches both ends: _hi_session_env (hi.sh) forwards the target
-# color, the tags and the tmux intent and nothing else, so a _HI_DISABLE_* or
+# color and the tags and nothing else, so a _HI_DISABLE_* or
 # _HI_HEADER_* exported here would style the client and leave the session it
 # opens on stock defaults. settings.sh is _HI_OVERLAY_FILES[0], so hi ships it
 # to the target and both sides read the same file.

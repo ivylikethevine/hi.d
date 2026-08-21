@@ -166,13 +166,11 @@ of how much of the tree it moves.
 - [ ] **Persistent sessions on a disposable target** — _scope: the largest entry
       here. It changes cleanup semantics on both paths, needs a findable tree
       path and something to reap it, and rewrites SECURITY.md's footprint
-      promise._ `--tmux` already gives you detach-and-reattach, but only where
-      say-hi is permanently installed: on a disposable target `_hi_tmux_wanted`
-      (`load.sh`) refuses outright, because the tree is deleted when the session
-      ends and a detached tmux would outlive it. This entry is that restriction
-      removed — keep the tree across a dropped connection, reconnect into the
-      same session later, and delete only on a definitive exit or after a
-      configurable timeout.
+      promise._ A dropped connection currently loses the session outright: the
+      tree is deleted when the session ends, so there is nothing to reconnect
+      to. This entry is that changed — keep the tree across a dropped
+      connection, reconnect into the same session later, and delete only on a
+      definitive exit or after a configurable timeout.
 
   - **What has to stop happening, carefully.** Cleanup has two independent
     paths — the bootstrap's `trap 'rm -rf $_HI_CLEANUP' exit` and `load.sh`'s
@@ -197,10 +195,11 @@ of how much of the tree it moves.
     literally true. Either way SECURITY.md's _Footprint and cleanup_ section
     needs rewriting, and the timeout wants a name and a row in
     [CONFIGURATION.md](CONFIGURATION.md).
-  - **It composes with `--tmux` rather than replacing it.** tmux keeps the
-    _shell_ alive; this keeps the _tree_ alive underneath it. Landing it is
-    also what lets `_hi_tmux_wanted` drop its permanent-install refusal, which
-    is the visible half of the feature.
+  - **Keeping the tree alive is only half of it.** This keeps the _tree_ alive;
+    something still has to keep the _shell_ alive on the target, and hi no
+    longer ships a multiplexer integration to lean on (`--tmux` was removed).
+    Whether that is a multiplexer hi drives, or a reattachable shell of its
+    own, is an open question this entry has to answer rather than inherit.
   - **Ticks when:** a dropped session on a disposable target can be
     reconnected to, an explicit exit still cleans up immediately, the timeout
     is a documented setting, and the disconnect suite covers both halves.

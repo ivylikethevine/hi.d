@@ -124,22 +124,6 @@ function _hi_session_shell() {
   printf 'bash'
 }
 
-# True when this session should run inside a named tmux (`hi --tmux` /
-# _HI_TMUX_ATTACH=1). Both refusals print and carry on: a disposable tree would
-# outlive a detached tmux, and the client can't know whether tmux exists.
-function _hi_tmux_wanted() {
-  [ "${_HI_TMUX_ATTACH:-0}" = 1 ] || return 1
-  if [ -n "${_HI_CLEANUP:-}" ]; then
-    _hi_cecho " --tmux needs a permanent say-hi here (scripts/install.sh) - this tree is disposable, so a detached session would outlive it. Continuing without tmux." "$YELLOW"
-    return 1
-  fi
-  if ! command -v tmux >/dev/null 2>&1; then
-    _hi_cecho " --tmux asked for, but there is no tmux on this host. Continuing without it." "$YELLOW"
-    return 1
-  fi
-  return 0
-}
-
 function load() {
   local start
   start="$(_hi_now)"
@@ -175,14 +159,7 @@ function load() {
   local -a shell_cmd=("$shell" -i)
   # the header above is our greeting
   [ "$shell" = fish ] && shell_cmd=(fish -C "set fish_greeting ''" -i)
-  if _hi_tmux_wanted; then
-    # -A: attach-or-create, which never loses work; separate args so fish's -C
-    # survives unquoted. GLOSSARY: HI.27
-    tmux -f "$_HI_TMUXCONF" new-session -A -s "${_HI_TMUX_SESSION:-hi}" \
-      "${shell_cmd[@]}" || shell_ec=$?
-  else
-    "${shell_cmd[@]}" || shell_ec=$?
-  fi
+  "${shell_cmd[@]}" || shell_ec=$?
 
   local size
   size="$(_hi_du_size "$_HI_ROOT")"

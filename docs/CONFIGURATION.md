@@ -2,7 +2,7 @@
 
 Your config lives **outside the checkout**, in
 `${XDG_CONFIG_HOME:-$HOME/.config}/say-hi/` (`$_HI_CONFIG_DIR`). `colors`,
-`packages` and `tmux.conf` there override the tree's copies, one file at a
+`packages` there override the tree's copies, one file at a
 time - anything you haven't overridden keeps tracking the default the tree
 ships, so `hi --update` still delivers changes to the rest. `aliases.sh` is the
 one that adds rather than replaces, loading after the tree's own so yours win.
@@ -14,7 +14,6 @@ writes it here.
 | `~/.config/say-hi/settings.sh` | -                | what `hi --configure` writes                                                                                                            |
 | `~/.config/say-hi/colors`      | `misc/colors`    | your color pins                                                                                                                       |
 | `~/.config/say-hi/packages`    | `misc/packages`  | what the package check looks for                                                                                                      |
-| `~/.config/say-hi/tmux.conf`   | `misc/tmux.conf` | your tmux config                                                                                                                      |
 | `~/.config/say-hi/aliases.sh`  | -                | your own aliases, sourced **after** `misc/aliases.sh` and `misc/personal.sh` so yours win - additive, never a replacement, and in the same POSIX+fish subset |
 
 This is what keeps configuring say-hi from dirtying the checkout (so
@@ -41,7 +40,6 @@ lasts.
 
 - [Features](#features)
 - [Colors](#colors)
-- [tmux](#tmux)
 - [Two sessions to the same host](#two-sessions-to-the-same-host)
 - [Header details](#header-details)
 - [Everything else](#everything-else)
@@ -57,9 +55,8 @@ Each is **on by default**; set it to `1` to turn that piece off.
 | `_HI_DISABLE_PERSONAL`   | personal shell settings - history size, keybindings, completion tweaks                                                                |
 | `_HI_DISABLE_GIT_STATUS` | the git segment in the prompt                                                                                                         |
 | `_HI_DISABLE_EDITORS`    | the `vim`/`nano` config overrides                                                                                                     |
-| `_HI_DISABLE_ALIASES`    | the personal aliases in `misc/personal.sh` - not the editor, `hi_copy` and `tmux` aliases `misc/aliases.sh` installs, which are the product. Setting it also keeps `personal.sh` off the ssh payload entirely |
+| `_HI_DISABLE_ALIASES`    | the personal aliases in `misc/personal.sh` - not the editor and `hi_copy` aliases `misc/aliases.sh` installs, which are the product. Setting it also keeps `personal.sh` off the ssh payload entirely |
 | `_HI_DISABLE_OSC52`      | the OSC 52 clipboard - yanks in `vim` and the `hi_copy` alias                                                                         |
-| `_HI_DISABLE_TMUX`       | the `tmux` config override (offered on permanent installs only)                                                                       |
 | `_HI_DISABLE_LOCAL`      | all of the above **on this machine only** - hi still styles the hosts you visit                                                       |
 
 `_HI_DISABLE_LOCAL` is the odd one out: "leave my own machine alone, but give me
@@ -94,28 +91,6 @@ naming the rule it matched:
 
 ![hi --color-preview: every ssh host and user, in the colors they resolve to](demos/color_preview.gif)
 
-## tmux
-
-`misc/tmux.conf` is reached the way `vim.rc` is - through an alias,
-`tmux -f <conf>` - and overridden the same way, by dropping your own
-`~/.config/say-hi/tmux.conf`. Beyond the usual defaults it does one hi-specific
-thing: it appends the `_HI_*` variables to tmux's `update-environment`, so a
-window opened **after** attaching gets a shell that can still find hi. Without
-it, `tmux new-window` on a remote box gives a bare prompt, the tmux server
-predating the connection and knowing nothing about `$_HI_HOME`.
-
-Two limits worth stating plainly:
-
-- `-f` is read when the tmux **server** starts, not when a client attaches, so
-  attaching to an already-running server applies none of the config - tmux's
-  rule, not hi's. The `update-environment` half still works, being refreshed on
-  every attach.
-- The alias is defined **only where say-hi is permanent** - your own machine, or
-  a target where `scripts/install.sh` has been run. On a disposable target hi
-  deletes the tree on exit and a detached tmux outlives the session, so every
-  shell inside it would wake up reading a directory that is gone. Plain `tmux`
-  still works there, without hi's config.
-
 ## Two sessions to the same host
 
 hi grafts its rc block into the target's `~/.bashrc` (and `~/.zshrc`, and fish's
@@ -128,7 +103,7 @@ Nothing you are already using breaks. A running shell read its rc when it
 started, the session trees are per-`mktemp` so neither session can delete the
 other's, and the graft is guarded on `$_HI_HOME` so it could never source a
 stranger's tree anyway. What you lose is a shell started **afterwards** inside
-the surviving session - `tmux new-window`, `su`, a nested login - which comes up
+the surviving session - `su`, a nested login - which comes up
 bare, exactly as if you had ssh'd in without hi.
 
 This is deliberate rather than unnoticed. Refcounting the graft is the

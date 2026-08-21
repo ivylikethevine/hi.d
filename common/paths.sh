@@ -31,8 +31,6 @@ export _HI_PACKAGES="$_HI_ROOT/misc/packages"
 [ -f "$_HI_CONFIG_DIR/packages" ] && export _HI_PACKAGES="$_HI_CONFIG_DIR/packages"
 export _HI_VIMRC="$_HI_ROOT/misc/vim.rc"
 export _HI_NANORC="$_HI_ROOT/misc/nano.rc"
-export _HI_TMUXCONF="$_HI_ROOT/misc/tmux.conf"
-[ -f "$_HI_CONFIG_DIR/tmux.conf" ] && export _HI_TMUXCONF="$_HI_CONFIG_DIR/tmux.conf"
 # eza reads its theme from a *directory* (misc/theme.yml), not a file path
 export _HI_THEME_DIR="$_HI_ROOT/misc"
 export _HI_ALIASES="$_HI_ROOT/misc/aliases.sh"
@@ -90,5 +88,4 @@ export _HI_REMOTE_SESSION
   export _HI_DISABLE_EDITORS=1
   export _HI_DISABLE_ALIASES=1
   export _HI_DISABLE_OSC52=1
-  export _HI_DISABLE_TMUX=1
 } || true

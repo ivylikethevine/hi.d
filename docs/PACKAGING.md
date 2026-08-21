@@ -208,13 +208,18 @@ what the release attaches. One set of bytes, summed once.
 3. Approve the `publish` job in the Actions UI — this is your review point, over
    the exact artifacts the build produced. Packages, the source tarball,
    `SHA256SUMS`, and manifests land on the release, and the regenerated
-   manifests are committed back to `main` (they are consumed from the AUR/tap
-   repos, not from inside the tarball, so they don't need to be in the tagged
-   tree).
+   manifests come back to `main` as a `manifests-v1.0.0` **pull request** (they
+   are consumed from the AUR/tap repos, not from inside the tarball, so they
+   don't need to be in the tagged tree). `main` requires a pull request and
+   refuses a direct push, so the job opens one rather than being granted an
+   exception to the rule.
 4. Both channels update themselves once their secrets exist: the tap gets a PR
-   (`HOMEBREW_TAP_TOKEN`), the AUR gets a push (`AUR_SSH_KEY`). Until then, copy
-   the manifests from the release (or from `main`) by hand, per the sections
-   below.
+   (`HOMEBREW_TAP_TOKEN`), the AUR gets a push (`AUR_SSH_KEY`). **Neither waits
+   on the manifest PR** — both read the manifests out of the `packages`
+   artifact, so merging it is bookkeeping for the next release to diff against.
+   Until those secrets exist, copy the manifests from the release by hand, per
+   the sections below.
+5. Merge the manifest PR.
 
 Because the tarball is in `dist/ARTIFACTS`, it reaches both the attestation and
 the release upload without either step naming a `.tar.gz`: those two read that
@@ -228,13 +233,20 @@ first thing it tries: during a release the asset does not exist yet.
 `bump.sh --check 1.0.0` stays useful locally to confirm the manifests match a
 cut release.
 
-**Release notes are the PR titles.** The publish job's
-`gh release create --generate-notes` drafts the notes from the PR titles merged
-since the last tag — there is no separate notes file to write. The discipline
-that makes this good enough: title PRs the way you'd want them read in release
-notes, and skim `gh pr list --state merged` before tagging to retitle anything
-that wouldn't. Revisit git-cliff only if the generated notes start needing
-curation.
+**Release notes are the PR titles.** The publish job asks GitHub's
+`releases/generate-notes` endpoint for the notes and puts them at the top of the
+release body — the PR titles merged since the last tag, with no separate notes
+file to write. The discipline that makes this good enough: title PRs the way
+you'd want them read in release notes, and skim `gh pr list --state merged`
+before tagging to retitle anything that wouldn't. Revisit git-cliff only if the
+generated notes start needing curation.
+
+Below the notes the same step appends the
+[verification checklist](#verifying-a-release-download), so the two questions a
+release has to answer — _what changed_ and _how do I check this download_ — are
+both in the body. It is composed rather than passed as
+`--generate-notes --notes`, because `gh` appends the generated notes **after**
+`--notes`, which would bury the notes under the checklist.
 
 ## Publishing each channel
 
@@ -500,6 +512,13 @@ sha256sum -c --ignore-missing SHA256SUMS                        # the bytes matc
 minisign -Vm SHA256SUMS -P 'RWTDcJ3LGWayrAxK6mbMysyOF8mNLOmMUGRl4YSWk5KIoayS+lW0Fy1L'
 gh attestation verify say-hi_*_all.deb --repo ivylikethevine/say-hi # which CI run built them
 ```
+
+**That `minisign` line is load-bearing, not just an example.** `release.yml`'s
+publish job `sed`s the public key out of it to build the checklist it puts in
+every release body, and fails the release if the pattern stops matching — one
+literal copy of the key in the tree rather than two that can drift apart. Keep
+it a single line starting `minisign -Vm SHA256SUMS -P '`, with the key in single
+quotes; the prose and the trailing comments around it are free to change.
 
 That covers **every** file on the release, `say-hi-<version>.tar.gz` included —
 the source tarball the Homebrew formula and the AUR package build from is one

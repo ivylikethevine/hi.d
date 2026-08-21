@@ -84,7 +84,7 @@ Showing `_HI_HEADER_TIMESTAMP=0` and `_HI_HEADER_SYSINFO=0` — set on the _box_
 not the client: a permanent install reads its own config, so this is the demo
 whose knob lives on the target.
 
-![hi over ssh into a host with a permanent ~/say-hi](docs/demos/ssh.gif)
+![hi over ssh into a host with a permanent ~/say-hi](https://ivylikethevine.github.io/say-hi/docs/demos/ssh.gif)
 
 ### docker
 
@@ -93,7 +93,7 @@ hi probes and falls back without being told. Client: zsh.
 Showing `_HI_PROMPT_END_ZSH` and `_HI_HEADER_CHECK=0` — the same debian target
 as the GIF at the top, styled differently from the client side.
 
-![hi into a debian container, then an alpine zsh-only container](docs/demos/docker.gif)
+![hi into a debian container, then an alpine zsh-only container](https://ivylikethevine.github.io/say-hi/docs/demos/docker.gif)
 
 ### podman
 
@@ -101,7 +101,7 @@ A fish-only alpine container from a fish client: no bash anywhere in the
 loop. Same session, same code path as docker.
 Showing `_HI_PROMPT_END_FISH` — fish's own prompt separator.
 
-![hi from fish into a fish-only alpine container via podman](docs/demos/podman.gif)
+![hi from fish into a fish-only alpine container via podman](https://ivylikethevine.github.io/say-hi/docs/demos/podman.gif)
 
 ### nomad
 
@@ -110,7 +110,7 @@ the allocation. Client: bash.
 Showing `_HI_HEADER_GHZ=1` and `_HI_HEADER_IDENTITY=0` — the CPU line in GHz,
 the identity row off.
 
-![hi into a nomad allocation by ID prefix](docs/demos/nomad.gif)
+![hi into a nomad allocation by ID prefix](https://ivylikethevine.github.io/say-hi/docs/demos/nomad.gif)
 
 ### kubernetes
 
@@ -118,7 +118,7 @@ A kind cluster and a bare alpine pod — busybox ash is all it has, which is
 hi's aliases-only fallback. Client: zsh.
 Showing `_HI_DISABLE_GIT_STATUS=1` — the same prompt, without the git segment.
 
-![hi into a kubernetes pod on a kind cluster](docs/demos/kube.gif)
+![hi into a kubernetes pod on a kind cluster](https://ivylikethevine.github.io/say-hi/docs/demos/kube.gif)
 
 ### completion, every backend at once
 
@@ -128,7 +128,7 @@ pod, each tagged with the backend it came from; `hi --<TAB>` answers hi's own
 flags, without probing any backend to do it. Client: fish, for the description
 column its pager gives every row.
 
-![hi TAB listing ssh hosts and containers from every backend, then hi --TAB listing flags](docs/demos/complete.gif)
+![hi TAB listing ssh hosts and containers from every backend, then hi --TAB listing flags](https://ivylikethevine.github.io/say-hi/docs/demos/complete.gif)
 
 The list stops at eleven rows because fish hands its pager half the screen, so
 two ssh hosts spill into "…and 1 more row". That is completion behaving

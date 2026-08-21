@@ -304,25 +304,30 @@ changed, what a contributor is told before they open a pull request, and how
 much of the front page is reference material. None of it moves a line of `hi`,
 and all of it is what somebody meets first.
 
-- [ ] **Say what changed in a release** — _scope: one line in `release.yml`; a
-      `CHANGELOG.md` only if the one line proves too thin._ say-hi ships to
-      deb, rpm, apk and Homebrew, and nothing tells a packaged user what moved
-      between two versions. `release.yml`'s `gh release create` puts a
-      _verification checklist_ in the body — useful, and not an answer to that
-      question — and `--generate-notes` is not passed.
+- [ ] **Say what changed in a release** — _scope: shipped; waits on a real
+      release to prove it._ say-hi ships to deb, rpm, apk and Homebrew, and
+      nothing told a packaged user what moved between two versions. `git log` is
+      not something a `brew upgrade` reaches, which is exactly why deleting
+      finished entries from this file — right for a to-do list — left that gap:
+      the ledger has to be published, not merely kept.
 
-  - **The rule this does not break.** This file deletes finished entries
-    because git history is the ledger. That stays right for a to-do list, and
-    it is exactly why the gap exists: `git log` is not something a
-    `brew upgrade` reaches. The ledger has to be published, not kept.
-  - **Start with `--generate-notes`**, above the existing checklist body rather
-    than in place of it: it costs one line, it is derived from the commits and
-    the merged pull requests, and it cannot go stale the way a hand-kept file
-    does. A `CHANGELOG.md` is worth writing only once releases start carrying
-    notes somebody actually composed — which is a different entry, and should
-    only be opened if this one turns out not to be enough.
-  - **Ticks when:** a release's body names what changed as well as how to check
-    it, without anybody hand-writing the list.
+  - **What shipped.** `release.yml`'s publish job now composes the release body
+    out of both halves. GitHub's `releases/generate-notes` endpoint supplies the
+    top — the PR titles merged since the last tag, derived rather than
+    hand-kept, so it cannot go stale — and the _verification checklist_ this
+    entry once wrongly claimed was already there is appended below it, reading
+    its minisign public key straight out of
+    [PACKAGING.md](PACKAGING.md#verifying-a-release-download) so the key exists
+    once in the tree.
+  - **Why it is composed rather than two flags.** `gh` appends generated notes
+    *after* `--notes`, which would bury what changed under how to check it.
+  - **A `CHANGELOG.md` is still not open**, and should only be opened if the
+    generated notes turn out not to be enough — the same test as before.
+  - **Ticks when:** a release has gone out whose body names what changed as well
+    as how to check it, with nobody hand-writing the list. Blocked behind
+    [Get a release out under branch
+    protection](#repo-settings-and-first-runs), like everything else that needs
+    a real tag.
 
 - [ ] **A `CONTRIBUTING.md`, and issue/PR templates** — _scope: three short
       files, mostly links to docs that already exist._ `.github/` holds

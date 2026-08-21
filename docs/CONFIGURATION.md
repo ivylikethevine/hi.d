@@ -89,7 +89,7 @@ its `Host` line in `~/.ssh/config`. A pin always beats the hash.
 config and every user it knows of, drawn in the colors themselves, each row
 naming the rule it matched:
 
-![hi --color-preview: every ssh host and user, in the colors they resolve to](demos/color_preview.gif)
+![hi --color-preview: every ssh host and user, in the colors they resolve to](https://ivylikethevine.github.io/say-hi/docs/demos/color_preview.gif)
 
 ## Two sessions to the same host
 

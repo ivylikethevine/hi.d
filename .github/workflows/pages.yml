@@ -205,9 +205,14 @@ jobs:
       # triggered this deploy. The site therefore carries the last GIFs anyone
       # rendered and keeps carrying them until somebody renders again.
       #
+      # These six are no longer committed, so this is the only place they come
+      # from and README.md links them at their published URLs. Until a render
+      # has landed there is nothing to serve and those links 404 - deliberate,
+      # per docs/ROADMAP.md's Demos entry.
+      #
       # docs/demos/demo.gif is deliberately not in that artifact - it is the
-      # hand-rendered one, and Jekyll has already copied the committed copy into
-      # _site, which is exactly where it should come from.
+      # hand-rendered one, still committed, and Jekyll has already copied it
+      # into _site, which is exactly where it should come from.
       - name: Find the last demo render
         id: demo-run
         env:
@@ -222,11 +227,11 @@ jobs:
           if [ -n "$run_id" ]; then
             echo "demo GIFs from run $run_id"
           else
-            echo "no successful demos run on main - the site keeps the committed GIFs"
+            echo "no successful demos run on main - the six rendered GIFs are missing"
           fi
 
       # continue-on-error for the badges' reason: an expired or missing render
-      # means the committed GIFs stay, not a failed site deploy
+      # means the six GIFs are absent from the site, not a failed site deploy
       - name: Fetch that run's GIFs
         if: steps.demo-run.outputs.run_id != ''
         continue-on-error: true
@@ -251,11 +256,10 @@ jobs:
           # seam the workspace-reclaim step above exists for, reached a
           # different way, so it gets the same one-line answer.
           sudo chown -R "$(id -u):$(id -g)" _site
-          # The rendered GIFs land on top of the committed ones Jekyll copied,
-          # at the very path every relative link in README.md and
-          # docs/CONFIGURATION.md already resolves to - so a fresh render
-          # reaches the site with no link anywhere having to change, and a run
-          # with no render simply leaves the committed copies in place.
+          # The rendered GIFs land beside the one committed GIF Jekyll copied,
+          # at the very path README.md's and docs/CONFIGURATION.md's published
+          # URLs resolve to - so a fresh render reaches the site with no link
+          # anywhere having to change.
           if [ -d "$RUNNER_TEMP/demos" ]; then
             mkdir -p _site/docs/demos
             cp "$RUNNER_TEMP/demos"/*.gif _site/docs/demos/ 2>/dev/null || true

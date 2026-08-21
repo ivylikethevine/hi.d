@@ -205,11 +205,12 @@ normally, not the GIF cut short.
     renders installed and missing packages in, one real example of each from
     your own file, and the check itself as a connect will print it
 - say `hi`!
-- [optional] modify `~/say-hi/misc/*` and `~/say-hi/shells/*` to your liking —
+- [optional] modify `say-hi/misc/*` and `say-hi/shells/*` in your checkout to
+  your liking —
   though anything with an overlay (`settings.sh`, `colors`, `packages`,
   `tmux.conf`, `aliases.sh`) is better edited in `~/.config/say-hi/`, which
   keeps the checkout clean for `hi --update`
-  - tip: `~/say-hi` is a git checkout, so if you do edit it, push to your own
+  - tip: the tree is a git checkout, so if you do edit it, push to your own
     fork and clone that on your next device — same setup everywhere, kept in
     sync by `hi --update`
 - done with it? `say-hi/scripts/uninstall.sh`, or `hi --uninstall`, is the
@@ -244,7 +245,7 @@ environment variable hi reads (`_HI_SHELL_PREFERENCE`, `_HI_PROMPT`,
 
 Every username and hostname gets a color deterministically derived from its
 name — nothing to generate, nothing that can go missing. To pin one instead,
-add a line to `~/say-hi/misc/colors` (`username,root,red` /
+add a line to `say-hi/misc/colors` (`username,root,red` /
 `hostname,prod-db,yellow` / `hosttag,desktop,green`); `hosttag` entries match
 the _leftmost_ tag in a `# Tags: ...` comment directly above a `Host` line in
 `~/.ssh/config`. `hi --color-preview` shows what every ssh host and your user
@@ -290,8 +291,11 @@ full `load.sh`. For ssh targets hi first checks, over the same connection so it
 costs no extra authentication, whether a permanent say-hi is already there; if
 so it uses that in place and copies nothing. It does not assume `~/say-hi`: the
 check reads the `_HI_HOME` line `install.sh` wrote into that target's login rc
-files (or `/etc/profile.d` for a packaged install) and falls back to the home
-directory, so a tree installed anywhere is still found and reused.
+files (or `/etc/profile.d` for a packaged install), then falls back to the home
+directory, and finally to the places an install lands when nothing declared it —
+`~/.local/share`, `/usr/local/share`, `/opt`, `/usr/share` and Homebrew's
+default keg prefixes, which is what finds a `brew install`ed target that never
+had its shells wired up. A tree installed anywhere is still found and reused.
 `hi --doctor` prints the wire size and the unpacked size, labeled.
 
 **_IMPORTANT: Local-only changes MUST stay in `~/.bashrc`, `~/.zshrc`,
@@ -314,7 +318,7 @@ directory, so a tree installed anywhere is still found and reused.
 
 `hi <name>` also works against a running docker or podman container. If
 `<name>` isn't a `Host` in `~/.ssh/config` but is a running container (by name
-or ID, docker checked first), `hi` copies `~/say-hi` in and chainloads
+or ID, docker checked first), `hi` copies its tree in and chainloads
 `load.sh` exactly as the ssh path does, for an identical session. No armoring
 is needed (`docker exec -i`/`podman exec -i` pass stdin as raw bytes), and
 cleanup happens on exit. Podman's CLI is close enough to reuse the same command

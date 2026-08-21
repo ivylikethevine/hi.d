@@ -231,7 +231,7 @@ the table at all.
 Secondary but real: a per-user config overlay (settings, colors, packages,
 aliases) that rides along without dirtying the tree, `hi --doctor` for when
 something is slow, `--tmux` so a dropped connection detaches instead of losing
-work, and detecting a permanent `~/say-hi` on the target to use in place.
+work, and detecting a permanent say-hi on the target to use in place.
 
 ## Where say-hi is the wrong choice
 

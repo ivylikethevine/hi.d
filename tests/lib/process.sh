@@ -23,6 +23,9 @@
 #   installed_nested  the same, for a permanent say-hi that is *not* at ~/say-hi:
 #                     only _hi_remote_root reading install.sh's rc line can
 #                     have found it, so the path itself is the assertion
+#   installed_at      the general form: $3 is the tree the session must have
+#                     landed in. What install_methods_test.sh asserts, where the
+#                     path differs per packaging channel rather than per shell
 #
 # Every string stays single-quoted: the variables expand on the target.
 # shellcheck disable=SC2016 # these expand later, on the target
@@ -36,6 +39,7 @@ function _hi_probe_cmd() {
   ssh_fallback_fish) printf '%s%s' 'test -f "$_HI_ROOT/hi.sh"; and functions -q hi_info; and echo ' "$marker" ;;
   installed) printf '%s%s' 'test "$_HI_ROOT" = "$HOME/say-hi" && source "$_HI_ALIASES" && alias hi_info >/dev/null 2>&1 && echo ' "$marker" ;;
   installed_nested) printf '%s%s' 'test "$_HI_ROOT" = "$HOME/opt/nested/say-hi" && source "$_HI_ALIASES" && alias hi_info >/dev/null 2>&1 && echo ' "$marker" ;;
+  installed_at) printf 'test "$_HI_ROOT" = "%s" && source "$_HI_ALIASES" && alias hi_info >/dev/null 2>&1 && echo %s' "$3" "$marker" ;;
   *)
     _hi_cecho "unknown probe shape: $2" "$RED"
     return 1

@@ -56,8 +56,8 @@ the target executes was generated on the client.
   abrupt disconnect, not just a clean exit.
 - The rc additions sit between `# hi-config-start` and `# hi-config-end`
   markers and are stripped back out by that same on-exit hook.
-- A target with a permanent `~/say-hi` (you ran `scripts/install.sh`
-  there) is used in place and nothing is deleted; the rc grafts are
+- A target with a permanent say-hi (you ran `scripts/install.sh`
+  there, anywhere) is used in place and nothing is deleted; the rc grafts are
   still cleaned on exit. That permanent tree never needs to be writable
   by you - root-owned, package-manager-installed copies work, because
   your config lives in `~/.config/say-hi/`.
@@ -74,7 +74,7 @@ the target executes was generated on the client.
   payload and a terminal. Treat your overlay (`settings.sh`, `colors`,
   `packages`) as public to every host you visit. Nothing a target sends
   back is ever executed on the client - the one string hi reads back
-  (the probe for an existing `~/say-hi`) is only interpolated into the
+  (the probe for an existing say-hi tree) is only interpolated into the
   script sent back to that same target. Escape sequences in session
   output remain possible, exactly as with plain `ssh`.
 - Backend dispatch trusts your local `~/.ssh/config` and your

@@ -33,11 +33,11 @@ The payload is base64\-armored through the target's login shell for ssh
 targets, unpacked into a private
 .BR mktemp (1)
 directory, and removed by cleanup traps on exit \- including on an abrupt
-disconnect. If the target has a permanent
-.B ~/say-hi
-(installed with
-.BR install.sh ),
-that copy is used in place and left alone.
+disconnect. If the target has a permanent say-hi (installed with
+.BR install.sh ,
+anywhere \- the location is read from that target's login rc files, and failing
+that from the standard install prefixes), that copy is used in place and left
+alone.
 .SH TARGET RESOLUTION
 .I target
 is tried against each backend, in order; the first match wins:

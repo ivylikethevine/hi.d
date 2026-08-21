@@ -138,3 +138,9 @@ or an easier integration does not move any of these, because none of them are
 
 If you want one reconsidered, the useful shape of the argument is: who is in
 these, how often, and what they do today instead.
+
+**Candidates not yet ruled on** — anything that is neither on a table above nor
+the open row — are collected in
+[ROADMAP.md](ROADMAP.md#in-repo-code-work)'s _second wave of target candidates_
+entry, each with a first read and no verdict. They land here as rows, one way
+or the other, as they are decided.

@@ -2,7 +2,7 @@
 
 Every script resolves against `$_HI_HOME/say-hi`. The runner defaults `_HI_HOME`
 to this checkout's parent, so a fresh clone works with no setup - but never
-point anything at your real `~/say-hi`:
+point anything at your real say-hi install:
 
 ```sh
 export _HI_HOME=/path/to/parent-of-say-hi
@@ -14,6 +14,7 @@ tests/test_runner.sh
 - [Running the tests](#running-the-tests)
   - [Where a suite lives](#where-a-suite-lives)
   - [The container suites run their cases in parallel](#the-container-suites-run-their-cases-in-parallel)
+  - [The install-method suite](#the-install-method-suite)
   - [Coverage and profiling](#coverage-and-profiling)
   - [The images are files; the build contexts are not](#the-images-are-files-the-build-contexts-are-not)
     - [What is pinned, and what deliberately is not](#what-is-pinned-and-what-deliberately-is-not)
@@ -60,9 +61,10 @@ membership, which is the copy to trust —
   `test_lib_par` and `test_runner`, which are the harness testing itself.
 - **`bench`** — hot-path timings checked against ceilings, plus the payload's
   two size budgets.
-- **`e2e`** — `ssh`, `ssh_disconnect`, `ssh_relay`, `docker`, `framework`: real
-  throwaway containers driving `hi.sh`'s actual connection paths, covering both
-  halves of it (`_say_hi` and `_say_hi_container`).
+- **`e2e`** — `ssh`, `ssh_disconnect`, `ssh_relay`, `install_methods`,
+  `docker`, `framework`: real throwaway containers driving `hi.sh`'s actual
+  connection paths, covering both halves of it (`_say_hi` and
+  `_say_hi_container`).
 - **`backends`** — `podman`, `nomad`, `kube`: split from `e2e` because they need
   extra runner setup (podman, nomad, kind) beyond docker; a separate, slower CI
   job.
@@ -84,7 +86,8 @@ HI.34).
 
 ### The container suites run their cases in parallel
 
-`ssh`, `ssh_relay`, `docker`, `podman`, `framework` and `kube` spend nearly all
+`ssh`, `ssh_relay`, `install_methods`, `docker`, `podman`, `framework` and
+`kube` spend nearly all
 their wall clock waiting on one container at a time, so their cases run in a
 batch: `_hi_par_case` in `tests/lib/parallel.sh` submits a case to a background
 subshell, `_hi_par_wait` collects the batch. Each case writes its verdict to a
@@ -108,6 +111,26 @@ _HI_PAR_WIDTH=8 tests/test_runner.sh ssh   # a big machine, if the daemon can ta
 `nomad` pins itself to `_HI_PAR_WIDTH=1`: its jobs are tracked in a shell array
 its cleanup hook purges, which is the one fixture in the tree that is not
 case-scoped.
+
+### The install-method suite
+
+`install_methods` is the sibling of `ssh_test.sh`, split on what each one
+varies: `ssh` runs one install against every login shell, `install_methods`
+runs one login shell against every way say-hi gets onto a machine — the `.deb`,
+the `.rpm`, the `.apk`, a Homebrew-shaped keg, a system-wide
+`install.sh --prefix`, and a tree whose `/etc/profile.d` announcement has been
+removed. They share the case runner in `tests/lib/ssh.sh`.
+
+Every case asserts the same thing: `$_HI_ROOT` is the path the installer left,
+and no payload was copied. A session that merely works proves nothing here — hi
+shipping its whole tree over the top produces one of those too, which is the
+waste the permanent-install path exists to avoid.
+
+The three package cases build what they install with `packaging/mkpkg.sh`, so
+they need `nfpm`; without it they stand down yellow. That is a **per-case**
+skip, which `--require-run` does not catch (it reads suite-level skips), so
+`ci.yml`'s e2e job pins nfpm through `setup-tool` to make them actually run.
+The other three need nothing beyond docker.
 
 ### Coverage and profiling
 

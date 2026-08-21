@@ -474,6 +474,15 @@ jobs:
         with:
           persist-credentials: false
 
+      # install_methods_test.sh installs a real .deb/.rpm/.apk on its targets,
+      # and builds them with the same mkpkg.sh the release runs. Without nfpm
+      # those three cases stand down - a per-case skip, which --require-run does
+      # not catch (it reads suite-level skips), so the pin is what makes them
+      # actually run here rather than quietly not.
+      - uses: ./.github/actions/setup-tool
+        with:
+          tool: nfpm
+
       # --require-run: here a skip is a broken runner, not an optional backend
       - name: Run end-to-end suites
         run: "${{ github.workspace }}/tests/test_runner.sh --verbose --host-report --require-run --group e2e"

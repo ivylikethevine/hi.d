@@ -89,6 +89,66 @@ not wait on somebody else's spam problem. Its entry stays tracked under
     `_HI_BACKENDS`, and its suite is in `_HI_TESTS` — even if it skips
     everywhere but the self-hosted box.
 
+- [ ] **Work through the second wave of target candidates** —
+      [TARGETS.md](TARGETS.md) settled the runtimes that had been suggested
+      before it existed, and `lxc`/`incus` is the one row it left open. This is
+      the list of everything _not_ on it: candidates nobody has ruled on yet,
+      with a first read on each. It is an evaluation to finish, not a plan to
+      build — most of these should end up as "decided against" rows, and the
+      entry ticks either way.
+
+  The bar is the one TARGETS.md states: a row earns a yes by being something
+  people **sit in**, not by being reachable, because every backend on the
+  roster costs a fork on every `hi <target>` and every TAB (GLOSSARY: HI.26) on
+  machines that have none of it.
+
+  - **Not backends at all — naming layers over what already ships.** The
+    cheapest wins here, if they are wins: they cost no probe, because the
+    runtime underneath is already on the roster.
+    - **`docker compose` service names.** People think in `web`/`db`, not in
+      `myproject-web-1`. `docker compose ps -q <service>` resolves one to a
+      container hi already answers to. The open question is where it belongs:
+      a lister in `common/targets.sh` so TAB offers both names, or nothing at
+      all if the container name is close enough.
+    - **devcontainers / VS Code dev containers.** Already reachable today, on
+      exactly the distrobox precedent — they are docker containers, so the
+      docker row finds them by name. Worth a TARGETS.md row saying so rather
+      than a backend.
+  - **Genuinely new backends, roughly in order of how real the audience is.**
+    - **`adb shell` (Android).** The best fit on this list: `adb shell`,
+      `adb push`, `adb devices` map onto `_hi_container_cmds`' probe/cp/attach
+      triple almost exactly, the CLI is one binary on every platform hi runs
+      on, and a debuggable device is a full Linux userland people genuinely sit
+      in. The catch is what lands there — a Toybox/Android shell, so the
+      no-bash tier, and `$HOME` semantics that are not a normal Unix home.
+    - **AWS ECS Exec** (`aws ecs execute-command --interactive`). Real audience
+      and a real exec shape, but the name is a cluster/task/container triple
+      rather than one word, and it needs the Session Manager plugin installed
+      beside the CLI. Closer to nomad's `alloc/task` split than to docker's.
+    - **Slurm** (`srun --pty bash`). The HPC row. Whether it is a target at all
+      is the question: `srun` _allocates_ rather than attaches, so `hi` would
+      be queueing a job, not connecting to a machine — and the thing people
+      want a styled shell on is usually the login node, which is already an
+      ordinary ssh host.
+    - **`multipass`, Vagrant, Codespaces** (`multipass shell`,
+      `vagrant ssh`, `gh codespace ssh`). All three end in ssh, so they are
+      arguably already answered the way TARGETS.md answers AWS SSM and
+      `gcloud compute ssh` — a `Host` entry away. Confirm that, and if it
+      holds, they are one collected row rather than three candidates.
+    - **Docker Swarm services**, **Azure Container Instances**
+      (`az container exec`), **`systemd-run`/portable services**. Listed for
+      completeness; none has shown an audience that sits in them.
+  - **Rows that are interesting because they are "no".** A verdict with a
+    reason is the deliverable, and these are the ones people will ask about:
+    **Talos Linux** and other shell-less immutable distributions (there is no
+    shell to style, by design); **serial consoles** (`picocom`, `virsh
+    console`) and **telnet**, where there is no file transfer channel at all,
+    so the payload cannot land; **WinRM / PowerShell Remoting**, which is the
+    same bash-only answer README's compatibility table already gives.
+  - **Ticks when:** every candidate above has a row in
+    [TARGETS.md](TARGETS.md) with a verdict and a reason, and each "yes" that
+    is not built has its own entry here.
+
 - [ ] **Persistent sessions on a disposable target** — `--tmux` already gives
       you detach-and-reattach, but only where say-hi is permanently installed:
       on a disposable target `_hi_tmux_wanted` (`load.sh`) refuses outright,

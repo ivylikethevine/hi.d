@@ -314,8 +314,9 @@ function _hi_ctl_close() {
 
 # The sh script _hi_remote_root runs on the target: the path of a permanent
 # say-hi there, or nothing. Candidates come from what install.sh wrote into the
-# login rc files, read as *files* (`sh -c` over ssh sources none of them),
-# then $HOME. Its own function so a suite can run it without an ssh hop.
+# login rc files, read as *files* (`sh -c` over ssh sources none of them), then
+# $HOME, then the locations an install lands in when nothing announced it. Its
+# own function so a suite can run it without an ssh hop.
 # GLOSSARY: HI.33 - the candidate order, the two seds, and what `--tmux` gets
 # from it. The unwrapping sed's `-e` order matters: one pattern space in
 # sequence, so the comment strip goes first, addressed to unquoted lines - after
@@ -327,7 +328,9 @@ _c=$(for _f in "$HOME/.bashrc" "$HOME/.zshrc" "$HOME/.config/fish/config.fish" /
 done | sed -e '/^"/!s/[[:space:]]*#.*$//' -e 's/^"\([^"]*\)".*$/\1/' -e 's/[[:space:]]*$//')
 IFS='
 '
-for _h in $_c "$HOME"; do
+for _h in $_c "$HOME" "$HOME/.local/share" /usr/local/share /opt /usr/share \
+  "$HOME/.linuxbrew/opt/say-hi/libexec" /home/linuxbrew/.linuxbrew/opt/say-hi/libexec \
+  /opt/homebrew/opt/say-hi/libexec /usr/local/opt/say-hi/libexec; do
   [ -n "$_h" ] || continue
   [ -x "$_h/say-hi/hi.sh" ] && [ -f "$_h/say-hi/common/paths.sh" ] && {
     printf "%s" "$_h/say-hi"

@@ -457,8 +457,21 @@ checkout to derive from - `_hi_remote_root`'s probe asks in this order:
    install. Read as _files_: the probe runs under `sh -c` over ssh, which is
    neither a login nor an interactive shell and sources none of them.
 2. `$HOME`.
+3. Where an install lands when nothing declared it: `~/.local/share`,
+   `/usr/local/share`, `/opt`, `/usr/share`, and Homebrew's three default
+   keg prefixes (`~/.linuxbrew`, `/home/linuxbrew/.linuxbrew`,
+   `/opt/homebrew` and `/usr/local` under `opt/say-hi/libexec`).
 
 Each candidate is then tried as `<home>/say-hi`.
+
+Tier 3 is why the list is not just "the rc line, then `$HOME`". Homebrew's
+formula writes no rc line — its caveats ask you to run `install.sh --no-link`,
+and nobody has to — so a brew-installed target was invisible to tiers 1 and 2
+and got the payload copied over a tree already sitting there. It is best-effort
+by construction (`brew --prefix` is user-settable, and only its defaults are
+listed), and strictly a fallback: a `$HOME` tree still wins, so adding it moved
+no existing target's answer. The whole tier costs two shell builtins per
+candidate and no forks.
 
 The first is the point. A curated tree is exactly the one most likely to live
 somewhere else, and a probe that only knew `$HOME/say-hi` made those targets

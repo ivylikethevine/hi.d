@@ -20,6 +20,7 @@ here: git history is the ledger, and this file is only what is left to do.
   - [The session itself](#the-session-itself)
   - [Testing & CI](#testing--ci)
   - [Demos](#demos)
+  - [Project docs](#project-docs)
 - [Outside this repo](#outside-this-repo)
   - [Repo settings and first runs](#repo-settings-and-first-runs)
   - [Release channels](#release-channels)
@@ -68,11 +69,12 @@ within each section, smallest first. The scope is what the work _is_, not how
 long it takes: "one CI run" and "a backend across seven files" are the useful
 distinction, and a guessed number of days is not.
 
-Read across the sections, the shape today is: everything under
-[Testing & CI](#testing--ci) and [Demos](#demos) is an observation waiting on a
-run that no file here can trigger, and every entry that is actually work to
-_write_ is under [The session itself](#the-session-itself), in increasing order
-of how much of the tree it moves.
+Read across the sections, the shape today is: [Demos](#demos) and all but one
+entry under [Testing & CI](#testing--ci) are observations waiting on a run that
+no file here can trigger; [The session itself](#the-session-itself) is the work
+that moves the product, in increasing order of how much of the tree it touches;
+and [Project docs](#project-docs) is work that moves no code at all, which is
+why it sits last rather than first.
 
 ### The session itself
 
@@ -233,6 +235,42 @@ of how much of the tree it moves.
   - **Ticks when:** the job has been green once, ci.yml calls it on push, and
     README's Windows client row reads ✅ instead of 🟡.
 
+- [ ] **Collapse the coverage tooling to the half that is honest** — _scope:
+      mostly deletion — one script, one workflow, one badge and a paragraph out;
+      one `.simplecov` filter in._ Two scripts, two workflows, two README badges
+      and a section of [TESTING.md](TESTING.md) exist to publish two numbers
+      that this repo separately tells you not to believe, in three places. Both
+      badges are deliberately grey and read `load-time` and `heredoc-inflated`
+      rather than `coverage`. That is honest, and it is also the argument for
+      not carrying them.
+
+  - **The two failure modes are not equally fixable**, which is what makes this
+    a deletion rather than a repair. kcov loses its `DEBUG` trap the moment the
+    harness is sourced, so its figure describes what ran while things were
+    _loading_ — `common/git_prompt.sh` at 2.56% with seventeen cases passing
+    against it. Nothing in this checkout can reach that; it is where kcov reads
+    a bash script from.
+  - **bashcov is wrong in a bounded way.** It reads bash's own `xtrace`, gets
+    that same file right at 92.68%, and correctly reads 0 for an uncalled
+    function. It counts every line of a **heredoc body** as covered, so the
+    files that generate scripts read high — `hi.sh` at 97.38%, with `_say_hi`
+    and `_say_hi_container` both reporting 100% for 182 lines nothing in
+    `--group fast` calls. TESTING.md already names the believable set
+    (`common/`, `shells/`, `misc/`), which is the filter this entry writes down.
+  - **What the commit is.** A `.simplecov` filter scoping `coverage_v2.sh` to
+    the files without heredocs, so the aggregate means something; then
+    `tests/coverage.sh`, `.github/workflows/coverage.yml`, the kcov badge and
+    its half of README's disclaimer paragraph come out, and TESTING.md's
+    _Coverage and profiling_ loses the "read both or neither" framing it only
+    needs while there are two.
+  - **Neither gates anything, and neither should start.** The point is one
+    number a reader can act on instead of two that each need a disclaimer — not
+    a threshold. `docs/TESTING.md`'s "don't write tests to move those figures"
+    survives this entry unchanged.
+  - **Ticks when:** one coverage script and one workflow remain, the surviving
+    badge's number is one the docs do not have to apologise for, and README
+    carries a single coverage badge.
+
 ### Demos
 
 - [ ] **Shed the seven committed demo GIFs** — _scope: one commit, gated on
@@ -258,6 +296,85 @@ of how much of the tree it moves.
     permanent history each time whether a demo had moved or not.
   - **Ticks when:** a `publish` run has been green, the seven are out of the
     tree, and the docs point at the site.
+
+### Project docs
+
+Work addressed to people rather than to the product: what a release says it
+changed, what a contributor is told before they open a pull request, and how
+much of the front page is reference material. None of it moves a line of `hi`,
+and all of it is what somebody meets first.
+
+- [ ] **Say what changed in a release** — _scope: one line in `release.yml`; a
+      `CHANGELOG.md` only if the one line proves too thin._ say-hi ships to
+      deb, rpm, apk and Homebrew, and nothing tells a packaged user what moved
+      between two versions. `release.yml`'s `gh release create` puts a
+      _verification checklist_ in the body — useful, and not an answer to that
+      question — and `--generate-notes` is not passed.
+
+  - **The rule this does not break.** This file deletes finished entries
+    because git history is the ledger. That stays right for a to-do list, and
+    it is exactly why the gap exists: `git log` is not something a
+    `brew upgrade` reaches. The ledger has to be published, not kept.
+  - **Start with `--generate-notes`**, above the existing checklist body rather
+    than in place of it: it costs one line, it is derived from the commits and
+    the merged pull requests, and it cannot go stale the way a hand-kept file
+    does. A `CHANGELOG.md` is worth writing only once releases start carrying
+    notes somebody actually composed — which is a different entry, and should
+    only be opened if this one turns out not to be enough.
+  - **Ticks when:** a release's body names what changed as well as how to check
+    it, without anybody hand-writing the list.
+
+- [ ] **A `CONTRIBUTING.md`, and issue/PR templates** — _scope: three short
+      files, mostly links to docs that already exist._ `.github/` holds
+      workflows, a composite action and dependabot config, and nothing
+      addressed to a person. The conventions are real and written down — the
+      `_HI_HOME` rule, where a suite lives, the bash 3.2 floor, the `GLOSSARY:`
+      tag discipline — but they live in `CLAUDE.md`, which is addressed to
+      agent sessions. Somebody opening their first pull request has no
+      equivalent.
+
+  - **Short, and mostly a signpost.** [TESTING.md](TESTING.md) already carries
+    the runbook and [GLOSSARY.md](GLOSSARY.md) the idioms; what is missing is
+    the page that says _read those two, run `--group fast`, and here is the
+    bash 3.2 floor_. Anything longer will drift out of step with the files it
+    is summarising.
+  - **It also moves a Scorecard check.** The
+    [Scorecard badge](#repo-settings-and-first-runs) entry lists three checks a
+    solo maintainer cannot move; CII-Best-Practices is not one of them, because
+    a contribution guide is part of what it reads for. That entry has been
+    corrected to say so, and the judgement it is waiting on should be made
+    after this one lands rather than before.
+  - **Ticks when:** a `CONTRIBUTING.md` exists, the templates are in
+    `.github/`, and neither restates what TESTING.md or GLOSSARY.md already
+    say.
+
+- [ ] **Finish the README split** — _scope: two sections moved, plus the
+      anchors and the contents block that point at them._ The front page is
+      down to two sections that are reference material rather than a pitch:
+      **How it works**, and **Built from/with/in mind** with its four backend
+      subsections. _Regenerating the demo GIFs_ and _Verifying a release
+      download_ have already gone to [PACKAGING.md](PACKAGING.md); these are
+      what is left of the same argument.
+
+  - **Where each goes.** _How it works_ is the mechanism behind the config
+    overlay it currently sits under, so [CONFIGURATION.md](CONFIGURATION.md).
+    _Built from/with/in mind_ is a per-backend account of what hi does on the
+    other end, which is [TARGETS.md](TARGETS.md)'s subject — and TARGETS.md
+    already carries the verdict rows those four sections describe the
+    implementation of.
+  - **The links are the work**, not the prose. Both are linked from inside
+    README and from the compatibility table, and relative anchors that resolve
+    on the Pages site 404 on github.com — the same trap the
+    [demo GIF entry](#demos) names. Every inbound link moves with the section.
+  - **Not a rule about length.** The test is whether a section answers "should
+    I use this" or "how does this work"; the second kind is what `docs/` is
+    for. Nothing here is deleted, and nothing shipped changes — every comment
+    in the tree is stripped out of the payload on the way to a target
+    (GLOSSARY: HI.35), so prose density in the code is not the same question
+    and is not part of this entry.
+  - **Ticks when:** both sections are in `docs/`, README's contents block and
+    every inbound link point at their new homes, and no link 404s on
+    github.com.
 
 ## Outside this repo
 
@@ -327,11 +444,17 @@ below it.
       and one README line either way._ `scorecard.yml` runs weekly with
       `publish_results: true` and `README.md` carries the badge, so the score is
       public either way and the 404 that once blocked it is gone. The open
-      question is whether showing it helps. Three checks a solo maintainer
-      cannot move — Code-Review, CI-Tests and CII-Best-Practices — dominate the
-      number, so it reads as a verdict on the project's headcount rather than on
-      its engineering, sitting next to badges that measure something real.
+      question is whether showing it helps. Two checks a solo maintainer cannot
+      move — Code-Review and CI-Tests — dominate the number, so it reads partly
+      as a verdict on the project's headcount rather than on its engineering,
+      sitting next to badges that measure something real.
 
+  - **CII-Best-Practices used to be on that list and is not.** It reads for a
+    contribution guide among other things, so it is movable by writing one —
+    which is the [`CONTRIBUTING.md` entry](#project-docs) under Project docs.
+    That makes the judgement here worth deferring until after it lands: a
+    number with one unmovable check fewer is a different number to decide
+    about.
   - **The rest of the report is settled and needs nothing.** SAST counts
     `codeql.yml`'s `actions` pack over the workflows (worth having on its own
     merits, and a poor reason to believe the resulting number, since the

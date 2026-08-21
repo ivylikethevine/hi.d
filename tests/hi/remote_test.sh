@@ -256,8 +256,51 @@ function test_remote_preamble_exports_the_version() {
 # ...and so does the client's glyph verdict: the glyphs render in the
 # client's terminal, so the target must not re-probe its own locale
 function test_remote_preamble_ships_the_glyph_verdict() {
-  [[ "$(DOMAIN=host _HI_ASCII=1 _hi_remote_preamble)" == *'export _HI_ASCII="1"'* ]] &&
-    [[ "$(DOMAIN=host _HI_ASCII="" LC_ALL=en_US.UTF-8 _hi_remote_preamble)" == *'export _HI_ASCII="0"'* ]]
+  [[ "$(DOMAIN=host _HI_ASCII=1 _hi_remote_preamble)" == *"export _HI_ASCII='1'"* ]] &&
+    [[ "$(DOMAIN=host _HI_ASCII="" LC_ALL=en_US.UTF-8 _hi_remote_preamble)" == *"export _HI_ASCII='0'"* ]]
+}
+
+# Every value the preamble exports is data the client picked up rather than
+# code it wrote: $DOMAIN off argv, $_HI_TARGET_TAG out of a free-text ssh_config
+# comment, $_HI_RELEASE off `git describe`. Interpolated raw they were the
+# target's to *execute* - `hi 'a$(id)b'` used to render
+# `export _HI_TARGET="a$(id)b"` - so the assertion is a round trip through a
+# real sh rather than a match on the rendered text: whatever the name was, that
+# is what has to arrive.
+#
+# _HI_MEAN is deliberately every character that ends a quoted word in either
+# dialect, since the two transports used to quote differently and only one of
+# them could be wrong at a time.
+_HI_MEAN='we$(id)ird"ho'\''st`whoami`\\%s'
+
+function _hi_preamble_env_value() { # <name> - what the preamble delivers, via sh
+  local script
+  script="$(DOMAIN="$_HI_MEAN" _hi_remote_preamble)"
+  sh -c "$script"'
+printf %s "$'"$1"'"' 2>/dev/null
+}
+
+function test_preamble_quotes_a_hostile_target_name() {
+  [ "$(_hi_preamble_env_value _HI_TARGET)" = "$_HI_MEAN" ]
+}
+
+# ...and the container transport folds the same stream into one `sh -c export`
+# line, so it gets the same round trip rather than trusting the shared helper
+function test_container_env_quotes_a_hostile_target_name() {
+  local kv
+  kv="$(DOMAIN="$_HI_MEAN" _hi_env_each ' %s=%s')"
+  [ "$(sh -c "export$kv"'
+printf %s "$_HI_TARGET"' 2>/dev/null)" = "$_HI_MEAN" ]
+}
+
+# The sh-tier prompt bakes the host into a double-quoted PS1 on the client, so
+# it is escaped rather than quoted - and has to come back out as itself, with
+# nothing expanded on the way.
+function test_fallback_prompt_escapes_a_hostile_host() {
+  local ps1
+  ps1="$(DOMAIN="$_HI_MEAN" bash -c 'source "$_HI_LAUNCHER"; _hi_fallback_prompt' |
+    sh -c 'IFS= read -r _; IFS= read -r l; eval "$l"; printf %s "$PS1"' 2>/dev/null)"
+  [[ "$ps1" == *"$_HI_MEAN"* ]]
 }
 
 # The generated preamble is executed under a real sh with a controlled TERM
@@ -363,6 +406,11 @@ EOF
   _hi_check "Candid with no stamp and no git" test_version_is_candid_without_stamp_or_git
   _hi_check "The preamble exports it" test_remote_preamble_exports_the_version
   _hi_check "The preamble ships the glyph verdict" test_remote_preamble_ships_the_glyph_verdict
+
+  _hi_h2 "Testing: what the client bakes in stays data"
+  _hi_check "A hostile target name survives the ssh preamble" test_preamble_quotes_a_hostile_target_name
+  _hi_check "...and the container transport's export line" test_container_env_quotes_a_hostile_target_name
+  _hi_check "...and the sh-tier prompt renders it literally" test_fallback_prompt_escapes_a_hostile_host
 
   _hi_h2 "Testing: the preamble's TERM fallback"
   _hi_check_eq "Unknown TERM becomes xterm-256color" xterm-256color _hi_preamble_final_term TERM=hi-test-no-such-term

@@ -80,9 +80,23 @@ function _hi_armored_line() {
   printf 'echo "%s" | %s %s %s' "$($_HI_ARMOR)" "$_HI_UNARMOR" "$1" "$2"
 }
 
+# _hi_shquote <var> <value> - <value> as one single-quoted sh word, into <var>.
+#
+# Everything this file bakes into a script for the target is text the target's
+# shell will parse, and some of it is data rather than code: $DOMAIN comes off
+# argv, $_HI_TARGET_TAG out of a free-text `# Tags:` comment in ~/.ssh/config,
+# $_HI_RELEASE off `git describe --dirty`. A `$`, a quote or a backtick in any
+# of them used to land in the generated script unescaped - a bootloader that no
+# longer parses, and a command substitution the target would run. The same
+# idiom _hi_ssh_sh quotes its script with, as a function so the two transports
+# cannot drift into two dialects.
+function _hi_shquote() {
+  printf -v "$1" "'%s'" "${2//\'/\'\\\'\'}"
+}
+
 # The client-derived env both transports export into the session, one
-# NAME<TAB>value pair per line: the ssh preamble renders `export NAME="v"`,
-# the container path folds them into one `sh -c "export ..."` string
+# NAME<TAB>value pair per line: both render `NAME='v'`, the ssh preamble behind
+# an `export` each, the container path folded into one `sh -c "export ..."`
 function _hi_session_env() {
   printf '_HI_TARGET\t%s\n' "$DOMAIN"
   printf '_HI_TARGET_COLOR\t%s\n' "$(_hi_target_color)"
@@ -216,23 +230,32 @@ function _hi_payload_tar() {
   # Staged, because the strip rewrites files and the tree is not ours to touch.
   # The tar|tar pair rather than cp -R: it reuses the exclusion list above
   # exactly, and -h resolves the symlinks so the stage holds real files.
+  #
+  # All of it inside a subshell so the cleanup can be a trap rather than an rm
+  # on each way out: a ^C between the mktemp and the last of those - which is a
+  # normal thing to do while a slow payload builds - used to leave the stage in
+  # the client's tmp. The subshell is what makes the trap safe; set in this
+  # function's own shell it would replace the one _hi installed for its error
+  # log. INT and TERM are spelled out because a signal that kills the subshell
+  # outright never reaches the EXIT trap.
   local stage f tmp
-  stage="$(mktemp -d -t hi.stage.XXXXXX)" || return 1
-  tar cf - -h ${excl[@]+"${excl[@]}"} -C "$_HI_HOME" "${_HI_PAYLOAD[@]/#/say-hi/}" |
-    tar xf - -C "$stage" || {
-    rm -rf "$stage"
-    return 1
-  }
-  _hi_strip_awk >"$stage/strip.awk"
-  tmp="$stage/strip.out"
-  # _hi_write_back, not mv: mktemp's mode would land on the file and hi.sh has
-  # to stay executable - the target's probe tests `[ -x .../hi.sh ]`.
-  # GLOSSARY: HI.09
-  while IFS= read -r f; do
-    awk -f "$stage/strip.awk" "$f" >"$tmp" && _hi_write_back "$tmp" "$f"
-  done < <(find "$stage/say-hi" -type f \( -name '*.sh' -o -name '*.zsh' -o -name '*.fish' \))
-  tar czf - -C "$stage" say-hi
-  rm -rf "$stage"
+  (
+    stage="$(mktemp -d -t hi.stage.XXXXXX)" || exit 1
+    trap 'rm -rf "$stage"' EXIT
+    trap 'exit 130' INT
+    trap 'exit 143' TERM
+    tar cf - -h ${excl[@]+"${excl[@]}"} -C "$_HI_HOME" "${_HI_PAYLOAD[@]/#/say-hi/}" |
+      tar xf - -C "$stage" || exit 1
+    _hi_strip_awk >"$stage/strip.awk"
+    tmp="$stage/strip.out"
+    # _hi_write_back, not mv: mktemp's mode would land on the file and hi.sh has
+    # to stay executable - the target's probe tests `[ -x .../hi.sh ]`.
+    # GLOSSARY: HI.09
+    while IFS= read -r f; do
+      awk -f "$stage/strip.awk" "$f" >"$tmp" && _hi_write_back "$tmp" "$f"
+    done < <(find "$stage/say-hi" -type f \( -name '*.sh' -o -name '*.zsh' -o -name '*.fish' \))
+    tar czf - -C "$stage" say-hi
+  )
 }
 
 # The walker's rc 2 means "known host, no tag"; only 1 means not in the config.
@@ -407,6 +430,14 @@ function _hi_ladder_probe() {
 function _hi_fallback_prompt() {
   local host="${DOMAIN##*@}" nc
   [ "${_HI_DISABLE_PROMPT:-0}" = 1 ] && return 0
+  # The host is display text, not a value, and it lands *inside* the double
+  # quotes of the PS1 below - so the four characters that would end or re-open
+  # that quoting are escaped rather than quoted away. A target named with a `$`
+  # has to render, not break the rc it is being written into.
+  host="${host//\\/\\\\}"
+  host="${host//\$/\\\$}"
+  host="${host//\`/\\\`}"
+  host="${host//\"/\\\"}"
   # _hi_color_escape already emits real escapes; only $NC is a literal to expand
   printf -v nc '%b' "$NC"
   printf '_hi_u=$(id -un 2>/dev/null || echo "${USER:-?}")\n'
@@ -476,16 +507,22 @@ function _hi_version() {
 # _hi_env_each <printf-format> - _hi_session_env's NAME<TAB>value pairs through
 # <format>, name then value. Both transports render the same stream in
 # different shapes, so the tab contract is stated once, not in two loops.
+#
+# The value arrives already quoted by _hi_shquote, so a format takes it bare
+# (`%s=%s`, never `%s="%s"`): quoting is one decision made here rather than a
+# dialect per transport, where one of the two would eventually be the one that
+# forgot.
 function _hi_env_each() {
-  local n v
+  local n v q
   while IFS=$'\t' read -r n v; do
+    _hi_shquote q "$v"
     # shellcheck disable=SC2059 # the format is ours, not user data
-    printf "$1" "$n" "$v"
+    printf "$1" "$n" "$q"
   done < <(_hi_session_env)
 }
 
 function _hi_env_exports() {
-  _hi_env_each '      export %s="%s"\n'
+  _hi_env_each '      export %s=%s\n'
 }
 
 # The bit both _say_hi branches need first. Everything expands on the client:
@@ -527,7 +564,7 @@ function _hi_remote_suffix() {
       else
         _hi_fallback=sh
         $(_hi_ladder_probe '_hi_fallback="$_hi_s"')
-        printf '%s no bash on [$DOMAIN], dropping into plain %s w/ aliases only %s\n' "$hi_esc" "\$_hi_fallback" "$nc_esc" >&2
+        printf '%s no bash on [%s], dropping into plain %s w/ aliases only %s\n' "$hi_esc" "\$_HI_TARGET" "\$_hi_fallback" "$nc_esc" >&2
         $(_hi_fallback_rc | _hi_armored_line '>' '"$_hi_rc_dir/.hi_fallback_rc"')
         case "\$_hi_fallback" in
         zsh)
@@ -552,8 +589,10 @@ REMOTE
 # _hi_wire_estimate assemble one shape rather than two kept in step. (The
 # permanent-install branch stays inline in _say_hi; nothing else builds it.)
 function _hi_remote_middle() {
+  local tmpl
+  _hi_shquote tmpl "$(_hi_whoami).hi.XXXXXX"
   cat <<REMOTE
-      export _HI_HOME=\$(mktemp -d -t $(_hi_whoami).hi.XXXXXX) # busybox mktemp needs exactly six X
+      export _HI_HOME=\$(mktemp -d -t $tmpl) # busybox mktemp needs exactly six X
       export _HI_ROOT=\$_HI_HOME/say-hi
       export _HI_CONFIG_DIR=\$_HI_ROOT/config
       export _HI_CLEANUP=\$_HI_HOME
@@ -643,9 +682,9 @@ $(_hi_remote_suffix)"
   # armoring the whole thing again cost a third of every session for nothing.
   # GLOSSARY: HI.19 - the argv cap, and why it must be two calls
   if printf '%s\n' "$script" | ssh "${ctl_opts[@]}" "${SSHARGS[@]}" "$DOMAIN" \
-    "sh -c 'command -v base64 >/dev/null 2>&1 && mkdir -m 700 $boot_tmp && cat > $boot_tmp/bootloader'" 2>/dev/null; then
+    "sh -c 'command -v base64 >/dev/null 2>&1 && mkdir -m 700 \"$boot_tmp\" && cat > \"$boot_tmp/bootloader\"'" 2>/dev/null; then
     ssh -t "${ctl_opts[@]}" "${SSHARGS[@]}" "$DOMAIN" \
-      "sh $boot_tmp/bootloader; rm -rf $boot_tmp" || ec=$?
+      "sh \"$boot_tmp/bootloader\"; rm -rf \"$boot_tmp\"" || ec=$?
   else
     ssh -t "${ctl_opts[@]}" "${SSHARGS[@]}" "$DOMAIN" \
       powershell -NoLogo -NoExit -Command \
@@ -701,6 +740,10 @@ function _say_hi_container() {
   local -a probe cp attach
   _hi_container_cmds "$label"
 
+  # A literal /tmp on purpose: this path is created inside the *container*, so
+  # the client's $TMPDIR has nothing to say about it. Mode 700 at creation, the
+  # way the ssh path's own scratch directory is made (see _say_hi's boot_tmp) -
+  # a bare `mkdir -p` left it on whatever umask the image happens to carry.
   root="/tmp/$(_hi_whoami).hi.log.$$"
   shell_end="$(_hi_now)"
 
@@ -710,7 +753,7 @@ function _say_hi_container() {
     [ -n "$fallback" ] || return 1
     _hi_cecho " no bash in [$DOMAIN], skipping hi config -> plain $fallback w/ aliases" "$YELLOW"
 
-    if ! "${cp[@]}" sh -c "mkdir -p '$root' && cat > '$root/aliases.sh'" <"$_HI_ALIASES" 2>"$tmp"; then
+    if ! "${cp[@]}" sh -c "mkdir -m 700 -p '$root' && cat > '$root/aliases.sh'" <"$_HI_ALIASES" 2>"$tmp"; then
       _hi_cecho " failed to copy aliases.sh into [$DOMAIN]" "$BRRED"
       "${attach[@]}" "$fallback"
       return $?
@@ -765,7 +808,7 @@ function _say_hi_container() {
   prefix=" $size"
   echo -ne " $size"
 
-  if ! "${cp[@]}" sh -c "mkdir -p '$root' && tar mxzf - -C '$root'" <"$tarball"; then
+  if ! "${cp[@]}" sh -c "mkdir -m 700 -p '$root' && tar mxzf - -C '$root'" <"$tarball"; then
     rm -f "$tarball"
     _hi_cecho " failed to copy say-hi into [$DOMAIN]" "$BRRED"
     "${probe[@]}" rm -rf "$root" >/dev/null 2>&1
@@ -785,7 +828,7 @@ function _say_hi_container() {
   # _HI_CLEANUP marks the tree disposable for load.sh's clean_all; the
   # `rm -rf "$root"` below is the client-side belt to it. Shared vars come from
   # _hi_session_env; the tree paths and timing are this transport's own.
-  env_kv="$(_hi_env_each " %s='%s'")"
+  env_kv="$(_hi_env_each ' %s=%s')"
   "${attach[@]}" sh -c "export$env_kv _HI_HOME='$root' _HI_ROOT='$root/say-hi' _HI_CONFIG_DIR='$root/say-hi/config' _HI_CLEANUP='$root' _HI_COPY_TIME='$(_hi_copy_time "$copy_start" "$_HI_SHELL_START" "$shell_end")' _HI_CONNECT_PREFIX='$prefix'; exec bash --rcfile '$root/say-hi/hi.bashrc'"
   exit_code=$?
 

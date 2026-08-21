@@ -75,12 +75,17 @@ backends='docker:docker podman:podman nomad:nomad kube:kubectl'
 # at all (and the suite's toolbox PATH, which carries sh, awk and sed and
 # nothing else) never reaches for `mkdir`. Not $XDG_RUNTIME_DIR: this is
 # per-run scratch rather than a cache, and it is removed on the way out.
+#
+# `mkdir -m 700`, and deliberately no `-p`: with -p the call *succeeds* on a
+# path that already exists, so a name somebody else got to first would be
+# adopted here and then removed by emit_targets' `rm -rf` on the way out. The
+# mode rides the same call rather than a chmod after it, which left a window
+# where the directory existed on the default umask.
 scratch=""
 scratch_dir() {
   [ -n "$scratch" ] && return 0
   _hi_scratch="${TMPDIR:-/tmp}/hi-probe.$$"
-  mkdir -p "$_hi_scratch" 2>/dev/null || return 1
-  chmod 700 "$_hi_scratch" 2>/dev/null
+  mkdir -m 700 "$_hi_scratch" 2>/dev/null || return 1
   scratch="$_hi_scratch"
 }
 
@@ -230,8 +235,13 @@ if [ -z "$cache_dir" ] || [ ! -d "$cache_dir" ]; then
   cache_dir="${TMPDIR:-/tmp}/hi-$(id -u 2>/dev/null || echo unknown)"
   # first TAB only: otherwise two execs per completion on any host without
   # $XDG_RUNTIME_DIR (macOS, most containers)
+  # -m 700 on the create, so a fresh cache is never even briefly world-readable
+  # - and no -p, which would silently adopt a path somebody else made. The
+  # chmod is the other arm rather than a follow-on: it runs only when the mkdir
+  # declined, which past the `-d` test above means losing a race with another
+  # shell, and this directory is *meant* to outlive the run.
   [ -d "$cache_dir" ] || {
-    mkdir -p "$cache_dir" 2>/dev/null && chmod 700 "$cache_dir" 2>/dev/null
+    mkdir -m 700 "$cache_dir" 2>/dev/null || chmod 700 "$cache_dir" 2>/dev/null
   }
 fi
 cache="$cache_dir/hi.targets.$kind"

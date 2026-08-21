@@ -4,11 +4,12 @@
 # (docs/tapes/generate.sh says so at the top), and a check that refused a
 # commit would be making that call for you. Exit status is always 0.
 #
-# Run by hand, or as the pre-commit hook beside it - see README's "Regenerating
-# the demo GIFs". It lives in .githooks/ rather than scripts/ because scripts/
-# is in $_HI_PACKAGE_CONTENTS: a contributor's git hook has no business in
-# /usr/share/say-hi, and a subdirectory under scripts/ also falls straight
-# through nfpm.yaml's one-level apk globs (packaging_test.sh fails on it).
+# Run by hand, or as the pre-commit hook beside it - see docs/PACKAGING.md's
+# "Regenerating the demo GIFs". It lives in .githooks/ rather than scripts/
+# because scripts/ is in $_HI_PACKAGE_CONTENTS: a contributor's git hook has no
+# business in /usr/share/say-hi, and a subdirectory under scripts/ also falls
+# straight through nfpm.yaml's one-level apk globs (packaging_test.sh fails on
+# it).
 #
 # Only the topmost README demo, on purpose - and it is now the only demo this
 # could apply to. It is the one GIF that claims to be the stock defaults with

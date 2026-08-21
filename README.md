@@ -62,9 +62,6 @@ _Don't `ssh`ush your hosts, say `hi`!_
 - [Testing](#testing)
 - [More docs](#more-docs)
 - [AI Usage](#ai-usage)
-- [Miscellaneous](#miscellaneous)
-  - [Regenerating the demo GIFs](#regenerating-the-demo-gifs)
-  - [Verifying a release download](#verifying-a-release-download)
 
 ## Every target, the same session
 
@@ -76,8 +73,8 @@ so the set reads as a configurable tool rather than one fixed look. The GIF at
 the top of this README is the exception on purpose — it is the stock defaults,
 with nothing turned off. A last GIF closes the section without being a backend
 at all: completion, which answers with every one of them at once. How they are
-rendered, and what to catch when you regenerate them, is at the bottom:
-[Regenerating the demo GIFs](#regenerating-the-demo-gifs).
+rendered, and what to catch when you regenerate them, is in
+[docs/PACKAGING.md](docs/PACKAGING.md#regenerating-the-demo-gifs).
 
 ### ssh, with a permanent install
 
@@ -465,8 +462,9 @@ lint gate, relaying, `_HI_HOME`, and why the tests are local-only — is in
 - [docs/SECURITY.md](docs/SECURITY.md) — reporting, and what hi touches on a
   target
 - [docs/PACKAGING.md](docs/PACKAGING.md) — the publishing runbook: cutting a
-  release, the per-channel steps, the channels weighed and not shipped, and the
-  reproducibility contract
+  release, the per-channel steps, the channels weighed and not shipped, the
+  reproducibility contract, how to verify a release you downloaded, and how the
+  demo GIFs are regenerated
 - [docs/ROADMAP.md](docs/ROADMAP.md) — what is planned, what each item is
   blocked on, and the one-time setup the release channels wait on
 
@@ -482,81 +480,3 @@ is a tool, not an owner of a project. I have personally understood, reviewed
 and approved all of the AI-generated code in this repository, and _mainline
 releases_ carry the same accountability to me as anything I write and publish
 myself.
-
----
-
-## Miscellaneous
-
-### Regenerating the demo GIFs
-
-[`docs/tapes/generate.sh`](docs/tapes/generate.sh) renders all of them: one
-`vhs` run per tape, cheapest first, with a `fixtures.sh down` in between — no
-tape cleans up after itself — and a summary of what rendered, what stood down
-for a missing backend, and what failed. Name tapes to render a subset
-(`generate.sh docker kube`); `--list` shows them, `--down` clears up after a
-crashed run.
-
-**Seven of the eight render themselves.**
-[`.github/workflows/demos.yml`](.github/workflows/demos.yml) runs every tape but
-`demo` on the self-hosted runner — the only machine with all four backends — on
-a tape change, weekly, or on dispatch, and hands the GIFs to the Pages build,
-which lays them over the committed copies at the same paths. Nothing is
-committed back: a bot commit on top of the author's is what branch protection
-refuses, and it is the same reason the tests badge is published rather than
-written into this file.
-
-The top-of-README demo is the one that goes quietly wrong: it claims to be the
-stock defaults, so it is stale the moment the header, the prompt or the tape
-changes, and nothing about looking at it says so.
-[`.githooks/demo_staleness.sh`](.githooks/demo_staleness.sh) is the reminder —
-it compares `demo.gif`'s last commit against the tape, the fixtures and the
-shipped tree, and says which of them moved since. Run it by hand, or wire it up
-as a pre-commit hook:
-
-```sh
-git config core.hooksPath .githooks
-```
-
-It only ever warns. Rendering a binary nobody looked at is the thing this
-section exists to argue against, so the hook will not do it for you and will
-never block a commit.
-
-By hand it is one `vhs docs/tapes/<name>.tape` per GIF from the repo root, with
-the backend running and `hi` on PATH; `docs/tapes/fixtures.sh` builds every
-target the tapes connect to, `fixtures.sh down` removes them. There is one more
-in [CONFIGURATION.md](docs/CONFIGURATION.md#colors) — `color_preview.tape`, the
-only one needing no backend at all.
-
-Two things to get right when you do it that way — the two the script exists to
-take care of. `hi` on `$PATH` must be _this_ checkout (`/usr/bin/hi` may point
-elsewhere; the script shims its own onto the front of `$PATH`). And the target
-image builds from `HEAD`, so uncommitted work shows on the client side of the
-GIF but not the target's: render from a commit, or set
-`HI_DEMO_SOURCE=worktree`, which is what the script picks for you on a dirty
-tree.
-
-Both sides of every GIF are staged, not inherited. Each tape sources a small rc
-`fixtures.sh` writes, giving the outside shell hi's own prompt under a chosen
-`user@host` instead of the renderer's — and every target gets an explicit
-hostname rather than a backend's random hex ID. The pairs vary on purpose:
-docker's client is `cache-1` and one of its targets is `cache-1` too, while the
-rest say `hi` somewhere they are not.
-
-### Verifying a release download
-
-Releases ship a `SHA256SUMS`, signed build provenance, and a detached
-[minisign](https://jedisct1.github.io/minisign/) signature over the sums (the
-offline half — no `gh`, no network, one static public key):
-
-```sh
-sha256sum -c --ignore-missing SHA256SUMS                        # the bytes match the release
-minisign -Vm SHA256SUMS -P 'RWTDcJ3LGWayrAxK6mbMysyOF8mNLOmMUGRl4YSWk5KIoayS+lW0Fy1L'
-gh attestation verify say-hi_*_all.deb --repo ivylikethevine/say-hi # which CI run built them
-```
-
-That covers **every** file on the release, `say-hi-<version>.tar.gz` included —
-the source tarball the Homebrew formula and the AUR package build from is one
-the release built and attested, not GitHub's auto-generated `/archive/` one,
-which carries neither sum nor signature. So
-`gh attestation verify say-hi-*.tar.gz --repo ivylikethevine/say-hi` answers for
-the sources the same way the line above answers for the `.deb`.

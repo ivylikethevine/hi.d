@@ -445,6 +445,55 @@ function config_header_details() {
   ask_prompt_group _HI_HEADER_PROMPTS
 }
 
+# The package floor's preview, rendered at the value being *considered* rather
+# than the one configured: full_check reads $_HI_PACKAGES_MIN_PRIORITY on every
+# call, so a prefix assignment around it is the whole trick. An empty render is
+# a real answer at a high enough floor, and says so rather than showing show_preview
+# a blank string, which it would drop on the floor.
+function _hi_packages_floor_preview() {
+  local out
+  out="$(_HI_PACKAGES_MIN_PRIORITY="${_hi_floor_candidate:-0}" full_check)"
+  if [ -n "$out" ]; then
+    printf '%s\n' "$out"
+  else
+    _hi_cecho " nothing - the check is off at this floor" "$YELLOW"
+  fi
+}
+
+# The one prompt that loops. Every other question here previews once and takes
+# an answer, because the answer is a yes/no or a character; this one is a dial
+# whose whole point is how much it prints, so it re-renders the real check at
+# each value until the answer stops changing. Enter accepts what is on screen.
+#
+# Skipped when the check it trims is not being drawn at all - the same shape
+# config_header_details and config_prompt_ends use, and for the same reason:
+# a preview of something switched off is a box full of nothing.
+function config_packages_floor() {
+  setting_off _HI_DISABLE_HEADER "$_HI_SETTINGS" 1 && return 0
+  setting_off _HI_HEADER_CHECK "$_HI_SETTINGS" 0 && return 0
+  local current reply
+  current="$(grep -oE '^export _HI_PACKAGES_MIN_PRIORITY=[0-9]+' "$_HI_SETTINGS" 2>/dev/null | cut -d= -f2)"
+  _hi_floor_candidate="${current:-0}"
+  if [ -t 0 ]; then
+    _hi_load_preview_sources
+    while :; do
+      show_preview _hi_packages_floor_preview
+      read -r -p " Lowest package priority to show (0-5, higher hides more)? [$_hi_floor_candidate] " reply || reply=""
+      [ -z "$reply" ] && break
+      if ! _hi_is_number "$reply"; then
+        _hi_cecho " not a number, leaving it at $_hi_floor_candidate" "$YELLOW"
+        continue
+      fi
+      [ "$reply" = "$_hi_floor_candidate" ] && break
+      _hi_floor_candidate="$reply"
+    done
+  fi
+  # 0 is common/header.sh's own default, so it clears the override rather than
+  # restating it - config_max_width does the same with 80.
+  [ "$_hi_floor_candidate" = 0 ] && _hi_floor_candidate=""
+  _HI_SETTING_LINES+=("${_hi_floor_candidate:+export _HI_PACKAGES_MIN_PRIORITY=$_hi_floor_candidate}")
+}
+
 # ask_value <question> <current> <default> <validator-fn> <invalid-msg> -
 # one free-text prompt, printed value on stdout: entering nothing keeps
 # <current> (or the default when there is no override yet), a rejected answer
@@ -862,6 +911,7 @@ fi
 
 config_features
 config_header_details
+config_packages_floor
 config_max_width
 config_prompt_ends
 # One write for all three groups above, for the reason _HI_SETTING_LINES

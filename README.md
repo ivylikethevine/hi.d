@@ -141,8 +141,10 @@ Showing `_HI_DISABLE_GIT_STATUS=1` — the same prompt, without the git segment.
 - reload your shell!
 - run `hi --configure` any time afterward to revisit the feature toggle
   prompts — header, prompt, personal settings, git status, editors, aliases,
-  header details, terminal width, and whether hi styles this machine too or
-  only the hosts you say `hi` to — without touching the shell rc wiring.
+  header details, how much of the package check to show, terminal width, and
+  whether hi styles this machine too or only the hosts you say `hi` to —
+  without touching the shell rc wiring. Most questions preview their answer;
+  the package-check one re-renders the real check at each value you try.
   Answers land in `~/.config/say-hi/settings.sh`; see
   [Configuration](#configuration) below
 - run `hi --check-configs` any time to just re-run that shell rc validation,

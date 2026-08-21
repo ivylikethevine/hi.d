@@ -264,6 +264,48 @@ function test_shebang_replaces_a_different_one_and_keeps_content() {
     grep -qF "export _HI_MAX_WIDTH=120" "$f"
 }
 
+# config_packages_floor: the only prompt that loops, so the parts worth pinning
+# without a pty are the three that do not need one - it keeps an existing floor
+# rather than dropping it, it does not restate the shipped default, and it does
+# not ask about a check that is switched off. The loop itself needs a terminal
+# and is skipped when there is none, which is what makes these callable here.
+# _hi_settings_fixture swallows stdout (its other users assert against the file
+# it wrote), so the collected lines go to a file inside the fixture instead -
+# otherwise "no lines" and "lines nobody saw" look identical and two of these
+# three would pass without asserting anything.
+function _hi_floor_run() {
+  mkdir -p "$_HI_CONFIG_DIR"
+  printf '#!/bin/sh\n%s\n' "$1" >"$_HI_SETTINGS"
+  _HI_SETTING_LINES=()
+  _HI_SETTING_PENDING=()
+  config_packages_floor
+  printf '%s\n' ${_HI_SETTING_LINES[@]+"${_HI_SETTING_LINES[@]}"} >"$_HI_CONFIG_DIR/lines.out"
+}
+
+function _hi_floor_lines() { cat "$_HI_WORKDIR/$1/config/lines.out" 2>/dev/null; }
+
+function test_packages_floor_keeps_a_configured_value() {
+  _hi_settings_fixture floor_keep _hi_floor_run 'export _HI_PACKAGES_MIN_PRIORITY=3'
+  [ "$(_hi_floor_lines floor_keep)" = "export _HI_PACKAGES_MIN_PRIORITY=3" ]
+}
+
+# 0 is header.sh's own default via ${_HI_PACKAGES_MIN_PRIORITY:-0}, so writing
+# it out would be a line that means nothing - the same rule config_max_width
+# has for 80.
+function test_packages_floor_does_not_write_the_default() {
+  _hi_settings_fixture floor_default _hi_floor_run 'export _HI_PACKAGES_MIN_PRIORITY=0'
+  [ -f "$_HI_WORKDIR/floor_default/config/lines.out" ] || return 1
+  [ -z "$(_hi_floor_lines floor_default | tr -d '[:space:]')" ]
+}
+
+function test_packages_floor_is_skipped_when_the_check_is_off() {
+  _hi_settings_fixture floor_off _hi_floor_run 'export _HI_HEADER_CHECK=0'
+  # the file has to exist - a skip that never ran the function at all would
+  # leave no file and pass the emptiness check for the wrong reason
+  [ -f "$_HI_WORKDIR/floor_off/config/lines.out" ] || return 1
+  [ -z "$(_hi_floor_lines floor_off | tr -d '[:space:]')" ]
+}
+
 # same mode-preservation contract as config_shell
 function _hi_shebang_mode() {
   mkdir -p "$_HI_CONFIG_DIR"
@@ -764,6 +806,9 @@ function run_install_tests() {
   _hi_check "Written to a new settings.sh" test_shebang_is_written_to_a_new_settings_file
   _hi_check "Stays first under the settings block" test_shebang_stays_first_under_the_settings_block
   _hi_check "Not duplicated on reruns" test_shebang_is_not_duplicated_on_reruns
+  _hi_check "Packages floor: an existing value survives" test_packages_floor_keeps_a_configured_value
+  _hi_check "Packages floor: the default is not written" test_packages_floor_does_not_write_the_default
+  _hi_check "Packages floor: skipped when the check is off" test_packages_floor_is_skipped_when_the_check_is_off
   _hi_check "Replaces a different shebang" test_shebang_replaces_a_different_one_and_keeps_content
   _hi_check "Preserves settings.sh's mode" test_settings_shebang_preserves_mode
 

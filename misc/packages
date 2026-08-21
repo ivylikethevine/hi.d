@@ -55,15 +55,23 @@ python3:3,python2:3,python:3
 tldr:3,man:2
 act:3
 # 2: green installed, yellow missing - system and package tools
-appimage:2
-flatpak:2
+# One line per *question*, not per tool, wherever the answers are mutually
+# exclusive: check_line renders the first name on the line that resolves, so
+# grouping things no single machine has together collapses a column of `x`
+# marks into one honest row. A Debian box has no business reporting that it is
+# missing `choco`, `brew` and `apk`.
+#
+# Order inside a line is the tiebreak, because equal priorities are settled by
+# file order: the native manager comes before the helper that wraps it (pacman
+# before yay, dnf/zypper before rpm, brew before mas), so a machine that has
+# both names shows the one that actually owns the packages.
+apt-get:2,dnf:2,pacman:2,zypper:2,apk:2,brew:2,choco:2,chocolatey:2,yay:2,rpm:2,mas:2
+# ...and the layers that sit *on top* of the native one. These can coexist -
+# Ubuntu ships both snap and flatpak - so this is a "do you have any of these"
+# row rather than an exclusive choice, which is still one row instead of four.
+flatpak:2,snap:2,nix:2,appimage:2
 sshfs:2
 sshm:2
-chocolatey:2,choco:2
-yay:2,pacman:2,apt-get:2,dnf:2,rpm:2,zypper:2
-apk:2
-nix:2
-mas:2,brew:2,snap:2
 nano:2,micro:2,vim:2,pico:2,nvim:2,vi:2,emacs:2
 # 1: bright cyan installed, bright magenta missing - optional extras
 golang:1,go:1
@@ -146,17 +154,23 @@ od:4
 stty:4
 # probed for, and hi carries on without them - but the session is worse for it:
 # an unbounded backend probe, or a "?" where the header's system info should be
-timeout:4
-nproc:4
-lscpu:4
+# The same grouping rule as the package managers above, for the same reason:
+# these three are GNU, and a Mac has none of them. Left on their own they are
+# three yellow warnings on every macOS target about tools that platform never
+# had - so each is paired with what answers the same question there. hi already
+# falls back at runtime (`timeout` is optional in common/targets.sh, and the
+# header's CPU line degrades to "?"), and the check should say the same thing.
+timeout:4,gtimeout:4
+lscpu:4,nproc:4,sysctl:4
 df:4
 stat:4
 
-# platform-specific by nature: each of these exists on exactly one OS, so a
-# missing one is information about the host, not about the install
-sysctl:0
-sw_vers:0
-wmic:0
+# Platform-specific by nature: a missing one is information about the host
+# rather than about the install. The first three are one row on purpose - they
+# answer the same question, and no machine has two of them. sw_vers first so
+# macOS reports the macOS-only name, wmic next for Windows, sysctl last as the
+# one everything else answers with.
+sw_vers:0,wmic:0,sysctl:0
 lesspipe:0
 
 # --- what the test suite and the release workflow run ------------------------

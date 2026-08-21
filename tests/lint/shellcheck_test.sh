@@ -492,6 +492,12 @@ function lint_dockerfiles() {
 # cap is there because a container case is a docker daemon and an sshd, where
 # this is pure CPU and a few MB resident. $_HI_SC_WIDTH overrides it, and
 # _HI_SC_WIDTH=1 is the serial run down this same code path.
+#
+# Raising it past the CPU count is not the lever it looks like. Measured on an
+# 8-core box: 1 -> 60s, 2 -> 47s, 4 -> 41s, 8 -> 40s, and 12/16/24/32 all sit at
+# 38-39s, which is run-to-run noise. What flattens the curve is -x re-parsing,
+# not scheduling - see _hi_sc_chunks below, which is where the time actually
+# went.
 function _hi_sc_width() {
   local cpus
   if [ -n "${_HI_SC_WIDTH:-}" ]; then
@@ -511,15 +517,45 @@ function _hi_sc_width() {
 # Chunks rather than one process per file, and the difference is not small: under
 # -x a single invocation parses each sourced file once and reuses it for every
 # file in that invocation, so 130 one-file runs re-parse test_lib.sh and its
-# parts 130 times and spend triple the CPU to save half the wall clock. Dealing
-# round-robin keeps a chunk from being all of tests/targets/, where the sourced
-# trees are deepest.
+# parts 130 times and spend triple the CPU to save half the wall clock.
+#
+# The same argument decides how the files are *dealt*, and it points the
+# opposite way to load balancing. Round-robin used to deal file by file, which
+# spread tests/ evenly and made all eight invocations parse test_lib.sh and its
+# parts - eight times the work that one invocation would do. Dealing whole
+# top-level directories instead keeps every file that shares a sourced tree in
+# the same invocation, so that tree is parsed once. Measured at width 8: 42-45s
+# by file, 32s by directory, repeatably.
+#
+# Chunks are *deliberately* unbalanced as a result - tests/ is 47 of 75 files
+# and lands whole in one of them, which is also the run's critical path. That is
+# the trade: an even split costs more total CPU than the idle cores save, and
+# splitting tests/ by subdirectory (each of which sources test_lib.sh too) times
+# at 36-37s, between the two. It also means width past the number of top-level
+# directories buys nothing at all - there is no tenth group to hand a ninth
+# core.
 function _hi_sc_chunks() {
-  local out="$1" width="$2" i=0 f
+  local out="$1" width="$2" i=0 f rel top idx seen="" s
   shift 2
   for f in "$@"; do
-    printf '%s\0' "$f" >>"$out/chunk.$((i % width))"
-    i=$((i + 1))
+    # $_HI_ROOT-relative, so the group is the top-level directory - and a
+    # root-level file (hi.sh, load.sh) is its own group, which is right: it
+    # shares a sourced tree with nothing.
+    rel="${f#"$_HI_ROOT"/}"
+    top="${rel%%/*}"
+    case " $seen " in
+    *" $top "*) ;;
+    *) seen="$seen $top" ;;
+    esac
+    # the group's position in $seen is its chunk - first seen, first chunk,
+    # which keeps the deal stable for a given (sorted) file list
+    idx=0
+    # shellcheck disable=SC2086 # deliberate split: $seen is a space-joined list
+    for s in $seen; do
+      [ "$s" = "$top" ] && break
+      idx=$((idx + 1))
+    done
+    printf '%s\0' "$f" >>"$out/chunk.$((idx % width))"
   done
   i=0
   while [ "$i" -lt "$width" ]; do

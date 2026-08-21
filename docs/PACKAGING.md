@@ -76,6 +76,7 @@ where a required reviewer would stall the run rather than gate it — the
 - [The one idea](#the-one-idea)
 - [Layout](#layout)
 - [Cutting a release](#cutting-a-release)
+- [Channels weighed and not shipped](#channels-weighed-and-not-shipped)
 - [Publishing each channel](#publishing-each-channel)
   - [AUR](#aur)
   - [Homebrew tap](#homebrew-tap)
@@ -131,6 +132,44 @@ tarball Homebrew and the AUR build from. A checkout answers `hi --version` with
 `git describe` instead, so the committed line stays empty. The formula passes
 `--date <version>`, having no `SOURCE_DATE_EPOCH`, and `stamp.sh` refuses to
 guess one. `tests/packaging/packaging_test.sh` guards all of it.
+
+## Channels weighed and not shipped
+
+**nix.** Looked at, and the answer for now is no — recorded here rather than
+left as an open question, because the build shape was never the hard part.
+
+The derivation is the Homebrew formula: `$out/share/say-hi` plus a wrapped
+`$out/bin/hi` whose only job is `export _HI_HOME=$out/share`. It is the formula
+and not `scripts/install.sh --prefix` for the reason [Layout](#layout) already
+gives — `install_tree` hardcodes `/usr/bin` and `/etc/profile.d`, and neither
+exists in a store path.
+
+Two routes, and they are not the same commitment. A `flake.nix` in this repo is
+publishable with no external review: `nix run github:ivylikethevine/say-hi`
+works the moment it lands, and a flake on the repo itself needs no source hash,
+so `bump.sh` learns nothing new. A nixpkgs submission is discoverable from
+`environment.systemPackages`, which is where nix users actually look, but it is
+upstream review plus a standing maintainer entry, and `bump.sh` grows a fourth
+manifest to checksum. **If it ships, it ships as a flake first.**
+
+**The precondition, before either.** A nix derivation is a _third_ copy of
+`_HI_PACKAGE_CONTENTS`, where `tests/packaging/packaging_test.sh` currently
+guards exactly one (the formula). The drift guard grows a case before anything
+is published, not after — a channel installing a stale file list is the failure
+this repo has already designed against twice.
+
+**The `/etc/profile.d` half has no store-path equivalent.** That snippet is how
+a _new_ process — a login shell, tmux's `update-environment`, another machine's
+`hi` probing this one — reads `$_HI_HOME` with no tree to derive it from. On
+NixOS that wants a module (`environment.etc`, or a `programs.say-hi` option),
+which is not committed to; under home-manager the rc line `install.sh` writes
+already covers it, and the plain answer stays `install.sh --no-link`, which is
+what the formula's `caveats` says today.
+
+Two things would come free and are worth remembering if this is revisited: nix
+builds are hermetic, so the reproducibility [mkpkg.sh works
+for](#reproducibility) becomes a property rather than a CI check, and a
+`checkPhase` running `--group fast` would make the build itself a test.
 
 ## Cutting a release
 

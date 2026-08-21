@@ -4,6 +4,10 @@ name: Tool versions
 # the one class of pin dependabot cannot see (its own config says so). A red
 # run with ::warning annotations is the signal; the bump itself stays a
 # one-line edit to that file's version column.
+#
+# That annotation is also why this workflow still exists rather than being
+# folded into Renovate, which could watch the same pins: the reasoning is in
+# .github/dependabot.yml's header, and the answer there is no.
 on:
   schedule:
     - cron: "23 7 * * 1"

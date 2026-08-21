@@ -1,6 +1,7 @@
 # Tooling & practices roadmap
 
-What is left to do on say-hi, in two halves:
+What is left to do on say-hi. [What v1.0.0 means](#what-v100-means) is the gate
+the tag waits on, and the rest is in two halves:
 
 - **[In-repo code work](#in-repo-code-work)** — everything that can be written
   and finished in this checkout, with nothing outside it involved.
@@ -14,10 +15,10 @@ here: git history is the ledger, and this file is only what is left to do.
 
 ## Contents
 
+- [What v1.0.0 means](#what-v100-means)
 - [In-repo code work](#in-repo-code-work)
   - [The session itself](#the-session-itself)
   - [Release & packaging](#release--packaging)
-  - [Tooling](#tooling)
   - [Testing & CI](#testing--ci)
   - [Demos](#demos)
 - [Outside this repo](#outside-this-repo)
@@ -25,9 +26,108 @@ here: git history is the ledger, and this file is only what is left to do.
   - [Release channels](#release-channels)
   - [Docs & submissions](#docs--submissions)
 
+## What v1.0.0 means
+
+README carries EXPERIMENTAL UNTIL v1.0.0 and entries below are ordered against
+it, so this is the list that makes that orderable: what has to be true before
+the tag, each line naming the entry or file that satisfies it. It is a **gate,
+not a wish list** — anything that would merely be nice by v1 stays an ordinary
+unticked entry below rather than padding this. The point is a list short enough
+to finish.
+
+- [ ] **The CLI surface is frozen.** `_hi_parse` in `hi.sh`, `docs/hi.1` and
+      `docs/tldr.md` describe the same flags, and no rename is expected. This
+      is what the [tldr page](#docs--submissions) entry is waiting on —
+      examples that churn are worse than no page.
+- [ ] **`macos-e2e.yml` has been green at least once.** It is written and
+      called on every push; README's compatibility table still says "written
+      but has never run", and that sentence is the criterion.
+- [ ] **`windows-e2e.yml` has been green at least once** — the target-side
+      half, same table, same sentence. Its client-side counterpart,
+      `windows-client.yml`, is deliberately **not** on this list: it is an
+      ordinary entry under [Testing & CI](#testing--ci), because a Windows
+      _client_ is not what "stable" promises.
+- [ ] **A release has gone out under branch protection**, with the manifest
+      step green — the [Get a release out under branch
+      protection](#repo-settings-and-first-runs) entry. The criterion below it
+      cannot start until this one lands: `tap` and `aur` are `needs: publish`,
+      and `publish` is the job the rule currently refuses.
+- [ ] **Every publishable channel has been published once by hand**, before the
+      automation is trusted with it: deb/rpm/apk and the Homebrew tap, per
+      [PACKAGING.md](PACKAGING.md)'s _Publishing each channel_. The tap half is
+      the [Homebrew tap](#release-channels) entry.
+
+**The AUR is excluded on purpose.** Registration is closed to new accounts
+because of spam, so there is nothing to do and no date to do it by; v1 should
+not wait on somebody else's spam problem. Its entry stays tracked under
+[Release channels](#release-channels) and ticks whenever it reopens.
+
 ## In-repo code work
 
 ### The session itself
+
+- [ ] **Investigate LXC/LXD (or Incus) as a target** — the one container
+      runtime with a real audience that hi does not answer to. It is also the
+      _easiest_ target hi could have: an LXC container is normally a full
+      system container running a real distro with systemd and bash already in
+      it, so it lands in the top tier of the fallback ladder rather than the
+      aliases-only one. The question is what it costs on the hot paths, and
+      which project it is.
+
+  - **Which binary, and is it one backend or two.** LXD ships `lxc exec <name>
+    -- <cmd>`; Incus, the LinuxContainers fork, ships `incus exec` with the
+    same shape. They are the same integration twice over, and picking "both"
+    means two rows everywhere below, not one with a fallback — decide before
+    writing any of it.
+  - **What it touches, in roster order.** A row in `_HI_BACKENDS` (`hi.sh`),
+    which is what feeds both the dispatch and `hi --doctor`; a
+    `_hi_is_lxc_container` predicate beside `_hi_is_docker_container`; an arm
+    in `_hi_container_cmds` setting `probe`/`cp`/`attach`; a lister and a
+    `run_lister` case in `common/targets.sh` (plus its usage line), in that
+    file's standalone-POSIX dialect; and an e2e suite under `tests/targets/`
+    registered in `test_runner.sh`'s `_HI_TESTS` under the `backends` group.
+  - **The cost is paid by machines that do not have it.** `_hi_resolve_backend`
+    runs every predicate in parallel on every `hi <target>`, and `targets.sh`
+    probes every backend on every TAB (GLOSSARY: HI.26). A fifth backend is a
+    fifth process on both hot paths; check the `command -v` guard actually
+    short-circuits before adding one, and re-run `--group bench`.
+  - **The fixture is the hard part.** Every existing backend suite stands up
+    its target from a container image; LXD/Incus wants a real daemon and a
+    storage pool on the runner, which is a self-hosted-box change, not a
+    Dockerfile. A suite that can only ever skip is worth less than no suite.
+  - **Ticks when:** the answer is written down either way. If it is yes, the
+    binary is named, the backend is in `_HI_BACKENDS`, and its suite is in
+    `_HI_TESTS` — even if it skips everywhere but the self-hosted box.
+
+- [ ] **Write down every target hi could connect to, and the verdict on each**
+      — the wider question the LXC entry above is one row of. hi answers to ssh
+      plus four container backends, and the reasoning for what is in and what is
+      out lives nowhere: each new suggestion gets re-litigated from scratch, and
+      nobody outside can tell whether their runtime was rejected or never
+      considered.
+
+  - **The shape already exists in this repo.** README's _Compatibility_ section
+    ends with a "shells hi does not style, and why that is settled" table —
+    name, status, and a why long enough to close the question. This is that
+    table for targets, and it belongs next to it or in a `docs/TARGETS.md` the
+    section links to.
+  - **What goes on it**, at least: `lxc`/`incus`; `systemd-nspawn` and
+    `machinectl`; WSL distributions (`wsl -d`); distrobox and toolbx (which
+    wrap podman — do they need a row of their own, or does the podman one
+    already cover them?); `nerdctl`/containerd and `crictl`/CRI-O; Apptainer
+    and Singularity; Proxmox `pct enter`; FreeBSD jails (`jexec`) and illumos
+    zones (`zlogin`); `chroot`; remote docker contexts; and the
+    ssh-that-is-not-ssh transports — AWS SSM `start-session`, `gcloud compute
+    ssh`, `fly ssh console`, Azure Bastion.
+  - **Most rows should be "no", with a reason.** The cheap test is the one the
+    hot-path note above states: every backend on the roster costs a probe on
+    every TAB and every connect, on machines that have none of it. A row earns
+    a "yes" by being something people actually sit in, not by being reachable.
+  - **Some rows are already answered elsewhere** and only need collecting: the
+    ssh-wrapping transports mostly work today, because anything that ends in an
+    ssh connection is a `Host` entry away from being an ordinary ssh target.
+  - **Ticks when:** the table exists with a verdict and a reason per row, and
+    every "yes" that is not built yet has an entry here.
 
 - [ ] **Persistent sessions on a disposable target** — `--tmux` already gives
       you detach-and-reattach, but only where say-hi is permanently installed:
@@ -70,139 +170,14 @@ here: git history is the ledger, and this file is only what is left to do.
 
 ### Release & packaging
 
-- [ ] **Say what v1.0.0 means** — README says EXPERIMENTAL UNTIL v1.0.0 and two
-      entries here are blocked on it, with nothing anywhere stating what v1 is.
-      That makes "blocked on v1" a mood rather than a date: no entry can be
-      scheduled against it, and nobody can tell whether shipping it is a week
-      away or a quarter. The fix is a list, not a release — write down what has
-      to be true, and the blocked entries become orderable behind it.
-
-  - **The obvious candidates**, each already tracked somewhere in this file: the
-    CLI surface frozen (the tldr entry is blocked on exactly that),
-    `macos-e2e.yml` and `windows-e2e.yml` green at least once rather than merely
-    written, and every channel that _can_ be published published once by hand
-    before the automation is trusted with it. Scope that last one to the
-    publishable ones: the AUR is closed to new accounts, and v1 should not wait
-    on somebody else's spam problem.
-  - **It is a gate, not a wish list.** Anything that would be nice by v1 but
-    does not block calling the thing stable belongs in its own entry, unticked,
-    rather than padding this one — the point is a list short enough to finish.
-  - **Ticks when:** the criteria are written down, and every one of them names
-    the entry or file that satisfies it.
-
-- [ ] **Re-render the seven demo GIFs** — the last of the `hi.d` → `say-hi`
-      rename, and the one step no file here can perform. Everything else landed;
-      the GIFs in `docs/demos/` were rendered before it did, so they still show
-      `~/hi.d` on screen while every word around them says `say-hi`.
-
-  - `docs/tapes/generate.sh` already refuses to run unless the checkout is named
-    `say-hi`, so the guard is in place. It needs docker and a clean tree.
-  - **A second change rides along.** The tapes now set a theme per client shell
-    (`common.tape` has the table: Catppuccin Mocha for bash, Dracula for zsh,
-    nord for fish), which nothing has rendered yet - so the committed GIFs are
-    stale twice over, and one re-render settles both. Look at the colored
-    output with fresh eyes when you do: hi's own palette is drawn over these
-    backgrounds, and the check's tiers now use cyan and magenta as well.
-  - **A third rides along.** The packages check ships at a floor of 1 rather
-    than 0, and docker and nomad now set a floor of 5 of their own - so every
-    committed GIF shows a longer check than its tape will now render, and
-    docker.gif shows none at all where it now shows one line.
-  - Its own commit, since it is seven binary files.
-  - **Ticks when:** the GIFs show the current name, on the current themes.
-
-- [ ] **Source tarball under the provenance chain** — _Blocked on **Say what
-      v1.0.0 means**, above._ Both manifests checksum GitHub's auto-generated
+- [ ] **Source tarball under the provenance chain** — _Deliberately not a v1
+      criterion (see [What v1.0.0 means](#what-v100-means)), and orderable on
+      its own now that the gate is written down._ Both manifests checksum GitHub's auto-generated
       `/archive/` tarball, the one released artifact with no attestation and no
       signature over it. The release already builds the identical shape
       (`git archive` in the rehearsal): attach it as an asset, list it in
       `SHA256SUMS`, point both `url=`s at it. Touches `bump.sh`, both manifests
       and their tests.
-
-- [ ] **Investigate publishing to nix** — the one channel with a real audience
-      this project has not looked at, and the question is which of two routes
-      rather than whether it can be built: the build shape is already solved.
-
-  - **The derivation is the Homebrew formula.** `packaging/homebrew/say-hi.rb`
-    installs the tree into a prefix subdirectory literally named `say-hi`, runs
-    `packaging/stamp.sh` for the version, and writes a `bin/hi` wrapper whose
-    only job is `export _HI_HOME=<prefix>`. A nix derivation is that same
-    shape - `$out/share/say-hi` plus a wrapped `$out/bin/hi` - and for the same
-    reason it cannot call `scripts/install.sh --prefix`: `install_tree`
-    hardcodes `/usr/bin` and `/etc/profile.d`, neither of which exists in a
-    store path.
-  - **Which is the cost to weigh.** That makes nix a _third_ copy of
-    `_HI_PACKAGE_CONTENTS`, where `tests/packaging/packaging_test.sh` currently
-    guards exactly one (the formula). The drift guard has to grow a case before
-    the channel ships, not after.
-  - **Flake or nixpkgs**, and they are not the same commitment. A `flake.nix`
-    in this repo is publishable today with no external review - `nix run
-    github:ivylikethevine/say-hi` works the moment it lands, and a flake on the
-    repo itself needs no source hash, so `bump.sh` learns nothing new. A
-    nixpkgs submission is discoverable from `environment.systemPackages`, which
-    is where nix users actually look, but it is upstream review plus a standing
-    maintainer entry, and `bump.sh` grows a fourth manifest to checksum.
-  - **The `/etc/profile.d` half has no plain-package equivalent.** Packaged
-    installs rely on that snippet so a _new_ process - a login shell, tmux's
-    `update-environment`, another machine's `hi` probing this one - can read
-    `$_HI_HOME` with no tree to derive it from. On NixOS that wants a module
-    (`environment.etc`, or a `programs.say-hi` option); under home-manager the
-    rc line `install.sh` writes already covers it. Decide whether a module
-    ships at all, or whether the answer is "run `install.sh --no-link`", which
-    is what the formula's `caveats` already says.
-  - **Two things come free** and are worth noting in the answer: nix builds are
-    hermetic, so the reproducibility `mkpkg.sh` works for is a property rather
-    than a CI check, and a `checkPhase` running `--group fast` would make the
-    build itself a test.
-  - **Ticks when:** the answer is written down either way. If it is yes, name
-    the route, and `packaging_test.sh` covers the new copy of the contents list
-    before anything is published.
-
-### Tooling
-
-- [ ] **Decide whether Renovate replaces dependabot plus `tool-versions.yml`** —
-      a consolidation to weigh, not an obvious win. Three classes of pin live
-      here, and each is watched differently: dependabot handles the `uses:`
-      SHAs and the `tests/dockerfiles` digests;
-      `.github/actions/setup-tool/tools.txt` (ten curl-installed tools) has no
-      ecosystem, which is exactly why
-      `tool-versions.yml` exists as a bespoke weekly drift script; and the same
-      images named as plain tags in `tests/lib/backend.sh`,
-      `docs/tapes/fixtures.sh` and `ci.yml` have no watcher at all, only
-      `lint_image_tags` failing the build when one disagrees with the
-      digest-pinned version.
-
-  - **What Renovate would buy:** `customManagers` match arbitrary files by
-    regex, so `tools.txt`'s version column and the tag strings in shell both
-    become ordinary managed dependencies - the tag strings would be _bumped_
-    rather than merely guarded. That is one tool watching all three classes,
-    and `.github/scripts/check_tool_versions.sh` plus its workflow delete.
-  - **What it costs:** a second bot app on the repo, a `renovate.json` that is
-    its own dialect to learn, and the loss of something the current setup has —
-    `tool-versions.yml` fails loudly with `::warning` annotations in a run,
-    where Renovate opens PRs. For ten pins that is arguably a downgrade in
-    signal.
-  - **Ticks when:** the answer is written down either way. If it stays
-    dependabot, say so here and in `.github/dependabot.yml`'s header so the
-    question stops being reopened.
-
-- [ ] **Say what a refused push means in `SECURITY.md`** — _secret scanning and
-      push protection are both on._ Push protection is the half that acts: it
-      refuses the push rather than reporting the leak afterwards, so a
-      contributor who trips it gets GitHub's own error and nothing from this
-      project saying what to do next. Four credentials make that reachable — the
-      two signing keys, plus `AUR_SSH_KEY` and `HOMEBREW_TAP_TOKEN` — and every
-      one is generated on a laptop, pasted into a settings page and deleted
-      locally, a sequence whose failure mode is a paste into the wrong buffer
-      and a commit.
-
-  - **What the note has to say:** that the refusal is the guard working, that
-    the fix is editing the file rather than forcing the push, and where to go
-    if the blocked string is a false positive. `docs/SECURITY.md` is the file —
-    there is no `CONTRIBUTING.md` in this tree.
-  - **Still not gitleaks or trufflehog.** GitHub's own scanner runs on the push
-    path where a third-party action cannot; revisit only if a key format it
-    does not recognise shows up.
-  - **Ticks when:** `docs/SECURITY.md` carries the note.
 
 ### Testing & CI
 
@@ -225,40 +200,32 @@ here: git history is the ledger, and this file is only what is left to do.
   - **Ticks when:** each has been seen green in CI. Measured locally at the
     current pins, all three images report zero fixable HIGH/CRITICAL.
 
-- [ ] **The Windows client-side job** — `windows-e2e.yml` is the _target_-side
-      job: it stands up sshd and drives `hi localhost` into it. The client-side
-      half — the fast suites run under Git Bash, proving `hi.sh` itself works
-      when the machine you are sitting at is Windows — has never been written,
-      and README's compatibility table rests on it.
+- [ ] **See the Windows client-side job green** — `.github/workflows/windows-client.yml`
+      has shipped and is what this entry asked for: the fast group under the
+      runner's own Git Bash, proving `hi.sh` works when the machine you are
+      _sitting at_ is Windows, where `windows-e2e.yml` covers the target side.
+      What is left is a run, which no file here can perform.
 
-  - **Scope it to the suites that can run there.** The fast group is
-    dependency-free by design, which is what makes it the candidate; anything
-    needing a container backend is out of scope on a Windows runner.
-  - **Ticks when:** a workflow runs the fast group under Git Bash and has been
-    green once, and README's Windows row says which half is proven.
+  - **It runs `--group fast --skip shellcheck`.** The lint suite is the one
+    suite in that group with nothing to say about Windows, and it cannot run
+    there anyway: `.github/actions/setup-tool` resolves linux/darwin asset
+    slugs into `/usr/local/bin`, and `run_shellcheck` exits 1 rather than
+    standing down when shellcheck is missing — on purpose, since a lint gate
+    that did not run must not read as a pass. `runner_test.sh` checks that
+    every `--skip` name in a workflow is a real suite, so a rename cannot
+    silently put it back.
+  - **Dispatch-only until it is green**, on `windows-e2e.yml`'s precedent:
+    nothing here has ever executed the harness under Git Bash, so the first
+    runs are information rather than a gate on somebody's pull request. The
+    `workflow_call` trigger is already there for the day ci.yml picks it up
+    beside `e2e-windows`.
+  - **Expect skips, not a clean sweep.** There is no zsh or fish on a Windows
+    runner, so several suites will stand down yellow; that is the honest shape
+    and why the job passes neither `--require-run` nor `--totals-file`.
+  - **Ticks when:** the job has been green once, ci.yml calls it on push, and
+    README's Windows client row reads ✅ instead of 🟡.
 
 ### Demos
-
-- [ ] **A completion demo — render it and put it in the README.** The tape and
-      its fixture have shipped: `tapes/complete.tape` (fish, for the pager's
-      description column), `up_complete` composing the four existing `up_*`
-      fixtures, and a `complete` row in `_HI_GEN_TAPES`. It renders, and both
-      panes read the way the entry wanted — targets with their backend tags,
-      then `hi --<TAB>` and the flags. What is left is a render nobody can do
-      from a busy machine, and the README line that points at it.
-
-  - **The render box has to be quiet.** `targets.sh` lists every running
-    container, not the fixture's — the feature, and the hazard — so anything
-    else running on the renderer's docker or podman takes rows in the pane, by
-    name, in a committed GIF. `generate.sh`'s preflight now counts them and
-    warns before the run starts, but stopping them is a person's call.
-  - **The pane truncates at eleven rows** (fish gives its pager half the
-    screen) and a clean box offers twelve. Which eleven is settled by fish's
-    sort, and every backend lands inside them — `complete.tape` works it out in
-    full. Two ssh hosts spill into "…and 1 more row", which is the honest shape
-    rather than something to fix.
-  - **Ticks when:** `demos/complete.gif` is rendered on a box running nothing
-    but the fixtures, reviewed by eye, and the README shows it.
 
 - [ ] **Render the demos in CI — see it go green once.**
       `.github/workflows/demos.yml` has shipped and does what this entry asked:
@@ -396,6 +363,6 @@ entries are just the remaining human steps and their tick conditions.
       `docs/tldr.md`.
 
   - **Do:** open the PR against tldr-pages once the CLI surface is frozen —
-    which is one of the criteria **Say what v1.0.0 means** exists to write down.
-    Examples that churn are worse than no page.
+    the first line of [What v1.0.0 means](#what-v100-means). Examples that
+    churn are worse than no page.
   - **Ticks when:** it is merged upstream.

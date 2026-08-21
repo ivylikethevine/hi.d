@@ -11,6 +11,7 @@ trust boundaries sit, and how to report what slipped through.
 - [What runs where](#what-runs-where)
 - [Footprint and cleanup on the target](#footprint-and-cleanup-on-the-target)
 - [Trust boundaries](#trust-boundaries)
+- [When a push is refused](#when-a-push-is-refused)
 - [Supported versions](#supported-versions)
 - [Reporting a vulnerability](#reporting-a-vulnerability)
 
@@ -79,6 +80,32 @@ the target executes was generated on the client.
 - Backend dispatch trusts your local `~/.ssh/config` and your
   `docker`/`podman`/`nomad`/`kubectl` CLIs - the same ones you already
   run by hand.
+
+## When a push is refused
+
+Secret scanning and push protection are both on for this repository. Push
+protection is the half that acts: it refuses the push outright rather than
+reporting the leak afterwards, so the first thing you see is GitHub's own
+error, not anything from this project.
+
+**That refusal is the guard working.** The fix is to take the credential out of
+the commit — amend it, or rewrite the branch — and push again. It is not to
+force the push, and it is not to bypass the block and clean up later: a secret
+that reaches the remote for even one push is a secret to rotate, whatever
+happens to the commit afterwards. If the blocked string is a false positive,
+GitHub's own error links the bypass flow, which asks you to say why and records
+the answer; take that route rather than reshaping the string until the scanner
+stops noticing.
+
+It is reachable at all because four credentials are handled by hand: the two
+signing keys, plus `AUR_SSH_KEY` and `HOMEBREW_TAP_TOKEN`. Every one is
+generated on a laptop, pasted into a settings page, and deleted locally — a
+sequence whose failure mode is one paste into the wrong buffer and a commit.
+[PACKAGING.md](PACKAGING.md) walks each of them.
+
+Still GitHub's scanner rather than gitleaks or trufflehog, deliberately: it
+runs on the push path, where a third-party action cannot. Revisit only if a key
+format it does not recognise shows up.
 
 ## Supported versions
 

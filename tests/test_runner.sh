@@ -115,6 +115,7 @@ _HI_TESTS_DIR="${_HI_TESTS_DIR:-$_HI_ROOT/tests}"
 # and rejected as unknown. The suite list comes from $_HI_TESTS rather than
 # being spelled out again, so it can't drift.
 _HI_GROUP=""
+declare -a _HI_SKIP=()
 _HI_LIST=0
 _HI_LIST_PATHS=0
 _HI_REQUIRE_RUN=0
@@ -128,7 +129,7 @@ while [ "$#" -gt 0 ]; do
   case "$1" in
   -h | --help)
     cat <<EOF
-Usage: test_runner.sh [--group <group>] [--verbose] [suite ...]
+Usage: test_runner.sh [--group <group>] [--skip <suite>] [--verbose] [suite ...]
 
 Runs every test suite, or just the named ones, timing each and printing a
 pass/fail summary table at the end. Exits with the number of failed suites.
@@ -138,6 +139,10 @@ rather than PASS, so a green run can't overstate what actually ran.
 
   suite ...        one or more of the names below (default: all of them)
   --group <group>  every suite in one group: $(_hi_test_groups)
+  --skip <suite>   drop one suite from whatever the above selected; repeatable.
+                   An unknown name is an error, not a no-op, so a suite renamed
+                   out from under a caller fails loudly instead of quietly
+                   running again
   --list           print "<group> <name>" per suite and exit
   --list-paths     the same, plus each suite's absolute path as a third column
   --require-run    treat SKIPPED suites as failures - for CI runners where a
@@ -201,6 +206,15 @@ EOF
     shift
     ;;
   --group=*) _HI_GROUP="${1#--group=}" ;;
+  --skip)
+    [ "$#" -ge 2 ] || {
+      _hi_cecho "test_runner.sh: --skip needs a value" "$RED" >&2
+      exit 1
+    }
+    _HI_SKIP+=("$2")
+    shift
+    ;;
+  --skip=*) _HI_SKIP+=("${1#--skip=}") ;;
   *) _HI_ARGS+=("$1") ;;
   esac
   shift
@@ -229,6 +243,45 @@ else
   done
   if [ "${#_HI_SELECTED[@]}" -eq 0 ]; then
     _hi_cecho "no test suite matches: ${_HI_ARGS[*]} (known: $(_hi_test_names))" "$RED"
+    exit 1
+  fi
+fi
+
+# --skip subtracts from whatever the block above selected, so one flag composes
+# with --group, with a suite list, and with the default of everything. It exists
+# because two CI jobs run the fast group on a machine the lint suite has nothing
+# to say about: `test-macos` would re-run the same pinned shellcheck over the
+# same files the ubuntu job already linted, and the Windows client job cannot
+# install shellcheck at all (setup-tool's asset slugs are linux/darwin only) -
+# where run_shellcheck exits 1 rather than skipping, on purpose.
+#
+# An unknown name is an error. A stale --skip after a rename would otherwise
+# quietly put the suite back and nothing would say so. Skipping a suite the
+# selection never held is still fine (`--group fast --skip ssh`): the check is
+# against the whole table, so a caller need not know which group a name is in.
+if [ "${#_HI_SKIP[@]}" -gt 0 ]; then
+  for _hi_s in "${_HI_SKIP[@]}"; do
+    _hi_found=0
+    for _hi_t in "${_HI_TESTS[@]}"; do
+      [ "$(_hi_test_name "$_hi_t")" = "$_hi_s" ] && _hi_found=1
+    done
+    if [ "$_hi_found" = 0 ]; then
+      _hi_cecho "no test suite matches --skip $_hi_s (known: $(_hi_test_names))" "$RED"
+      exit 1
+    fi
+  done
+  declare -a _hi_kept=()
+  for _hi_t in "${_HI_SELECTED[@]}"; do
+    _hi_name="$(_hi_test_name "$_hi_t")"
+    _hi_drop=0
+    for _hi_s in "${_HI_SKIP[@]}"; do
+      [ "$_hi_name" = "$_hi_s" ] && _hi_drop=1
+    done
+    [ "$_hi_drop" = 1 ] || _hi_kept+=("$_hi_t")
+  done
+  _HI_SELECTED=(${_hi_kept[@]+"${_hi_kept[@]}"})
+  if [ "${#_HI_SELECTED[@]}" -eq 0 ]; then
+    _hi_cecho "--skip left no suites to run" "$RED"
     exit 1
   fi
 fi

@@ -1,0 +1,59 @@
+name: Windows client
+
+# The client-side half of the Windows story, and the half nothing has ever run:
+# the fast suites under the runner's own Git Bash, proving hi.sh works when the
+# machine you are *sitting at* is Windows. windows-e2e.yml is the other half -
+# it stands up sshd and drives `hi localhost` into a stock Windows OpenSSH
+# *target*. README's compatibility table rests on both, and said so while only
+# one of them existed.
+#
+# Dispatch-only for now, on windows-e2e.yml's precedent and for its reason:
+# nothing here has ever executed the harness under Git Bash, so the first runs
+# are information, not a gate on somebody's pull request. `workflow_call` is
+# already here so ci.yml can pick this up beside `e2e-windows` the day it has
+# been green once - which is what its docs/ROADMAP.md entry now ticks on.
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  fast-suites:
+    name: fast suites (Git Bash)
+    runs-on: ${{ vars.WINDOWS_RUNNER_LABEL || 'windows-latest' }}
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Deliberately no `uses: ./.github/actions/setup-tool` in this job, and
+      # it is not an oversight that could be fixed by adding one: that action
+      # resolves linux.x86_64/darwin.* asset slugs and caches into
+      # /usr/local/bin, and neither is a Windows shape. Hence `--skip
+      # shellcheck` rather than letting the suite stand down - run_shellcheck
+      # exits 1 when shellcheck is missing, on purpose (a lint gate that did
+      # not run must not read as a pass), so leaving it selected would red this
+      # job on the one suite with nothing to say about Windows. ci.yml's ubuntu
+      # job is where lint is enforced, against pinned versions.
+      #
+      # No --require-run and no --totals-file either. Skips are the expected
+      # shape here - there is no zsh or fish on the runner - and README's tests
+      # badge is the ubuntu count on purpose, per the note above ci.yml's
+      # fast-totals upload.
+      - name: Run the fast suites under Git Bash
+        shell: bash
+        run: |
+          set -euo pipefail
+          # hi.sh derives its own tree (GLOSSARY: HI.33), so this export is
+          # belt and braces rather than the thing that makes the run work - it
+          # stays because under Git Bash a wrong tree resolves to
+          # /c/Users/runneradmin rather than the checkout on D:, and that is
+          # invisible until the run is already wrong. The workspace *is* the
+          # say-hi directory, so _HI_HOME is its parent; derived with `cd ..`
+          # because $GITHUB_WORKSPACE is a backslashed path bash cannot walk.
+          _HI_HOME="$(cd .. && pwd)"
+          export _HI_HOME
+          ./tests/test_runner.sh --verbose --host-report --group fast --skip shellcheck

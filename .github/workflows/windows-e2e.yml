@@ -5,9 +5,9 @@ name: Windows e2e
 # PowerShell fallback via the cmd-compatible `||` - not hang, not error out.
 # The client is the runner's own Git Bash. Dispatch-only and frankly
 # experimental, so red runs here are information, not noise. Note this is the
-# target-side job: the README's "Windows channels" gates every native Windows
-# channel on the *client*-side one (the fast suites under Git Bash), which
-# does not exist yet.
+# target-side job: the client-side half - the fast suites run under Git Bash,
+# proving hi.sh works when the machine you are sitting at is Windows - is
+# windows-client.yml, and README's compatibility table names both.
 #
 # ci.yml calls this on every push to main, once both fast-suite jobs are green.
 # Dispatch still works for running it on its own.

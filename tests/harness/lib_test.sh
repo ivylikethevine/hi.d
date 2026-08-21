@@ -152,6 +152,30 @@ function test_host_tree_check_returns_one_when_it_differs() {
   [ "$rc" -eq 1 ]
 }
 
+# Which runner a borderline benchmark came off is the first question a CI log
+# has to answer, so both rows carry a number rather than being best-effort.
+function test_host_report_names_the_cpu_and_memory() {
+  local out
+  out="$(_hi_host_report_out)"
+  [[ "$out" == *" cpu "* ]] && [[ "$out" == *" memory "* ]] &&
+    [[ "$out" =~ [0-9]+\ cores ]] && [[ "$out" == *GiB* ]]
+}
+
+# The same rule the rest of the block follows: a host that answers nothing
+# still gets its rows, reading "?" rather than blank or vanishing. PATH=""
+# takes out getconf/nproc/sysctl; the two overrides take out /proc.
+function test_host_report_marks_an_unreadable_cpu_and_memory() {
+  local out
+  out="$(
+    # shellcheck disable=SC2123 # emptying the search path is the case
+    PATH=""
+    _HI_PROC_CPUINFO="$_HI_WORKDIR/no_such_cpuinfo" \
+      _HI_PROC_MEMINFO="$_HI_WORKDIR/no_such_meminfo" \
+      _hi_host_report "$_HI_ROOT" 2>&1
+  )"
+  [[ "$out" == *"cpu       ? cores"* ]] && [[ "$out" == *"memory    ?"* ]]
+}
+
 function test_host_report_lists_the_lint_tools() {
   local out
   out="$(_hi_host_report_out)"
@@ -407,6 +431,8 @@ function run_lib_process_tests() {
   _hi_check "Warns, naming both, when it differs" test_host_report_warns_when_the_tree_differs
   _hi_check "Tree check stays silent on agreement" test_host_tree_check_is_silent_and_zero_when_it_agrees
   _hi_check "Tree check returns 1 on a mismatch" test_host_tree_check_returns_one_when_it_differs
+  _hi_check "Names the CPU and the memory" test_host_report_names_the_cpu_and_memory
+  _hi_check "Marks an unreadable CPU/memory \"?\"" test_host_report_marks_an_unreadable_cpu_and_memory
   _hi_check "Lists the lint tools" test_host_report_lists_the_lint_tools
   _hi_check "Survives an empty PATH" test_host_report_survives_an_empty_path
   _hi_check "Marks absent tools absent" test_host_report_marks_absent_tools_absent

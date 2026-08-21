@@ -5,9 +5,19 @@
 # Usage: sh targets.sh [ssh|docker|podman|nomad|kube|flags]
 #        (no argument = every backend; `flags` = hi's own options instead)
 # GLOSSARY: HI.26 - _HI_PROBE_TIMEOUT and _HI_TARGETS_TTL
+#
+# The backends are probed *together*, not in turn. Each is capped at
+# $_HI_PROBE_TIMEOUT on its own, so one after another two wedged daemons cost
+# the sum of the ceilings and four cost 8s of a single TAB; started together
+# they cost the longest. That is the trade common/header.sh's _hi_probe_start
+# already makes for the banner, in the one dialect this file is allowed.
+# Emission order stays the roster's - the rows are read back per backend, never
+# in the order the daemons answered - and a host with no writable scratch
+# directory simply gets the old in-turn sweep, which is slow, not wrong.
 # shellcheck disable=SC2329 # every function here is reached indirectly - by
-# the completion hook that sources this file, or through emit_backend's
-# dispatch - so "never invoked" is true of the file, not of five lines in it.
+# the completion hook that sources this file, through run_lister's dispatch, or
+# as a background job - so "never invoked" is true of the file, not of five
+# lines in it.
 
 kind="${1:-all}"
 
@@ -57,17 +67,42 @@ cache_body() {
   done <"$1"
 }
 
-# emit_backend <label> <bin> <lister...> - kind gate, presence check, timeout
-# wrap. Listers go through "$@" (hence SC2329).
-emit_backend() {
-  label="$1" bin="$2"
-  shift 2
-  { [ "$kind" = "$label" ] || [ "$kind" = all ]; } || return 0
-  command -v "$bin" >/dev/null 2>&1 || return 0
-  "$@"
+# The roster, "<label>:<bin>", in the order the rows are emitted.
+backends='docker:docker podman:podman nomad:nomad kube:kubectl'
+
+# Somewhere private to collect a fan-out's output, made at most once per run
+# and only on a path that has a fan-out to collect - so a host with no backends
+# at all (and the suite's toolbox PATH, which carries sh, awk and sed and
+# nothing else) never reaches for `mkdir`. Not $XDG_RUNTIME_DIR: this is
+# per-run scratch rather than a cache, and it is removed on the way out.
+scratch=""
+scratch_dir() {
+  [ -n "$scratch" ] && return 0
+  _hi_scratch="${TMPDIR:-/tmp}/hi-probe.$$"
+  mkdir -p "$_hi_scratch" 2>/dev/null || return 1
+  chmod 700 "$_hi_scratch" 2>/dev/null
+  scratch="$_hi_scratch"
+}
+
+# backend_wanted <label> <bin> - does the kind gate pass, and is the CLI here?
+# Both halves are builtins, so the whole roster is sized before anything forks.
+backend_wanted() {
+  { [ "$kind" = "$1" ] || [ "$kind" = all ]; } || return 1
+  command -v "$2" >/dev/null 2>&1
+}
+
+# run_lister <label> - that backend's rows on stdout, in turn or backgrounded.
+run_lister() {
+  case "$1" in
+  docker | podman) list_ps "$1" ;;
+  nomad) list_nomad ;;
+  kube) list_kube ;;
+  esac
 }
 
 emit_targets() {
+  # ssh first and in line: a local file read and one awk, already faster than
+  # the bookkeeping backgrounding it would cost.
   if [ "$kind" = ssh ] || [ "$kind" = all ]; then
     [ -f "${_HI_SSH_CONFIG:-$HOME/.ssh/config}" ] &&
       awk 'tolower($1) == "host" {
@@ -78,35 +113,86 @@ emit_targets() {
       }' "${_HI_SSH_CONFIG:-$HOME/.ssh/config}"
   fi
 
-  emit_backend docker docker list_ps docker
-  emit_backend podman podman list_ps podman
-  emit_backend nomad nomad list_nomad
-  emit_backend kube kubectl list_kube
+  wanted="" n_wanted=0
+  for spec in $backends; do
+    backend_wanted "${spec%%:*}" "${spec#*:}" || continue
+    wanted="${wanted}${wanted:+ }${spec%%:*}"
+    n_wanted=$((n_wanted + 1))
+  done
+  [ "$n_wanted" -gt 0 ] || return 0
+
+  # worth its two forks only where something actually fans out: two or more
+  # backends, or nomad, whose per-job calls fan out on their own
+  if [ "$n_wanted" -ge 2 ] || [ "$wanted" = nomad ]; then
+    scratch_dir || :
+  fi
+
+  if [ "$n_wanted" -ge 2 ] && [ -n "$scratch" ]; then
+    for label in $wanted; do
+      run_lister "$label" >"$scratch/$label" 2>/dev/null &
+    done
+    wait
+    files=""
+    for label in $wanted; do files="$files $scratch/$label"; done
+    # shellcheck disable=SC2086 # deliberate split: the roster-ordered file list
+    cat $files 2>/dev/null
+  else
+    for label in $wanted; do run_lister "$label"; done
+  fi
+
+  [ -n "$scratch" ] && rm -rf "$scratch" 2>/dev/null
+  scratch=""
   return 0
 }
 
-# The listers, each reached indirectly through emit_backend's "$@".
+# The listers, each reached indirectly through run_lister's dispatch.
 
-# docker and podman are one call (drop-in CLIs); the tag rides a `sed` over the
-# result, so it holds whatever the backend does with --format
+# docker and podman are one call (drop-in CLIs); the tag is appended by the
+# read loop rather than by a `sed` over the result - one fewer exec per backend
+# on the path that runs on every TAB, for the reason cache_body gives.
 list_ps() {
-  run_backend "$1" ps --format '{{.Names}}' 2>/dev/null | sed "s/\$/	$1/"
+  run_backend "$1" ps --format '{{.Names}}' 2>/dev/null |
+    while IFS= read -r _hi_name || [ -n "$_hi_name" ]; do
+      [ -n "$_hi_name" ] || continue
+      printf '%s\t%s\n' "$_hi_name" "$1"
+    done
+}
+
+# nomad_allocs <job> - the running allocations of one job, and the task names
+# riding the same template as the ID, so this stays one call per job.
+nomad_allocs() {
+  # shellcheck disable=SC2016 # $t/$s are nomad's Go template, not the shell's
+  run_backend nomad job allocs -t \
+    '{{range .}}{{if eq .ClientStatus "running"}}{{printf "%.8s" .ID}}{{range $t, $s := .TaskStates}}{{" "}}{{$t}}{{end}}{{"\n"}}{{end}}{{end}}' \
+    "$1" 2>/dev/null
 }
 
 # The allocation, plus "alloc/task" per task when the group has more than one -
-# the same shape list_kube emits, and the same syntax hi takes. The task names
-# come from the same template as the ID, so this stays one call per job.
+# the same shape list_kube emits, and the same syntax hi takes.
+#
+# The per-job calls go out together where there is a scratch dir to collect
+# them: each carries its own $_HI_PROBE_TIMEOUT, so run in turn N wedged jobs
+# cost N ceilings and nothing bounds the total. This is the file's one fan-out
+# sized by the host rather than by the roster.
 list_nomad() {
-  run_backend nomad job status 2>/dev/null | awk 'NR > 1 { print $1 }' | while read -r job; do
-    # shellcheck disable=SC2016 # $t/$s are nomad's Go template, not the shell's
-    run_backend nomad job allocs -t \
-      '{{range .}}{{if eq .ClientStatus "running"}}{{printf "%.8s" .ID}}{{range $t, $s := .TaskStates}}{{" "}}{{$t}}{{end}}{{"\n"}}{{end}}{{end}}' \
-      "$job" 2>/dev/null
-  done | while read -r alloc t1 t2 rest; do
+  _hi_jobs="$(run_backend nomad job status 2>/dev/null | awk 'NR > 1 { print $1 }')"
+  [ -n "$_hi_jobs" ] || return 0
+  if [ -n "$scratch" ]; then
+    _hi_j=0
+    for _hi_job in $_hi_jobs; do
+      _hi_j=$((_hi_j + 1))
+      nomad_allocs "$_hi_job" >"$scratch/nomad.$_hi_j" 2>/dev/null &
+    done
+    wait
+    # the glob cannot catch the "nomad" the backend fan-out writes: no dot
+    cat "$scratch"/nomad.* 2>/dev/null
+  else
+    for _hi_job in $_hi_jobs; do nomad_allocs "$_hi_job"; done
+  fi | while read -r alloc t1 t2 rest; do
     [ -n "$alloc" ] || continue
-    printf '%s	nomad\n' "$alloc"
+    printf '%s\tnomad\n' "$alloc"
     if [ -n "$t2" ]; then
-      for t in $t1 $t2 $rest; do printf '%s/%s	nomad\n' "$alloc" "$t"; done
+      for t in $t1 $t2 $rest; do printf '%s/%s\tnomad\n' "$alloc" "$t"; done
     fi
   done
 }
@@ -122,15 +208,16 @@ list_kube() {
     -o jsonpath='{range .items[*]}{.metadata.name}{range .spec.containers[*]}{" "}{.name}{end}{"\n"}{end}' 2>/dev/null |
     while read -r pod c1 c2 rest; do
       [ -n "$pod" ] || continue
-      printf '%s	kube\n' "$pod"
+      printf '%s\tkube\n' "$pod"
       # c2 non-empty means more than one container, so the choice is real
       if [ -n "$c2" ]; then
-        for c in $c1 $c2 $rest; do printf '%s/%s	kube\n' "$pod" "$c"; done
+        for c in $c1 $c2 $rest; do printf '%s/%s\tkube\n' "$pod" "$c"; done
       fi
     done
 }
 
-# No cache wanted (or no writable place to put one): just answer.
+# No cache wanted (or no writable place to put one): just answer. Reached
+# before the two forks below, so a TTL of 0 pays for neither.
 if [ "$ttl" -le 0 ]; then
   emit_targets
   exit 0

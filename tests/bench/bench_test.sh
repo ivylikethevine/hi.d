@@ -50,6 +50,11 @@ function _hi_bench() {
     fi
   fi
   if [ -z "$avg" ]; then
+    # one untimed run first, the way the hyperfine arm above passes --warmup 1.
+    # CI always lands here (the runners install zsh and fish, never hyperfine),
+    # so without it run #1's cold binary paging and first-daemon-contact are
+    # divided into the average and every ceiling has to carry them.
+    "$@" >/dev/null 2>&1 || true
     t0="$(_hi_now)"
     for ((i = 0; i < n; i++)); do "$@" >/dev/null 2>&1 || true; done
     t1="$(_hi_now)"
@@ -96,15 +101,27 @@ function bench_git_prompt() {
       for ((i = 0; i < 50; i++)); do _hi_git_prompt out; done'
 }
 
-# what every TAB after `hi ` pays: once cold, then against the warm cache
+# what every TAB after `hi ` pays: once cold, then against the warm cache.
+#
+# The ceiling is one probe's, not four. targets.sh sweeps the backends
+# together, so a cold TAB costs the longest of them rather than the sum -
+# $_HI_PROBE_TIMEOUT is 1s in the env above, and the rest is the `sh` fork.
+# Set here rather than generously on purpose: the failure this catches is the
+# sweep going back to running in turn, and four ceilings' worth of slack is
+# exactly what would hide it.
 function bench_targets_cold() {
-  _hi_bench "targets.sh, cold cache" 2000 3 \
+  _hi_bench "targets.sh, cold cache" 1200 3 \
     _hi_bench_env env _HI_TARGETS_TTL=0 sh "$_HI_TARGETS"
 }
 
+# TTL 60, not the env's 5: this primes once and then times five more runs, and
+# at 5s the cache can turn over mid-loop - one "warm" run silently becomes a
+# cold one, and a ~1000ms event lands in an average held to 500ms. The number
+# wanted here is the cache-hit path's, which a longer window measures more of.
 function bench_targets_warm() {
-  _hi_bench_env sh "$_HI_TARGETS" >/dev/null 2>&1 || true # prime the cache
-  _hi_bench "targets.sh, warm cache" 500 5 _hi_bench_env sh "$_HI_TARGETS"
+  _hi_bench_env env _HI_TARGETS_TTL=60 sh "$_HI_TARGETS" >/dev/null 2>&1 || true # prime
+  _hi_bench "targets.sh, warm cache" 500 5 \
+    _hi_bench_env env _HI_TARGETS_TTL=60 sh "$_HI_TARGETS"
 }
 
 # The wire budget: the payload built exactly the way hi.sh builds it, against

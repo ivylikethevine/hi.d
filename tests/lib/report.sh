@@ -222,6 +222,95 @@ function _hi_host_versions() {
   printf '%s' "$out"
 }
 
+# How big is this machine. The ceilings in tests/bench/bench_test.sh are one
+# number for every runner the matrix has, so which box a borderline timing came
+# off is the first thing anybody asks of a CI log - a 2-core hosted runner and
+# the self-hosted one are not the same host in any way that matters to a
+# benchmark. Overridable paths so the cases can point at a fixture instead of
+# the real /proc.
+#
+# Read with the `read` builtin rather than awk: these two rows have to survive
+# the empty-PATH case below like every other, and on Linux this way they cost
+# no fork at all.
+
+# _hi_host_cores - online CPU count, or empty
+function _hi_host_cores() {
+  local n=""
+  n="$(getconf _NPROCESSORS_ONLN 2>/dev/null || true)"
+  [ -n "$n" ] || n="$(nproc 2>/dev/null || true)"
+  [ -n "$n" ] || n="$(sysctl -n hw.ncpu 2>/dev/null || true)"
+  case "$n" in '' | *[!0-9]*) return 0 ;; esac
+  printf '%s' "$n"
+}
+
+# _hi_host_cpu_model - the brand string, or empty
+function _hi_host_cpu_model() {
+  local line
+  if [ -r "${_HI_PROC_CPUINFO:-/proc/cpuinfo}" ]; then
+    while IFS= read -r line; do
+      # x86 and most arm kernels say "model name"; some arm ones say
+      # "Processor". The first of either is enough - the rows below it are the
+      # same chip.
+      case "$line" in
+      "model name"*:* | "Model name"*:* | "Processor"*:*) ;;
+      *) continue ;;
+      esac
+      line="${line#*:}"
+      while [ "${line# }" != "$line" ]; do line="${line# }"; done
+      [ -n "$line" ] || continue
+      printf '%s' "$line"
+      return 0
+    done <"${_HI_PROC_CPUINFO:-/proc/cpuinfo}"
+  fi
+  sysctl -n machdep.cpu.brand_string 2>/dev/null || true
+}
+
+# _hi_host_mem_kb <field> - a /proc/meminfo value in kB, or empty
+function _hi_host_mem_kb() {
+  local line v
+  [ -r "${_HI_PROC_MEMINFO:-/proc/meminfo}" ] || return 0
+  while IFS= read -r line; do
+    case "$line" in
+    "$1":*)
+      v="${line#*:}"
+      v="${v%% kB*}"
+      # shellcheck disable=SC2086 # unquoted to strip the leading run of spaces
+      set -- $v
+      printf '%s' "${1:-}"
+      return 0
+      ;;
+    esac
+  done <"${_HI_PROC_MEMINFO:-/proc/meminfo}"
+}
+
+# _hi_host_gib <kb> - "15.6 GiB", or empty. Integer arithmetic in bash rather
+# than an awk fork; one decimal is all a debug row wants.
+function _hi_host_gib() {
+  local kb="${1:-}" whole tenth
+  case "$kb" in '' | *[!0-9]*) return 0 ;; esac
+  whole=$((kb / 1048576))
+  tenth=$(((kb % 1048576) * 10 / 1048576))
+  printf '%s.%s GiB' "$whole" "$tenth"
+}
+
+# _hi_host_memory - "15.6 GiB total, 13.9 GiB available", or empty. macOS has
+# no cheap MemAvailable equivalent, so it reports the total alone.
+function _hi_host_memory() {
+  local total avail bytes
+  total="$(_hi_host_gib "$(_hi_host_mem_kb MemTotal)")"
+  if [ -z "$total" ]; then
+    bytes="$(sysctl -n hw.memsize 2>/dev/null || true)"
+    case "$bytes" in
+    '' | *[!0-9]*) return 0 ;;
+    *) total="$(_hi_host_gib $((bytes / 1024)))" ;;
+    esac
+    printf '%s total' "$total"
+    return 0
+  fi
+  avail="$(_hi_host_gib "$(_hi_host_mem_kb MemAvailable)")"
+  printf '%s total%s' "$total" "${avail:+, $avail available}"
+}
+
 # What the e2e suites need, reported rather than enforced: docker and podman
 # have to *answer*, not merely exist (_hi_require_backend runs the same `info`,
 # and a downed daemon is why an e2e suite skips); the rest only have to be on
@@ -271,7 +360,7 @@ function _hi_host_tree_check() {
 
 # _hi_host_report <reference-tree> - the block itself.
 function _hi_host_report() {
-  local ref="${1:-}" kernel os userland sed_ver loc glyphs
+  local ref="${1:-}" kernel os userland sed_ver loc glyphs cores cpu mem
 
   _hi_h2 "The host"
   _hi_host_row bash "${BASH_VERSION:-?} (${BASH:-?})"
@@ -285,6 +374,12 @@ function _hi_host_report() {
     os="macOS $(sw_vers -productVersion 2>/dev/null || true)"
   fi
   _hi_host_row os "${kernel:-?}${os:+ - $os}"
+
+  cores="$(_hi_host_cores)"
+  cpu="$(_hi_host_cpu_model)"
+  mem="$(_hi_host_memory)"
+  _hi_host_row cpu "${cores:-?} cores${cpu:+ - $cpu}"
+  _hi_host_row memory "${mem:-?}"
 
   # GNU or not decides `sed -i`, `mktemp -t`, `base64 -D` and half the reasons
   # a suite passes here and fails on the macOS job

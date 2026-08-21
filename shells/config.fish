@@ -51,10 +51,16 @@ end
 set -q _HI_ENABLE_FISH_ALIAS_ABBR; or set -gx _HI_ENABLE_FISH_ALIAS_ABBR 0
 test "$_HI_ENABLE_FISH_ALIAS_ABBR" = 1; and hi_abbr_aliases
 
-complete -c hi -f -a '(sh $_HI_TARGETS)' # "<target>\ttype" lines
+# Both halves carry the opposite condition, so exactly one runs per TAB. The
+# negation is not symmetry for its own sake: without it `hi --<TAB>` fires the
+# target sweep as well, and a flag list must never wait on a docker daemon or
+# an ssh config - the promise targets.sh's own flags branch makes by exiting
+# before the cache and the probes, and the one bash.sh and zsh.zsh keep by
+# answering `-*` words without touching the target cache.
+complete -c hi -f -n 'not string match -q -- "-*" (commandline -ct)' \
+  -a '(sh $_HI_TARGETS)' # "<target>\ttype" lines
 # hi's own options, from the same file rather than a second list here - the two
-# would drift, and targets.sh is the only one of the three fish can run. The
-# condition keeps flags out of a bare TAB, which should still be targets.
+# would drift, and targets.sh is the only one of the three fish can run.
 complete -c hi -f -n 'string match -q -- "-*" (commandline -ct)' \
   -a '(sh $_HI_TARGETS flags)'
 complete exa --wraps eza

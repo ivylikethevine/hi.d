@@ -135,6 +135,20 @@ function test_fish_registers_hi_completion() {
     grep -qF '$_HI_TARGETS'
 }
 
+# bash and zsh answer a `-*` word from targets.sh's flags roster and never
+# touch the target cache, because a flag list must not wait on a docker daemon.
+# fish keeps that promise only if the target completion carries the negated
+# condition: an unconditional one fires the whole backend sweep alongside the
+# flags on every `hi --<TAB>`.
+function test_fish_flag_completion_does_not_also_sweep_targets() {
+  local out
+  out="$(_hi_rc_shell xterm-256color fish \
+    'source $_HI_HOME/say-hi/shells/config.fish 2>/dev/null; complete -c hi')"
+  # the bare-target line is guarded, and the flags line still is too
+  printf '%s\n' "$out" | grep -qF 'not string match -q -- "-*"' &&
+    printf '%s\n' "$out" | grep -qF '$_HI_TARGETS flags'
+}
+
 # The character each prompt ends with is a setting now (core.sh's
 # _hi_prompt_end, mirrored in config.fish), with three different shipped
 # defaults. Each case renders the real prompt in the real shell rather than
@@ -267,6 +281,7 @@ function run_rc_tests() {
   _hi_check_requires zsh "[zsh] defers when asked and present" test_defers_to_starship_when_asked zsh
   _hi_check_requires fish "[fish] defers when asked and present" test_defers_to_starship_when_asked fish
   _hi_check_requires fish "fish registers hi completion" test_fish_registers_hi_completion
+  _hi_check_requires fish "fish flag TAB does not sweep the backends" test_fish_flag_completion_does_not_also_sweep_targets
   _hi_check_requires fish "fish resolves \$_HI_CONFIG_DIR as bash does" test_fish_config_dir_matches_bash
   _hi_check_requires fish "fish honours an explicit \$_HI_CONFIG_DIR" test_fish_config_dir_explicit_value_wins
 

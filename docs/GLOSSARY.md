@@ -311,12 +311,26 @@ configs are grafted onto every rc file either way; the user's are not.
 
 `targets.sh` runs on every TAB after `hi` and a space - the most latency-sensitive path
 in say-hi and the slowest (four of five backends are a subprocess each). Two
-knobs keep it honest: `_HI_PROBE_TIMEOUT` is the seconds any one backend CLI
-gets (default 2, needs GNU `timeout`; shared with `common/core.sh`'s
-`_hi_probe`) or an unreachable daemon hangs completion unbounded, and
+knobs keep it honest.
+
+`_HI_PROBE_TIMEOUT` is the seconds a backend CLI gets (default 2, needs GNU
+`timeout`; shared with `common/core.sh`'s `_hi_probe`) or an unreachable daemon
+hangs completion unbounded. It bounds the **whole sweep**, not each leg of it:
+the backends are started together and read back in roster order, so four wedged
+daemons cost one ceiling rather than four. Started in turn they cost the sum,
+which is how a cold TAB on a host with docker and kubectl installed used to
+reach two seconds. A host with no writable scratch directory falls back to the
+in-turn sweep, which is slow, not wrong.
+
 `_HI_TARGETS_TTL` is the seconds a result is reused (default 5, 0 disables) -
 a just-started container may not appear until it expires, the trade for not
-paying ~110ms per TAB.
+paying ~110ms per TAB. **Nothing invalidates it**; there is no watch on
+container events, only the clock. Two windows stack, and they are offset: the
+file cache in `targets.sh` stamps when it was written, while the in-shell memo
+in `shells/bash.sh` and `shells/zsh.zsh` stamps when that shell last read the
+file. A memo filled from an already-4-second-old file holds it for its own full
+TTL, so worst-case staleness is close to **twice** the TTL, not once. Only
+`_HI_TARGETS_TTL=0` turns both off.
 
 ## HI.27 tmux server-start rules
 

@@ -183,6 +183,14 @@ jobs:
           # different way, so it gets the same one-line answer.
           sudo chown -R "$(id -u):$(id -g)" _site
           mkdir -p _site/badges
+          # badge <file> <label> <color> <message> - one shields endpoint object.
+          # The schema string was written out six times, once per branch of the
+          # three badges below; what actually varies is the message and colour.
+          badge() {
+            printf '{"schemaVersion":1,"label":"%s","message":"%s","color":"%s","cacheSeconds":300}\n' \
+              "$2" "$4" "$3" >"_site/badges/$1"
+          }
+
           passed=""
           # four fields: passed failed skipped selected (tests/test_runner.sh).
           # Redirect rather than pipe - `read` in a pipeline reads into a
@@ -190,12 +198,10 @@ jobs:
           # `|| true`, or set -e takes the missing-file case out with it
           [ -f "$TOTALS" ] && read -r passed _ _ _ <"$TOTALS" || true
           if [ -n "$passed" ]; then
-            printf '{"schemaVersion":1,"label":"tests","message":"%s passed","color":"4c1","cacheSeconds":300}\n' \
-              "$passed" >_site/badges/tests.json
+            badge tests.json tests 4c1 "$passed passed"
             echo "tests badge: $passed passed"
           else
-            printf '{"schemaVersion":1,"label":"tests","message":"unknown","color":"inactive","cacheSeconds":300}\n' \
-              >_site/badges/tests.json
+            badge tests.json tests inactive unknown
             echo "::warning::no fast-totals to read - tests badge published as unknown"
           fi
 
@@ -205,12 +211,11 @@ jobs:
           deb="" installed=""
           [ -f "$SIZES" ] && read -r deb installed <"$SIZES" || true
           if [ -n "$deb" ] && [ -n "$installed" ]; then
-            printf '{"schemaVersion":1,"label":"package","message":"%s KB deb / %s KB installed","color":"4c1","cacheSeconds":300}\n' \
-              "$(((deb + 512) / 1024))" "$(((installed + 512) / 1024))" >_site/badges/package.json
+            badge package.json package 4c1 \
+              "$(((deb + 512) / 1024)) KB deb / $(((installed + 512) / 1024)) KB installed"
             echo "package badge: $deb B deb, $installed B installed"
           else
-            printf '{"schemaVersion":1,"label":"package","message":"unknown","color":"inactive","cacheSeconds":300}\n' \
-              >_site/badges/package.json
+            badge package.json package inactive unknown
             echo "::warning::no package-sizes to read - package badge published as unknown"
           fi
 
@@ -227,12 +232,10 @@ jobs:
           pct=""
           [ -f "$COVPCT" ] && read -r pct <"$COVPCT" || true
           if [ -n "$pct" ]; then
-            printf '{"schemaVersion":1,"label":"kcov","message":"%s%% load-time","color":"inactive","cacheSeconds":300}\n' \
-              "$pct" >_site/badges/coverage.json
+            badge coverage.json kcov inactive "$pct% load-time"
             echo "kcov badge: $pct% load-time"
           else
-            printf '{"schemaVersion":1,"label":"kcov","message":"not measured","color":"inactive","cacheSeconds":300}\n' \
-              >_site/badges/coverage.json
+            badge coverage.json kcov inactive "not measured"
             echo "kcov badge: no figure published yet"
           fi
 

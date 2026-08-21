@@ -37,28 +37,6 @@ function _hi_parse_out() {
   )
 }
 
-function test_parse_takes_a_bare_target() {
-  [ "$(_hi_parse_out myhost)" = "$(printf 'myhost\n\n')" ]
-}
-
-function test_parse_keeps_valueless_flags() {
-  [ "$(_hi_parse_out -v myhost)" = "$(printf 'myhost\n\n-v\n')" ]
-}
-
-function test_parse_pairs_a_flag_with_its_value() {
-  [ "$(_hi_parse_out -p 2222 myhost)" = "$(printf 'myhost\n\n-p\n2222\n')" ]
-}
-
-# the regression this list exists for: -J takes a value, so without it in the
-# case arm "bastion" becomes DOMAIN and hi connects to the wrong machine
-function test_parse_treats_jump_host_as_a_value_not_the_target() {
-  [ "$(_hi_parse_out -J bastion myhost)" = "$(printf 'myhost\n\n-J\nbastion\n')" ]
-}
-
-function test_parse_treats_bind_interface_as_a_value_not_the_target() {
-  [ "$(_hi_parse_out -B eth0 myhost)" = "$(printf 'myhost\n\n-B\neth0\n')" ]
-}
-
 function test_parse_handles_several_flags_before_the_target() {
   [ "$(_hi_parse_out -4 -o StrictHostKeyChecking=no -i /tmp/k myhost)" = \
     "$(printf 'myhost\n\n-4\n-o\nStrictHostKeyChecking=no\n-i\n/tmp/k\n')" ]
@@ -266,26 +244,36 @@ function test_container_cmds_pick_the_inner_unit() {
 # that fails loudly on $PATH - the whole point of the flag is that it never
 # reaches ssh, and before it existed `hi -h` answered with ssh's usage block.
 
+# --help is asserted four separate ways and its output cannot differ between
+# them, so it is launched once and kept; the ssh shim that makes a stray
+# connect attempt loud is built once for the same reason.
+_HI_HELP_OUT=""
+
 function _hi_help_out() {
-  local dir="$_HI_WORKDIR/nossh"
-  mkdir -p "$dir"
-  cat >"$dir/ssh" <<'EOF'
+  local dir="$_HI_WORKDIR/nossh" out rc=0
+  [ -x "$dir/ssh" ] || {
+    mkdir -p "$dir"
+    cat >"$dir/ssh" <<'EOF'
 #!/bin/sh
 echo "ssh was called: $*" >&2
 exit 97
 EOF
-  chmod +x "$dir/ssh"
-  PATH="$dir:$PATH" "$_HI_LAUNCHER" "$@" 2>&1
+    chmod +x "$dir/ssh"
+  }
+  if [ "$*" = "--help" ] && [ -n "$_HI_HELP_OUT" ]; then
+    printf '%s\n' "$_HI_HELP_OUT"
+    return 0
+  fi
+  out="$(PATH="$dir:$PATH" "$_HI_LAUNCHER" "$@" 2>&1)" || rc=$?
+  [ "$*" = "--help" ] && [ "$rc" -eq 0 ] && _HI_HELP_OUT="$out"
+  printf '%s\n' "$out"
+  return "$rc"
 }
 
 function test_help_long_flag_prints_usage() {
   local out
   out="$(_hi_help_out --help)" || return 1
   [[ "$out" == "Usage: hi "* && "$out" != *"ssh was called"* ]]
-}
-
-function test_help_short_flag_prints_the_same() {
-  [ "$(_hi_help_out -h)" = "$(_hi_help_out --help)" ]
 }
 
 # the two things a usage block is for: what the flags are, and how a name is
@@ -476,11 +464,13 @@ function run_hi_parse_tests() {
   _hi_h1 "Testing hi.sh: parsing and dispatch"
 
   _hi_h2 "Testing: _hi_parse (targets and flags)"
-  _hi_check "A bare target" test_parse_takes_a_bare_target
-  _hi_check "Keeps valueless flags" test_parse_keeps_valueless_flags
-  _hi_check "Pairs a flag with its value" test_parse_pairs_a_flag_with_its_value
-  _hi_check "-J's value is not mistaken for the target" test_parse_treats_jump_host_as_a_value_not_the_target
-  _hi_check "-B's value is not mistaken for the target" test_parse_treats_bind_interface_as_a_value_not_the_target
+  _hi_check_eq "A bare target" "$(printf 'myhost\n\n')" _hi_parse_out myhost
+  _hi_check_eq "Keeps valueless flags" "$(printf 'myhost\n\n-v\n')" _hi_parse_out -v myhost
+  _hi_check_eq "Pairs a flag with its value" "$(printf 'myhost\n\n-p\n2222\n')" _hi_parse_out -p 2222 myhost
+  # the regression this list exists for: -J takes a value, so without it in the
+  # case arm "bastion" becomes DOMAIN and hi connects to the wrong machine
+  _hi_check_eq "-J's value is not mistaken for the target" "$(printf 'myhost\n\n-J\nbastion\n')" _hi_parse_out -J bastion myhost
+  _hi_check_eq "-B's value is not mistaken for the target" "$(printf 'myhost\n\n-B\neth0\n')" _hi_parse_out -B eth0 myhost
   _hi_check "Several flags before the target" test_parse_handles_several_flags_before_the_target
 
   _hi_h2 "Testing: _hi_parse (commands and errors)"
@@ -519,7 +509,7 @@ function run_hi_parse_tests() {
 
   _hi_h2 "Testing: hi --help"
   _hi_check "--help prints the usage line" test_help_long_flag_prints_usage
-  _hi_check "-h is the same text" test_help_short_flag_prints_the_same
+  _hi_check_eq "-h is the same text" "$(_hi_help_out --help)" _hi_help_out -h
   _hi_check "Lists hi's flags and the target ladder" test_help_lists_hi_s_own_flags
   _hi_check "Every flag is in the man page" test_help_flags_are_all_in_the_man_page
   _hi_check "Both shell ladders are in the man page" test_shell_ladders_are_in_the_man_page

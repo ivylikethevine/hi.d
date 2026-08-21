@@ -8,10 +8,8 @@
 
 alias sudo="command sudo " # works in bash/zsh, fish has a sudo wrapper in config.fish
 
-# cli text editor defaults with preferential fallthrough
 export EDITOR="$_HI_EDITOR_BIN"
 alias micro="micro -autoindent=true -colorscheme=darcula -colorcolumn=80 -diffgutter=true -softwrap=true -tabsize=2"
-# ide defaults with preferential fallthrough
 export IDE="$(command -v zeditor || command -v zed || command -v code || command -v vi)"
 
 # cat is bat with our options when bat exists, plain cat otherwise
@@ -29,12 +27,10 @@ alias catn="batn"
 
 alias now='echo "LOCAL: $(date $_HI_HUMAN_SHORT_DATE) => UTC: $(date -u $_HI_HUMAN_SHORT_DATE)"'
 
-# for working on this repo quickly
 alias zed="$(command -v zeditor || command -v zed || command -v echo)"
 alias ehi="zed $_HI_ROOT"
 alias essh="zed $_HI_SSH_DIR"
 
-# ls basics
 alias ls="ls -lh --color=auto"
 alias lsa="ls -a"
 alias lsr="lsa -R"
@@ -61,10 +57,8 @@ alias let="le -T -L2"
 alias leg="le --git --git-repos-no-status"
 alias l="$_HI_EZA_BIN -l"
 
-# lsd (another improved ls)
 alias lsd="lsd -lh --color=auto"
 
-# docker compose
 alias dcl="docker container ls && docker compose ls"
 alias dcu="docker compose up"
 alias dcud="docker compose up -d"
@@ -72,28 +66,22 @@ alias dcd="docker compose down"
 alias dps="dcl"
 alias dsp="docker system prune -fa"
 alias dil="docker image ls"
-# defaults for basics
 alias grep="grep --color=auto"
 alias ps="ps aux"
 
-# good safety mechanism
 alias rm="rm -iv"
 alias rmv="rm -rv"
 
-# default recursive copy with progress
 alias cp="cp -rv"
 alias rsync="rsync -zvhPr --info=progress2"
 alias scp="scp -Cr"
 
-# file count + executability
 alias fc="ls | wc -l"
 alias mkex="chmod +x"
 
-# always forget how tar works
 alias ctar="tar -zcvf"
 alias utar="tar -zxvf"
 
-# file diffing
 alias mindiff="diff -Bdw"
 
 # fallthrough aliases for improved basics
@@ -101,12 +89,10 @@ alias mindiff="diff -Bdw"
 alias df="$(command -v duf || command -v df)"
 alias dig="$(command -v dog || command -v dig || command -v echo)"
 
-# directory navigation
 alias ..="cd ../"
 alias ...="cd ../../"
 alias z="zoxide"
 
-# git
 alias gl="git log --abbrev-commit --graph"
 alias gf="git fetch -a"
 alias gp="git fetch -a && git pull"
@@ -123,7 +109,6 @@ alias gd="git diff --color=always"
 alias gps="echo ' Okay. Where are we going?'"
 alias gpsh='git push --set-upstream origin $(git rev-parse --abbrev-ref HEAD)'
 
-# internet
 alias ping="ping -O"
 alias pping="prettyping"
 alias ip="ip -color=always"
@@ -143,11 +128,9 @@ alias aptug="sudo apt upgrade"
 alias aptupg="sudo apt update && sudo apt upgrade"
 alias aptac="sudo apt autoclean && sudo apt autoremove"
 
-# fwupdmgr commands (laptops, device drivers, etc.)
 alias fw_check="fwupdmgr get-devices && fwupdmgr get-updates"
 alias fw_update="fwupdmgr update"
 
-# prevent misspellings/save my fingers
 alias sctl="sudo systemctl"
 alias chron="cron"
 alias chrontab="crontab"

@@ -206,6 +206,88 @@ function test_payload_stays_clear_of_the_arg_limit() {
   [ "$bytes" -lt 262144 ]
 }
 
+# The comment strip. Its correctness argument is "only full-line comments, and
+# never inside a heredoc", so that is what these assert: the shipped shell is
+# still shell, the code survives byte for byte, and the one heredoc a user can
+# see - `hi --help` - is intact.
+function _hi_strip_unpack() {
+  local dir="$_HI_WORKDIR/$1"
+  [ -d "$dir" ] || {
+    mkdir -p "$dir"
+    _hi_payload_tar | tar xzf - -C "$dir"
+  }
+  printf '%s' "$dir"
+}
+
+# Per file, skipping its own line 1: every shebang stays. Only hi.sh may have
+# survivors, and only because its REMOTE heredocs are script the *target* runs -
+# those bodies are deliberately not stripped.
+function test_strip_leaves_no_full_line_comments() {
+  local dir f rel n bad=0
+  dir="$(_hi_strip_unpack stripped)"
+  while IFS= read -r f; do
+    rel="${f#"$dir/say-hi/"}"
+    n="$(sed -n '2,$p' "$f" | grep -cE '^[[:space:]]*#' || true)"
+    [ "$n" -eq 0 ] && continue
+    if [ "$rel" = hi.sh ]; then
+      # the heredoc bodies; a jump here means the strip started skipping files
+      [ "$n" -le 8 ] && continue
+    fi
+    _hi_cecho " | $rel kept $n comment line(s) through the strip" "$RED"
+    bad=1
+  done < <(find "$dir/say-hi" -type f \( -name '*.sh' -o -name '*.zsh' -o -name '*.fish' \))
+  [ "$bad" -eq 0 ]
+}
+
+function test_strip_keeps_every_code_line() {
+  local dir f rel bad=0
+  dir="$(_hi_strip_unpack stripped)"
+  while IFS= read -r f; do
+    rel="${f#"$dir/say-hi/"}"
+    [ -f "$_HI_ROOT/$rel" ] || continue
+    diff <(grep -vE '^[[:space:]]*#|^$' "$_HI_ROOT/$rel") \
+      <(grep -vE '^[[:space:]]*#|^$' "$f") >/dev/null || {
+      _hi_cecho " | $rel lost or changed a code line" "$RED"
+      bad=1
+    }
+  done < <(find "$dir/say-hi" -type f \( -name '*.sh' -o -name '*.zsh' -o -name '*.fish' \))
+  [ "$bad" -eq 0 ]
+}
+
+function test_strip_leaves_valid_shell() {
+  local dir f bad=0
+  dir="$(_hi_strip_unpack stripped)"
+  while IFS= read -r f; do
+    bash -n "$f" 2>/dev/null || {
+      _hi_cecho " | ${f##*/} does not parse after the strip" "$RED"
+      bad=1
+    }
+  done < <(find "$dir/say-hi" -type f -name '*.sh')
+  [ "$bad" -eq 0 ]
+}
+
+# a plain `mv` of the stripped copy would put mktemp's 0600 here, and the
+# target's own probe tests `[ -x .../hi.sh ]` before it trusts a tree
+function test_strip_keeps_hi_sh_executable() {
+  local dir
+  dir="$(_hi_strip_unpack stripped)"
+  [ -x "$dir/say-hi/hi.sh" ]
+}
+
+function test_strip_spares_heredoc_bodies() {
+  local dir
+  dir="$(_hi_strip_unpack stripped)"
+  grep -q 'Everything else is passed to ssh' "$dir/say-hi/hi.sh"
+}
+
+function test_keep_comments_ships_the_tree_verbatim() {
+  local dir
+  dir="$_HI_WORKDIR/verbatim"
+  mkdir -p "$dir"
+  _HI_KEEP_COMMENTS=1 _hi_payload_tar | tar xzf - -C "$dir"
+  diff "$_HI_ROOT/common/core.sh" "$dir/say-hi/common/core.sh" >/dev/null
+}
+
 function run_hi_payload_tests() {
   _hi_workdir hipayloadtest
 
@@ -219,6 +301,14 @@ function run_hi_payload_tests() {
   _hi_check "A default client ships everything" test_payload_ships_everything_by_default
   _hi_check "The toggle trims personal.sh and keeps aliases.sh" test_payload_trims_personal_but_keeps_aliases
   _hi_check "ksh.sh rides the payload" test_payload_carries_ksh_sh
+
+  _hi_h2 "Testing: the in-transit comment strip"
+  _hi_check "No full-line comments survive" test_strip_leaves_no_full_line_comments
+  _hi_check "Every code line survives" test_strip_keeps_every_code_line
+  _hi_check "The result is still valid shell" test_strip_leaves_valid_shell
+  _hi_check "hi.sh stays executable" test_strip_keeps_hi_sh_executable
+  _hi_check "Heredoc bodies are spared" test_strip_spares_heredoc_bodies
+  _hi_check "_HI_KEEP_COMMENTS=1 ships verbatim" test_keep_comments_ships_the_tree_verbatim
 
   _hi_h2 "Testing: the config overlay stream"
   _hi_check "Nothing sent without an overlay" test_overlay_is_empty_without_one

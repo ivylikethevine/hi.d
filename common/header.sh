@@ -99,15 +99,14 @@ function system_info() {
     freq_unit="GHz"
     # MHz -> x.x GHz with printf, not an awk fork apiece; rounded to tenths
     # *before* splitting so a carry lands properly (2950 -> 3.0, not "2.10")
-    local ghz_tenths
-    [ -n "$base_mhz" ] && {
-      ghz_tenths=$(((base_mhz + 50) / 100))
-      printf -v base_mhz '%d.%d' "$((ghz_tenths / 10))" "$((ghz_tenths % 10))"
-    }
-    [ -n "$boost_mhz" ] && {
-      ghz_tenths=$(((boost_mhz + 50) / 100))
-      printf -v boost_mhz '%d.%d' "$((ghz_tenths / 10))" "$((ghz_tenths % 10))"
-    }
+    local ghz_tenths ghz_var ghz_val
+    for ghz_var in base_mhz boost_mhz; do
+      eval "ghz_val=\$$ghz_var"
+      [ -n "$ghz_val" ] && {
+        ghz_tenths=$(((ghz_val + 50) / 100))
+        printf -v "$ghz_var" '%d.%d' "$((ghz_tenths / 10))" "$((ghz_tenths % 10))"
+      }
+    done
   fi
   header_row "$PURPLE$arch" "$GREEN$os" "${YELLOW}Cores: ${cpus:-?}" \
     "${CYAN}RAM: ${ram:-?}" "${BRBLUE}CPU: ${base_mhz:-?}/${boost_mhz:-?} $freq_unit"
@@ -269,16 +268,32 @@ function hi_header() {
   [[ "${_HI_HEADER_CHECK:-1}" == 0 ]] || full_check
 }
 
-# package priorities
-# lowest to highest (more can be added)
-# 0 nice-to-haves (netstat, distro tools)
-# 1 second line (git, curl, ping)
-# 2 first line (sed, awk, bc)
-# 3 runtimes (python, node, dotnet)
-# 4 favorites (eza, bat)
+# package priorities, lowest to highest (more can be added).
+#
+# A priority says how much you want to hear about a tool, and
+# `$_HI_PACKAGES_MIN_PRIORITY` is the dial: it gates display, so raising it
+# trims the decorative tiers before the ones that can tell you something is
+# wrong. Every tier speaks when the tool is missing, which is the point - a
+# target you visit often is exactly where a nudge to install your own
+# preferred tools belongs, and one that stays quiet about them never nudges.
+#
+# Tier 4 is the single exception, and the only `hide` left in the table: it is
+# the core-tool tier, where being present is not news and being absent means
+# this box is bare. Printing 57 `ok` rows on every healthy target to catch that
+# is the wrong trade, so it stays silent until it has something to say.
+#
+# The numbered lines below are scraped verbatim by scripts/packages_preview.sh
+# (the run immediately above _HI_YES, parentheticals dropped), so keep the
+# "# <n> <meaning> (<examples>)" shape and add nothing between them and the
+# table.
+# 0 platform and trivia (sw_vers, netstat)
+# 1 optional extras (zoxide, navi)
+# 2 system and package tools (flatpak, yay)
+# 3 favorites (eza, bat)
+# 4 expected on any box (awk, curl, tar)
 # 5 workflow-defining (asdf, direnv)
-_HI_YES=("$BRBLUE" "$BRBLUE" hide "$GREEN" "$BRGREEN" "$BRGREEN")
-_HI_NO=(hide "$BRYELLOW" "$YELLOW" hide hide "$BRRED")
+_HI_YES=("$BLUE" "$BRCYAN" "$GREEN" "$BRGREEN" hide "$BRGREEN")
+_HI_NO=("$BRBLUE" "$BRPURPLE" "$YELLOW" "$BRYELLOW" "$YELLOW" "$BRRED")
 
 # For each "cmd:priority[,...]": the highest-priority installed package (or the
 # first, if none), colored and marked per above. The marks themselves live in

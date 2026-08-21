@@ -673,9 +673,12 @@ function test_stamp_skips_a_missing_man_page() {
     grep -qF '_HI_RELEASE="6.6.6"' "$d/usr/share/say-hi/hi.sh"
 }
 
+# _hi_staged_999 is a --stage-only run and nothing more, so it answers this
+# too - staging one more tree to ask the same question is install_tree, the
+# expensive part of this suite, run for nothing.
 function test_package_sh_stage_only_needs_no_nfpm() {
-  local out="$_HI_WORKDIR/pkgdist"
-  "$_HI_PKG_DIR/mkpkg.sh" --stage-only --outdir "$out" >/dev/null 2>&1 &&
+  local out
+  out="$(_hi_staged_999)" &&
     [ -f "$out/staging/usr/share/say-hi/hi.sh" ]
 }
 

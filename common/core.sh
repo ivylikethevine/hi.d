@@ -226,10 +226,18 @@ function _hi_sanitize_var() {
   printf -v "$1" '%s' "${_hi_s//\\/}"
 }
 
+# tmp -> dest through dest's existing inode: cat, not mv, or mktemp's 0600
+# lands on the destination and severs any hardlink/ACL on it.
+# GLOSSARY: HI.09
+function _hi_write_back() {
+  cat "$1" >"$2"
+  rm -f "$1"
+}
+
 # _hi_rewrite <file> <sed-expr>... - every expression in one pass, in place.
 # A temp file, not `sed -i`: its flag differs BSD/GNU, and -i replaces a
 # *symlinked* rc with a regular file where the append wrote through the link.
-# Written back with cat, not mv, to keep the inode, mode, hardlinks and ACLs.
+# GLOSSARY: HI.08
 function _hi_rewrite() {
   local file="$1" e tmp
   shift
@@ -237,8 +245,7 @@ function _hi_rewrite() {
   for e in "$@"; do exprs+=(-e "$e"); done
   tmp="$(mktemp -t hi.rewrite.XXXXXX)"
   sed "${exprs[@]}" "$file" >"$tmp"
-  cat "$tmp" >"$file"
-  rm -f "$tmp"
+  _hi_write_back "$tmp" "$file"
 }
 
 # The version, raw and unpresented: a packager's stamp (or the client's, which
@@ -336,6 +343,8 @@ function _hi_choose_glyphs() {
     _HI_GLYPH_MASK="*"
     _HI_MARK_OK="ok" _HI_MARK_ALT="~" _HI_MARK_NO="x"
     _HI_MARK_OK_W=2 _HI_MARK_ALT_W=1 _HI_MARK_NO_W=1
+    _HI_BOX_TL="+" _HI_BOX_TR="+" _HI_BOX_BL="+" _HI_BOX_BR="+"
+    _HI_BOX_H="-" _HI_BOX_V="|"
   else
     _HI_GLYPH_AHEAD="↑" _HI_GLYPH_BEHIND="↓" _HI_GLYPH_STAGED="●"
     _HI_GLYPH_DIRTY="✚" _HI_GLYPH_INVALID="✖" _HI_GLYPH_UNTRACKED="…"
@@ -345,6 +354,8 @@ function _hi_choose_glyphs() {
     _HI_MARK_ALT="~" # installed, but via a fallback alternative
     _HI_MARK_NO="✗"  # not installed
     _HI_MARK_OK_W=1 _HI_MARK_ALT_W=1 _HI_MARK_NO_W=1
+    _HI_BOX_TL="┌" _HI_BOX_TR="┐" _HI_BOX_BL="└" _HI_BOX_BR="┘"
+    _HI_BOX_H="─" _HI_BOX_V="│"
   fi
 }
 _hi_choose_glyphs

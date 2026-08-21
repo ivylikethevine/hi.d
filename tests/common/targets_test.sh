@@ -61,6 +61,69 @@ EOF
   _HI_SHIM_PATH="$dir:$PATH"
 }
 
+# The same idea, slowed down and made to keep a diary: each backend records
+# "<name> start", waits, then records "<name> end". Run in turn that log reads
+# start/end/start/end; run together the three starts bunch at the top before
+# any end - which is the whole claim emit_targets's fan-out makes, asserted on
+# the *order* of events rather than on a stopwatch, so a loaded runner and the
+# macOS job read it the same way.
+#
+# nomad answers a header row and no jobs: it belongs to the roster (four
+# backends is what makes emit_targets fan out at all) but has nothing to wait
+# for, and its per-job fan-out is a second mechanism this case is not about.
+_HI_SLOW_PATH=""
+_HI_PROBE_LOG=""
+function _hi_write_slow_shims() {
+  local dir="$_HI_WORKDIR/slowshims" tool
+  mkdir -p "$dir"
+  _HI_PROBE_LOG="$_HI_WORKDIR/probe.log"
+
+  for tool in docker podman; do
+    cat >"$dir/$tool" <<EOF
+#!/bin/sh
+[ "\$1" = ps ] || exit 1
+printf '$tool start\\n' >>"\$_HI_PROBE_LOG"
+sleep 0.3
+printf '$tool end\\n' >>"\$_HI_PROBE_LOG"
+printf 'slow-$tool\\n'
+EOF
+  done
+
+  cat >"$dir/kubectl" <<'EOF'
+#!/bin/sh
+[ "$1" = get ] || exit 1
+printf 'kube start\n' >>"$_HI_PROBE_LOG"
+sleep 0.3
+printf 'kube end\n' >>"$_HI_PROBE_LOG"
+printf 'slow-pod\n'
+EOF
+
+  cat >"$dir/nomad" <<'EOF'
+#!/bin/sh
+[ "$1 $2" = "job status" ] || exit 1
+printf 'ID    Type     Status\n'
+EOF
+
+  for tool in docker podman kubectl nomad; do
+    chmod +x "$dir/$tool"
+  done
+  # Its own toolbox rather than $_HI_TOOLBOX_PATH: `sleep` is one of the
+  # commands these shims run, and the fan-out arm needs the four the in-turn
+  # arm never touches - mkdir and chmod to make the scratch dir, cat and rm to
+  # spend it. A PATH missing those is the *no-scratch* case, which is the other
+  # test here. No real backend is on it either: a real nomad found behind the
+  # fakes would put this machine's daemons back into a fixed case.
+  _HI_SLOW_PATH="$dir:$(_hi_real_path slowtools sh awk sed sleep mkdir chmod cat rm)"
+}
+
+# targets.sh under the slow shims, from an empty diary. $1, if given, is a
+# TMPDIR for the run - the no-scratch case points it somewhere unmakeable.
+function _hi_targets_slow() {
+  : >"$_HI_PROBE_LOG"
+  PATH="$_HI_SLOW_PATH" _HI_SSH_CONFIG="$_HI_NO_CONFIG" _HI_PROBE_LOG="$_HI_PROBE_LOG" \
+    TMPDIR="${1:-${TMPDIR:-/tmp}}" _HI_TARGETS_TTL=0 sh "$_HI_TARGETS"
+}
+
 # A PATH with the commands targets.sh runs and nothing else - no docker,
 # podman, nomad or kubectl to find.
 function _hi_write_toolbox() {
@@ -161,6 +224,33 @@ function test_kube_kind_lists_running_pods() {
   local out
   out="$(_hi_targets "$_HI_CONFIG" kube)"
   _hi_has_row "$out" pod-a kube && _hi_has_row "$out" pod-b kube
+}
+
+# The fan-out itself. Three backends that take 0.3s each: started together the
+# log opens with three starts, started in turn it never gets two in a row.
+function test_backends_are_swept_together() {
+  local out first
+  out="$(_hi_targets_slow)" || return 1
+  _hi_has_row "$out" slow-docker docker || return 1
+  _hi_has_row "$out" slow-podman podman || return 1
+  _hi_has_row "$out" slow-pod kube || return 1
+  first="$(head -n 3 "$_HI_PROBE_LOG" | grep -c ' start$')"
+  [ "$first" = 3 ] && return 0
+  _hi_cecho "   the backends ran in turn - the log opens: $(head -n 3 "$_HI_PROBE_LOG" | tr '\n' '/')" "$RED"
+  return 1
+}
+
+# ...and the documented degradation: no writable scratch dir means no fan-out,
+# which is slow and must still be right. TMPDIR under /dev/null can never be
+# mkdir'd, so scratch_dir fails the way an unwritable host would.
+function test_no_scratch_dir_falls_back_in_turn() {
+  local out
+  out="$(_hi_targets_slow /dev/null/nope)" || return 1
+  _hi_has_row "$out" slow-docker docker || return 1
+  _hi_has_row "$out" slow-podman podman || return 1
+  _hi_has_row "$out" slow-pod kube || return 1
+  # one backend finished before the next started, i.e. really the in-turn arm
+  [ "$(sed -n '2p' "$_HI_PROBE_LOG")" = "docker end" ]
 }
 
 function test_no_argument_lists_every_kind() {
@@ -329,15 +419,6 @@ EOF
   grep -c . "$counter" || true
 }
 
-function test_complete_reuses_the_list_inside_the_ttl() {
-  [ "$(_hi_complete_forks 5)" = 1 ]
-}
-
-# ...and TTL 0 means no cache at all - the same thing it means to targets.sh
-function test_complete_refetches_when_the_ttl_is_zero() {
-  [ "$(_hi_complete_forks 0)" = 2 ]
-}
-
 # the cached path must still produce completions, not just skip the fork
 function test_complete_still_answers_from_the_cache() {
   local out
@@ -416,6 +497,36 @@ function test_flags_drop_local_subcommands_in_a_session() {
   return 1
 }
 
+# The roster's four cases above pin targets.sh; these two pin the half that
+# reaches it. _hi_complete branches on the typed word, and a branch nothing
+# drives is a branch that can be deleted by accident - the completion would
+# still "work" for targets and quietly offer none of hi's own options.
+function test_complete_offers_hi_flags_for_a_dash_word() {
+  local out
+  out="$(_hi_completions_for --)"
+  printf '%s\n' "$out" | grep -qx -- --doctor &&
+    printf '%s\n' "$out" | grep -qx -- --color-preview
+}
+
+# ...and the prefix filter is the completion's own, not targets.sh's: the
+# roster is emitted whole and matched here. The target assertion is the one
+# that matters - $_HI_SHIM_PATH has a docker answering `alpha`, so a dash word
+# that fell through to the target branch would show it.
+function test_complete_flags_filter_by_prefix_and_never_reach_targets() {
+  local out
+  out="$(_hi_completions_for --col)"
+  printf '%s\n' "$out" | grep -qx -- --color-preview || return 1
+  if printf '%s\n' "$out" | grep -qx -- --configure; then
+    _hi_cecho "   --col also offered --configure" "$RED"
+    return 1
+  fi
+  if printf '%s\n' "$out" | grep -qx alpha; then
+    _hi_cecho "   a dash word reached the target list" "$RED"
+    return 1
+  fi
+  return 0
+}
+
 # `hi --<TAB>` must not wait on a docker daemon or an ssh config. Pinned by
 # pointing every backend at a command that would hang if it were ever run.
 function test_flags_do_not_probe() {
@@ -438,6 +549,7 @@ function run_targets_tests() {
 
   _hi_write_configs
   _hi_write_shims
+  _hi_write_slow_shims
   _hi_write_toolbox
 
   _hi_suite_begin
@@ -455,6 +567,8 @@ function run_targets_tests() {
   _hi_check "podman -> running containers" test_podman_kind_lists_running_containers
   _hi_check "nomad -> running allocs, no header row" test_nomad_kind_lists_running_allocs
   _hi_check "kube -> running pods" test_kube_kind_lists_running_pods
+  _hi_check "Backends are swept together, not in turn" test_backends_are_swept_together
+  _hi_check "No scratch dir -> in turn, same rows" test_no_scratch_dir_falls_back_in_turn
 
   _hi_h2 "Testing: argument handling"
   _hi_check "No argument -> every kind" test_no_argument_lists_every_kind
@@ -473,13 +587,16 @@ function run_targets_tests() {
   _hi_check "Filters by the typed prefix" test_complete_filters_by_the_typed_prefix
   _hi_check "Drops the kind column" test_complete_drops_the_kind_column
   _hi_check "Empty for an unmatched prefix" test_complete_is_empty_for_an_unmatched_prefix
-  _hi_check "A repeat TAB inside the TTL forks nothing" test_complete_reuses_the_list_inside_the_ttl
-  _hi_check "TTL 0 refetches every time" test_complete_refetches_when_the_ttl_is_zero
+  _hi_check_eq "A repeat TAB inside the TTL forks nothing" 1 _hi_complete_forks 5
+  # ...and TTL 0 means no cache at all - the same thing it means to targets.sh
+  _hi_check_eq "TTL 0 refetches every time" 2 _hi_complete_forks 0
   _hi_check "The cached answer is still an answer" test_complete_still_answers_from_the_cache
   _hi_check "flags: every one is in hi --help" test_flags_all_appear_in_help
   _hi_check "flags: every --help flag is in the roster" test_help_flags_all_appear_in_roster
   _hi_check "flags: a session is offered only what works there" test_flags_drop_local_subcommands_in_a_session
   _hi_check "flags: answered without probing a backend" test_flags_do_not_probe
+  _hi_check "flags: a dash word completes hi's options" test_complete_offers_hi_flags_for_a_dash_word
+  _hi_check "flags: filtered by prefix, never a target" test_complete_flags_filter_by_prefix_and_never_reach_targets
 
   _hi_suite_end "targets.sh"
 }

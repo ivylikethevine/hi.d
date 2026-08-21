@@ -18,6 +18,9 @@ Output docs/demos/kube.gif
 Set Shell zsh
 Source docs/tapes/common.tape
 
+# zsh's theme - see the table in common.tape
+Set Theme "Dracula"
+
 Require hi
 Require kind
 Require kubectl

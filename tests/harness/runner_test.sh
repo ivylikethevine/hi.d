@@ -36,8 +36,31 @@ function _hi_skipping_fixture() {
   _hi_fixture "$1" 0 "SKIP ${2:-no backend}"
 }
 
+# Nested runs are the expensive part of this suite: each one sources the whole
+# test_runner.sh in a subshell and forks its fixture suites, and 22 of the 51
+# calls ask for a run that has already happened - several cases assert
+# different things about the same output. Those 22 now cost two `cat`s.
+#
+# Memoized to files rather than through _hi_kv_set: that store is
+# newline-separated and $_HI_RUN_OUT is a whole run's transcript. The key is
+# everything that decides what a run produces, keyed by cksum because it
+# contains newlines; a collision would show up as a case failing, not as a
+# quietly wrong pass.
+_HI_RUN_MEMO_DIR=""
+
 function _hi_run_runner() {
-  local table="$1" line
+  local table="$1" line memo key
+  key="$table"$'\x1f'"$*"$'\x1f'"${_HI_RUN_WITH:-}"
+  [ -n "$_HI_RUN_MEMO_DIR" ] || {
+    _HI_RUN_MEMO_DIR="$_HI_WORKDIR/runmemo"
+    mkdir -p "$_HI_RUN_MEMO_DIR"
+  }
+  memo="$_HI_RUN_MEMO_DIR/$(printf '%s' "$key" | cksum | tr -cd '0-9')"
+  if [ -f "$memo.exit" ]; then
+    _HI_RUN_EXIT="$(cat "$memo.exit")"
+    _HI_RUN_OUT="$(cat "$memo.out")"
+    return 0
+  fi
   shift
   local -a entries=()
   # Fixtures are written "<name>:<path>" - the group is what the real table
@@ -68,6 +91,8 @@ function _hi_run_runner() {
     # shellcheck source=../test_runner.sh
     source "$_HI_TEST_RUN" "$@"
   )" || _HI_RUN_EXIT=$?
+  printf '%s' "$_HI_RUN_EXIT" >"$memo.exit"
+  printf '%s' "$_HI_RUN_OUT" >"$memo.out"
 }
 
 function test_runs_every_suite_when_given_no_arguments() {

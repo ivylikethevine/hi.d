@@ -9,9 +9,10 @@ which master it serves.
 
 Every entry carries a stable `HI.NN` code, and a file references it with a short
 `# GLOSSARY: HI.NN` tag instead of re-explaining. Any file in the tree may carry
-a tag, and `tests/` carries plenty; the tag is *mandatory* in `common/`,
-`shells/`, `misc/`, `load.sh` and `hi.sh`, because every byte of those rides
-over the wire on each `hi`. The code is what the tags point at, so an entry can
+a tag, and `tests/` carries plenty; the tag is _mandatory_ in `common/`,
+`shells/`, `misc/`, `load.sh` and `hi.sh` - not for wire bytes any more (HI.35
+strips comments out of the payload), but because those are the files a reader
+meets first and the tag is shorter than the explanation. The code is what the tags point at, so an entry can
 be retitled without touching a single tagged file; codes are never reused once
 retired. A tag is one code, or two joined with ` + `, with optional prose after
 it. `tests/lint/shellcheck_test.sh` fails the build if a tag names a code this
@@ -54,6 +55,8 @@ file doesn't define. This file never ships (the payload is `$_HI_PAYLOAD` in
 - [HI.32 starship deference](#hi32-starship-deference)
 - [HI.33 derived tree location](#hi33-derived-tree-location)
 - [HI.34 test suite preamble](#hi34-test-suite-preamble)
+- [HI.35 payload comment strip](#hi35-payload-comment-strip)
+- [HI.36 overlay toggle source](#hi36-overlay-toggle-source)
 
 ## HI.01 empty-array guard
 
@@ -129,7 +132,8 @@ why the write-back is `cat`, not `mv`.
 
 Writing a tempfile back over an existing file goes through the existing
 inode: `cat "$tmp" > "$target"; rm -f "$tmp"` (`_hi_write_back` in
-`scripts/install.sh`, `rewrite` in `packaging/bump.sh`). `mv` would transplant
+`common/core.sh`, which `_hi_rewrite` ends in and `scripts/install.sh` calls;
+`rewrite` in `packaging/stamp.sh` is the boundary-forced copy). `mv` would transplant
 mktemp's 0600 mode onto the target and sever any hardlink/ACL on it - a
 dotfile manager's hardlinked `~/.bashrc` must see the new content.
 Non-atomicity is acceptable for single-user rc files; `common/targets.sh`'s
@@ -307,12 +311,26 @@ configs are grafted onto every rc file either way; the user's are not.
 
 `targets.sh` runs on every TAB after `hi` and a space - the most latency-sensitive path
 in say-hi and the slowest (four of five backends are a subprocess each). Two
-knobs keep it honest: `_HI_PROBE_TIMEOUT` is the seconds any one backend CLI
-gets (default 2, needs GNU `timeout`; shared with `common/core.sh`'s
-`_hi_probe`) or an unreachable daemon hangs completion unbounded, and
+knobs keep it honest.
+
+`_HI_PROBE_TIMEOUT` is the seconds a backend CLI gets (default 2, needs GNU
+`timeout`; shared with `common/core.sh`'s `_hi_probe`) or an unreachable daemon
+hangs completion unbounded. It bounds the **whole sweep**, not each leg of it:
+the backends are started together and read back in roster order, so four wedged
+daemons cost one ceiling rather than four. Started in turn they cost the sum,
+which is how a cold TAB on a host with docker and kubectl installed used to
+reach two seconds. A host with no writable scratch directory falls back to the
+in-turn sweep, which is slow, not wrong.
+
 `_HI_TARGETS_TTL` is the seconds a result is reused (default 5, 0 disables) -
 a just-started container may not appear until it expires, the trade for not
-paying ~110ms per TAB.
+paying ~110ms per TAB. **Nothing invalidates it**; there is no watch on
+container events, only the clock. Two windows stack, and they are offset: the
+file cache in `targets.sh` stamps when it was written, while the in-shell memo
+in `shells/bash.sh` and `shells/zsh.zsh` stamps when that shell last read the
+file. A memo filled from an already-4-second-old file holds it for its own full
+TTL, so worst-case staleness is close to **twice** the TTL, not once. Only
+`_HI_TARGETS_TTL=0` turns both off.
 
 ## HI.27 tmux server-start rules
 
@@ -494,3 +512,41 @@ and the second run happens after the harness has already moved
 The `# shellcheck source=` line is a directive, not prose - the linter follows
 it to type-check the source - and `# shellcheck disable=SC2329` is HI.30's
 indirect invocation. Both must stay verbatim above their statement.
+
+## HI.35 payload comment strip
+
+Every `*.sh`, `*.zsh` and `*.fish` file is comment-stripped on its way into the
+payload (`_hi_strip_awk` and `_hi_payload_tar` in `hi.sh`). The checkout keeps
+every word; the wire does not, which is about 40% of it - roughly two fifths of
+the shipped shell is comment. The ratio is the durable figure here; the byte
+counts move every release, and `bench_payload_readme_badge` is what keeps the
+one number this project quotes (README's badge) honest.
+
+Two rules keep it safe. **Full-line comments only**: an inline `#` cannot be
+told from `${x#y}`, `$#` or a `#` inside a string without a real parser, and
+none of those are worth the bytes. **Never inside a heredoc**: those bodies are
+data the target reads, and one of them is `hi --help`.
+
+The order of the two tests is the correctness argument, not an implementation
+detail. The comment test runs _before_ the heredoc-open test, because a comment
+mentioning `<<WORD` would otherwise open a heredoc that never closes and
+silently stop stripping the rest of the file - failing quiet, in the direction
+that costs bytes rather than breaks a session, but failing all the same.
+
+`_HI_KEEP_COMMENTS=1` ships the tree verbatim, for reading the real source on a
+target when it behaves differently there. `tests/hi/payload_test.sh` pins the
+rest: no full-line comment survives outside `hi.sh`'s heredocs, every code line
+survives byte for byte, the result still parses, and `hi.sh` keeps its exec
+bit - which is why the write-back is HI.09's `cat` and not `mv`, the target's
+own probe testing `[ -x .../hi.sh ]` before it trusts a tree.
+
+## HI.36 overlay toggle source
+
+`_hi_overlay_toggle` (`hi.sh`) reads `$_HI_CONFIG_DIR/settings.sh` as a _file_
+rather than off the exported environment, and that distinction is the whole
+point: settings.sh rides along and is sourced on the target, so it is the value
+that will apply there. The client's exported copy means something else -
+`_HI_DISABLE_LOCAL=1` is precisely "leave my machine alone but style the hosts I
+visit", and trimming the payload on it would stop shipping files to targets that
+never disabled them. Matches `scripts/install.sh`'s `export NAME='value'`
+contract for `$_HI_SETTINGS`.

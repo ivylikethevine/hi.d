@@ -149,8 +149,9 @@ rather than PASS, so a green run can't overstate what actually ran.
   --verbose        stream every suite's transcript live instead of collapsing
                    the passing ones. _HI_VERBOSE=1 does the same
   --host-report    print what this machine is before running anything: bash,
-                   OS, GNU/BSD/busybox userland, which tree \$_HI_HOME resolves
-                   to, which backends answer, and the lint tools' versions.
+                   OS, CPU and memory, GNU/BSD/busybox userland, which tree
+                   \$_HI_HOME resolves to, which backends answer, and the lint
+                   tools' versions.
                    _HI_HOST_REPORT=1 does the same. CI passes it always
   -h, --help       this text
 

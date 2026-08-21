@@ -11,6 +11,29 @@ set -euo pipefail
 # shellcheck source=../test_lib.sh
 source "${_HI_TEST_LIB:-${BASH_SOURCE[0]%/*}/../test_lib.sh}"
 
+# _hi_settings_fixture <name> <fn...> - run <fn...> with $_HI_ROOT,
+# $_HI_CONFIG_DIR and $_HI_SETTINGS pointed at throwaway paths under
+# $_HI_WORKDIR/<name>. scripts/install.sh's writers (config_shell,
+# ensure_settings_shebang) and its uninstall half (strip_settings) all reach for
+# those three, which in a real run are this very checkout and the developer's
+# own overlay - the same shadowing load_test.sh's _hi_clean_all wrapper does
+# before letting clean_all near $_HI_ROOT.
+#
+# The scratch overlay is deliberately a *different* directory from the scratch
+# tree's misc/, so "writes land outside the tree" is something the tests can see
+# rather than assume.
+function _hi_settings_fixture() {
+  local dir="$_HI_WORKDIR/$1"
+  local _HI_ROOT="$dir" _HI_CONFIG_DIR="$dir/config"
+  local _HI_SETTINGS="$dir/config/settings.sh"
+  mkdir -p "$dir/common" "$dir/misc" "$dir/config"
+  shift
+  "$@" >/dev/null
+}
+
+# where _hi_settings_fixture's run writes, as the assertions see it
+function _hi_fixture_settings() { printf '%s' "$_HI_WORKDIR/$1/config/settings.sh"; }
+
 set -- # install.sh reads "$@" for its own args; make sure it sees none
 # shellcheck source=../../scripts/install.sh
 source "$_HI_INSTALL"
@@ -114,15 +137,11 @@ function test_config_shell_no_backup_for_empty_target() {
 # Comment lines are filtered out first: both files explain themselves in prose
 # that names the very files being looked for, and a comment mentioning paths.sh
 # above the code that sources settings.sh would read as the wrong order.
-function _hi_first_code_line() {
-  grep -n "$2" "$1" | grep -v ':[[:space:]]*#' | head -1 | cut -d: -f1
-}
-
+# _hi_before is the harness's ordering assertion; the only thing this check
+# adds is dropping comment lines first, so a mention in a comment above the
+# real source line cannot answer for it.
 function _hi_sources_settings_before_paths() {
-  local target="$1" settings_line paths_line
-  settings_line="$(_hi_first_code_line "$target" 'settings\.sh')"
-  paths_line="$(_hi_first_code_line "$target" 'paths\.sh')"
-  [ -n "$settings_line" ] && [ -n "$paths_line" ] && [ "$settings_line" -lt "$paths_line" ]
+  _hi_before "$(grep -v '^[[:space:]]*#' "$1")" 'settings\.sh' 'paths\.sh'
 }
 
 function test_core_sources_settings_first() {
@@ -243,6 +262,48 @@ function test_shebang_replaces_a_different_one_and_keeps_content() {
   [ "$(head -n 1 "$f")" = "#!/bin/sh" ] &&
     [ "$(grep -c '^#!' "$f")" -eq 1 ] &&
     grep -qF "export _HI_MAX_WIDTH=120" "$f"
+}
+
+# config_packages_floor: the only prompt that loops, so the parts worth pinning
+# without a pty are the three that do not need one - it keeps an existing floor
+# rather than dropping it, it does not restate the shipped default, and it does
+# not ask about a check that is switched off. The loop itself needs a terminal
+# and is skipped when there is none, which is what makes these callable here.
+# _hi_settings_fixture swallows stdout (its other users assert against the file
+# it wrote), so the collected lines go to a file inside the fixture instead -
+# otherwise "no lines" and "lines nobody saw" look identical and two of these
+# three would pass without asserting anything.
+function _hi_floor_run() {
+  mkdir -p "$_HI_CONFIG_DIR"
+  printf '#!/bin/sh\n%s\n' "$1" >"$_HI_SETTINGS"
+  _HI_SETTING_LINES=()
+  _HI_SETTING_PENDING=()
+  config_packages_floor
+  printf '%s\n' ${_HI_SETTING_LINES[@]+"${_HI_SETTING_LINES[@]}"} >"$_HI_CONFIG_DIR/lines.out"
+}
+
+function _hi_floor_lines() { cat "$_HI_WORKDIR/$1/config/lines.out" 2>/dev/null; }
+
+function test_packages_floor_keeps_a_configured_value() {
+  _hi_settings_fixture floor_keep _hi_floor_run 'export _HI_PACKAGES_MIN_PRIORITY=3'
+  [ "$(_hi_floor_lines floor_keep)" = "export _HI_PACKAGES_MIN_PRIORITY=3" ]
+}
+
+# 0 is header.sh's own default via ${_HI_PACKAGES_MIN_PRIORITY:-0}, so writing
+# it out would be a line that means nothing - the same rule config_max_width
+# has for 80.
+function test_packages_floor_does_not_write_the_default() {
+  _hi_settings_fixture floor_default _hi_floor_run 'export _HI_PACKAGES_MIN_PRIORITY=0'
+  [ -f "$_HI_WORKDIR/floor_default/config/lines.out" ] || return 1
+  [ -z "$(_hi_floor_lines floor_default | tr -d '[:space:]')" ]
+}
+
+function test_packages_floor_is_skipped_when_the_check_is_off() {
+  _hi_settings_fixture floor_off _hi_floor_run 'export _HI_HEADER_CHECK=0'
+  # the file has to exist - a skip that never ran the function at all would
+  # leave no file and pass the emptiness check for the wrong reason
+  [ -f "$_HI_WORKDIR/floor_off/config/lines.out" ] || return 1
+  [ -z "$(_hi_floor_lines floor_off | tr -d '[:space:]')" ]
 }
 
 # same mode-preservation contract as config_shell
@@ -745,6 +806,9 @@ function run_install_tests() {
   _hi_check "Written to a new settings.sh" test_shebang_is_written_to_a_new_settings_file
   _hi_check "Stays first under the settings block" test_shebang_stays_first_under_the_settings_block
   _hi_check "Not duplicated on reruns" test_shebang_is_not_duplicated_on_reruns
+  _hi_check "Packages floor: an existing value survives" test_packages_floor_keeps_a_configured_value
+  _hi_check "Packages floor: the default is not written" test_packages_floor_does_not_write_the_default
+  _hi_check "Packages floor: skipped when the check is off" test_packages_floor_is_skipped_when_the_check_is_off
   _hi_check "Replaces a different shebang" test_shebang_replaces_a_different_one_and_keeps_content
   _hi_check "Preserves settings.sh's mode" test_settings_shebang_preserves_mode
 

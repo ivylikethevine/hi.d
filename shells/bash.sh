@@ -50,10 +50,14 @@ fi
 #
 # targets.sh file-caches for $_HI_TARGETS_TTL seconds, but finding that out is
 # still a fork and an exec. Holding the names in the shell for the same window
-# makes it free and means the same thing: a container started inside the window
-# was already invisible until the file cache turned over. $SECONDS is the stamp
-# because it is a builtin; -1 is "never filled", and a TTL of 0 refreshes every
-# time, as targets.sh reads it. GLOSSARY: HI.26
+# makes it free. Not for the *same* window, though: this one starts when this
+# shell last read the file, and the file's started when it was written, so a
+# memo filled from an already-stale file holds it for a full TTL on top of
+# what it had already spent - worst case is close to twice the TTL, and only
+# _HI_TARGETS_TTL=0 turns both layers off. Nothing invalidates either; a
+# container started inside the window waits for the clock. $SECONDS is the
+# stamp because it is a builtin; -1 is "never filled", and a TTL of 0 refreshes
+# every time, as targets.sh reads it. GLOSSARY: HI.26
 _HI_TARGET_NAMES=""
 _HI_TARGET_NAMES_AT=-1
 

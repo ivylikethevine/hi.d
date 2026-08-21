@@ -19,6 +19,13 @@ set -euo pipefail
 # shellcheck source=../test_lib.sh
 source "${_HI_TEST_LIB:-${BASH_SOURCE[0]%/*}/../test_lib.sh}"
 
+# The hook a case hands _HI_EXTRA_CLEANUP to prove the teardown carries on past
+# a failing one. Its own copy, the way lib_test.sh and lib_report_test.sh each
+# carry theirs: without it the hook is merely *missing*, which the teardown
+# swallows just the same - but as a "command not found" on the suite's stderr,
+# and the case then tests something it does not say it tests.
+function _hi_false() { return 1; }
+
 function test_workdir_creates_a_scratch_dir() {
   local dir
   dir="$(

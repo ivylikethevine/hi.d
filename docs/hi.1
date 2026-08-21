@@ -60,6 +60,23 @@ a running pod in the current
 .BR kubectl (1)
 context and namespace.
 .PP
+The last two can hold more than one thing to land in, and a
+.B /
+suffix says which:
+.I alloc/task
+becomes
+.B nomad alloc exec \-task
+and
+.I pod/container
+becomes
+.BR "kubectl exec \-c" .
+Without it the two differ:
+.BR nomad (1)
+refuses a multi-task exec outright, while
+.BR kubectl (1)
+falls back to the pod's first container and warns. Completion offers the
+pairs for any allocation or pod that has more than one.
+.PP
 A name matching none of these is handed to
 .BR ssh (1)
 anyway, so unlisted hosts still work.
@@ -146,6 +163,28 @@ unchanged \-
 and the rest behave exactly as they do there. Only the first
 non\-option word is taken as the target; everything after it is the
 remote command.
+.SH COMPLETION
+.B hi
+completes in bash, zsh and fish. All three read one list \-
+.B common/targets.sh
+\- so the three can not drift apart, and it is the only one fish can run.
+.TP
+.B hi <TAB>
+every target: the
+.B Host
+entries in
+.B ~/.ssh/config
+plus every running container, allocation and pod, each tagged with the
+backend it came from. The list is reused for
+.B $_HI_TARGETS_TTL
+seconds and each backend gets
+.B $_HI_PROBE_TIMEOUT
+to answer, because this runs on every keypress.
+.TP
+.B hi \-\-<TAB>
+hi's own options, answered without probing any backend at all. Inside a
+session the local sub-commands are left out: they need the full checkout,
+which the payload does not carry.
 .SH CONFIGURATION
 Configuration lives outside the tree, in
 .B ~/.config/say-hi/
@@ -159,7 +198,9 @@ written by
 .B hi \-\-configure
 and carried along to every target. Every feature is an environment
 variable toggle \- header, prompt, git status, aliases, editors \- each on
-by default and documented in the README. The tree itself can be
+by default and tabulated in
+.IR docs/CONFIGURATION.md .
+The tree itself can be
 root\-owned (a package\-manager install): nothing hi does writes into it.
 .SH FILES
 .TP
@@ -216,6 +257,9 @@ session inside a running container or allocation with that ID.
 .BR ssh (1),
 .BR tmux (1)
 .PP
-Full documentation, including every toggle and the testing story, in the
-README:
+Full documentation \- the toggle tables in
+.IR docs/CONFIGURATION.md ,
+the testing story in
+.IR docs/TESTING.md ,
+and the README over both:
 .I https://github.com/ivylikethevine/say-hi

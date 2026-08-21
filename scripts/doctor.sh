@@ -225,6 +225,15 @@ function doctor_target() {
   return 0
 }
 
+# The tool probe both target arms send: one `command -v` sweep, printed as a
+# space-separated list. $_HI_SHELL_LADDER expands here, "$c" is left for the
+# target's shell. One copy, or a tool added to the list reaches only one arm.
+function _hi_doctor_probe_snippet() {
+  # shellcheck disable=SC2016 # "$c" is the target shell's variable, not ours -
+  # expanding it here is exactly what must not happen
+  printf 'for c in base64 bash %s tmux vim git; do command -v "$c" >/dev/null 2>&1 && printf "%%s " "$c"; done' "$_HI_SHELL_LADDER"
+}
+
 # The container half, and deliberately the same shape as doctor_ssh_target: what
 # the target has, whether a session lands in the full tier or the aliases-only
 # one, and what it costs to get there. A docker/podman/nomad/kube target gets
@@ -242,7 +251,7 @@ function doctor_container_target() {
 
   # one exec, not one per tool: a kubectl round trip is ~100ms and this is a
   # report somebody is waiting on
-  tools="$("${probe[@]}" sh -c "for c in base64 bash $_HI_SHELL_LADDER tmux vim git; do command -v \"\$c\" >/dev/null 2>&1 && printf \"%s \" \"\$c\"; done" 2>/dev/null || true)"
+  tools="$("${probe[@]}" sh -c "$(_hi_doctor_probe_snippet)" 2>/dev/null || true)"
   if [ -z "$tools" ]; then
     doctor_row target "no answer - the container is not running, or exec is refused" bad
     return 0
@@ -319,7 +328,7 @@ function doctor_ssh_target() {
   # through _hi_ssh_sh, like every other command hi sends: unwrapped, a fish
   # login shell cannot parse the loop and the report claimed the target had
   # nothing - no base64, no bash, all of it false
-  tools="$(_hi_ssh_sh "for c in base64 bash $_HI_SHELL_LADDER tmux vim git; do command -v \"\$c\" >/dev/null 2>&1 && printf \"%s \" \"\$c\"; done" \
+  tools="$(_hi_ssh_sh "$(_hi_doctor_probe_snippet)" \
     "${ctl_opts[@]}" 2>/dev/null || true)"
   doctor_row remote "has: ${tools:-nothing this probes for}"
   case " $tools" in

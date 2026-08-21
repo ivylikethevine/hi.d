@@ -14,7 +14,7 @@
 
 - Start a session inside a running container, allocation or pod:
 
-`hi {{container_name}}`
+`hi {{name_or_id}}`
 
 - Connect through a jump host (every `ssh` option passes through unchanged):
 
@@ -28,9 +28,9 @@
 
 `hi --version`
 
-- Preview the color every known host and user resolves to:
+- Run the session inside a tmux on the target (needs say-hi installed there), so a drop detaches:
 
-`hi --color-preview`
+`hi --tmux {{host}}`
 
 - Re-run the feature toggle prompts (header, prompt, git status, aliases, ...):
 

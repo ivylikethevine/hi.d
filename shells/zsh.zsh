@@ -56,7 +56,9 @@ else
   compinit -C
 fi
 promptinit
-# The in-shell TTL cache bash.sh's _hi_complete explains, in zsh's dialect.
+# The in-shell TTL cache bash.sh's _hi_complete explains, in zsh's dialect -
+# including the part where this window and the file cache's are offset, so the
+# two stack to nearly twice the TTL.
 # (( )) rather than [ ]: zsh's SECONDS is a float once anything typeset -F's it.
 # GLOSSARY: HI.26
 _HI_TARGET_ROWS=()

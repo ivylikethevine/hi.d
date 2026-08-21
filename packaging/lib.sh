@@ -1,9 +1,9 @@
 #!/bin/bash
 # Shared plumbing for packaging/'s entry points (bump.sh, mkpkg.sh): locate
-# the tree, source core.sh, and hold the primitives they share. scripts/install.sh keeps its own locator and _hi_write_back
-# on purpose - it ships in packages *without* packaging/, so it cannot source
-# this file; that boundary-forced copy is documented there, as is hi.sh's - the
-# third copy, for the same reason.
+# the tree, source core.sh, and hold the primitives they share.
+# scripts/install.sh keeps its own locator on purpose - it ships in packages
+# *without* packaging/, so it cannot source this file; that boundary-forced
+# copy is documented there, as is hi.sh's - the third copy, for the same reason.
 
 # Locate say-hi relative to the script that sourced this file, resolving
 # symlinks - BASH_SOURCE[1] is that script, and packaging/ is one level down

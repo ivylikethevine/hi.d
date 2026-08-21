@@ -14,8 +14,7 @@
 # both PKGBUILDs (the AUR recipe symlinks $srcdir/say-hi in prepare()), but
 # Homebrew unpacks to say-hi-<version>, where sourcing lib.sh would abort before
 # this script ran. The `rewrite` below is core.sh's _hi_rewrite, copied for that
-# reason - the same boundary that makes scripts/install.sh carry its own
-# _hi_write_back.
+# reason - the same boundary that makes this script carry its own locator.
 set -euo pipefail
 
 _HI_USAGE="Usage: stamp.sh --version <v> [--date <YYYY-MM-DD>] [--root <dir>]

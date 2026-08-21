@@ -17,12 +17,19 @@ set -euo pipefail
 # shellcheck source=../test_lib.sh
 source "${_HI_TEST_LIB:-${BASH_SOURCE[0]%/*}/../test_lib.sh}"
 
+# The cap one backend probe gets, in seconds. A variable rather than a literal
+# because bench_targets_cold's ceiling is derived from it: the two numbers are
+# one statement about the same run, and setting them apart is how the ceiling
+# ended up under the benchmark's own floor.
+_HI_BENCH_PROBE=1
+
 # run <cmd...> in the controlled environment rc_test.sh also uses, so local
-# settings and a live backend zoo can't skew a number; probes get 1s
+# settings and a live backend zoo can't skew a number; probes get
+# $_HI_BENCH_PROBE seconds
 function _hi_bench_env() {
   env -i HOME="$_HI_WORKDIR" TERM=xterm-256color PATH="$PATH" \
     _HI_HOME="$_HI_HOME" _HI_CONFIG_DIR="$_HI_WORKDIR/cfg" \
-    _HI_PROBE_TIMEOUT=1 _HI_TARGETS_TTL=5 "$@" </dev/null
+    _HI_PROBE_TIMEOUT="$_HI_BENCH_PROBE" _HI_TARGETS_TTL=5 "$@" </dev/null
 }
 
 # _hi_bench <label> <ceiling-ms> <n> <cmd...> - average of n runs against a
@@ -103,14 +110,23 @@ function bench_git_prompt() {
 
 # what every TAB after `hi ` pays: once cold, then against the warm cache.
 #
-# The ceiling is one probe's, not four. targets.sh sweeps the backends
-# together, so a cold TAB costs the longest of them rather than the sum -
-# $_HI_PROBE_TIMEOUT is 1s in the env above, and the rest is the `sh` fork.
-# Set here rather than generously on purpose: the failure this catches is the
-# sweep going back to running in turn, and four ceilings' worth of slack is
-# exactly what would hide it.
+# The ceiling is arithmetic, not a round number: ONE probe cap plus a fork
+# budget. targets.sh sweeps the backends together, so a cold TAB costs the
+# longest of them rather than the sum - but a daemon that is installed and not
+# answering costs that whole cap, and a hosted runner hands this job two of
+# them (docker and podman both wedged), so $_HI_BENCH_PROBE seconds is the
+# floor this number cannot go under however parallel the sweep is. The +600ms
+# is everything around it: `env -i`, `sh`, the scratch mkdir, and one
+# `timeout`+CLI exec per backend, which are large Go binaries. A contended
+# 4-core hosted runner spends ~285ms there; a developer machine with a docker
+# that answers, ~90ms for the whole run.
+#
+# In turn on that same host would be two caps and change, so this still tells
+# the two apart - but it is a wall clock on somebody else's machine and it is
+# not what guards the fan-out. tests/common/targets_test.sh's "Backends are
+# swept together, not in turn" does that, deterministically, in the fast group.
 function bench_targets_cold() {
-  _hi_bench "targets.sh, cold cache" 1200 3 \
+  _hi_bench "targets.sh, cold cache" $((_HI_BENCH_PROBE * 1000 + 600)) 3 \
     _hi_bench_env env _HI_TARGETS_TTL=0 sh "$_HI_TARGETS"
 }
 
@@ -182,13 +198,34 @@ function bench_payload_readme_badge() {
   fi
 }
 
+# The probes above run with $HOME pointed at the scratch dir, so a rootless
+# podman answering `podman ps` initialises its storage under it - and the
+# overlay dirs it leaves behind belong to a subuid, which the generic
+# `rm -rf "$_HI_WORKDIR"` cannot remove ("Permission denied" on .../work/work,
+# and a directory left in $TMPDIR for good on a self-hosted runner). `podman
+# unshare` re-enters the user namespace they were made in, which is the only
+# way this user can take them back. Runs before the generic teardown, because
+# that is the rm it exists to let succeed.
+function _hi_bench_cleanup() {
+  [ -n "$_HI_WORKDIR" ] && [ -d "$_HI_WORKDIR/.local/share/containers" ] || return 0
+  command -v podman >/dev/null 2>&1 || return 0
+  # a podman that will not unshare must not hang a teardown. Where `timeout` is
+  # absent (stock macOS) this stands down and the generic rm handles it: the
+  # subuid ownership that defeats that rm is the Linux rootless case, and a
+  # macOS podman's files under $HOME belong to the user who ran it.
+  if command -v timeout >/dev/null 2>&1; then
+    timeout 10 podman unshare rm -rf "$_HI_WORKDIR/.local/share/containers" >/dev/null 2>&1 || true
+  fi
+  return 0
+}
+
 function run_bench_tests() {
-  _hi_workdir benchtest
+  _hi_workdir benchtest _hi_bench_cleanup
   mkdir -p "$_HI_WORKDIR/cfg"
   # hyperfine reruns the benched argv in a child bash: hand that child the
-  # env wrapper and the two vars its body expands
+  # env wrapper and the three vars its body expands
   export -f _hi_bench_env
-  export _HI_WORKDIR _HI_HOME
+  export _HI_WORKDIR _HI_HOME _HI_BENCH_PROBE
 
   _hi_suite_begin
 

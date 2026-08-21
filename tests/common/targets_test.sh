@@ -61,6 +61,69 @@ EOF
   _HI_SHIM_PATH="$dir:$PATH"
 }
 
+# The same idea, slowed down and made to keep a diary: each backend records
+# "<name> start", waits, then records "<name> end". Run in turn that log reads
+# start/end/start/end; run together the three starts bunch at the top before
+# any end - which is the whole claim emit_targets's fan-out makes, asserted on
+# the *order* of events rather than on a stopwatch, so a loaded runner and the
+# macOS job read it the same way.
+#
+# nomad answers a header row and no jobs: it belongs to the roster (four
+# backends is what makes emit_targets fan out at all) but has nothing to wait
+# for, and its per-job fan-out is a second mechanism this case is not about.
+_HI_SLOW_PATH=""
+_HI_PROBE_LOG=""
+function _hi_write_slow_shims() {
+  local dir="$_HI_WORKDIR/slowshims" tool
+  mkdir -p "$dir"
+  _HI_PROBE_LOG="$_HI_WORKDIR/probe.log"
+
+  for tool in docker podman; do
+    cat >"$dir/$tool" <<EOF
+#!/bin/sh
+[ "\$1" = ps ] || exit 1
+printf '$tool start\\n' >>"\$_HI_PROBE_LOG"
+sleep 0.3
+printf '$tool end\\n' >>"\$_HI_PROBE_LOG"
+printf 'slow-$tool\\n'
+EOF
+  done
+
+  cat >"$dir/kubectl" <<'EOF'
+#!/bin/sh
+[ "$1" = get ] || exit 1
+printf 'kube start\n' >>"$_HI_PROBE_LOG"
+sleep 0.3
+printf 'kube end\n' >>"$_HI_PROBE_LOG"
+printf 'slow-pod\n'
+EOF
+
+  cat >"$dir/nomad" <<'EOF'
+#!/bin/sh
+[ "$1 $2" = "job status" ] || exit 1
+printf 'ID    Type     Status\n'
+EOF
+
+  for tool in docker podman kubectl nomad; do
+    chmod +x "$dir/$tool"
+  done
+  # Its own toolbox rather than $_HI_TOOLBOX_PATH: `sleep` is one of the
+  # commands these shims run, and the fan-out arm needs the four the in-turn
+  # arm never touches - mkdir and chmod to make the scratch dir, cat and rm to
+  # spend it. A PATH missing those is the *no-scratch* case, which is the other
+  # test here. No real backend is on it either: a real nomad found behind the
+  # fakes would put this machine's daemons back into a fixed case.
+  _HI_SLOW_PATH="$dir:$(_hi_real_path slowtools sh awk sed sleep mkdir chmod cat rm)"
+}
+
+# targets.sh under the slow shims, from an empty diary. $1, if given, is a
+# TMPDIR for the run - the no-scratch case points it somewhere unmakeable.
+function _hi_targets_slow() {
+  : >"$_HI_PROBE_LOG"
+  PATH="$_HI_SLOW_PATH" _HI_SSH_CONFIG="$_HI_NO_CONFIG" _HI_PROBE_LOG="$_HI_PROBE_LOG" \
+    TMPDIR="${1:-${TMPDIR:-/tmp}}" _HI_TARGETS_TTL=0 sh "$_HI_TARGETS"
+}
+
 # A PATH with the commands targets.sh runs and nothing else - no docker,
 # podman, nomad or kubectl to find.
 function _hi_write_toolbox() {
@@ -161,6 +224,33 @@ function test_kube_kind_lists_running_pods() {
   local out
   out="$(_hi_targets "$_HI_CONFIG" kube)"
   _hi_has_row "$out" pod-a kube && _hi_has_row "$out" pod-b kube
+}
+
+# The fan-out itself. Three backends that take 0.3s each: started together the
+# log opens with three starts, started in turn it never gets two in a row.
+function test_backends_are_swept_together() {
+  local out first
+  out="$(_hi_targets_slow)" || return 1
+  _hi_has_row "$out" slow-docker docker || return 1
+  _hi_has_row "$out" slow-podman podman || return 1
+  _hi_has_row "$out" slow-pod kube || return 1
+  first="$(head -n 3 "$_HI_PROBE_LOG" | grep -c ' start$')"
+  [ "$first" = 3 ] && return 0
+  _hi_cecho "   the backends ran in turn - the log opens: $(head -n 3 "$_HI_PROBE_LOG" | tr '\n' '/')" "$RED"
+  return 1
+}
+
+# ...and the documented degradation: no writable scratch dir means no fan-out,
+# which is slow and must still be right. TMPDIR under /dev/null can never be
+# mkdir'd, so scratch_dir fails the way an unwritable host would.
+function test_no_scratch_dir_falls_back_in_turn() {
+  local out
+  out="$(_hi_targets_slow /dev/null/nope)" || return 1
+  _hi_has_row "$out" slow-docker docker || return 1
+  _hi_has_row "$out" slow-podman podman || return 1
+  _hi_has_row "$out" slow-pod kube || return 1
+  # one backend finished before the next started, i.e. really the in-turn arm
+  [ "$(sed -n '2p' "$_HI_PROBE_LOG")" = "docker end" ]
 }
 
 function test_no_argument_lists_every_kind() {
@@ -429,6 +519,7 @@ function run_targets_tests() {
 
   _hi_write_configs
   _hi_write_shims
+  _hi_write_slow_shims
   _hi_write_toolbox
 
   _hi_suite_begin
@@ -446,6 +537,8 @@ function run_targets_tests() {
   _hi_check "podman -> running containers" test_podman_kind_lists_running_containers
   _hi_check "nomad -> running allocs, no header row" test_nomad_kind_lists_running_allocs
   _hi_check "kube -> running pods" test_kube_kind_lists_running_pods
+  _hi_check "Backends are swept together, not in turn" test_backends_are_swept_together
+  _hi_check "No scratch dir -> in turn, same rows" test_no_scratch_dir_falls_back_in_turn
 
   _hi_h2 "Testing: argument handling"
   _hi_check "No argument -> every kind" test_no_argument_lists_every_kind

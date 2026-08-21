@@ -25,10 +25,11 @@ trust boundaries sit, and how to report what slipped through.
   built from that same script. `hi --update` is `git pull` in a checkout
   you can read.
 - **The payload is an allow list.** What goes over the wire is exactly
-  `$_HI_PAYLOAD` at the top of `hi.sh` (`common misc shells load.sh`) -
-  docs, tests, CI and editor config never leave the client. Your overlay
-  (`settings.sh`, `colors`, `packages` from `~/.config/say-hi/`) is a
-  second, smaller allow list.
+  `$_HI_PAYLOAD` at the top of `hi.sh` (`common misc shells load.sh
+  hi.sh`) - docs, tests, CI and editor config never leave the client.
+  `hi.sh` is in that list so a session can say `hi` onward from the
+  target. Your overlay (`settings.sh`, `colors`, `packages` from
+  `~/.config/say-hi/`) is a second, smaller allow list.
 - **base64 is armor, not crypto.** The payload is base64-encoded so it
   survives the target's login shell unmangled; it provides no
   confidentiality or integrity. Both come entirely from the transport

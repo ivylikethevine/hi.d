@@ -64,7 +64,7 @@ terminal.
 | Target OS                           | Linux (glibc + musl), macOS/BSD, Windows via WSL/Git Bash | broad                                                                                           | Linux x86_64                                             | Linux, macOS                    | broad                    |
 | Installs on target                  | nothing                                                   | nothing                                                                                         | a portable shell + plugins under `~/.xxh`                | nothing                         | nothing                  |
 | Cleans up on exit                   | yes, automatically                                        | leaves `/tmp` dir                                                                               | no — delete `~/.xxh` yourself                            | yes, automatically              | leaves files             |
-| Size ceiling                        | ~40KB gzipped, enforced by CI                             | **~64KB and the server may block you**                                                          | large — it uploads whole shells                          | small                           | none (that is its point) |
+| Size ceiling                        | ~32KB gzipped, enforced by CI                             | **~64KB and the server may block you**                                                          | large — it uploads whole shells                          | small                           | none (that is its point) |
 | Non-ssh targets                     | **docker, podman, nomad, k8s**                            | no                                                                                              | no                                                       | no                              | no                       |
 | Can give you a shell the host lacks | no                                                        | no                                                                                              | **yes**                                                  | no                              | no                       |
 | Maturity                            | pre-1.0, not yet published to any channel                 | **original deleted from GitHub**; [cdown's] fork is the maintained line, argv ceiling inherited | mature, active                                           | quiet                           | quiet                    |
@@ -117,8 +117,8 @@ plugin model is also more principled than copying dotfiles blind.
 - **Reach.** xxh targets "Linux on x86_64" — no ARM, no macOS, no BSD. say-hi's
   floor is bash 3.2 (what macOS still ships) and `base64`, and its suite runs
   real Debian, Alpine/musl and bash-3.2 targets every time.
-- **Weight.** xxh uploads shells; say-hi uploads ~40KB and a CI job fails if that
-  number drifts more than a kilobyte from the badge.
+- **Weight.** xxh uploads shells; say-hi sends ~48KB a session and a CI job
+  fails if that drifts more than 5% from the number on the badge.
 - **Footprint.** xxh is hermetic but persistent — `~/.xxh` stays until you
   delete it. say-hi removes itself when the session ends.
 - **Dependencies.** xxh needs Python on the client. say-hi needs a shell you
@@ -220,9 +220,9 @@ server and the containers on it that is the feature, and nothing else in this
 space does it.
 
 **2. It degrades in stated tiers rather than failing or lying.** The
-[compatibility tables](../README.md#compatibility) answer three questions — can hi land a
-session here, what must your _login_ shell survive, what do you end up in — and
-mark every cell proven-by-a-suite, expected, reduced, or unsupported. A target
+[compatibility tables](../README.md#compatibility) answer two questions — can hi
+land a session here at all, and what shell do you end up in — and mark every
+cell proven-by-a-suite, expected, reduced, or unsupported. A target
 with no bash gets aliases, a colored prompt, and a warning saying so; a Windows
 OpenSSH host with no POSIX shell gets a plain PowerShell session rather than an
 error. That stance is why the honest cells (🟡 "nobody has proven it") are in

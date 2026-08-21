@@ -9,7 +9,7 @@ which master it serves.
 
 Every entry carries a stable `HI.NN` code, and a file references it with a short
 `# GLOSSARY: HI.NN` tag instead of re-explaining. Any file in the tree may carry
-a tag, and `tests/` carries plenty; the tag is *mandatory* in `common/`,
+a tag, and `tests/` carries plenty; the tag is _mandatory_ in `common/`,
 `shells/`, `misc/`, `load.sh` and `hi.sh` - not for wire bytes any more (HI.35
 strips comments out of the payload), but because those are the files a reader
 meets first and the tag is shorter than the explanation. The code is what the tags point at, so an entry can
@@ -517,8 +517,10 @@ indirect invocation. Both must stay verbatim above their statement.
 
 Every `*.sh`, `*.zsh` and `*.fish` file is comment-stripped on its way into the
 payload (`_hi_strip_awk` and `_hi_payload_tar` in `hi.sh`). The checkout keeps
-every word; the wire does not, which is about 40% of it - the tree ships ~125KB
-of shell and roughly 50KB of that is comment.
+every word; the wire does not, which is about 40% of it - roughly two fifths of
+the shipped shell is comment. The ratio is the durable figure here; the byte
+counts move every release, and `bench_payload_readme_badge` is what keeps the
+one number this project quotes (README's badge) honest.
 
 Two rules keep it safe. **Full-line comments only**: an inline `#` cannot be
 told from `${x#y}`, `$#` or a `#` inside a string without a real parser, and
@@ -526,7 +528,7 @@ none of those are worth the bytes. **Never inside a heredoc**: those bodies are
 data the target reads, and one of them is `hi --help`.
 
 The order of the two tests is the correctness argument, not an implementation
-detail. The comment test runs *before* the heredoc-open test, because a comment
+detail. The comment test runs _before_ the heredoc-open test, because a comment
 mentioning `<<WORD` would otherwise open a heredoc that never closes and
 silently stop stripping the rest of the file - failing quiet, in the direction
 that costs bytes rather than breaks a session, but failing all the same.
@@ -534,13 +536,13 @@ that costs bytes rather than breaks a session, but failing all the same.
 `_HI_KEEP_COMMENTS=1` ships the tree verbatim, for reading the real source on a
 target when it behaves differently there. `tests/hi/payload_test.sh` pins the
 rest: no full-line comment survives outside `hi.sh`'s heredocs, every code line
-survives byte for byte, the result still parses, and `hi.sh` keeps its exec bit
-- which is why the write-back is HI.09's `cat` and not `mv`, the target's own
-probe testing `[ -x .../hi.sh ]` before it trusts a tree.
+survives byte for byte, the result still parses, and `hi.sh` keeps its exec
+bit - which is why the write-back is HI.09's `cat` and not `mv`, the target's
+own probe testing `[ -x .../hi.sh ]` before it trusts a tree.
 
 ## HI.36 overlay toggle source
 
-`_hi_overlay_toggle` (`hi.sh`) reads `$_HI_CONFIG_DIR/settings.sh` as a *file*
+`_hi_overlay_toggle` (`hi.sh`) reads `$_HI_CONFIG_DIR/settings.sh` as a _file_
 rather than off the exported environment, and that distinction is the whole
 point: settings.sh rides along and is sourced on the target, so it is the value
 that will apply there. The client's exported copy means something else -

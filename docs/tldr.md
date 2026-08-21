@@ -14,7 +14,7 @@
 
 - Start a session inside a running container, allocation or pod:
 
-`hi {{container_name}}`
+`hi {{name_or_id}}`
 
 - Connect through a jump host (every `ssh` option passes through unchanged):
 

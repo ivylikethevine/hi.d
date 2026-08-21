@@ -497,6 +497,36 @@ function test_flags_drop_local_subcommands_in_a_session() {
   return 1
 }
 
+# The roster's four cases above pin targets.sh; these two pin the half that
+# reaches it. _hi_complete branches on the typed word, and a branch nothing
+# drives is a branch that can be deleted by accident - the completion would
+# still "work" for targets and quietly offer none of hi's own options.
+function test_complete_offers_hi_flags_for_a_dash_word() {
+  local out
+  out="$(_hi_completions_for --)"
+  printf '%s\n' "$out" | grep -qx -- --doctor &&
+    printf '%s\n' "$out" | grep -qx -- --color-preview
+}
+
+# ...and the prefix filter is the completion's own, not targets.sh's: the
+# roster is emitted whole and matched here. The target assertion is the one
+# that matters - $_HI_SHIM_PATH has a docker answering `alpha`, so a dash word
+# that fell through to the target branch would show it.
+function test_complete_flags_filter_by_prefix_and_never_reach_targets() {
+  local out
+  out="$(_hi_completions_for --col)"
+  printf '%s\n' "$out" | grep -qx -- --color-preview || return 1
+  if printf '%s\n' "$out" | grep -qx -- --configure; then
+    _hi_cecho "   --col also offered --configure" "$RED"
+    return 1
+  fi
+  if printf '%s\n' "$out" | grep -qx alpha; then
+    _hi_cecho "   a dash word reached the target list" "$RED"
+    return 1
+  fi
+  return 0
+}
+
 # `hi --<TAB>` must not wait on a docker daemon or an ssh config. Pinned by
 # pointing every backend at a command that would hang if it were ever run.
 function test_flags_do_not_probe() {
@@ -565,6 +595,8 @@ function run_targets_tests() {
   _hi_check "flags: every --help flag is in the roster" test_help_flags_all_appear_in_roster
   _hi_check "flags: a session is offered only what works there" test_flags_drop_local_subcommands_in_a_session
   _hi_check "flags: answered without probing a backend" test_flags_do_not_probe
+  _hi_check "flags: a dash word completes hi's options" test_complete_offers_hi_flags_for_a_dash_word
+  _hi_check "flags: filtered by prefix, never a target" test_complete_flags_filter_by_prefix_and_never_reach_targets
 
   _hi_suite_end "targets.sh"
 }

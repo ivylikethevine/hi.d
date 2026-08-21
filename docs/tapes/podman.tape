@@ -17,6 +17,9 @@ Output docs/demos/podman.gif
 Set Shell fish
 Source docs/tapes/common.tape
 
+# fish's theme - see the table in common.tape
+Set Theme "nord"
+
 Require hi
 Require podman
 

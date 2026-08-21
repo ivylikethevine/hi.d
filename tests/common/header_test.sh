@@ -338,16 +338,24 @@ function test_check_line_found_primary_is_visible_checked() {
     _hi_assert_contains "${visible[0]}" "$_HI_MARK_OK"
 }
 
-function test_check_line_found_priority2_is_hidden() {
+# 4 is the one tier hidden when the tool *is* there: it exists to speak up
+# about absence, so a healthy box says nothing.
+function test_check_line_found_priority4_is_hidden() {
   local -a visible=()
-  check_line "$_HI_REAL_CMD:2"
+  check_line "$_HI_REAL_CMD:4"
   [ "${#visible[@]}" -eq 0 ]
 }
 
-function test_check_line_missing_priority0_is_hidden() {
+# Every tier now speaks when the tool is absent - that is the nudge the table
+# exists for, and tier 0, the quietest one there is, is where it is worth
+# pinning: if even trivia reports itself missing, nothing above it can be
+# silently dropped.
+function test_check_line_missing_priority0_is_visible() {
   local -a visible=()
   check_line "$_HI_FAKE_CMD:0"
-  [ "${#visible[@]}" -eq 0 ]
+  [ "${#visible[@]}" -eq 1 ] || return 1
+  _hi_contains "${visible[0]}" "$_HI_FAKE_CMD" &&
+    _hi_assert_contains "${visible[0]}" "$_HI_MARK_NO"
 }
 
 function test_check_line_missing_priority5_is_visible_crossed() {
@@ -383,7 +391,9 @@ function test_full_check_skips_comments_and_blanks() {
 
 function test_full_check_empty_when_everything_hidden() {
   local pkgfile="$_HI_WORKDIR/hidden" out
-  printf '%s:0\n' "$_HI_FAKE_CMD" >"$pkgfile" # missing + priority 0 == hide
+  # installed at tier 4 is the one cell the table still hides - see the note
+  # above _HI_YES. Nothing else renders nothing.
+  printf '%s:4\n' "$_HI_REAL_CMD" >"$pkgfile"
   out="$(
     _HI_PACKAGES="$pkgfile"
     full_check
@@ -398,10 +408,10 @@ function test_full_check_min_priority_boundary() {
   local pkgfile="$_HI_WORKDIR/floor" out
   # both installed, so the only thing separating them is the floor. bash is a
   # second real command (the wrap case above leans on it the same way).
-  printf '%s:4\nbash:3\n' "$_HI_REAL_CMD" >"$pkgfile"
+  printf '%s:3\nbash:2\n' "$_HI_REAL_CMD" >"$pkgfile"
   out="$(
     _HI_PACKAGES="$pkgfile"
-    _HI_PACKAGES_MIN_PRIORITY=4
+    _HI_PACKAGES_MIN_PRIORITY=3
     full_check
   )"
   _hi_contains "$out" "$_HI_REAL_CMD" || return 1
@@ -517,8 +527,8 @@ function run_header_tests() {
 
   _hi_h2 "Testing: check_line"
   _hi_check "Found primary -> visible, checked" test_check_line_found_primary_is_visible_checked
-  _hi_check "Found priority 2 -> hidden" test_check_line_found_priority2_is_hidden
-  _hi_check "Missing priority 0 -> hidden" test_check_line_missing_priority0_is_hidden
+  _hi_check "Found priority 4 -> hidden" test_check_line_found_priority4_is_hidden
+  _hi_check "Missing priority 0 -> visible" test_check_line_missing_priority0_is_visible
   _hi_check "Missing priority 5 -> visible, crossed" test_check_line_missing_priority5_is_visible_crossed
   _hi_check "Fallback alternative used" test_check_line_fallback_uses_second_alternative
   _hi_check_requires bash "Picks the highest-priority installed alternative" test_check_line_picks_highest_priority_installed

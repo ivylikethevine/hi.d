@@ -28,9 +28,9 @@
 
 `hi --version`
 
-- Preview the color every known host and user resolves to:
+- Run the session inside a tmux on the target (needs say-hi installed there), so a drop detaches:
 
-`hi --color-preview`
+`hi --tmux {{host}}`
 
 - Re-run the feature toggle prompts (header, prompt, git status, aliases, ...):
 

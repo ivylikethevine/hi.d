@@ -40,7 +40,7 @@ hiecho:1
 highost1:1
 hifoxtrot:0
 highost0:0
-highostalt:4,hibravo:4
+highostalt:3,hibravo:3
 EOF
   export _HI_PACKAGES="$_HI_WORKDIR/packages"
 }
@@ -123,7 +123,7 @@ function test_collect_counts_every_listed_package() {
 # lines the header prints 9: both of 5 and 1, the installed 4/3/0, the missing
 # 2, and the alternatives line
 function test_collect_counts_only_what_the_header_shows() {
-  [ "$_HI_PKG_SHOWN" -eq 9 ]
+  [ "$_HI_PKG_SHOWN" -eq 12 ]
 }
 
 function test_collect_finds_an_installed_example() {
@@ -137,18 +137,23 @@ function test_collect_finds_a_missing_example() {
 # priority 2 paints installed packages "hide" - there is no example to show,
 # because at that priority an installed package shows nothing
 function test_collect_skips_a_hidden_installed_example() {
-  [ -z "${_HI_EX_OK[2]:-}" ] && [[ "${_HI_EX_NO[2]:-}" == *highost2* ]]
+  [ -z "${_HI_EX_OK[4]:-}" ] && [[ "${_HI_EX_NO[4]:-}" == *highost4* ]]
 }
 
-function test_collect_skips_a_hidden_missing_example() {
-  [ -z "${_HI_EX_NO[4]:-}" ] && [[ "${_HI_EX_OK[4]:-}" == *hibravo* ]]
+# The nudge, which is what the table was rebuilt for: a favorite you have not
+# installed is collected and shown rather than silently dropped.
+function test_collect_keeps_a_missing_example_as_a_nudge() {
+  [[ "${_HI_EX_NO[3]:-}" == *highost3* ]] && [[ "${_HI_EX_OK[3]:-}" == *hicharlie* ]]
 }
 
 # the installed/missing split reads the mark, so it has to survive a package
 # whose *name* contains the ASCII glyph ("x" in highost0) and the alternatives
 # mark, which is neither of the two
+# Both halves of a tier come back, told apart by the mark rather than by the
+# name - tier 0 has one installed package and one absent, and each has to land
+# in its own column.
 function test_collect_reads_the_mark_not_the_name() {
-  [[ "${_HI_EX_OK[0]:-}" == *hifoxtrot* ]] && [ -z "${_HI_EX_NO[0]:-}" ]
+  [[ "${_HI_EX_OK[0]:-}" == *hifoxtrot* ]] && [[ "${_HI_EX_NO[0]:-}" == *highost0* ]]
 }
 
 # The cell is nothing but color escapes and text, so its length is not its
@@ -205,7 +210,7 @@ function test_preview_says_hidden_where_the_header_prints_nothing() {
 }
 
 function test_preview_counts_what_it_read() {
-  printf '%s\n' "$_HI_PREVIEW_OUT" | grep -q '13 listed, 9 shown, 4 hidden'
+  printf '%s\n' "$_HI_PREVIEW_OUT" | grep -q '13 listed, 12 shown, 1 hidden'
 }
 
 # the check itself is the last thing the preview prints, so a package the
@@ -263,7 +268,7 @@ function run_packages_preview_tests() {
   _hi_check "Finds an installed example" test_collect_finds_an_installed_example
   _hi_check "Finds a missing example" test_collect_finds_a_missing_example
   _hi_check "Skips a hidden installed example" test_collect_skips_a_hidden_installed_example
-  _hi_check "Skips a hidden missing example" test_collect_skips_a_hidden_missing_example
+  _hi_check "Keeps a missing example as a nudge" test_collect_keeps_a_missing_example_as_a_nudge
   _hi_check "Reads the mark, not the name" test_collect_reads_the_mark_not_the_name
 
   _hi_h2 "Testing: the example cell"

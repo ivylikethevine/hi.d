@@ -6,14 +6,31 @@
 # Nothing else belongs here - `Output`, `Require` and the Hide/Show script stay
 # per tape.
 #
-# Every demo renders at this one geometry, and no tape overrides it. What varies
-# between the demos is hi's own configuration - the settings.sh each gets from
-# docs/tapes/fixtures.sh - and nothing else, so a reader comparing two GIFs is
-# looking at a config difference rather than a frame difference. The height is
-# the tightest that still fits the tallest thing any demo draws, which is
+# Every demo renders at this one geometry, and no tape overrides it. The height
+# is the tightest that still fits the tallest thing any demo draws, which is
 # color_preview.tape's table - check that one first if you change it.
+#
+# Two things vary between the demos, and both mean something. hi's own
+# configuration - the settings.sh each gets from docs/tapes/fixtures.sh - is
+# the one a reader is meant to compare, so a difference in the frame is never
+# incidental. The theme is the other, and it is not decoration: it tracks the
+# **client shell**, so the set has three looks rather than seven and the look
+# tells you which shell you are watching.
+#
+#   bash (no `Set Shell`, the default here)  Catppuccin Mocha
+#   zsh  (docker.tape, kube.tape)            Dracula
+#   fish (podman.tape)                       nord
+#
+# The bash one lives here because it is the default; the other two override it
+# immediately after their `Source` line. Adding a demo on a fourth shell means
+# a fourth theme - and adding one on an existing shell means reusing its theme,
+# not picking a new one.
 
 Set FontSize 16
 Set Width 1100
 Set Height 620
 Set TypingSpeed 60ms
+
+# The bash default - overridden by the two non-bash tapes. Names come from
+# `vhs themes`; see https://github.com/charmbracelet/vhs/blob/main/THEMES.md
+Set Theme "Catppuccin Mocha"

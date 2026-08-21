@@ -64,8 +64,15 @@ function _hi_kube_preload_images() {
   return 0
 }
 
+# 90s rather than the 30s docker and podman take, and the difference is the
+# transport rather than slack: those two exec locally, while every step here is
+# an API-server round trip. One session is eight of them - the bash probe, the
+# shell ladder, three file streams, the attach and the cleanup - and the three
+# cases run as a batch, so a single-node kind cluster serves all of it at once.
+# On a laptop that is a second; on a shared CI runner 30s was the budget that
+# broke first, and it was measuring the cluster, not hi.
 function _hi_run_case() {
-  local label="$1" image="$2" cmd="$3" timeout_s="${4:-30}"
+  local label="$1" image="$2" cmd="$3" timeout_s="${4:-90}"
   local name ok=0
 
   name="hi-kubetest-$label"
@@ -156,12 +163,42 @@ function run_kube_test() {
   _HI_CLUSTER_UP=1
   _hi_cecho " | Cluster up" "$GREEN"
 
+  # Two gates, not one, and the preload runs across both.
+  #
+  # The default ServiceAccount is what lets a pod be admitted, so it has to
+  # exist before `kubectl run` - but it shows up while the node is still
+  # NotReady, and that is the trap: the cases used to start there, ~10s before
+  # kindnet and CoreDNS had settled, so every `kubectl exec` in them was racing
+  # the cluster's own startup. A session is eight API round trips (probe, shell
+  # ladder, three file streams, the attach, the cleanup), and eight round trips
+  # against a still-booting API server is exactly how a 30s case budget goes on
+  # a runner slower than a laptop. Waiting for Ready costs wall clock the pod
+  # poll was going to spend anyway, and buys a settled cluster to measure on.
+  #
+  # The preload is started first and collected after, because `crictl` talks to
+  # the node's containerd directly - which is up long before the node is Ready -
+  # so the pulls and the wait overlap instead of running in turn.
   if ! _hi_poll_bool 40 0.5 kubectl get serviceaccount default; then
     _hi_stand_down "no default ServiceAccount" \
       "default ServiceAccount never showed up, skipping"
   fi
 
-  _hi_kube_preload_images
+  # buffered, not streamed: a background job writing straight to the terminal
+  # would interleave with the wait below and break the ordered transcript the
+  # rest of the suite keeps.
+  _hi_kube_preload_images >"$_HI_WORKDIR/preload.out" 2>&1 &
+  _HI_PRELOAD_PID=$!
+
+  if ! kubectl wait --for=condition=Ready node --all --timeout=180s \
+    >"$_HI_WORKDIR/ready.log" 2>&1; then
+    _hi_dump_log "Nodes never reported Ready:" "$_HI_WORKDIR/ready.log" "$YELLOW"
+    _hi_cecho " | Carrying on anyway - the pod poll below has its own budget" "$YELLOW"
+  else
+    _hi_cecho " | Node ready" "$GREEN"
+  fi
+
+  wait "$_HI_PRELOAD_PID" 2>/dev/null || true
+  cat "$_HI_WORKDIR/preload.out" 2>/dev/null || true
 
   _HI_TEST_MARKER="HI_KUBE_TEST_OK"
 

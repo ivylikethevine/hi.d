@@ -15,6 +15,7 @@ here: git history is the ledger, and this file is only what is left to do.
 ## Contents
 
 - [In-repo code work](#in-repo-code-work)
+  - [The session itself](#the-session-itself)
   - [Release & packaging](#release--packaging)
   - [Tooling](#tooling)
   - [Testing & CI](#testing--ci)
@@ -25,6 +26,47 @@ here: git history is the ledger, and this file is only what is left to do.
   - [Docs & submissions](#docs--submissions)
 
 ## In-repo code work
+
+### The session itself
+
+- [ ] **Persistent sessions on a disposable target** — `--tmux` already gives
+      you detach-and-reattach, but only where say-hi is permanently installed:
+      on a disposable target `_hi_tmux_wanted` (`load.sh`) refuses outright,
+      because the tree is deleted when the session ends and a detached tmux
+      would outlive it. This entry is that restriction removed — keep the tree
+      across a dropped connection, reconnect into the same session later, and
+      delete only on a definitive exit or after a configurable timeout.
+
+  - **What has to stop happening, carefully.** Cleanup has two independent
+    paths — the bootstrap's `trap 'rm -rf $_HI_CLEANUP' exit` and `load.sh`'s
+    own on-exit hook — and `tests/targets/ssh_disconnect_test.sh` exists
+    specifically to prove they fire on an _abrupt_ disconnect rather than only
+    a clean exit. That is the current contract and it is deliberate, so this
+    makes it conditional rather than weaker: the suite gains a second case
+    (dropped **with** persistence keeps the tree) beside the one it has
+    (dropped **without** still reaps it).
+  - **The tree has to be findable again.** It is
+    `mktemp -d -t $(_hi_whoami).hi.XXXXXX` (`hi.sh`), a fresh random name every
+    session, which is exactly what nothing can reconnect to. A resumable
+    session needs a deterministic path, or a pointer the next `hi` reads on the
+    way in — still per-user and still mode 0700, or SECURITY.md's footprint
+    section stops being true.
+  - **Something has to reap it, and there is no daemon.** Two shapes, and they
+    trade the same way: a watchdog detached at disconnect
+    (`sh -c 'sleep N; rm -rf ...'`) keeps the promise even if you never come
+    back, at the cost of leaving a process on the target; reap-on-next-connect
+    costs nothing and runs nothing, but leaves the tree indefinitely if you
+    don't return. Only the first keeps "a machine you visited looks untouched"
+    literally true. Either way SECURITY.md's _Footprint and cleanup_ section
+    needs rewriting, and the timeout wants a name and a row in
+    [CONFIGURATION.md](CONFIGURATION.md).
+  - **It composes with `--tmux` rather than replacing it.** tmux keeps the
+    _shell_ alive; this keeps the _tree_ alive underneath it. Landing it is
+    also what lets `_hi_tmux_wanted` drop its permanent-install refusal, which
+    is the visible half of the feature.
+  - **Ticks when:** a dropped session on a disposable target can be
+    reconnected to, an explicit exit still cleans up immediately, the timeout
+    is a documented setting, and the disconnect suite covers both halves.
 
 ### Release & packaging
 
@@ -55,8 +97,14 @@ here: git history is the ledger, and this file is only what is left to do.
 
   - `docs/tapes/generate.sh` already refuses to run unless the checkout is named
     `say-hi`, so the guard is in place. It needs docker and a clean tree.
+  - **A second change rides along.** The tapes now set a theme per client shell
+    (`common.tape` has the table: Catppuccin Mocha for bash, Dracula for zsh,
+    nord for fish), which nothing has rendered yet - so the committed GIFs are
+    stale twice over, and one re-render settles both. Look at the colored
+    output with fresh eyes when you do: hi's own palette is drawn over these
+    backgrounds, and the check's tiers now use cyan and magenta as well.
   - Its own commit, since it is seven binary files.
-  - **Ticks when:** the GIFs show the current name.
+  - **Ticks when:** the GIFs show the current name, on the current themes.
 
 - [ ] **Source tarball under the provenance chain** — _Blocked on **Say what
       v1.0.0 means**, above._ Both manifests checksum GitHub's auto-generated
@@ -65,6 +113,45 @@ here: git history is the ledger, and this file is only what is left to do.
       (`git archive` in the rehearsal): attach it as an asset, list it in
       `SHA256SUMS`, point both `url=`s at it. Touches `bump.sh`, both manifests
       and their tests.
+
+- [ ] **Investigate publishing to nix** — the one channel with a real audience
+      this project has not looked at, and the question is which of two routes
+      rather than whether it can be built: the build shape is already solved.
+
+  - **The derivation is the Homebrew formula.** `packaging/homebrew/say-hi.rb`
+    installs the tree into a prefix subdirectory literally named `say-hi`, runs
+    `packaging/stamp.sh` for the version, and writes a `bin/hi` wrapper whose
+    only job is `export _HI_HOME=<prefix>`. A nix derivation is that same
+    shape - `$out/share/say-hi` plus a wrapped `$out/bin/hi` - and for the same
+    reason it cannot call `scripts/install.sh --prefix`: `install_tree`
+    hardcodes `/usr/bin` and `/etc/profile.d`, neither of which exists in a
+    store path.
+  - **Which is the cost to weigh.** That makes nix a _third_ copy of
+    `_HI_PACKAGE_CONTENTS`, where `tests/packaging/packaging_test.sh` currently
+    guards exactly one (the formula). The drift guard has to grow a case before
+    the channel ships, not after.
+  - **Flake or nixpkgs**, and they are not the same commitment. A `flake.nix`
+    in this repo is publishable today with no external review - `nix run
+    github:ivylikethevine/say-hi` works the moment it lands, and a flake on the
+    repo itself needs no source hash, so `bump.sh` learns nothing new. A
+    nixpkgs submission is discoverable from `environment.systemPackages`, which
+    is where nix users actually look, but it is upstream review plus a standing
+    maintainer entry, and `bump.sh` grows a fourth manifest to checksum.
+  - **The `/etc/profile.d` half has no plain-package equivalent.** Packaged
+    installs rely on that snippet so a _new_ process - a login shell, tmux's
+    `update-environment`, another machine's `hi` probing this one - can read
+    `$_HI_HOME` with no tree to derive it from. On NixOS that wants a module
+    (`environment.etc`, or a `programs.say-hi` option); under home-manager the
+    rc line `install.sh` writes already covers it. Decide whether a module
+    ships at all, or whether the answer is "run `install.sh --no-link`", which
+    is what the formula's `caveats` already says.
+  - **Two things come free** and are worth noting in the answer: nix builds are
+    hermetic, so the reproducibility `mkpkg.sh` works for is a property rather
+    than a CI check, and a `checkPhase` running `--group fast` would make the
+    build itself a test.
+  - **Ticks when:** the answer is written down either way. If it is yes, name
+    the route, and `packaging_test.sh` covers the new copy of the contents list
+    before anything is published.
 
 ### Tooling
 

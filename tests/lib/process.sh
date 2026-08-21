@@ -233,8 +233,7 @@ function _hi_session_ready() {
 #   -c <closing>  the line whose appearance means the session is over - the
 #                 feeder holds the pipe open until it lands, and it is
 #                 asserted as a marker. Default: load()'s "hi closing"; a tier
-#                 that never reaches load.sh names its own (the mksh git case
-#                 waits on the echoed marker instead).
+#                 that never reaches load.sh names its own.
 #   -m <marker>   a further must-appear transcript marker (repeatable)
 #   -f <fn>       runs inside the feeder between the marker line and the
 #                 `exit`: its stdout is typed into the live session, and it

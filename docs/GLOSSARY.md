@@ -41,13 +41,12 @@ file doesn't define. This file never ships (the payload is `$_HI_PAYLOAD` in
 - [HI.18 sh -c wrapping](#hi18-sh--c-wrapping)
 - [HI.19 stdin transport](#hi19-stdin-transport)
 - [HI.20 fallback rc](#hi20-fallback-rc)
-- [HI.21 split-quoted prompt segment](#hi21-split-quoted-prompt-segment)
+- [HI.21 baked prompt](#hi21-baked-prompt)
 - [HI.22 TERM fallback probe](#hi22-term-fallback-probe)
 - [HI.23 bash --rcfile -i](#hi23-bash---rcfile--i)
 - [HI.24 graft crash guard](#hi24-graft-crash-guard)
 - [HI.25 session-shell ranking](#hi25-session-shell-ranking)
 - [HI.26 completion probe knobs](#hi26-completion-probe-knobs)
-- [HI.28 ksh git segment](#hi28-ksh-git-segment)
 - [HI.29 apostrophes in substitution comments](#hi29-apostrophes-in-substitution-comments)
 - [HI.30 indirect invocation](#hi30-indirect-invocation)
 - [HI.31 porcelain branch.oid](#hi31-porcelain-branchoid)
@@ -250,18 +249,13 @@ the shipped overlay was unpacked - not a `~/.config/say-hi` belonging to
 whoever we logged in as, and not `misc/`, which holds the _shipped_ copies of
 the same names.
 
-## HI.21 split-quoted prompt segment
+## HI.21 baked prompt
 
 The bash-less tiers' PS1 is baked on the client - colors resolved once, the
 username read once at source time - because busybox ash does not run command
-substitution inside PS1 at all. The ksh/mksh git segment is the exception:
-ksh93 and mksh _do_ expand `$( )` when the prompt is printed, so the call is
-emitted inside a **single-quoted run** of an otherwise double-quoted
-assignment - `"…"'$(_hi_ksh_git)'"…"` is one word to the shell - so the shell
-stores the substitution literally and expands it per prompt. Double-quoted,
-it would be expanded once at rc time and frozen. That split-quoting is the
-whole trick, and why the segment stays an opt-in argument: handed to busybox
-ash, the substitution's _text_ would print instead of running.
+substitution inside PS1 at all. Handed a live `$( )`, it would print the
+substitution's _text_ instead of running it, so there is nothing to defer:
+everything the prompt shows is resolved before the line is ever written.
 
 ## HI.22 TERM fallback probe
 
@@ -301,11 +295,11 @@ stops when there is none, rather than falling back to `$HOME` (HI.33).
 `login` for "whatever the user's login shell is"; the first entry that is
 installed wins, and bash is the floor because `load.sh` only runs where bash
 exists. Its default tail is not a literal: `_hi_session_shell` walks
-`common/core.sh`'s `$_HI_SHELL_TREE` (`fish zsh bash mksh ksh dash ash sh`) and
+`common/core.sh`'s `$_HI_SHELL_TREE` (`fish zsh bash dash ash sh`) and
 its allow-list `case` drops the tiers that need bash to be _missing_ to be
 reachable, leaving `fish > zsh > bash`. `hi.sh`'s `$_HI_SHELL_LADDER` is that
 same tree with bash removed. One list, two consumers - two literals would be
-free to disagree about fish-vs-zsh and ksh-vs-mksh.
+free to disagree about fish-vs-zsh and dash-vs-ash.
 
 The default puts `login` first for a reason found by the framework matrix: a
 ranking that leads with fish hands it to anyone whose box has it, so a user
@@ -337,18 +331,6 @@ file. A memo filled from an already-4-second-old file holds it for its own full
 TTL, so worst-case staleness is close to **twice** the TTL, not once. Only
 `_HI_TARGETS_TTL=0` turns both off.
 
-## HI.28 ksh git segment
-
-Where bash is present, `common/git_prompt.sh` renders the git segment and
-fish reaches it by shelling out to `bash -c`. The ksh/mksh tier is defined by
-bash being _absent_, so `shells/ksh.sh` is the segment written a second time,
-in POSIX shell - or ksh users would keep the static baked prompt and nothing
-else. Only ksh93 and mksh get it because the segment is live (see
-split-quoted prompt segment): they expand `$( )` when the prompt is printed,
-busybox ash does not do substitution in PS1 at all. What it deliberately does
-NOT do is the header - that needs bash, and the README's compatibility table
-says so in the ksh row.
-
 ## HI.29 apostrophes in substitution comments
 
 bash 3.2 scans a `$( ... )` command substitution with a simple quote
@@ -375,8 +357,7 @@ The disable is the fix; this entry is the reason it is there.
 `# branch.oid` line, so the detached-HEAD label reads it out of the stream the
 prompt is already parsing instead of forking `git rev-parse`. The `rev-parse`
 beneath it is a fallback for a porcelain stream too old to carry that header,
-not a third fork in the common path. Implemented twice, in
-`common/git_prompt.sh` and `shells/ksh.sh` - see HI.28.
+not a third fork in the common path.
 
 ## HI.32 starship deference
 

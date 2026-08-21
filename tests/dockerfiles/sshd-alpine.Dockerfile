@@ -3,8 +3,7 @@
 # hi's ssh fallback ladder against a machine with no bash.
 #
 # $PKGS is the extra packages for the variant - empty for plain ash, or a shell
-# ("zsh", "fish") and anything it needs ("mksh git", since ksh is the only one
-# of these whose prompt renders a live git segment).
+# ("zsh", "fish") and anything it needs.
 #
 # ARG *after* FROM: see alpine-shell.Dockerfile for why that placement matters.
 FROM alpine:3.24@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b

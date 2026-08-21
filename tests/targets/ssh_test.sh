@@ -7,7 +7,7 @@
 # loads it in place rather than shipping a tree, and the same install at a
 # non-default path, which only _hi_remote_root's rc-reading probe can find;
 # bash-less alpine with only zsh
-# with only fish, and with only mksh, for the fallback tiers the plain alpine
+# and with only fish, for the fallback tiers the plain alpine
 # image never reaches. The debian base comes
 # from test_lib.sh's _hi_sshd_image, shared with ssh_disconnect_test.sh.
 #
@@ -36,52 +36,6 @@ function _hi_run_interactive_case() {
     ok=1
     _hi_post_check "$label" "$name" "$post" || ok=0
   fi
-
-  _hi_rm_container "$name"
-  [ "$ok" -eq 1 ]
-}
-
-# The bash-less ksh/mksh tier's git segment (shells/ksh.sh), which is the one
-# thing in hi's prompt that has to be recomputed per line without bash around.
-# It has to be an *interactive* case: the command-shaped nobash-ksh case above
-# goes through $CMDARG and never draws a prompt at all.
-#
-# The login directory is made the repo rather than cd-ing into one, so the very
-# first prompt already carries the segment and the driver stays the shared one.
-# The branch name is the assertion: a pty echoes back everything typed, and
-# nothing types this, so finding it in the transcript means mksh expanded
-# $(_hi_ksh_git) while drawing the prompt.
-function _hi_run_ksh_git_case() {
-  local image="$1" name="hi-sshtest-kshgit-$$" branch="hi-ksh-probe" ok=0
-  local _HI_SSH_PORT=""
-
-  _hi_h3 "Testing the mksh tier's git segment"
-  _hi_sshd_container "$name" "$image" -e "LOGIN_SHELL=/bin/ash" || return 1
-
-  # identity and safe.directory passed with -c rather than written by
-  # `git config`: the exec runs as root inside a directory owned by hitest,
-  # which is exactly the dubious-ownership case git refuses to write config in
-  if ! docker exec "$name" sh -c "
-    G=\"git -c safe.directory=/home/hitest -c user.email=test@example.com -c user.name=Test -C /home/hitest\"
-    \$G init -q -b $branch . &&
-    echo tracked > /home/hitest/tracked.txt &&
-    \$G add tracked.txt &&
-    \$G commit -qm initial &&
-    chown -R hitest:hitest /home/hitest" >/dev/null 2>&1; then
-    _hi_h3 " | [kshgit] -- could not build the probe repo" "$RED"
-    _hi_rm_container "$name"
-    return 1
-  fi
-
-  _hi_ssh_launch "$_HI_SSH_PORT"
-
-  # The shared driver, with its knobs turned for this tier: no bash means the
-  # session never reaches load.sh, so there is no "hi closing" to wait for -
-  # the echoed marker is the closing line instead - and the branch name is the
-  # extra assertion: nothing types it, so it is in the transcript only because
-  # mksh expanded $(_hi_ksh_git) to draw the prompt.
-  _hi_interactive_case -c "$_HI_TEST_MARKER-INTERACTIVE" -m "$branch" \
-    kshgit "mksh git segment" "$_HI_TEST_MARKER" 90 "${_HI_SSH_LAUNCH_BARE[@]}" && ok=1
 
   _hi_rm_container "$name"
   [ "$ok" -eq 1 ]
@@ -159,10 +113,9 @@ function run_ssh_tests() {
   _hi_sshd_image "its shells" || _HI_DEBIAN_OK=0
 
   # "+" separates extra packages, not a space: the specs are split on
-  # whitespace by the loop itself. The mksh image carries git because it is the
-  # only one whose prompt has a live git segment to render (shells/ksh.sh).
+  # whitespace by the loop itself.
   _HI_SSH_IMAGES=()
-  for _hi_img in alpine: alpine-zsh:zsh alpine-fish:fish alpine-ksh:mksh+git; do
+  for _hi_img in alpine: alpine-zsh:zsh alpine-fish:fish; do
     _hi_label="${_hi_img%%:*}"
     _hi_ctx="$_HI_WORKDIR/$_hi_label"
     mkdir -p "$_hi_ctx"
@@ -256,15 +209,12 @@ function run_ssh_tests() {
   fi
 
   for _hi_case_spec in nobash:alpine:ssh_fallback nobash-zsh:alpine-zsh:ssh_fallback \
-    nobash-fish:alpine-fish:ssh_fallback_fish nobash-ksh:alpine-ksh:ssh_fallback; do
+    nobash-fish:alpine-fish:ssh_fallback_fish; do
     IFS=: read -r _hi_label _hi_image _hi_shape <<<"$_hi_case_spec"
     if [ "$(_hi_kv_get _HI_ALPINE_OK "$_hi_image")" = 1 ]; then
       _hi_par_case "$_hi_label" _hi_run_case "$_hi_label" "hi-sshtest-$_hi_image-$$" /bin/ash "$(_hi_probe_cmd "$_HI_TEST_MARKER" "$_hi_shape")"
     fi
   done
-
-  [ "$(_hi_kv_get _HI_ALPINE_OK alpine-ksh)" = 1 ] &&
-    _hi_par_case kshgit _hi_run_ksh_git_case "hi-sshtest-alpine-ksh-$$"
 
   if [ "$_HI_BASH32_OK" -eq 1 ]; then
     _hi_par_case bash32 _hi_run_case bash32 "hi-sshtest-bash32-$$" /usr/local/bin/bash "$(_hi_probe_cmd "$_HI_TEST_MARKER" bash)"

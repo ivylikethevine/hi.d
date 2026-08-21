@@ -166,11 +166,6 @@ function test_overlay_tar_carries_aliases() {
   [ "$(_HI_CONFIG_DIR="$dir" _hi_overlay_tar | tar tzf -)" = "aliases.sh" ]
 }
 
-# ksh.sh has to ride the payload, or the rc sources a file that isn't there
-function test_payload_carries_ksh_sh() {
-  [ -f "$_HI_ROOT/shells/ksh.sh" ] && [[ " ${_HI_PAYLOAD[*]} " == *" shells "* ]]
-}
-
 # This block exists because both halves were wrong at once: the connect line
 # reported `du` over the payload directories (the uncompressed tree, roughly
 # double the truth), and the armored script had grown to within a few kilobytes
@@ -300,7 +295,6 @@ function run_hi_payload_tests() {
   _hi_check "Overlay trims what it disabled" test_payload_trims_what_the_overlay_disabled
   _hi_check "A default client ships everything" test_payload_ships_everything_by_default
   _hi_check "The toggle trims personal.sh and keeps aliases.sh" test_payload_trims_personal_but_keeps_aliases
-  _hi_check "ksh.sh rides the payload" test_payload_carries_ksh_sh
 
   _hi_h2 "Testing: the in-transit comment strip"
   _hi_check "No full-line comments survive" test_strip_leaves_no_full_line_comments

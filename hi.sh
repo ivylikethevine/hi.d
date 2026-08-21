@@ -401,22 +401,18 @@ function _hi_ladder_probe() {
     "$_HI_SHELL_LADDER" "$1"
 }
 
-# A prompt for the bash-less tiers (sh, ash, dash, ksh, mksh - fish and zsh get
-# their own rc), baked on the client; $1 = "git" adds the live segment only
-# _hi_remote_suffix's ksh/mksh arm asks for.
-# GLOSSARY: HI.21 - why baked, and the quoting trick
+# A prompt for the bash-less tiers (sh, ash, dash - fish and zsh get their own
+# rc), baked on the client.
+# GLOSSARY: HI.21 - why baked
 function _hi_fallback_prompt() {
-  local host="${DOMAIN##*@}" nc git=""
+  local host="${DOMAIN##*@}" nc
   [ "${_HI_DISABLE_PROMPT:-0}" = 1 ] && return 0
-  # the fragment closes the double-quoted run, adds a single-quoted one, and
-  # reopens it - "…"'$(_hi_ksh_git)'" …" is one word to the shell
-  [ "${1:-}" = git ] && git="\"'\$(_hi_ksh_git)'\""
   # _hi_color_escape already emits real escapes; only $NC is a literal to expand
   printf -v nc '%b' "$NC"
   printf '_hi_u=$(id -un 2>/dev/null || echo "${USER:-?}")\n'
-  printf 'PS1=" %s${_hi_u}%s@%s%s%s%s %s "\n' \
+  printf 'PS1=" %s${_hi_u}%s@%s%s%s %s "\n' \
     "$(_hi_user_escape)" "$nc" "$(_hi_color_escape "$(_hi_target_color)")" \
-    "$host" "$nc" "$git" "$(_hi_prompt_end SH)"
+    "$host" "$nc" "$(_hi_prompt_end SH)"
 }
 
 function _hi_size() {
@@ -539,14 +535,6 @@ function _hi_remote_suffix() {
           ZDOTDIR="\$_hi_rc_dir" zsh -i
           ;;
         fish) fish -C "\$(cat "\$_hi_rc_dir/.hi_fallback_rc")" ;;
-        # ksh/mksh read \$ENV as sh does, sharing the rc; on top they get
-        # shells/ksh.sh and the live git segment (both expand \$( ) at prompt
-        # time, which busybox ash cannot). Header stays bash-only.
-        ksh | mksh)
-          printf '%s\n' '. \$_HI_ROOT/shells/ksh.sh' >> "\$_hi_rc_dir/.hi_fallback_rc"
-          $(_hi_fallback_prompt git | _hi_armored_line '>>' '"$_hi_rc_dir/.hi_fallback_rc"')
-          ENV="\$_hi_rc_dir/.hi_fallback_rc" "\$_hi_fallback" -i
-          ;;
         # sh/dash/ash; the prompt is appended here, not in the shared rc,
         # which also feeds fish (no PS1) and zsh (different \$ escape)
         *)
@@ -710,7 +698,6 @@ function _hi_container_cmds() {
 function _say_hi_container() {
   local label="$1" tmp="$2" copy_start="$3"
   local shell_end root fallback exit_code size prefix tarball env_kv
-  local ksh_git=""
   local -a probe cp attach
   _hi_container_cmds "$label"
 
@@ -729,41 +716,24 @@ function _say_hi_container() {
       return $?
     fi
 
-    # personal.sh rides along, for the same reason ksh.sh does below: this path
-    # ships files rather than the tree, and aliases.sh's `. $_HI_ROOT/misc/
-    # personal.sh` has nothing to resolve against here. Sourced by absolute
-    # path out of the fallback rc instead. Skipped when the overlay turned the
-    # personal aliases off, so this arm trims exactly what _hi_payload_tar does.
+    # personal.sh rides along because this path ships files rather than the
+    # tree, and aliases.sh's `. $_HI_ROOT/misc/personal.sh` has nothing to
+    # resolve against here. Sourced by absolute path out of the fallback rc
+    # instead. Skipped when the overlay turned the personal aliases off, so
+    # this arm trims exactly what _hi_payload_tar does.
     if [ "$(_hi_overlay_toggle _HI_DISABLE_ALIASES)" != 1 ] && [ -f "$_HI_ROOT/misc/personal.sh" ]; then
       "${cp[@]}" sh -c "cat > '$root/personal.sh'" <"$_HI_ROOT/misc/personal.sh" 2>"$tmp" || true
     fi
-
-    # ksh/mksh get the live git segment as on the ssh path - but that path has
-    # the whole tree there, and this one ships aliases.sh alone, so the segment
-    # has to be copied too
-    case "$fallback" in
-    ksh | mksh)
-      "${cp[@]}" sh -c "cat > '$root/ksh.sh'" <"$_HI_ROOT/shells/ksh.sh" 2>"$tmp" &&
-        ksh_git=1
-      ;;
-    esac
 
     # the shared fallback rc in its aliases-only shape, plus the POSIX prompt
     # for the shells that can parse it - the ssh path's `*)` rule, applied
     # while the file is written rather than in a second `exec` round trip
     {
       _hi_fallback_rc --aliases-only "$root"
-      if [ -n "$ksh_git" ]; then
-        # after the rc's verdict exports, which shells/ksh.sh reads for its
-        # glyphs and colors
-        printf '. %s/ksh.sh\n' "$root"
-        _hi_fallback_prompt git
-      else
-        case "$fallback" in
-        zsh | fish) ;;
-        *) _hi_fallback_prompt ;;
-        esac
-      fi
+      case "$fallback" in
+      zsh | fish) ;;
+      *) _hi_fallback_prompt ;;
+      esac
     } |
       "${cp[@]}" sh -c "cat > '$root/.hi_fallback_rc'" 2>"$tmp"
 
@@ -925,13 +895,49 @@ function _hi_run_script() {
   exit 1
 }
 
+# The sub-commands that only hand off to one of those scripts, as
+# <flag>|<the path variable>|<argument the script needs first>. A table rather
+# than eight `case` arms differing in nothing but those three fields, where one
+# naming the wrong script read exactly like the seven correct ones. Anything
+# needing logic of its own stays a case arm below.
+_HI_SUBCOMMANDS=(
+  "--install|_HI_INSTALL|"
+  "--uninstall|_HI_UNINSTALL|"
+  "--configure|_HI_INSTALL|--features-only"
+  "--check-configs|_HI_INSTALL|--check-configs"
+  "--overlay-init|_HI_INSTALL|--overlay-init"
+  "--color-preview|_HI_COLOR_PREVIEW|"
+  "--doctor|_HI_DOCTOR|"
+  "--test|_HI_TEST_RUN|"
+)
+
+# _hi_dispatch_subcommand "$@" - hands $1 to its script and never returns when
+# the table names it; returns 1 otherwise, leaving the case below to answer.
+# ${!var} is bash 2 indirect expansion, not a bash-4 form the lint suite greps.
+function _hi_dispatch_subcommand() {
+  local row flag rest var arg
+  for row in "${_HI_SUBCOMMANDS[@]}"; do
+    flag="${row%%|*}"
+    [ "$flag" = "${1:-}" ] || continue
+    rest="${row#*|}"
+    var="${rest%%|*}"
+    arg="${rest#*|}"
+    shift
+    _hi_run_script "$flag" "${!var}" ${arg:+"$arg"} "$@"
+  done
+  return 1
+}
+
 set +euo pipefail # the connection paths below run against unknown hosts, where a probe that fails is normal, not fatal
 
 # sourcing this file defines its functions without connecting, for testing
 [[ "${BASH_SOURCE[0]}" == "$0" ]] || return 0
 
 # hi's own flags, dispatched on $1 alone: _hi_parse hands every other -flag to
-# ssh, so anything hi answers itself has to be caught first.
+# ssh, so anything hi answers itself has to be caught first; the plain
+# hand-off-to-a-script flags come off $_HI_SUBCOMMANDS instead.
+_hi_dispatch_subcommand "$@"
+
 case "${1:-}" in
 # caught before the ssh pass-through, so this answers for hi rather than
 # handing back ssh's usage block. A bare `hi` still execs ssh, so `hi -V` and
@@ -980,38 +986,6 @@ Configuration lives outside this tree, in \${XDG_CONFIG_HOME:-\$HOME/.config}/sa
 so it survives an upgrade. See \`man hi\` and the README for all of it.
 EOF
   exit 0
-  ;;
---install)
-  shift
-  _hi_run_script --install "$_HI_INSTALL" "$@"
-  ;;
---uninstall)
-  shift
-  _hi_run_script --uninstall "$_HI_UNINSTALL" "$@"
-  ;;
---configure)
-  shift
-  _hi_run_script --configure "$_HI_INSTALL" --features-only "$@"
-  ;;
---check-configs)
-  shift
-  _hi_run_script --check-configs "$_HI_INSTALL" --check-configs "$@"
-  ;;
---overlay-init)
-  shift
-  _hi_run_script --overlay-init "$_HI_INSTALL" --overlay-init "$@"
-  ;;
---color-preview)
-  shift
-  _hi_run_script --color-preview "$_HI_COLOR_PREVIEW" "$@"
-  ;;
---doctor)
-  shift
-  _hi_run_script --doctor "$_HI_DOCTOR" "$@"
-  ;;
---test)
-  shift
-  _hi_run_script --test "$_HI_TEST_RUN" "$@"
   ;;
 # .git as the test: absent from payloads and packaged installs alike, so this
 # is the one local command that cannot borrow $_HI_NO_CHECKOUT's wording

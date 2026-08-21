@@ -283,8 +283,8 @@ function test_help_flags_are_all_in_the_man_page() {
 }
 
 # The ladders drift the same way the flags do - doctor.sh once still promised
-# "zsh/fish/sh" after ksh joined (the comment above $_HI_SHELL_LADDER tells
-# it), and the man page repeated the trick with the session shells. Every
+# a stale list after the tree changed (the comment above $_HI_SHELL_LADDER
+# tells it), and the man page repeated the trick with the session shells. Every
 # shell either ladder can land you in has to be named in the page. The
 # no-bash half reads the live variable; the session half is spelled out here
 # because load.sh's default ranking is a literal inside _hi_session_shell -
@@ -304,8 +304,8 @@ function test_shell_ladders_are_in_the_man_page() {
 # tree and the cut have to match it. The ladder is the tree minus bash because
 # a missing bash is the only thing that makes the ladder reachable at all.
 function test_the_shell_tree_is_the_documented_order() {
-  [ "$_HI_SHELL_TREE" = "fish zsh bash mksh ksh dash ash sh" ] || return 1
-  [ "$_HI_SHELL_LADDER" = "fish zsh mksh ksh dash ash sh" ]
+  [ "$_HI_SHELL_TREE" = "fish zsh bash dash ash sh" ] || return 1
+  [ "$_HI_SHELL_LADDER" = "fish zsh dash ash sh" ]
 }
 
 # hi's local sub-commands - `hi --install` and friends - are the case block at

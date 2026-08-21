@@ -68,7 +68,7 @@ something people actually sit in, not by being reachable.**
 | target | what a name resolves as | proven by |
 | ------ | ----------------------- | --------- |
 | ssh host ✅ | a `Host` entry in `~/.ssh/config`, or any name ssh will take | `tests/targets/ssh_test.sh`, plus `ssh_disconnect_test.sh` (cleanup on an abrupt drop) and `ssh_relay_test.sh` |
-| docker ✅ | a running container | `tests/targets/docker_test.sh` - six cases across bash, zsh, fish, mksh and busybox `sh` |
+| docker ✅ | a running container | `tests/targets/docker_test.sh` - six cases across bash, zsh, fish, dash and busybox `sh` |
 | podman ✅ | a running container | `tests/targets/podman_test.sh`, the same six against podman's own image store |
 | nomad ✅ | a running allocation, or `alloc/task` | `tests/targets/nomad_test.sh`, against a real `nomad agent -dev` |
 | kubernetes ✅ | a running pod, or `pod/container` | `tests/targets/kube_test.sh`, against a real kind cluster |

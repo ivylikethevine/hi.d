@@ -334,10 +334,9 @@ _HI_SHELL_PREFERENCE decides (full list)|bash zsh fish|SHELL=/bin/bash _HI_SHELL
 # load.sh only runs where bash exists, so bash is the floor no matter what
 Floors at bash|bash|SHELL=/usr/bin/fish _HI_SHELL_PREFERENCE="fish zsh"|bash
 # The default tail is $_HI_SHELL_TREE, which carries the bash-less tiers
-# (mksh, ksh, dash, ash, sh) after bash - they are hi.sh's ladder's business,
-# not this file's, and _hi_session_shell's allow-list `case` is what keeps them
-# out. A tree walked without that filter would answer "mksh" here.
-A bash-less tier is never the session shell (mksh)|bash mksh|SHELL=/bin/mksh|bash
+# (dash, ash, sh) after bash - they are hi.sh's ladder's business, not this
+# file's, and _hi_session_shell's allow-list `case` is what keeps them out. A
+# tree walked without that filter would answer "dash" here.
 A bash-less tier is never the session shell (dash)|bash dash zsh|SHELL=/bin/dash|zsh
 EOF
 

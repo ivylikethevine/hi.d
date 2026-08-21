@@ -410,7 +410,7 @@ function _hi_host_report() {
 
   _hi_host_row backends "$(_hi_host_backend_state)"
   _hi_host_row harness "$(_hi_host_versions python3 pgrep git tar)"
-  _hi_host_row shells "$(_hi_host_versions bash zsh fish ksh mksh dash)"
+  _hi_host_row shells "$(_hi_host_versions bash zsh fish dash)"
   _hi_host_row lint "$(_hi_host_versions shellcheck shfmt checkbashisms)"
   return 0
 }

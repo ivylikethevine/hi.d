@@ -134,7 +134,9 @@ The other three need nothing beyond docker.
 
 ### Coverage and profiling
 
-Two hand-run tools sit beside the suites, both deliberately out of CI.
+Three hand-run tools sit beside the suites, all deliberately out of CI. Two of
+them measure coverage, they disagree, and neither is right — read both or
+neither.
 
 `tests/coverage.sh` runs the fast suites under kcov when you want to know which
 arms of `install.sh`/`bump.sh` the cases never touch. Its numbers are currently
@@ -143,10 +145,28 @@ figure describes what ran while things were _loading_ rather than what the
 suites cover — `common/git_prompt.sh` reads 2.56% with seventeen cases passing
 against it. Don't write tests to move those figures.
 
-README's **kcov badge** is that aggregate, published by the dispatch-only
-`coverage.yml` and picked up by `pages.yml` from the last successful run. It is
-grey and says `load-time` rather than green and `coverage` for exactly the
-reason above; until someone dispatches the workflow it reads `not measured`.
+`tests/coverage_v2.sh` is the same sweep under
+[bashcov](https://github.com/infertux/bashcov), which reads bash's own `xtrace`
+instead of driving a DEBUG trap and so cannot fail that way — it puts
+`common/git_prompt.sh` at 92.68%, and an uncalled function correctly reads 0.
+It fails the other way instead: every line of a **heredoc body** counts as
+covered, including lines that are pure text, so anything that generates scripts
+reads high. `hi.sh` is the worst case at 97.38%, where `_say_hi` and
+`_say_hi_container` both report 100% — 182 lines nothing in `--group fast`
+calls. Files with no heredocs (all of `common/`, `shells/`, `misc/`) are the
+ones to believe.
+
+It needs a gem rather than a source build: `gem install --user-install bashcov`,
+which needs ruby. The script finds a `--user-install` binary off `$PATH` by
+itself. It writes a `.simplecov` into the checkout for the length of the run and
+removes it afterwards, and refuses to start rather than overwrite one you have.
+
+README's **kcov** and **bashcov** badges are those two aggregates, published by
+the dispatch-only `coverage.yml` and `coverage-v2.yml` and picked up by
+`pages.yml` from the last successful run of each. Both are grey, and say
+`load-time` and `heredoc-inflated` rather than green and `coverage`, for exactly
+the reasons above; until someone dispatches the workflow each reads
+`not measured`. Neither gates anything.
 
 `tests/profile.sh` is what to run when a `--group bench` ceiling trips:
 `_hi_bench` says _whether_ a path got slower, and this says _which command in

@@ -17,9 +17,20 @@ This is a hobby project.
 ![ssh payload](https://img.shields.io/badge/ssh_payload-48KB_per_session-4c1)
 [![package](https://img.shields.io/endpoint?url=https%3A%2F%2Fivylikethevine.github.io%2Fsay-hi%2Fbadges%2Fpackage.json)](https://github.com/ivylikethevine/say-hi/releases)
 [![kcov](https://img.shields.io/endpoint?url=https%3A%2F%2Fivylikethevine.github.io%2Fsay-hi%2Fbadges%2Fcoverage.json)](docs/TESTING.md#coverage-and-profiling)
+[![bashcov](https://img.shields.io/endpoint?url=https%3A%2F%2Fivylikethevine.github.io%2Fsay-hi%2Fbadges%2Fcoverage-v2.json)](docs/TESTING.md#coverage-and-profiling)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/ivylikethevine/say-hi/badge)](https://scorecard.dev/viewer/?uri=github.com/ivylikethevine/say-hi)
 ![bash](https://img.shields.io/badge/bash-3.2%2B-4EAA25?logo=gnubash&logoColor=white)
 ![license](https://img.shields.io/badge/license-MIT-blue)
+
+Both coverage badges are grey because neither number can be taken at face value,
+and neither gates anything: **kcov** loses its `DEBUG` trap the moment the test
+harness is sourced, so it counts only what ran while things were loading and
+reads far too low — `common/git_prompt.sh` shows 2.56% with seventeen cases
+passing against it. **bashcov** reads bash's own `xtrace` instead and gets that
+same file right at 92.68%, but it counts every line of a *heredoc body* as
+covered, so `hi.sh` — which builds the entire remote script out of heredocs —
+reads far too high, reporting 100% for two connect functions the fast suites
+never call.
 
 **One config directory to rule them all, uniting all shells from all hosts!**
 

@@ -70,7 +70,10 @@ _HI_USAGE="Usage: generate.sh [-l|--list] [--head] [--keep] [--require-run] [--d
 # renders in seconds, so a broken vhs/ttyd/font setup surfaces immediately
 # instead of after a four-minute image build; kube is last because taking the
 # fixtures down deletes the kind cluster, and recreating it is the most
-# expensive fixture there is.
+# expensive fixture there is. complete sits second to last for the same reason
+# from the other side: it is the only tape that wants all four backends at once,
+# so running it after the four single-backend tapes means a failure there is
+# already known to be its own rather than a backend's.
 _HI_GEN_TAPES=(
   "color_preview:colors:"
   "demo:demo:docker"
@@ -78,6 +81,7 @@ _HI_GEN_TAPES=(
   "docker:docker:docker zsh"
   "podman:podman:podman fish"
   "nomad:nomad:nomad docker"
+  "complete:complete:docker podman nomad kind kubectl fish"
   "kube:kube:kind kubectl docker zsh"
 )
 
@@ -186,6 +190,40 @@ function gen_list() {
   done
 }
 
+# The completion demo's one environmental hazard, reported where the other two
+# already are. `hi <TAB>` lists every running container on the box, not only the
+# fixture's - targets.sh asks docker and podman for all of them, which is the
+# whole point of the feature and exactly wrong for a committed artifact. So a
+# render started beside somebody's own containers puts their names in the pane.
+#
+# A warning rather than a refusal: it is legible in the finished GIF (that is
+# the trouble with it), the fix is `docker stop` on things this script must not
+# touch, and every other tape is unaffected. Only asked when complete is in the
+# run, and only of the two backends that answer for the whole host - nomad and
+# kube list their own jobs and pods, which is a smaller and less personal set.
+function gen_foreign_check() {
+  local backend all ours n=0
+  case " ${_HI_GEN_RUN[*]%%:*} " in
+  *" complete "*) ;;
+  *) return 0 ;;
+  esac
+  for backend in docker podman; do
+    command -v "$backend" >/dev/null 2>&1 || continue
+    # everything running, less what the fixtures labelled as theirs. Two calls
+    # and a subtraction rather than one `--filter label!=`, which docker's own
+    # daemon rejects as an invalid filter.
+    all="$("$backend" ps -q 2>/dev/null | grep -c . || true)"
+    ours="$("$backend" ps -q --filter label=hi.demo=1 2>/dev/null | grep -c . || true)"
+    n=$((n + all - ours))
+  done
+  if [ "$n" -gt 0 ]; then
+    gen_row targets WARN "$YELLOW" "$n container(s) not from the fixtures are running"
+    gen_row "" note "$YELLOW" "complete.tape lists every one of them by name in the pane"
+  else
+    gen_row targets ok "$GREEN" "nothing running but the fixtures - the pane is the demo's own"
+  fi
+}
+
 # Everything that is worth knowing before the first four-minute image build, and
 # the two footguns this script exists to remove. Returns non-zero if the run
 # cannot go ahead.
@@ -253,6 +291,8 @@ function gen_preflight() {
   else
     gen_row config ok "$GREEN" "no overlay, every toggle at its default"
   fi
+
+  gen_foreign_check
 
   return 0
 }

@@ -1,0 +1,80 @@
+name: Demos
+
+# Proof that the tapes still render, on the pull request that changes one.
+# docs/demos/*.gif are manual artifacts - rendered by hand, reviewed by eye,
+# committed in their own commit - so nothing here writes one back. What this
+# catches is the other failure: a tape that quietly stopped working, which today
+# is found months later by whoever next runs docs/tapes/generate.sh.
+#
+# One tape, deliberately. color_preview needs no backend at all (see the roster
+# at the top of generate.sh) and renders in seconds, so it can gate every PR on
+# a hosted runner with no daemon, no images and no cluster. The six
+# docker-backed tapes belong on the self-hosted box the e2e jobs already use,
+# and are not wired up here yet.
+#
+# It runs generate.sh rather than vhs directly, which is the point: `Require hi`
+# in a tape is satisfied by *any* hi on $PATH, and a runner that happened to
+# have one installed would record the wrong tree. generate.sh's preflight puts a
+# shim for this checkout's hi.sh on the front of $PATH, and it also tears the
+# fixtures down afterwards.
+on:
+  pull_request:
+    paths:
+      - "docs/tapes/**"
+      - ".github/workflows/demos.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# superseded PR pushes cancel their in-flight run; a dispatch never cancels
+concurrency:
+  group: demos-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  render:
+    name: render color_preview (ubuntu-latest)
+    # Hardcoded, not vars.RUNNER_LABEL: this tape wants no backend, so there is
+    # nothing to gain from somebody's actual machine and a fork PR would be
+    # running unreviewed tape files on it. The docker-backed tapes are the ones
+    # that will need the self-hosted label, when they are added.
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # No `path:` input - that would run one tape and skip generate.sh's shim.
+      # This step is here for the toolchain only: vhs, plus the ttyd and ffmpeg
+      # it shells out to, which the runner image does not carry.
+      #
+      # `version` is left at the action's default (latest) on purpose, where
+      # everything else this repo installs is pinned. A pinned vhs would hide
+      # the upstream break this job exists to catch; the supply-chain half of
+      # the pin is the action's own SHA above, which dependabot keeps current.
+      - name: Install vhs, ttyd and ffmpeg
+        uses: charmbracelet/vhs-action@f6d7db07a432fcd3b06772628d36a57f96d95dcf # v2.1.1
+        with:
+          # the tapes render at common.tape's geometry in vhs's default font,
+          # so the artifact is only worth looking at if that font is here
+          install-fonts: "true"
+
+      - name: Render the backend-free tape
+        # --require-run turns a stand-down into a failure: this tape needs no
+        # backend, so "skipped" here can only mean the toolchain above did not
+        # land, and a green run that rendered nothing is the one outcome this
+        # job must not produce.
+        run: docs/tapes/generate.sh --require-run color_preview
+
+      # Attached rather than committed, per the note at the top: a GIF is looked
+      # at by a person before it lands in the tree, and a PR artifact is where
+      # that look happens.
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: color-preview-demo
+          path: docs/demos/color_preview.gif
+          # a review aid for one pull request, not a release artifact
+          retention-days: 7
+          if-no-files-found: error

@@ -2,12 +2,10 @@
 
 Everything needed to ship `hi` through a package manager. Nothing here publishes
 on its own — the publishing job waits on a manual approval, and the AUR and the
-Homebrew tap are copies you make by hand. The **one-time setup** each channel
-needs first (the `release` approval gate, branch protection, the apk and
-minisign keypairs, the AUR deploy key, the tap token) is a checklist with exact
-commands in [ROADMAP.md](ROADMAP.md)'s _GitHub repo settings_, _Secrets & keys_
-and _Release channels_ sections. Until those exist, a pushed `v*` tag publishes
-unattended and the release ships unsigned sums.
+Homebrew tap are copies you make by hand. Both signing keys are in place, so a
+release signs its sums and its apk; what is still one-time setup is the AUR
+deploy key and the tap token, a checklist with exact commands in
+[ROADMAP.md](ROADMAP.md)'s _Release channels_ section.
 
 Every workflow's `runs-on:` reads a repo/org Actions variable first —
 `vars.RUNNER_LABEL`, or `vars.MACOS_RUNNER_LABEL` / `vars.WINDOWS_RUNNER_LABEL`
@@ -256,7 +254,7 @@ Built by `mkpkg.sh` and attached to the GitHub Release. Users install the file:
 sudo apt install ./say-hi_1.0.0_all.deb
 ```
 
-The apk is signed (once the `APK_SIGNING_KEY` secret exists — see the ROADMAP checklist) with a key apk
+The apk is signed with a key apk
 verifies against `/etc/apk/keys/`, so Alpine users install the public key once and never pass
 `--allow-untrusted`:
 

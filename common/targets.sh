@@ -5,6 +5,10 @@
 # Usage: sh targets.sh [ssh|docker|podman|nomad|kube|flags]
 #        (no argument = every backend; `flags` = hi's own options instead)
 # GLOSSARY: HI.26 - _HI_PROBE_TIMEOUT and _HI_TARGETS_TTL
+# shellcheck disable=SC2329 # every function here is reached indirectly - by
+# the completion hook that sources this file, or through emit_backend's
+# dispatch - so "never invoked" is true of the file, not of five lines in it.
+
 kind="${1:-all}"
 
 # hi's own flags, so `hi --<TAB>` completes them the way a target does. They
@@ -34,7 +38,6 @@ fi
 ttl="${_HI_TARGETS_TTL:-5}"
 
 # `timeout` is GNU, absent on stock macOS - optional. Called via list_*.
-# shellcheck disable=SC2329
 if command -v timeout >/dev/null 2>&1; then
   run_backend() { timeout "${_HI_PROBE_TIMEOUT:-2}" "$@"; }
 else
@@ -56,7 +59,6 @@ cache_body() {
 
 # emit_backend <label> <bin> <lister...> - kind gate, presence check, timeout
 # wrap. Listers go through "$@" (hence SC2329).
-# shellcheck disable=SC2329
 emit_backend() {
   label="$1" bin="$2"
   shift 2
@@ -84,7 +86,6 @@ emit_targets() {
 }
 
 # The listers, each reached indirectly through emit_backend's "$@".
-# shellcheck disable=SC2329
 
 # docker and podman are one call (drop-in CLIs); the tag rides a `sed` over the
 # result, so it holds whatever the backend does with --format
@@ -92,7 +93,6 @@ list_ps() {
   run_backend "$1" ps --format '{{.Names}}' 2>/dev/null | sed "s/\$/	$1/"
 }
 
-# shellcheck disable=SC2329
 # The allocation, plus "alloc/task" per task when the group has more than one -
 # the same shape list_kube emits, and the same syntax hi takes. The task names
 # come from the same template as the ID, so this stays one call per job.
@@ -117,7 +117,6 @@ list_nomad() {
 # target where there is nothing to choose.
 #
 # One jsonpath, not one call per pod: this runs on every TAB.
-# shellcheck disable=SC2329
 list_kube() {
   run_backend kubectl get pods --field-selector=status.phase=Running \
     -o jsonpath='{range .items[*]}{.metadata.name}{range .spec.containers[*]}{" "}{.name}{end}{"\n"}{end}' 2>/dev/null |

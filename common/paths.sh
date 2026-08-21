@@ -5,7 +5,6 @@
 # shellcheck disable=SC2139 # aliases are meant to expand $_HI_* now, not later
 # shellcheck disable=SC2153 # $_HI_HOME is set by whoever sources this, not here
 
-# say-hi itself
 export _HI_ROOT="$_HI_HOME/say-hi"
 export _HI_LAUNCHER="$_HI_ROOT/hi.sh"
 export _HI_CORE="$_HI_ROOT/common/core.sh"

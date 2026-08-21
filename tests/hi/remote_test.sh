@@ -48,50 +48,24 @@ function _hi_probe_answer() {
   HOME="$1" sh -c "$(_hi_remote_root_probe)"
 }
 
-function test_remote_probe_finds_the_default_tree() {
-  local home
-  home="$(_hi_probe_home probe_default .)"
-  [ "$(_hi_probe_answer "$home")" = "$home/say-hi" ]
-}
-
-# the whole point: a curated tree somewhere else, named by the export
-# install.sh put in .bashrc, is found rather than copied over
-function test_remote_probe_finds_a_nested_tree_from_bashrc() {
-  local home
-  home="$(_hi_probe_home probe_bashrc opt/nested)"
-  printf 'export _HI_HOME="%s/opt/nested"\n' "$home" >"$home/.bashrc"
-  [ "$(_hi_probe_answer "$home")" = "$home/opt/nested/say-hi" ]
-}
-
-function test_remote_probe_reads_the_fish_dialect() {
-  local home
-  home="$(_hi_probe_home probe_fish opt/nested)"
-  printf 'set -gx _HI_HOME "%s/opt/nested"\n' "$home" >"$home/.config/fish/config.fish"
-  [ "$(_hi_probe_answer "$home")" = "$home/opt/nested/say-hi" ]
-}
-
-function test_remote_probe_reads_the_zsh_rc() {
-  local home
-  home="$(_hi_probe_home probe_zsh opt/nested)"
-  printf 'export _HI_HOME="%s/opt/nested"\n' "$home" >"$home/.zshrc"
-  [ "$(_hi_probe_answer "$home")" = "$home/opt/nested/say-hi" ]
-}
-
-# $HOME/say-hi stays the fallback, so a target that says nothing still resolves
-function test_remote_probe_falls_back_to_home_when_the_rc_says_nothing() {
-  local home
-  home="$(_hi_probe_home probe_fallback .)"
-  printf 'export PATH="$PATH:/nowhere"\n' >"$home/.bashrc"
-  [ "$(_hi_probe_answer "$home")" = "$home/say-hi" ]
-}
-
-# a stale export outliving the tree it named must not be the answer, and must
-# not stop the fallback from being one
-function test_remote_probe_skips_a_path_with_no_tree_on_it() {
-  local home
-  home="$(_hi_probe_home probe_stale .)"
-  printf 'export _HI_HOME="%s/gone"\n' "$home" >"$home/.bashrc"
-  [ "$(_hi_probe_answer "$home")" = "$home/say-hi" ]
+# _hi_probe_case <fixture> <tree> <rcfile> <style> <fmt> - build the fake $HOME,
+# write one rc line into it, and print what a target would answer. <style> is
+# `plain` (the format is the whole line) or `padded` (the format is the export
+# text, which install.sh pads to 45 columns and follows with its marker). An
+# empty <rcfile> writes nothing, which is the "installed but unannounced" case.
+function _hi_probe_case() {
+  local home fixture="$1" tree="$2" rcfile="$3" style="$4" fmt="$5" line
+  home="$(_hi_probe_home "$fixture" "$tree")"
+  if [ -n "$rcfile" ]; then
+    # shellcheck disable=SC2059 # the format is the table's, which is the point
+    printf -v line "$fmt" "$home"
+    if [ "$style" = padded ]; then
+      printf '%-45s %s\n' "$line" "$_HI_MARKER" >"$home/$rcfile"
+    else
+      printf '%s' "$line" >"$home/$rcfile"
+    fi
+  fi
+  _hi_probe_answer "$home"
 }
 
 # nothing installed anywhere is an empty answer, which is what sends hi down
@@ -101,23 +75,6 @@ function test_remote_probe_is_silent_with_no_tree_at_all() {
   rm -rf "$home"
   mkdir -p "$home"
   [ -z "$(_hi_probe_answer "$home")" ]
-}
-
-# The line install.sh actually writes, marker and padding included - the probe
-# reads real rc files, so the shape config_shell pads onto them is the shape
-# that has to parse. A hand-written unquoted export works too.
-function test_remote_probe_reads_the_marker_padded_line() {
-  local home
-  home="$(_hi_probe_home probe_marker opt/nested)"
-  printf '%-45s %s\n' "export _HI_HOME=\"$home/opt/nested\"" "$_HI_MARKER" >"$home/.bashrc"
-  [ "$(_hi_probe_answer "$home")" = "$home/opt/nested/say-hi" ]
-}
-
-function test_remote_probe_reads_an_unquoted_export() {
-  local home
-  home="$(_hi_probe_home probe_unquoted opt/nested)"
-  printf 'export _HI_HOME=%s/opt/nested\n' "$home" >"$home/.bashrc"
-  [ "$(_hi_probe_answer "$home")" = "$home/opt/nested/say-hi" ]
 }
 
 # a packaged install writes no rc line anywhere - /etc/profile.d is the only
@@ -155,25 +112,6 @@ function test_remote_probe_covers_every_rc_in_the_roster() {
     rel="${_home_rc#"$HOME/"}"
     case "$probe" in *"$rel"*) ;; *) return 1 ;; esac
   done < <(_hi_shell_rows local)
-}
-
-# an install path with a space in it survives the candidate list
-function test_remote_probe_handles_a_path_with_a_space() {
-  local home
-  home="$(_hi_probe_home probe_space "opt/my trees")"
-  printf 'export _HI_HOME="%s/opt/my trees"\n' "$home" >"$home/.bashrc"
-  [ "$(_hi_probe_answer "$home")" = "$home/opt/my trees/say-hi" ]
-}
-
-# and one with a `#` in it: the value is quoted, so the marker strip must not
-# treat the first `#` on the line as the start of the comment. This is the case
-# the unwrapping sed's expression *order* exists for - reversed, it answers
-# "$home/opt/hash" and the probe silently falls back to $HOME/say-hi.
-function test_remote_probe_handles_a_path_with_a_hash() {
-  local home
-  home="$(_hi_probe_home probe_hash "opt/hash#tree")"
-  printf '%-45s %s\n' "export _HI_HOME=\"$home/opt/hash#tree\"" "$_HI_MARKER" >"$home/.bashrc"
-  [ "$(_hi_probe_answer "$home")" = "$home/opt/hash#tree/say-hi" ]
 }
 
 # an interactive session chainloads load.sh then calls load()
@@ -296,23 +234,11 @@ function _hi_preamble_final_term() { # <env assignments...> - prints $TERM after
 printf %s "$TERM"' 2>/dev/null
 }
 
-function test_term_fallback_swaps_an_unknown_term() {
-  [ "$(_hi_preamble_final_term TERM=hi-test-no-such-term)" = xterm-256color ]
-}
-
 function test_term_fallback_keeps_a_term_with_terminfo() {
   local ti="$_HI_WORKDIR/terminfo"
   mkdir -p "$ti/h"
   : >"$ti/h/hi-test-present-term"
   [ "$(_hi_preamble_final_term TERM=hi-test-present-term TERMINFO="$ti")" = hi-test-present-term ]
-}
-
-function test_term_fallback_skips_ubiquitous_names() {
-  [ "$(_hi_preamble_final_term TERM=xterm)" = xterm ]
-}
-
-function test_term_fallback_can_be_disabled() {
-  [ "$(_hi_preamble_final_term TERM=hi-test-no-such-term _HI_TERM_FALLBACK=0)" = hi-test-no-such-term ]
 }
 
 # On a target, $_HI_CONFIG_DIR is the config/ the overlay was unpacked into,
@@ -343,20 +269,44 @@ function run_hi_remote_tests() {
   _hi_check "Fallback rc points at the overlay config dir" test_fallback_rc_points_config_dir_at_the_overlay
 
   _hi_h2 "Testing: _hi_remote_root's target-side probe"
-  _hi_check "Finds a tree at the default \$HOME/say-hi" test_remote_probe_finds_the_default_tree
-  _hi_check "Finds a nested tree named by .bashrc" test_remote_probe_finds_a_nested_tree_from_bashrc
-  _hi_check "Reads fish's set -gx dialect" test_remote_probe_reads_the_fish_dialect
-  _hi_check "Reads .zshrc too" test_remote_probe_reads_the_zsh_rc
-  _hi_check "Falls back to \$HOME when nothing says" test_remote_probe_falls_back_to_home_when_the_rc_says_nothing
-  _hi_check "Reads install.sh's marker-padded line" test_remote_probe_reads_the_marker_padded_line
-  _hi_check "Reads a hand-written unquoted export" test_remote_probe_reads_an_unquoted_export
-  _hi_check "Skips a stale export with no tree on it" test_remote_probe_skips_a_path_with_no_tree_on_it
+  # <label>|<fixture>|<tree>|<rcfile>|<style>|<rc-line format>|<want, under the
+  # fake $HOME>. Ten cases that differed only in those columns; the prose that
+  # explained each one is kept as a comment row. _hi_check_eq rather than
+  # _hi_check because every answer here is a path, and a wrong one is worth
+  # printing.
+  while IFS='|' read -r _label _fix _tree _rc _style _fmt _want; do
+    case "$_label" in '' | '#'*) continue ;; esac
+    _hi_check_eq "$_label" "$_HI_WORKDIR/$_fix/$_want" \
+      _hi_probe_case "$_fix" "$_tree" "$_rc" "$_style" "$_fmt"
+  done <<'EOF'
+Finds a tree at the default $HOME/say-hi|probe_default|.||plain||say-hi
+# the whole point: a curated tree somewhere else, named by the export
+# install.sh put in .bashrc, is found rather than copied over
+Finds a nested tree named by .bashrc|probe_bashrc|opt/nested|.bashrc|plain|export _HI_HOME="%s/opt/nested"\n|opt/nested/say-hi
+Reads fish's set -gx dialect|probe_fish|opt/nested|.config/fish/config.fish|plain|set -gx _HI_HOME "%s/opt/nested"\n|opt/nested/say-hi
+Reads .zshrc too|probe_zsh|opt/nested|.zshrc|plain|export _HI_HOME="%s/opt/nested"\n|opt/nested/say-hi
+# $HOME/say-hi stays the fallback, so a target that says nothing still resolves
+Falls back to $HOME when nothing says|probe_fallback|.|.bashrc|plain|export PATH="$PATH:/nowhere"\n|say-hi
+# The line install.sh actually writes, marker and padding included - the probe
+# reads real rc files, so the shape config_shell pads onto them is the shape
+# that has to parse. A hand-written unquoted export works too.
+Reads install.sh's marker-padded line|probe_marker|opt/nested|.bashrc|padded|export _HI_HOME="%s/opt/nested"|opt/nested/say-hi
+Reads a hand-written unquoted export|probe_unquoted|opt/nested|.bashrc|plain|export _HI_HOME=%s/opt/nested\n|opt/nested/say-hi
+# a stale export outliving the tree it named must not be the answer, and must
+# not stop the fallback from being one
+Skips a stale export with no tree on it|probe_stale|.|.bashrc|plain|export _HI_HOME="%s/gone"\n|say-hi
+# an install path with a space in it survives the candidate list
+Handles a path with a space in it|probe_space|opt/my trees|.bashrc|plain|export _HI_HOME="%s/opt/my trees"\n|opt/my trees/say-hi
+# and one with a `#` in it: the value is quoted, so the marker strip must not
+# treat the first `#` on the line as the start of the comment. This is the case
+# the unwrapping sed's expression *order* exists for - reversed, it answers
+# "$home/opt/hash" and the probe silently falls back to $HOME/say-hi.
+Handles a path with a # in it|probe_hash|opt/hash#tree|.bashrc|padded|export _HI_HOME="%s/opt/hash#tree"|opt/hash#tree/say-hi
+EOF
   _hi_check "Silent when nothing is installed" test_remote_probe_is_silent_with_no_tree_at_all
   _hi_check "Looks in the packaging profile snippet" test_remote_probe_reads_the_packaging_profile_snippet
   _hi_check "Reads what install.sh actually wrote" test_remote_probe_reads_what_install_sh_actually_wrote
   _hi_check "Covers every rc in the shell roster" test_remote_probe_covers_every_rc_in_the_roster
-  _hi_check "Handles a path with a space in it" test_remote_probe_handles_a_path_with_a_space
-  _hi_check "Handles a path with a # in it" test_remote_probe_handles_a_path_with_a_hash
 
   _hi_h2 "Testing: remote shell handoff"
   _hi_check "The bash handoff is explicitly interactive" test_remote_suffix_forces_an_interactive_bash
@@ -370,10 +320,10 @@ function run_hi_remote_tests() {
   _hi_check "The preamble ships the glyph verdict" test_remote_preamble_ships_the_glyph_verdict
 
   _hi_h2 "Testing: the preamble's TERM fallback"
-  _hi_check "Unknown TERM becomes xterm-256color" test_term_fallback_swaps_an_unknown_term
+  _hi_check_eq "Unknown TERM becomes xterm-256color" xterm-256color _hi_preamble_final_term TERM=hi-test-no-such-term
   _hi_check "A TERM with terminfo is kept" test_term_fallback_keeps_a_term_with_terminfo
-  _hi_check "Ubiquitous names skip the probe" test_term_fallback_skips_ubiquitous_names
-  _hi_check "_HI_TERM_FALLBACK=0 opts out" test_term_fallback_can_be_disabled
+  _hi_check_eq "Ubiquitous names skip the probe" xterm _hi_preamble_final_term TERM=xterm
+  _hi_check_eq "_HI_TERM_FALLBACK=0 opts out" hi-test-no-such-term _hi_preamble_final_term TERM=hi-test-no-such-term _HI_TERM_FALLBACK=0
   _hi_suite_end "hi.sh (target-side strings)"
 }
 

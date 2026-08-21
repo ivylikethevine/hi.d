@@ -11,6 +11,29 @@ set -euo pipefail
 # shellcheck source=../test_lib.sh
 source "${_HI_TEST_LIB:-${BASH_SOURCE[0]%/*}/../test_lib.sh}"
 
+# _hi_settings_fixture <name> <fn...> - run <fn...> with $_HI_ROOT,
+# $_HI_CONFIG_DIR and $_HI_SETTINGS pointed at throwaway paths under
+# $_HI_WORKDIR/<name>. scripts/install.sh's writers (config_shell,
+# ensure_settings_shebang) and its uninstall half (strip_settings) all reach for
+# those three, which in a real run are this very checkout and the developer's
+# own overlay - the same shadowing load_test.sh's _hi_clean_all wrapper does
+# before letting clean_all near $_HI_ROOT.
+#
+# The scratch overlay is deliberately a *different* directory from the scratch
+# tree's misc/, so "writes land outside the tree" is something the tests can see
+# rather than assume.
+function _hi_settings_fixture() {
+  local dir="$_HI_WORKDIR/$1"
+  local _HI_ROOT="$dir" _HI_CONFIG_DIR="$dir/config"
+  local _HI_SETTINGS="$dir/config/settings.sh"
+  mkdir -p "$dir/common" "$dir/misc" "$dir/config"
+  shift
+  "$@" >/dev/null
+}
+
+# where _hi_settings_fixture's run writes, as the assertions see it
+function _hi_fixture_settings() { printf '%s' "$_HI_WORKDIR/$1/config/settings.sh"; }
+
 set -- # install.sh reads "$@" for its own args; make sure it sees none
 # shellcheck source=../../scripts/install.sh
 source "$_HI_INSTALL"
@@ -114,15 +137,11 @@ function test_config_shell_no_backup_for_empty_target() {
 # Comment lines are filtered out first: both files explain themselves in prose
 # that names the very files being looked for, and a comment mentioning paths.sh
 # above the code that sources settings.sh would read as the wrong order.
-function _hi_first_code_line() {
-  grep -n "$2" "$1" | grep -v ':[[:space:]]*#' | head -1 | cut -d: -f1
-}
-
+# _hi_before is the harness's ordering assertion; the only thing this check
+# adds is dropping comment lines first, so a mention in a comment above the
+# real source line cannot answer for it.
 function _hi_sources_settings_before_paths() {
-  local target="$1" settings_line paths_line
-  settings_line="$(_hi_first_code_line "$target" 'settings\.sh')"
-  paths_line="$(_hi_first_code_line "$target" 'paths\.sh')"
-  [ -n "$settings_line" ] && [ -n "$paths_line" ] && [ "$settings_line" -lt "$paths_line" ]
+  _hi_before "$(grep -v '^[[:space:]]*#' "$1")" 'settings\.sh' 'paths\.sh'
 }
 
 function test_core_sources_settings_first() {

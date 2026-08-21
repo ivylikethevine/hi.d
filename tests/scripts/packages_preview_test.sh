@@ -106,11 +106,6 @@ function test_color_name_of_names_every_header_color() {
   return 0
 }
 
-# $NC is not a palette color, and neither is anything under $NO_COLOR
-function test_color_name_of_calls_a_reset_plain() {
-  [ "$(_hi_color_name_of "$NC")" = plain ]
-}
-
 # The "hide" sentinel is not a color to be named but an instruction to print
 # nothing, and the label is what the column is *measured* by as well as painted
 # with - naming it through a second path is how a column ends up sized to one
@@ -258,7 +253,8 @@ function run_packages_preview_tests() {
   _hi_h2 "Testing: naming the header's colors"
   _hi_check "Names a palette entry" test_color_name_of_names_a_palette_entry
   _hi_check "Names every color the header uses" test_color_name_of_names_every_header_color
-  _hi_check "Calls a reset plain" test_color_name_of_calls_a_reset_plain
+  # $NC is not a palette color, and neither is anything under $NO_COLOR
+  _hi_check_eq "Calls a reset plain" plain _hi_color_name_of "$NC"
   _hi_check "Names the hide sentinel hidden" test_color_label_names_the_hide_sentinel
 
   _hi_h2 "Testing: examples, via the header's check_line"

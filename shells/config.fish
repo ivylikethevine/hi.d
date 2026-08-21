@@ -163,7 +163,6 @@ end
 
 if test "$_HI_DISABLE_PERSONAL" != 1
 
-# keybinds
 bind \cH backward-kill-word
 bind ctrl-delete kill-word
 bind \e\[3\;5~ kill-word

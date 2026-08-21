@@ -96,8 +96,8 @@ function _hi_group_index() {
 # users table: every known real user with a non-default color, plus LOCALUSER
 # and every usertag override as its own "example" row
 function _hi_print_users_table() {
-  local user tag source color_name name_escape
-  local users=() usertags=()
+  local user tag source color_name name_escape uidx=0
+  local users=() usertags=() u_source=()
   local w_item=9 w_color=5 w_source=6
   local localuser_color=""
 
@@ -113,8 +113,13 @@ function _hi_print_users_table() {
   # reads ${!a[@]+...} as expanding to nothing whatever the array holds, and
   # bash 5 reads it as an indirect reference and errors outright.
   _hi_widen w_item "${users[@]}" LOCALUSER ${usertags[@]+"${usertags[@]}"}
+  # _hi_color_source re-reads misc/colors end to end and walks ~/.ssh/config,
+  # so the render loop below reads what this one worked out rather than asking
+  # a second time for every user.
   for user in "${users[@]}"; do
-    _hi_widen w_source "$(_hi_color_source username "$user")"
+    u_source[uidx]="$(_hi_color_source username "$user")"
+    _hi_widen w_source "${u_source[uidx]}"
+    uidx=$((uidx + 1))
   done
   _hi_widen w_source "local:username"
   for tag in ${usertags[@]+"${usertags[@]}"}; do
@@ -125,8 +130,10 @@ function _hi_print_users_table() {
   printf '| %-*s | %-*s | %-*s |\n' "$w_item" "USER" "$w_color" "COLOR" "$w_source" "SOURCE"
   _hi_hbar "$w_item" "$w_color" "$w_source"
 
+  uidx=0
   for user in "${users[@]}"; do
-    source=$(_hi_color_source username "$user")
+    source="${u_source[uidx]}"
+    uidx=$((uidx + 1))
     [[ "$source" = default ]] && continue
     color_name=$(_hi_resolve_color username "$user")
     name_escape=$(_hi_color_escape "$color_name")
@@ -170,7 +177,7 @@ function _hi_print_hosts_table() {
   # arrays keyed by $key: `local -A` is bash 4 and macOS ships bash 3.2, where
   # the declaration alone is a fatal "invalid option".
   # group_order holds the keys, so it doubles as the lookup table below.
-  local group_hosts=() group_source=() group_color=() group_tag=()
+  local group_hosts=() group_source=() group_color=() group_tag=() group_pw=()
   local gidx localhostname_color=""
 
   _hi_read_lines preview_users < <(_hi_preview_users)
@@ -221,7 +228,8 @@ function _hi_print_hosts_table() {
   for gidx in "${!group_order[@]}"; do
     _hi_widen w_source "${group_source[gidx]}"
     read -ra group_names <<<"${group_hosts[gidx]}"
-    _hi_widen_to w_preview "$(_hi_group_preview_width "${group_names[@]}")"
+    group_pw[gidx]="$(_hi_group_preview_width "${group_names[@]}")"
+    _hi_widen_to w_preview "${group_pw[gidx]}"
     # the wrap below can only break *between* names, so a name wider than the
     # column has nowhere to go - widen to it instead of overflowing the border.
     # A wrapped line keeps its trailing ", ", which counts toward the width.
@@ -262,7 +270,7 @@ function _hi_print_hosts_table() {
 
     # every preview line in this group has identical plain-text width (users
     # are right-padded to user_width) so one pad amount covers the whole group
-    pw=$(_hi_group_preview_width "${group_names[@]}")
+    pw="${group_pw[gidx]}"
     pad_preview=$((w_preview - pw))
 
     total_lines=${#item_lines[@]}

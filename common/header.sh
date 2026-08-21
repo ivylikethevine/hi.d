@@ -99,15 +99,14 @@ function system_info() {
     freq_unit="GHz"
     # MHz -> x.x GHz with printf, not an awk fork apiece; rounded to tenths
     # *before* splitting so a carry lands properly (2950 -> 3.0, not "2.10")
-    local ghz_tenths
-    [ -n "$base_mhz" ] && {
-      ghz_tenths=$(((base_mhz + 50) / 100))
-      printf -v base_mhz '%d.%d' "$((ghz_tenths / 10))" "$((ghz_tenths % 10))"
-    }
-    [ -n "$boost_mhz" ] && {
-      ghz_tenths=$(((boost_mhz + 50) / 100))
-      printf -v boost_mhz '%d.%d' "$((ghz_tenths / 10))" "$((ghz_tenths % 10))"
-    }
+    local ghz_tenths ghz_var ghz_val
+    for ghz_var in base_mhz boost_mhz; do
+      eval "ghz_val=\$$ghz_var"
+      [ -n "$ghz_val" ] && {
+        ghz_tenths=$(((ghz_val + 50) / 100))
+        printf -v "$ghz_var" '%d.%d' "$((ghz_tenths / 10))" "$((ghz_tenths % 10))"
+      }
+    done
   fi
   header_row "$PURPLE$arch" "$GREEN$os" "${YELLOW}Cores: ${cpus:-?}" \
     "${CYAN}RAM: ${ram:-?}" "${BRBLUE}CPU: ${base_mhz:-?}/${boost_mhz:-?} $freq_unit"

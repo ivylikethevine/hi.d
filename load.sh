@@ -171,7 +171,6 @@ function load() {
   _hi_cecho "$greeting" "$color" 1
   _hi_cecho " | load: $(_hi_elapsed "$start" "$(_hi_now)")s | copy: ${_HI_COPY_TIME:--1}s"
 
-  # keep the session's own status
   local shell_ec=0
   local -a shell_cmd=("$shell" -i)
   # the header above is our greeting

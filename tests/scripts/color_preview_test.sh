@@ -58,28 +58,6 @@ EOF
   export _HI_LOCAL_HOSTNAME=localbox
 }
 
-function test_source_reports_an_exact_hostname_override() {
-  [ "$(_hi_color_source hostname pinned)" = "override:hostname" ]
-}
-
-function test_source_reports_an_exact_username_override() {
-  [ "$(_hi_color_source username alice)" = "override:username" ]
-}
-
-function test_source_reports_the_ssh_tag_that_matched() {
-  [ "$(_hi_color_source hostname tagged)" = "tag:work" ]
-}
-
-function test_source_falls_back_to_default() {
-  [ "$(_hi_color_source hostname plain)" = default ]
-}
-
-# a host carrying a tag with no hosttag entry has nothing to inherit, so it
-# must read as default rather than claiming a tag it can't resolve
-function test_source_ignores_a_tag_without_an_override() {
-  [ "$(_hi_color_source hostname othertag)" = default ]
-}
-
 # usernames have no ssh config to carry tags, so the tag branch must not fire
 # for them even when a usertag of that name exists
 function test_source_never_reports_a_tag_for_a_username() {
@@ -136,16 +114,6 @@ function test_preview_users_adds_a_row_per_usertag() {
 
 function test_preview_users_are_deduplicated() {
   [ "$(_hi_preview_users | sort | uniq -d | wc -l)" -eq 0 ]
-}
-
-# each column is padded by one space either side, so a width of n renders n+2
-# dashes between the separators
-function test_hbar_sizes_each_column() {
-  [ "$(_hi_hbar 3 1)" = "+-----+---+" ]
-}
-
-function test_hbar_handles_a_single_column() {
-  [ "$(_hi_hbar 2)" = "+----+" ]
 }
 
 # widths are per-host: user_width + a space + the host name, plus two spaces
@@ -220,11 +188,21 @@ function run_color_preview_tests() {
   _hi_suite_begin
 
   _hi_h2 "Testing: _hi_color_source"
-  _hi_check "Exact hostname override" test_source_reports_an_exact_hostname_override
-  _hi_check "Exact username override" test_source_reports_an_exact_username_override
-  _hi_check "Names the ssh tag that matched" test_source_reports_the_ssh_tag_that_matched
-  _hi_check "Falls back to default" test_source_falls_back_to_default
-  _hi_check "Ignores a tag with no override" test_source_ignores_a_tag_without_an_override
+  # <label>|<kind>|<name>|<want>. Five _hi_color_source cases that differed
+  # only in those columns, through _hi_check_eq so a wrong verdict prints what
+  # it was instead of a bare FAILED.
+  while IFS='|' read -r _label _kind _name _want; do
+    case "$_label" in '' | '#'*) continue ;; esac
+    _hi_check_eq "$_label" "$_want" _hi_color_source "$_kind" "$_name"
+  done <<'EOF'
+Exact hostname override|hostname|pinned|override:hostname
+Exact username override|username|alice|override:username
+Names the ssh tag that matched|hostname|tagged|tag:work
+Falls back to default|hostname|plain|default
+# a host carrying a tag with no hosttag entry has nothing to inherit, so it
+# must read as default rather than claiming a tag it can't resolve
+Ignores a tag with no override|hostname|othertag|default
+EOF
   _hi_check "Never reports a tag for a username" test_source_never_reports_a_tag_for_a_username
 
   _hi_h2 "Testing: agreement with _hi_resolve_color"
@@ -242,8 +220,10 @@ function run_color_preview_tests() {
   _hi_check "Preview users are deduplicated" test_preview_users_are_deduplicated
 
   _hi_h2 "Testing: layout helpers"
-  _hi_check "hbar sizes each column" test_hbar_sizes_each_column
-  _hi_check "hbar handles a single column" test_hbar_handles_a_single_column
+  # each column is padded by one space either side, so a width of n renders n+2
+  # dashes between the separators
+  _hi_check_eq "hbar sizes each column" "+-----+---+" _hi_hbar 3 1
+  _hi_check_eq "hbar handles a single column" "+----+" _hi_hbar 2
   _hi_check "Group preview width sums its hosts" test_group_preview_width_sums_its_hosts
 
   _hi_h2 "Testing: the rendered tables"

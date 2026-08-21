@@ -329,15 +329,6 @@ EOF
   grep -c . "$counter" || true
 }
 
-function test_complete_reuses_the_list_inside_the_ttl() {
-  [ "$(_hi_complete_forks 5)" = 1 ]
-}
-
-# ...and TTL 0 means no cache at all - the same thing it means to targets.sh
-function test_complete_refetches_when_the_ttl_is_zero() {
-  [ "$(_hi_complete_forks 0)" = 2 ]
-}
-
 # the cached path must still produce completions, not just skip the fork
 function test_complete_still_answers_from_the_cache() {
   local out
@@ -473,8 +464,9 @@ function run_targets_tests() {
   _hi_check "Filters by the typed prefix" test_complete_filters_by_the_typed_prefix
   _hi_check "Drops the kind column" test_complete_drops_the_kind_column
   _hi_check "Empty for an unmatched prefix" test_complete_is_empty_for_an_unmatched_prefix
-  _hi_check "A repeat TAB inside the TTL forks nothing" test_complete_reuses_the_list_inside_the_ttl
-  _hi_check "TTL 0 refetches every time" test_complete_refetches_when_the_ttl_is_zero
+  _hi_check_eq "A repeat TAB inside the TTL forks nothing" 1 _hi_complete_forks 5
+  # ...and TTL 0 means no cache at all - the same thing it means to targets.sh
+  _hi_check_eq "TTL 0 refetches every time" 2 _hi_complete_forks 0
   _hi_check "The cached answer is still an answer" test_complete_still_answers_from_the_cache
   _hi_check "flags: every one is in hi --help" test_flags_all_appear_in_help
   _hi_check "flags: every --help flag is in the roster" test_help_flags_all_appear_in_roster

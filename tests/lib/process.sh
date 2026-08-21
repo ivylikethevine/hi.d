@@ -94,34 +94,6 @@ function _hi_poll_budget() {
     'BEGIN { b = t * i; b = (b == int(b) ? b : int(b) + 1); printf "%d", (b < 1 ? 1 : b) }'
 }
 
-# _hi_free_port_base [count] - a base port with $count consecutive free ports
-# from it, printed on stdout. A suite that binds a well-known port collides
-# with any real service of the same kind already on the host (and with a
-# second copy of itself), which is a failure that looks exactly like a bug in
-# the code under test. The ssh fixtures avoid this by letting docker map an
-# ephemeral port; anything hi runs directly has to pick its own, so it asks
-# here. Probing is a connect attempt: refused means nothing is listening.
-# Racy in principle, since something could claim the port between the probe
-# and the bind, but bounded - and unlike a hardcoded port it is usually right.
-function _hi_free_port_base() {
-  local count="${1:-1}" base i ok attempt
-  for ((attempt = 0; attempt < 20; attempt++)); do
-    base=$((20000 + RANDOM % 20000))
-    ok=1
-    for ((i = 0; i < count; i++)); do
-      if (exec 3<>"/dev/tcp/127.0.0.1/$((base + i))") 2>/dev/null; then
-        ok=0
-        break
-      fi
-    done
-    if [ "$ok" -eq 1 ]; then
-      printf '%s' "$base"
-      return 0
-    fi
-  done
-  return 1
-}
-
 # Both pollers take (tries, interval) - the shape every call site speaks -
 # but tries*interval only sizes the wall-clock budget: the deadline is the
 # one bound, for _hi_wait_pid's reason (an iteration counter stretches

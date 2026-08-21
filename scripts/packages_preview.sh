@@ -78,18 +78,29 @@ function _hi_priority_meanings() {
 # variables hold a literal "\e[..." while _hi_color_escape emits a real ESC.
 # Anything outside the palette - $NC, and every color under $NO_COLOR - is
 # "plain", which is exactly how it will render.
+# The escapes for _HI_COLOR_NAMES, in the same order, resolved once. Built here
+# rather than inside _hi_color_name_of because that used to fork
+# _hi_color_escape for all twelve names on every call, and the legend calls it
+# four times a row.
+_HI_COLOR_ESCAPES=()
+for _hi_cn in "${_HI_COLOR_NAMES[@]}"; do
+  _HI_COLOR_ESCAPES+=("$(_hi_color_escape "$_hi_cn")")
+done
+unset _hi_cn
+
 function _hi_color_name_of() {
-  local want name
+  local want i=0
   want=$(printf '%b' "$1")
   [[ -n "$want" ]] || {
     printf 'plain'
     return
   }
-  for name in "${_HI_COLOR_NAMES[@]}"; do
-    [[ "$want" = "$(_hi_color_escape "$name")" ]] && {
-      printf '%s' "$name"
+  while ((i < ${#_HI_COLOR_NAMES[@]})); do
+    [[ "$want" = "${_HI_COLOR_ESCAPES[i]}" ]] && {
+      printf '%s' "${_HI_COLOR_NAMES[i]}"
       return
     }
+    i=$((i + 1))
   done
   printf 'plain'
 }
@@ -187,18 +198,28 @@ function _hi_example_cell() {
 # its output into), each painted in the colors that priority actually uses
 function _hi_print_priorities_table() {
   local entry p meaning yes_escape no_escape yes_name no_name example ex_width
-  local -a rows=()
+  local i=0
+  local -a rows=() c_yes=() c_no=() c_example=() c_ex_width=()
   local w_prio=8 w_meaning=7 w_yes=9 w_no=7 w_example=7
 
   _hi_read_lines rows < <(_hi_priority_meanings | LC_ALL=C sort -k1,1nr)
 
+  # The measure pass keeps what it worked out, indexed by row, so the render
+  # pass below reads it instead of calling _hi_color_label and
+  # _hi_example_cell a second time for every row. Same parallel-array shape as
+  # _HI_EX_OK/_HI_EX_OK_W above.
   for entry in ${rows[@]+"${rows[@]}"}; do
     IFS=$'\t' read -r p meaning <<<"$entry"
     _hi_widen w_meaning "$meaning"
-    _hi_widen w_yes "$(_hi_color_label "${_HI_YES[p]:-}")"
-    _hi_widen w_no "$(_hi_color_label "${_HI_NO[p]:-}")"
+    c_yes[i]="$(_hi_color_label "${_HI_YES[p]:-}")"
+    c_no[i]="$(_hi_color_label "${_HI_NO[p]:-}")"
+    _hi_widen w_yes "${c_yes[i]}"
+    _hi_widen w_no "${c_no[i]}"
     IFS=$'\t' read -r example ex_width <<<"$(_hi_example_cell "$p")"
+    c_example[i]="$example"
+    c_ex_width[i]="$ex_width"
     _hi_widen_to w_example "$ex_width"
+    i=$((i + 1))
   done
 
   _hi_hbar "$w_prio" "$w_meaning" "$w_yes" "$w_no" "$w_example"
@@ -207,17 +228,20 @@ function _hi_print_priorities_table() {
     "$w_no" "MISSING" "$w_example" "EXAMPLE"
   _hi_hbar "$w_prio" "$w_meaning" "$w_yes" "$w_no" "$w_example"
 
+  i=0
   for entry in ${rows[@]+"${rows[@]}"}; do
     IFS=$'\t' read -r p meaning <<<"$entry"
     yes_escape="${_HI_YES[p]:-}"
     no_escape="${_HI_NO[p]:-}"
-    yes_name="$(_hi_color_label "$yes_escape")"
-    no_name="$(_hi_color_label "$no_escape")"
+    yes_name="${c_yes[i]}"
+    no_name="${c_no[i]}"
     # the sentinel is not something to paint with, so the cell that says
     # "hidden" is rendered in no color at all
     [[ "$yes_escape" = hide ]] && yes_escape=""
     [[ "$no_escape" = hide ]] && no_escape=""
-    IFS=$'\t' read -r example ex_width <<<"$(_hi_example_cell "$p")"
+    example="${c_example[i]}"
+    ex_width="${c_ex_width[i]}"
+    i=$((i + 1))
 
     _hi_cell "$w_prio" "" "$p"
     _hi_cell "$w_meaning" "" "$meaning"

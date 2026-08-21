@@ -272,39 +272,14 @@ function _hi_shell_answer() {
     _hi_session_shell' 2>/dev/null
 }
 
-function test_session_shell_prefers_the_login_shell() {
-  [ "$(_hi_shell_answer "bash zsh fish" SHELL=/bin/zsh)" = zsh ] || return 1
-  [ "$(_hi_shell_answer "bash zsh fish" SHELL=/usr/bin/bash)" = bash ]
-}
-
-# a login shell hi doesn't style is not a reason to refuse the session
-function test_session_shell_falls_back_for_an_unstyled_login_shell() {
-  [ "$(_hi_shell_answer "bash zsh fish" SHELL=/bin/mksh)" = fish ]
-}
-
-# ...nor is one that isn't installed here
-function test_session_shell_falls_back_when_the_login_shell_is_absent() {
-  [ "$(_hi_shell_answer "bash zsh" SHELL=/usr/bin/fish)" = zsh ]
-}
-
-function test_session_shell_honors_the_preference_list() {
-  [ "$(_hi_shell_answer "bash zsh fish" SHELL=/bin/zsh _HI_SHELL_PREFERENCE=bash)" = bash ] || return 1
-  # the pre-login-shell behaviour, for anyone who liked it
-  [ "$(_hi_shell_answer "bash zsh fish" SHELL=/bin/bash _HI_SHELL_PREFERENCE="fish zsh bash")" = fish ]
-}
-
-# load.sh only runs where bash exists, so bash is the floor no matter what
-function test_session_shell_floors_at_bash() {
-  [ "$(_hi_shell_answer "bash" SHELL=/usr/bin/fish _HI_SHELL_PREFERENCE="fish zsh")" = bash ]
-}
-
-# The default tail is now $_HI_SHELL_TREE, which carries the bash-less tiers
-# (mksh, ksh, dash, ash, sh) after bash - they are hi.sh's ladder's business,
-# not this file's, and _hi_session_shell's allow-list `case` is what keeps them
-# out. A tree walked without that filter would answer "mksh" here.
-function test_session_shell_never_picks_a_bash_less_tier() {
-  [ "$(_hi_shell_answer "bash mksh" SHELL=/bin/mksh)" = bash ] || return 1
-  [ "$(_hi_shell_answer "bash dash zsh" SHELL=/bin/dash)" = zsh ]
+# _hi_shell_case <installed> <env-string> - _hi_shell_answer with the env
+# pairs taken from one table field. eval'd so a value with spaces in it
+# (_HI_SHELL_PREFERENCE="fish zsh bash") stays one argument; the field is
+# literal text in this file, not input.
+function _hi_shell_case() {
+  local installed="$1" envs="$2"
+  eval "set -- $envs"
+  _hi_shell_answer "$installed" "$@"
 }
 
 # The gate in front of `hi --tmux`. Every "no" here has to be a *loud* no that
@@ -322,10 +297,6 @@ function _hi_tmux_answer() {
     if _hi_tmux_wanted; then echo yes; else echo no; fi' 2>&1)" || rc=$?
   printf '%s' "$out"
   return "$rc"
-}
-
-function test_tmux_wanted_off_by_default() {
-  [ "$(_hi_tmux_answer _HI_HOME="$_HI_HOME" PATH="$PATH")" = no ]
 }
 
 function test_tmux_wanted_on_when_asked_for() {
@@ -377,15 +348,34 @@ function run_load_tests() {
   _hi_check "_HI_LOAD_NO_INIT=1 skips both" test_no_init_guard_skips_profile_and_path
 
   _hi_h2 "Testing: _hi_session_shell"
-  _hi_check "Prefers the login shell" test_session_shell_prefers_the_login_shell
-  _hi_check "Falls back for a shell hi doesn't style" test_session_shell_falls_back_for_an_unstyled_login_shell
-  _hi_check "Falls back when it isn't installed" test_session_shell_falls_back_when_the_login_shell_is_absent
-  _hi_check "_HI_SHELL_PREFERENCE decides" test_session_shell_honors_the_preference_list
-  _hi_check "A bash-less tier is never the session shell" test_session_shell_never_picks_a_bash_less_tier
-  _hi_check "Floors at bash" test_session_shell_floors_at_bash
+  # <label>|<installed shells>|<env pairs>|<want>. Six cases, three of which
+  # asserted twice in one body - split into a row each, so a failure names the
+  # half that broke and _hi_check_eq prints the shell it actually chose.
+  while IFS='|' read -r _label _installed _env _want; do
+    case "$_label" in '' | '#'*) continue ;; esac
+    _hi_check_eq "$_label" "$_want" _hi_shell_case "$_installed" "$_env"
+  done <<'EOF'
+Prefers the login shell (zsh)|bash zsh fish|SHELL=/bin/zsh|zsh
+Prefers the login shell (bash)|bash zsh fish|SHELL=/usr/bin/bash|bash
+# a login shell hi doesn't style is not a reason to refuse the session
+Falls back for a shell hi doesn't style|bash zsh fish|SHELL=/bin/mksh|fish
+# ...nor is one that isn't installed here
+Falls back when it isn't installed|bash zsh|SHELL=/usr/bin/fish|zsh
+_HI_SHELL_PREFERENCE decides|bash zsh fish|SHELL=/bin/zsh _HI_SHELL_PREFERENCE=bash|bash
+# the pre-login-shell behaviour, for anyone who liked it
+_HI_SHELL_PREFERENCE decides (full list)|bash zsh fish|SHELL=/bin/bash _HI_SHELL_PREFERENCE="fish zsh bash"|fish
+# load.sh only runs where bash exists, so bash is the floor no matter what
+Floors at bash|bash|SHELL=/usr/bin/fish _HI_SHELL_PREFERENCE="fish zsh"|bash
+# The default tail is $_HI_SHELL_TREE, which carries the bash-less tiers
+# (mksh, ksh, dash, ash, sh) after bash - they are hi.sh's ladder's business,
+# not this file's, and _hi_session_shell's allow-list `case` is what keeps them
+# out. A tree walked without that filter would answer "mksh" here.
+A bash-less tier is never the session shell (mksh)|bash mksh|SHELL=/bin/mksh|bash
+A bash-less tier is never the session shell (dash)|bash dash zsh|SHELL=/bin/dash|zsh
+EOF
 
   _hi_h2 "Testing: _hi_tmux_wanted"
-  _hi_check "Off by default" test_tmux_wanted_off_by_default
+  _hi_check_eq "Off by default" no _hi_tmux_answer _HI_HOME="$_HI_HOME" PATH="$PATH"
   _hi_check_requires tmux "On when asked for" test_tmux_wanted_on_when_asked_for
   _hi_check_requires tmux "Refuses a disposable tree, loudly" test_tmux_wanted_refuses_a_disposable_tree
 

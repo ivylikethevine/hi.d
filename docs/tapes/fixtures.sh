@@ -20,6 +20,22 @@ set -euo pipefail
 _HI_DEMO_DIR=/tmp/hi-demo
 _HI_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
+# demo_wait_for <what> <cmd...> - poll <cmd> once a second for 30s. Returns 0
+# the first time it succeeds; otherwise names <what> on stderr and returns 1,
+# so a fixture that never came up says which one rather than failing the tape
+# further down with something unrelated.
+function demo_wait_for() {
+  local what="$1" i=0
+  shift
+  while ((i < 30)); do
+    "$@" >/dev/null 2>&1 && return 0
+    sleep 1
+    i=$((i + 1))
+  done
+  echo "$what never answered" >&2
+  return 1
+}
+
 # a throwaway keypair and an ssh config the ssh tape's `hi -F` points at, so
 # the demo never touches the renderer's ~/.ssh
 function demo_keypair() {
@@ -100,12 +116,8 @@ Host web-1
   LogLevel ERROR
 EOF
   # wait for sshd to answer before the tape types anything
-  for _ in $(seq 1 30); do
-    ssh -F "$_HI_DEMO_DIR/ssh_config" web-1 true 2>/dev/null && return 0
-    sleep 1
-  done
-  echo "sshd never answered on port $port" >&2
-  return 1
+  demo_wait_for "sshd on port $port" \
+    ssh -F "$_HI_DEMO_DIR/ssh_config" web-1 true
 }
 
 # a bare shell-only image per flavor, the docker/podman e2e shape. <name> is
@@ -133,6 +145,14 @@ function up_container() { # <backend> <name> <flavor: debian|zsh|fish|ash>
     "$image" tail -f /dev/null >/dev/null
 }
 
+# one poll of the hi-demo allocation: stash the running alloc's short ID and
+# say whether there was one.
+function demo_alloc_running() {
+  nomad job allocs -t '{{ range . }}{{ if eq .ClientStatus "running" }}{{ .ID }}{{ end }}{{ end }}' hi-demo \
+    2>/dev/null | cut -c1-8 >"$_HI_DEMO_DIR/alloc"
+  [ -s "$_HI_DEMO_DIR/alloc" ]
+}
+
 function up_nomad() {
   command -v nomad >/dev/null || {
     echo "nomad is not installed" >&2
@@ -141,10 +161,9 @@ function up_nomad() {
   pkill -f 'nomad agent -dev' 2>/dev/null || true
   nomad agent -dev >"$_HI_DEMO_DIR/nomad.log" 2>&1 &
   echo $! >"$_HI_DEMO_DIR/nomad.pid"
-  for _ in $(seq 1 30); do
-    nomad status >/dev/null 2>&1 && break
-    sleep 1
-  done
+  # not fatal: the job run below is the real gate, and it reports its own
+  # failure. A timeout here just says so rather than passing silently.
+  demo_wait_for 'the nomad agent' nomad status || true
   cat >"$_HI_DEMO_DIR/demo.nomad.hcl" <<'EOF'
 job "hi-demo" {
   type = "service"
@@ -162,14 +181,7 @@ job "hi-demo" {
 }
 EOF
   nomad job run "$_HI_DEMO_DIR/demo.nomad.hcl" >/dev/null
-  for _ in $(seq 1 30); do
-    nomad job allocs -t '{{ range . }}{{ if eq .ClientStatus "running" }}{{ .ID }}{{ end }}{{ end }}' hi-demo \
-      2>/dev/null | cut -c1-8 >"$_HI_DEMO_DIR/alloc"
-    [ -s "$_HI_DEMO_DIR/alloc" ] && return 0
-    sleep 1
-  done
-  echo "the hi-demo allocation never reached running" >&2
-  return 1
+  demo_wait_for 'the hi-demo allocation' demo_alloc_running
 }
 
 function up_kube() {

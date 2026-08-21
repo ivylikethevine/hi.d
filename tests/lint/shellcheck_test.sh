@@ -133,20 +133,25 @@ function _hi_lint_blanks() {
   done
 }
 
-# _hi_lint_table <dir> <what-plural> <entry...> - every "<pattern>|<what>" hit
+# _hi_lint_table <dir> <include> <what-plural> <entry...> - every
+# "<pattern>|<what>" hit. <include> is grep's --include glob, or empty for the
+# whole mirror: the two sweeps share one blanked tree and differ only in which
+# extensions they look at.
 # outside a comment, reported one line per pattern. Comments are excluded on
 # purpose: half of these constructs are *named* in the notes explaining why
 # they aren't used. Returns how many patterns matched.
 function _hi_lint_table() {
-  local dir="$1" label="$2" entry pattern what hits bad=0
-  shift 2
+  local dir="$1" include="$2" label="$3" entry pattern what hits bad=0
+  local -a inc=()
+  shift 3
+  [ -n "$include" ] && inc=(--include="$include")
   for entry in "$@"; do
     pattern="${entry%|*}"
     what="${entry##*|}"
     _HI_LINT_TOTAL=$((_HI_LINT_TOTAL + 1))
     # anchored and non-global, so a '%' or a path-like string inside a matched
     # line survives into the report untouched
-    hits="$(grep -rnHE "$pattern" "$dir" 2>/dev/null | grep -v ':[[:space:]]*#' |
+    hits="$(grep -rnHE ${inc[@]+"${inc[@]}"} "$pattern" "$dir" 2>/dev/null | grep -v ':[[:space:]]*#' |
       sed "s|^$dir/||" || true)"
     if [ -z "$hits" ]; then
       _hi_align " | no $what" "OK" "$GREEN"
@@ -160,11 +165,26 @@ function _hi_lint_table() {
   return "$bad"
 }
 
+# The blanked mirror both table sweeps read, built on first use. lint_bash32
+# wants the *.sh half and lint_home_default the whole thing, and $_HI_SH_FILES
+# is _hi_lint_find's *.sh subset - the same find, same exclusions - so one
+# mirror of the wider list serves both and the narrower sweep filters with
+# grep's --include. Blanking twice meant an awk fork per file twice over and
+# two copies of the tree on disk.
+_HI_LINT_MIRROR=""
+function _hi_lint_mirror() {
+  local files
+  [ -z "$_HI_LINT_MIRROR" ] || return 0
+  _HI_LINT_MIRROR="$_HI_WORKDIR/lintmirror"
+  _hi_read_lines files < <(_hi_lint_find -name '*.sh' -o -name '*.zsh' \
+    -o -name '*.fish' -o -name '*.md')
+  _hi_lint_blanks "$_HI_LINT_MIRROR" "${files[@]}"
+}
+
 function lint_bash32() {
-  local blanks="$_HI_WORKDIR/bash32"
   _hi_h2 "Checking for bash-4-only constructs (macOS ships bash 3.2)"
-  _hi_lint_blanks "$blanks" "${_HI_SH_FILES[@]}"
-  _hi_lint_table "$blanks" "bash-4 construct" "${_HI_BASH32_LINT[@]}"
+  _hi_lint_mirror
+  _hi_lint_table "$_HI_LINT_MIRROR" '*.sh' "bash-4 construct" "${_HI_BASH32_LINT[@]}"
 }
 
 # The same sweep for a $HOME-shaped tree default, over a wider file list. Every
@@ -179,13 +199,9 @@ function lint_bash32() {
 # reads. Not .rb: _hi_lint_table drops comments, and the formula's only
 # occurrence is one, so it would buy a file list and no coverage.
 function lint_home_default() {
-  local blanks="$_HI_WORKDIR/homedefault"
-  local files
   _hi_h2 "Checking for a \$HOME default for the say-hi tree"
-  _hi_read_lines files < <(_hi_lint_find -name '*.sh' -o -name '*.zsh' \
-    -o -name '*.fish' -o -name '*.md')
-  _hi_lint_blanks "$blanks" "${files[@]}"
-  _hi_lint_table "$blanks" "tree default" "${_HI_HOME_LINT[@]}"
+  _hi_lint_mirror
+  _hi_lint_table "$_HI_LINT_MIRROR" '' "tree default" "${_HI_HOME_LINT[@]}"
 }
 
 # The formatter as a lint: shfmt -d over the same file list shellcheck reads
@@ -348,6 +364,23 @@ function lint_glossary_tags() {
     done <<<"${tag//" + "/$'\n'}"
   done
   [ "$bad" -eq 0 ] && _hi_align " | every tag names a real entry" "OK" "$GREEN"
+
+  # ...and the other direction, which is the one that rots quietly. A tag
+  # naming a dead entry fails above and gets fixed; an entry nothing points at
+  # any more just sits there, and the code it described can move or go without
+  # anything noticing. HI.08 and HI.09 had both happened - orphaned, and naming
+  # a file _hi_write_back had since left.
+  _HI_LINT_TOTAL=$((_HI_LINT_TOTAL + 1))
+  local used orphan=0
+  used="$(printf '%s\n' "${tags[@]}")"
+  for h in "${headings[@]}"; do
+    case "$used" in *"$h"*) continue ;; esac
+    _hi_align " | $h is defined but nothing references it" "FAILED" "$RED"
+    _hi_note_failure "GLOSSARY entry: $h unreferenced"
+    orphan=$((orphan + 1))
+  done
+  [ "$orphan" -eq 0 ] && _hi_align " | every entry is referenced" "OK" "$GREEN"
+  bad=$((bad + orphan))
   return "$bad"
 }
 
@@ -560,31 +593,18 @@ function run_shellcheck() {
   fi
 
   _hi_h2 "Syntax-checking the files shellcheck can't parse"
-  _HI_NATIVE_FAILED=0
-  lint_native || _HI_NATIVE_FAILED=$?
-
-  _HI_BASH32_FAILED=0
-  lint_bash32 || _HI_BASH32_FAILED=$?
-
-  _HI_HOME_FAILED=0
-  lint_home_default || _HI_HOME_FAILED=$?
-
-  _HI_SHFMT_FAILED=0
-  lint_shfmt || _HI_SHFMT_FAILED=$?
-
-  _HI_CB_FAILED=0
-  lint_checkbashisms || _HI_CB_FAILED=$?
-
-  _HI_GLOSSARY_FAILED=0
-  lint_glossary_tags || _HI_GLOSSARY_FAILED=$?
-
-  _HI_DOCKERFILE_FAILED=0
-  lint_dockerfiles || _HI_DOCKERFILE_FAILED=$?
-
-  _HI_IMAGE_TAG_FAILED=0
-  lint_image_tags || _HI_IMAGE_TAG_FAILED=$?
-
-  _HI_LINT_FAILED=$((_HI_SC_FAILED + _HI_NATIVE_FAILED + _HI_BASH32_FAILED + _HI_HOME_FAILED + _HI_SHFMT_FAILED + _HI_CB_FAILED + _HI_GLOSSARY_FAILED + _HI_DOCKERFILE_FAILED + _HI_IMAGE_TAG_FAILED))
+  # One list, so a lint half is registered by adding its name here and nowhere
+  # else. The old form paired a per-half counter with a nine-term sum on one
+  # line, where forgetting the sum left that half's failures invisible while
+  # the suite still went green - silent, which is the wrong way for a gate to
+  # break. Each function prints its own _hi_h2 banner, so order is the running
+  # order. Seeded with the shellcheck count from above.
+  _HI_LINT_FAILED=$_HI_SC_FAILED
+  for _hi_lint_half in lint_native lint_bash32 lint_home_default lint_shfmt \
+    lint_checkbashisms lint_glossary_tags lint_dockerfiles lint_image_tags; do
+    "$_hi_lint_half" || _HI_LINT_FAILED=$((_HI_LINT_FAILED + $?))
+  done
+  unset _hi_lint_half
   _hi_report_counts "$_HI_LINT_TOTAL" "$_HI_LINT_FAILED" "$_HI_SKIPPED"
 
   local skipped=""

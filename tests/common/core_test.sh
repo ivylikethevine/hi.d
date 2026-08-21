@@ -58,18 +58,6 @@ function test_sanitize_strips_control_chars_and_backslashes() {
   [ "$out" = "abc" ]
 }
 
-function test_color_escape_matches_red_constant() {
-  [ "$(_hi_color_escape red)" = "$(_hi_rendered "$RED")" ]
-}
-
-function test_color_escape_matches_brcyan_constant() {
-  [ "$(_hi_color_escape brcyan)" = "$(_hi_rendered "$BRCYAN")" ]
-}
-
-function test_color_escape_unknown_name_resets() {
-  [ "$(_hi_color_escape not-a-real-color)" = "$(_hi_rendered "$NC")" ]
-}
-
 # https://no-color.org - the convention is "non-empty means off", so both the
 # per-call gates and the source-time palette blanking are asserted, the second
 # through a fresh bash: this shell sourced core.sh before the variable was set.
@@ -91,10 +79,6 @@ function test_no_color_blanks_the_palette_at_source_time() {
   out="$(env NO_COLOR=1 _HI_HOME="$_HI_HOME" bash -c \
     '. "$_HI_HOME/say-hi/common/core.sh"; printf "%s" "$NC$RED$BRCYAN"')"
   [ -z "$out" ]
-}
-
-function test_hash_color_deterministic() {
-  [ "$(_hi_hash_color someuser)" = "$(_hi_hash_color someuser)" ]
 }
 
 function test_hash_color_matches_hand_computed_bucket() {
@@ -257,14 +241,6 @@ function _hi_cfg_answer() {
   printf '%s' "${out#"$base/"}"
 }
 
-function test_config_dir_defaults_to_the_new_name() {
-  [ "$(_hi_cfg_answer neither)" = say-hi ]
-}
-
-function test_config_dir_uses_the_new_name_when_it_exists() {
-  [ "$(_hi_cfg_answer new)" = say-hi ]
-}
-
 # hi.sh points a target at the overlay it shipped, so an explicit value has to
 # beat the derived one
 function test_config_dir_explicit_value_wins() {
@@ -420,9 +396,9 @@ function run_core_tests() {
   _hi_check "Strips control chars and backslashes" test_sanitize_strips_control_chars_and_backslashes
 
   _hi_h2 "Testing: _hi_color_escape"
-  _hi_check "Red matches \$RED" test_color_escape_matches_red_constant
-  _hi_check "Brcyan matches \$BRCYAN" test_color_escape_matches_brcyan_constant
-  _hi_check "Unknown name resets" test_color_escape_unknown_name_resets
+  _hi_check_eq "Red matches \$RED" "$(_hi_rendered "$RED")" _hi_color_escape red
+  _hi_check_eq "Brcyan matches \$BRCYAN" "$(_hi_rendered "$BRCYAN")" _hi_color_escape brcyan
+  _hi_check_eq "Unknown name resets" "$(_hi_rendered "$NC")" _hi_color_escape not-a-real-color
 
   _hi_h2 "Testing: NO_COLOR"
   _hi_check "Blanks the escape" test_no_color_blanks_the_escape
@@ -431,7 +407,7 @@ function run_core_tests() {
   _hi_check "Blanks the palette at source time" test_no_color_blanks_the_palette_at_source_time
 
   _hi_h2 "Testing: _hi_hash_color"
-  _hi_check "Deterministic across calls" test_hash_color_deterministic
+  _hi_check_eq "Deterministic across calls" "$(_hi_hash_color someuser)" _hi_hash_color someuser
   _hi_check "Matches hand-computed buckets" test_hash_color_matches_hand_computed_bucket
 
   _hi_h2 "Testing: _hi_override_color"
@@ -461,8 +437,8 @@ function run_core_tests() {
 
   _hi_h2 "Testing: the settings overlay"
   _hi_check "settings.sh is sourced" test_settings_sh_is_sourced
-  _hi_check "Defaults to ~/.config/say-hi" test_config_dir_defaults_to_the_new_name
-  _hi_check "Uses say-hi when it exists" test_config_dir_uses_the_new_name_when_it_exists
+  _hi_check_eq "Defaults to ~/.config/say-hi" say-hi _hi_cfg_answer neither
+  _hi_check_eq "Uses say-hi when it exists" say-hi _hi_cfg_answer new
   _hi_check "An explicit \$_HI_CONFIG_DIR wins" test_config_dir_explicit_value_wins
 
   _hi_h2 "Testing: the same answers in zsh"

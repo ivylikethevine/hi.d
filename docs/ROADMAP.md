@@ -21,7 +21,6 @@ here: git history is the ledger, and this file is only what is left to do.
   - [Testing & CI](#testing--ci)
   - [Demos](#demos)
 - [Outside this repo](#outside-this-repo)
-  - [Secrets & keys](#secrets--keys)
   - [Release channels](#release-channels)
   - [Repo settings and first runs](#repo-settings-and-first-runs)
   - [Docs & submissions](#docs--submissions)
@@ -38,10 +37,12 @@ here: git history is the ledger, and this file is only what is left to do.
       has to be true, and the blocked entries become orderable behind it.
 
   - **The obvious candidates**, each already tracked somewhere in this file: the
-    CLI surface frozen (the tldr entry is blocked on exactly that), both keypairs
-    generated, `macos-e2e.yml` and `windows-e2e.yml` green at least once rather
-    than merely written, and every release channel published once by hand before
-    the automation is trusted with it.
+    CLI surface frozen (the tldr entry is blocked on exactly that),
+    `macos-e2e.yml` and `windows-e2e.yml` green at least once rather than merely
+    written, and every release channel published once by hand before the
+    automation is trusted with it. (Both signing keypairs are done - the apk key
+    and the minisign key are generated, their secrets are set and their public
+    halves are committed.)
   - **It is a gate, not a wish list.** Anything that would be nice by v1 but does
     not block calling the thing stable belongs in its own entry, unticked, rather
     than padding this one — the point is a list short enough to finish.
@@ -101,6 +102,26 @@ here: git history is the ledger, and this file is only what is left to do.
   - **Ticks when:** the answer is written down either way. If it stays
     dependabot, say so here and in `.github/dependabot.yml`'s header so the
     question stops being reopened.
+
+- [ ] **Say what a refused push means in `SECURITY.md`** — _secret scanning and
+      push protection are both on._ Push protection is the half that acts: it
+      refuses the push rather than reporting the leak afterwards, so a
+      contributor who trips it gets GitHub's own error and nothing from this
+      project saying what to do next. Four credentials make that reachable —
+      `APK_SIGNING_KEY` and `MINISIGN_SECRET_KEY`, the two signing keys, plus
+      `AUR_SSH_KEY` and `HOMEBREW_TAP_TOKEN` under **Release channels** — and
+      every one is generated on a laptop, pasted into a settings page and
+      deleted locally, a sequence whose failure mode is a paste into the wrong
+      buffer and a commit.
+
+  - **What the note has to say:** that the refusal is the guard working, that
+    the fix is editing the file rather than forcing the push, and where to go
+    if the blocked string is a false positive. `docs/SECURITY.md` is the file —
+    there is no `CONTRIBUTING.md` in this tree.
+  - **Still not gitleaks or trufflehog.** GitHub's own scanner runs on the push
+    path where a third-party action cannot; revisit only if a key format it
+    does not recognise shows up.
+  - **Ticks when:** `docs/SECURITY.md` carries the note.
 
 ### Testing & CI
 
@@ -208,38 +229,6 @@ here: git history is the ledger, and this file is only what is left to do.
 
 ## Outside this repo
 
-### Secrets & keys
-
-Two keypairs. **The in-repo half of both is written and tested** — CI consumes each secret the moment it exists and says so loudly when it doesn't. What's left is generating the key and pasting it in.
-
-- [ ] **apk signing key** — wired end to end: `nfpm.yaml` declares the
-      signature (key from `$HI_APK_KEY`, name `say-hi.rsa.pub`), `release.yml`
-      injects the `APK_SIGNING_KEY` secret, and CI's packaging-smoke installs a
-      signed apk on Alpine every PR. Without the key the release apk builds
-      unsigned and installing it needs `--allow-untrusted`.
-
-  - **Where:** a terminal, then Settings → Secrets and variables → Actions
-  - **Do:** generate the RSA keypair (abuild-style), add the private half as the `APK_SIGNING_KEY` **repo** secret (not an environment secret — the ungated build job needs it), commit `packaging/apk/say-hi.rsa.pub` under exactly that filename (apk matches signatures to `/etc/apk/keys/` by name, and it must stay what `nfpm.yaml`'s `key_name` says), delete the local private half.
-  - **Ticks when:** the secret exists and the public key is committed.
-
-    ```sh
-    openssl genrsa -out say-hi-apk.rsa 4096
-    openssl rsa -in say-hi-apk.rsa -pubout -out packaging/apk/say-hi.rsa.pub
-    ```
-
-- [ ] **minisign keypair** — the publish job installs a pinned minisign
-      (drift-checked weekly) and signs `SHA256SUMS` with `MINISIGN_SECRET_KEY`;
-      the `.minisig` rides the upload only when it exists, and the README's
-      "Verifying a release download" already shows the check.
-
-  - **Where:** a terminal, then Settings → Environments → `release` → Environment secrets
-  - **Do:** generate it passwordless (CI has nobody to type one), paste `minisign.key`'s contents as the `MINISIGN_SECRET_KEY` **environment** secret (sealed to the gated publish job), put `minisign.pub`'s public key line into the README's "Verifying a release download" over the `RWT-PLACEHOLDER-…` value, delete both local files.
-  - **Ticks when:** the secret exists and the README carries the real key.
-
-    ```sh
-    minisign -G -W -p minisign.pub -s minisign.key
-    ```
-
 ### Release channels
 
 Both jobs are written and behind the release gate; what's left in each is
@@ -276,39 +265,30 @@ Each of these waits on something outside the checkout — a toggle in the repo's
 settings, or a decision — which is why they sit here rather than in the in-repo
 half: no file here can close one.
 
-- [ ] **Turn branch protection on for `main`** — Scorecard's highest-severity
-      finding, and nothing in the repo blocks it: the tests count is published
-      to the Pages site rather than pushed to `main` by a `contents: write`
-      job, so `release.yml`'s gated `publish` job is the only writer, and it
-      writes against tags.
+- [ ] **Get a release out under branch protection** — _the rule is on:_ `main`
+      requires a pull request and refuses a direct push, which closes
+      Scorecard's highest-severity finding. What has not happened is a release
+      under it, and the entry's old `Watch for:` was right about why that
+      matters.
 
-  - **Watch for:** `publish` still commits the packaging manifests to `main`
-    (`release.yml`, the second credentialed checkout), so whatever rule goes on
-    has to let that job through or the release path breaks at the last step.
-    Decide the required checks too — and per the note on the markdownlint job,
-    do not make the advisory ones required.
-  - **Ticks when:** the rule exists and a release has gone out under it.
-
-- [ ] **Secret scanning and push protection** — free on a public repo, off by
-      default, and this repo now has four things worth protecting:
-      `APK_SIGNING_KEY` and `MINISIGN_SECRET_KEY` (the two signing keys, both
-      under **Secrets & keys** above), `AUR_SSH_KEY` and `HOMEBREW_TAP_TOKEN`
-      (the two publishing credentials, under **Release channels**). Every one
-      of them is generated on a laptop, pasted into a settings page, and
-      deleted locally — a sequence whose failure mode is a paste into the wrong
-      buffer and a commit.
-
-  - **Push protection is the half that matters.** Scanning tells you a
-    credential leaked, which by then means rotating an AUR key and a tap token.
-    Push protection refuses the push that would leak it, so the recovery is
-    editing a file rather than re-registering with two package channels.
-  - **Where:** Settings → Code security. Turn on secret scanning, then push
-    protection.
-  - **Not a workflow, and not gitleaks or trufflehog.** GitHub's own scanner
-    runs on the push path where a third-party action cannot, and it costs
-    nothing here. Revisit only if a key format it does not recognise shows up.
-  - **Ticks when:** both are on, and the CONTRIBUTING/SECURITY note says what a
-    contributor should do when a push is refused.
+  - **`publish` still pushes straight to `main`, and that push is now
+    refused.** `release.yml`'s second checkout is the one that keeps its
+    credentials (`ref: main`), and the `Commit the manifests to main` step ends
+    in `git push origin main` to land the regenerated `PKGBUILD`, `.SRCINFO`
+    and `say-hi.rb`. Under a PR-required rule that fails, so the next tag dies
+    at the last step of the release with the packages already published.
+  - **Two ways to close it**, and they are a real choice rather than a
+    formality: give the GitHub Actions app a bypass actor on the ruleset and
+    leave the job alone, or convert `publish` to open a pull request the way
+    the `aur`/`tap` half already does — the `tap` job is the in-repo precedent
+    for exactly that shape. The bypass keeps releases one-step; the PR keeps
+    the rule honest with no exceptions.
+  - **The required checks are still unset.** Only the pull-request requirement
+    is configured. When they go on, per the note on the markdownlint job, do
+    not make the advisory ones required — `markdownlint`, `hadolint`, lychee
+    and trivy are all designed to be ignorable.
+  - **Ticks when:** a release has gone out under the rule with the manifest
+    step green.
 
 - [ ] **A job-started hook on the self-hosted runner** — thirteen jobs across
       eight workflows open with the same `Reclaim the workspace` step: a

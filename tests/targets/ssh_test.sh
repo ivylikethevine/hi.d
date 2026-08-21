@@ -22,6 +22,19 @@ source "${_HI_TEST_LIB:-${BASH_SOURCE[0]%/*}/../test_lib.sh}"
 # associative array, which is bash 4 (macOS ships 3.2)
 _HI_ALPINE_OK=""
 
+# _hi_post_check <label> <container> <cmd> - the extra assertion a case can
+# make inside its own container once the session verdict is in. Empty <cmd>
+# passes. ssh-specific, so it lives here rather than in tests/lib/; it goes
+# through $_HI_BACKEND like the rest of the harness, where the two copies it
+# replaces both said `docker` outright.
+function _hi_post_check() {
+  local label="$1" name="$2" post="$3"
+  [ -n "$post" ] || return 0
+  "${_HI_BACKEND:-docker}" exec "$name" sh -c "$post" >/dev/null 2>&1 && return 0
+  _hi_h3 " | [$label] -- post-check FAILED: $post" "$RED"
+  return 1
+}
+
 # <label> <image> <login_shell> <cmd> [post] [extra-marker...] - anything past
 # $5 is handed to _hi_case_result as a further must-appear transcript marker
 # (the same variadic contract _hi_run_ksh_git_case uses for the branch name)
@@ -60,13 +73,9 @@ function _hi_run_case() {
   exit_code="$_HI_WAIT_EXIT"
   t1="$(_hi_now)"
 
-  # the shared verdict, then the same post-check shape _hi_run_interactive_case uses
   if _hi_case_result "$label" "ssh path" "$exit_code" "$t0" "$t1" "$out_file" "$_HI_TEST_MARKER" "${@:6}"; then
     ok=1
-    if [ -n "$post" ] && ! docker exec "$name" sh -c "$post" >/dev/null 2>&1; then
-      _hi_h3 " | [$label] -- post-check FAILED: $post" "$RED"
-      ok=0
-    fi
+    _hi_post_check "$label" "$name" "$post" || ok=0
   fi
 
   _hi_rm_container "$name"
@@ -85,10 +94,7 @@ function _hi_run_interactive_case() {
 
   if _hi_interactive_case "$label" "ssh path" "$_HI_TEST_MARKER" 90 "${_HI_SSH_LAUNCH_BARE[@]}"; then
     ok=1
-    if [ -n "$post" ] && ! docker exec "$name" sh -c "$post" >/dev/null 2>&1; then
-      _hi_h3 " | [$label] -- post-check FAILED: $post" "$RED"
-      ok=0
-    fi
+    _hi_post_check "$label" "$name" "$post" || ok=0
   fi
 
   _hi_rm_container "$name"

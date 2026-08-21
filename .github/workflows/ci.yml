@@ -16,11 +16,16 @@ concurrency:
 
 jobs:
 
-  # One place decides which runner the rest of CI gets, instead of the same
-  # expression copy-pasted into every job. A pull request from a fork is code
-  # nobody has read yet and vars.RUNNER_LABEL is somebody's actual machine, so
-  # that case gets the hosted runner whatever the variable says - a structural
-  # stop, not a reviewer remembering. See docs/PACKAGING.md for the variable.
+  # One place decides which runner the rest of *this file* gets, instead of the
+  # same expression copy-pasted into every job here. It is not repo-wide:
+  # codeql, scorecard, coverage, image-scan, link-check, tool-versions, pages
+  # and release.yml each still derive `vars.RUNNER_LABEL || 'ubuntu-latest'` on
+  # their own, because none of them needs the fork guard below.
+  #
+  # A pull request from a fork is code nobody has read yet and vars.RUNNER_LABEL
+  # is somebody's actual machine, so that case gets the hosted runner whatever
+  # the variable says - a structural stop, not a reviewer remembering. See
+  # docs/PACKAGING.md for the variable.
   runner:
     name: pick the runner
     runs-on: ubuntu-latest # never vars.RUNNER_LABEL: this job is the guard
@@ -198,8 +203,9 @@ jobs:
   # warning in the run summary. Note the difference from `continue-on-error` on
   # the job, which would paint the job green and hide the result entirely.
   #
-  # The corollary, for whenever branch protection goes on (see docs/ROADMAP.md):
-  # do not add this job to the required checks - it is designed to be ignorable.
+  # The corollary, now that branch protection is on (see docs/ROADMAP.md): its
+  # required checks are still unset, and this job must stay off that list when
+  # they go on - it is designed to be ignorable.
   markdownlint:
     name: markdownlint (advisory)
     # Pinned hosted, not needs.runner: this job installs no apt packages and
@@ -306,22 +312,29 @@ jobs:
   # Hot-path timings against generous ceilings - catches an order-of-magnitude
   # regression (a fork in a loop, a probe losing its timeout), and prints the
   # numbers into every run's log for eyeballing trends.
-  # The self-hosted chain: `test` -> `bench` -> `packaging-smoke` -> `e2e` ->
-  # `e2e-backends`. Those `needs:` are ordering, not data dependencies - with
-  # vars.RUNNER_LABEL set these five all land on one machine, and running them
-  # one at a time is what stops concurrent checkouts contending for a shared
-  # workspace. It costs wall-clock on GitHub-hosted runs, where they could have
-  # gone in parallel; that is the deliberate trade. `test-macos` stays outside
-  # the chain - it reads MACOS_RUNNER_LABEL, so it is never the same box.
+  # bench, packaging-smoke, e2e and e2e-backends all land on one machine when
+  # vars.RUNNER_LABEL is set, and must not run concurrent checkouts against its
+  # shared workspace. That used to be a `needs:` chain, which bought the
+  # serialization at two costs: on GitHub-hosted runs (every fork PR, and any
+  # repo with no RUNNER_LABEL) four jobs that could have gone in parallel ran
+  # strictly one after another, and the chain still did not solve the stated
+  # problem - `concurrency` at the top of this file is keyed on github.ref, so
+  # two *different* PRs put jobs on the same box at the same time anyway.
   #
-  # Each link is `!cancelled()` rather than a bare `needs`, so a red job still
-  # lets the next one run and report its own verdict. Only `e2e` and
-  # `e2e-backends` genuinely gate on `test` passing, exactly as before.
+  # Job-level concurrency instead: self-hosted runs share one group and queue,
+  # across runs as well as within them, while hosted runs get a group per job
+  # per run and full parallelism. Only the real data dependencies stay in
+  # `needs:` - e2e and e2e-backends gate on `test` passing. `test-macos` was
+  # never in the chain: it reads MACOS_RUNNER_LABEL, so it is never that box.
   bench:
     name: hot-path benchmarks
     runs-on: ${{ needs.runner.outputs.ubuntu }}
-    needs: [runner, test]
-    if: ${{ !cancelled() }}
+    needs: runner
+    # one group for the shared self-hosted workspace, one per job per run
+    # otherwise - see the note above bench
+    concurrency:
+      group: ${{ needs.runner.outputs.ubuntu == 'ubuntu-latest' && format('{0}-{1}', github.run_id, github.job) || 'hi-selfhosted-workspace' }}
+      cancel-in-progress: false
     timeout-minutes: 10
     steps:
       # hands the persistent self-hosted workspace back to the runner user, so
@@ -347,8 +360,12 @@ jobs:
   packaging-smoke:
     name: package build (deb, rpm, apk)
     runs-on: ${{ needs.runner.outputs.ubuntu }}
-    needs: [runner, bench]
-    if: ${{ !cancelled() }}
+    needs: runner
+    # one group for the shared self-hosted workspace, one per job per run
+    # otherwise - see the note above bench
+    concurrency:
+      group: ${{ needs.runner.outputs.ubuntu == 'ubuntu-latest' && format('{0}-{1}', github.run_id, github.job) || 'hi-selfhosted-workspace' }}
+      cancel-in-progress: false
     timeout-minutes: 10
     steps:
       # hands the persistent self-hosted workspace back to the runner user, so
@@ -435,7 +452,12 @@ jobs:
   e2e:
     name: e2e (ssh, docker)
     runs-on: ${{ needs.runner.outputs.ubuntu }}
-    needs: [runner, test, packaging-smoke]
+    needs: [runner, test]
+    # one group for the shared self-hosted workspace, one per job per run
+    # otherwise - see the note above bench
+    concurrency:
+      group: ${{ needs.runner.outputs.ubuntu == 'ubuntu-latest' && format('{0}-{1}', github.run_id, github.job) || 'hi-selfhosted-workspace' }}
+      cancel-in-progress: false
     if: ${{ !cancelled() && needs.test.result == 'success' }}
     timeout-minutes: 25
     steps:
@@ -458,7 +480,12 @@ jobs:
   e2e-backends:
     name: e2e (podman, nomad, kube)
     runs-on: ${{ needs.runner.outputs.ubuntu }}
-    needs: [runner, test, e2e]
+    needs: [runner, test]
+    # one group for the shared self-hosted workspace, one per job per run
+    # otherwise - see the note above bench
+    concurrency:
+      group: ${{ needs.runner.outputs.ubuntu == 'ubuntu-latest' && format('{0}-{1}', github.run_id, github.job) || 'hi-selfhosted-workspace' }}
+      cancel-in-progress: false
     if: ${{ !cancelled() && needs.test.result == 'success' }}
     timeout-minutes: 40
     steps:

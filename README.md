@@ -14,7 +14,7 @@ This is a hobby project.
 [![Linux](https://img.shields.io/github/actions/workflow/status/ivylikethevine/say-hi/ci.yml?branch=main&label=Linux)](https://github.com/ivylikethevine/say-hi/actions/workflows/ci.yml)
 [![macOS](https://img.shields.io/github/actions/workflow/status/ivylikethevine/say-hi/macos-e2e.yml?branch=main&label=macOS)](https://github.com/ivylikethevine/say-hi/actions/workflows/macos-e2e.yml)
 [![Windows](https://img.shields.io/github/actions/workflow/status/ivylikethevine/say-hi/windows-e2e.yml?branch=main&label=Windows)](https://github.com/ivylikethevine/say-hi/actions/workflows/windows-e2e.yml)
-![ssh payload](https://img.shields.io/badge/ssh_payload-78KB_per_session-4c1)
+![ssh payload](https://img.shields.io/badge/ssh_payload-47KB_per_session-4c1)
 [![package](https://img.shields.io/endpoint?url=https%3A%2F%2Fivylikethevine.github.io%2Fsay-hi%2Fbadges%2Fpackage.json)](https://github.com/ivylikethevine/say-hi/releases)
 [![kcov](https://img.shields.io/endpoint?url=https%3A%2F%2Fivylikethevine.github.io%2Fsay-hi%2Fbadges%2Fcoverage.json)](docs/TESTING.md#coverage-and-profiling)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/ivylikethevine/say-hi/badge)](https://scorecard.dev/viewer/?uri=github.com/ivylikethevine/say-hi)
@@ -170,7 +170,10 @@ Every username and hostname gets a color deterministically derived from its name
    then reuses - not argv, which Linux caps at 128KB however big `ARG_MAX` says it is. That script is what
    `hi` prints the size of on connect, and what the payload badge measures - for a _default_ configuration:
    a client whose overlay turns off the editor overrides or the OSC 52 clipboard ships less, since hi does not
-   send files it has already been told not to use. That badge is not the package
+   send files it has already been told not to use. Every shell file is comment-stripped on the way into that
+   archive - the checkout keeps its comments, the wire does not, which is about 40% of it; set
+   `_HI_KEEP_COMMENTS=1` to ship the tree verbatim when you need to read the real source on a target.
+   That badge is not the package
    badge beside it and the two should not be read as one number: the payload is what crosses the wire for a
    single ssh session, while the package badge is what you download from a release and what it costs on disk
    once installed - which is the larger figure, since `scripts/` and the docs ship in a package and never on
@@ -341,6 +344,3 @@ sha256sum -c --ignore-missing SHA256SUMS                        # the bytes matc
 minisign -Vm SHA256SUMS -P 'RWTDcJ3LGWayrAxK6mbMysyOF8mNLOmMUGRl4YSWk5KIoayS+lW0Fy1L'
 gh attestation verify say-hi_*_all.deb --repo ivylikethevine/say-hi # which CI run built them
 ```
-
-<!-- The -P value above is a placeholder until the first release's keypair is
-generated - the minisign entry in docs/ROADMAP.md's "Secrets & keys" replaces it. -->

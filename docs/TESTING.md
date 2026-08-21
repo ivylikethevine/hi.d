@@ -174,9 +174,10 @@ reason the header says to read the ranking, not the milliseconds.
 ### The images are files; the build contexts are not
 
 Every container image an e2e suite builds is a real Dockerfile under
-[`tests/dockerfiles/`](../tests/dockerfiles) - `sshd-debian` and `sshd-alpine`
-for the ssh targets, `alpine-shell` for the bare shell ones, `framework-*` for
-the nine shell frameworks, and so on. What stays generated per case is the
+[`tests/dockerfiles/`](../tests/dockerfiles) - `sshd-debian`, `sshd-alpine` and
+`sshd-fedora` for the ssh targets, `alpine-shell` for the bare shell ones,
+`installed-*` for the install-method targets, `framework-*` for the nine shell
+frameworks, and so on. What stays generated per case is the
 _build context_: the throwaway keypair's `entrypoint.sh`, and for the
 pre-installed case the repo itself. Suites reach a file through
 `_hi_dockerfile <stem>` and pass it with `-f`; the variants that differ only by
@@ -198,8 +199,10 @@ Scorecard's Pinned-Dependencies check reports every line below and will keep
 reporting some of them. The answer, so it does not get re-decided each time that
 report is read:
 
-**Base images are digest-pinned, and that is not negotiable.** `alpine`,
-`debian:bookworm-slim` and `bash:3.2` each carry a `@sha256:` in their `FROM`. A
+**Base images are digest-pinned, and that is not negotiable.** Every `FROM` in
+`tests/dockerfiles/` carries a `@sha256:` - `alpine`, `debian:bookworm-slim`,
+`debian:trixie-slim`, `bash:3.2` and `fedora` (the rpm target the
+install-method suite installs a real `.rpm` on). A
 digest is what makes a failed e2e run reproducible, and it is what makes a
 base-image move a deliberate, reviewable act instead of a green run going red
 for reasons nobody changed. Dependabot bumps the digests weekly. The upgrade

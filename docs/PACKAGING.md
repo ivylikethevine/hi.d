@@ -413,3 +413,11 @@ The tree is root-owned and holds nobody's settings. Each user runs, once:
 to `~/.config/say-hi/`, never into the tree, which is what lets a root-owned
 checkout work at all. `hi --update` correctly refuses to `git pull` and points
 at the package manager instead.
+
+**Saying `hi` _to_ a packaged machine works whether or not anyone ran that.**
+The package's `/etc/profile.d/say-hi.sh` is what `hi.sh`'s `_hi_remote_root`
+probe reads to find `/usr/share/say-hi` and use it in place instead of shipping
+a payload over it, and `/usr/share` is on the probe's install-prefix list even
+if that snippet is gone (GLOSSARY: HI.33).
+`tests/targets/install_methods_test.sh` installs a real `.deb`, `.rpm` and
+`.apk` on real targets and asserts exactly that.

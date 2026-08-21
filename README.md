@@ -490,8 +490,16 @@ myself.
 tape cleans up after itself — and a summary of what rendered, what stood down
 for a missing backend, and what failed. Name tapes to render a subset
 (`generate.sh docker kube`); `--list` shows them, `--down` clears up after a
-crashed run. Manual artifacts, reviewed by eye — regenerate whenever the header
-or prompt changes, and look at what came out before committing it.
+crashed run.
+
+**Seven of the eight render themselves.**
+[`.github/workflows/demos.yml`](.github/workflows/demos.yml) runs every tape but
+`demo` on the self-hosted runner — the only machine with all four backends — on
+a tape change, weekly, or on dispatch, and hands the GIFs to the Pages build,
+which lays them over the committed copies at the same paths. Nothing is
+committed back: a bot commit on top of the author's is what branch protection
+refuses, and it is the same reason the tests badge is published rather than
+written into this file.
 
 The top-of-README demo is the one that goes quietly wrong: it claims to be the
 stock defaults, so it is stale the moment the header, the prompt or the tape

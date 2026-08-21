@@ -56,11 +56,14 @@ the target executes was generated on the client.
   abrupt disconnect, not just a clean exit.
 - The rc additions sit between `# hi-config-start` and `# hi-config-end`
   markers and are stripped back out by that same on-exit hook.
-- A target with a permanent say-hi (you ran `scripts/install.sh`
-  there, anywhere) is used in place and nothing is deleted; the rc grafts are
-  still cleaned on exit. That permanent tree never needs to be writable
-  by you - root-owned, package-manager-installed copies work, because
-  your config lives in `~/.config/say-hi/`.
+- A target with a permanent say-hi is used in place and nothing is
+  deleted; the rc grafts are still cleaned on exit. However it got there -
+  `scripts/install.sh`, a `.deb`/`.rpm`/`.apk`, a Homebrew keg - hi finds
+  it by reading that target's own login rc files and then the standard
+  install prefixes, so nothing has to be at a fixed path. That permanent
+  tree never needs to be writable by you: root-owned, package-manager
+  copies work, because your config lives in `~/.config/say-hi/`.
+  `tests/targets/install_methods_test.sh` drives one target per method.
 - On the client, `install.sh` validates your existing rc files with each
   shell's own syntax checker before touching them, and `--uninstall`
   removes exactly what install wrote.

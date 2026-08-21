@@ -63,33 +63,21 @@ not wait on somebody else's spam problem. Its entry stays tracked under
 
 ## In-repo code work
 
+Each entry opens with its **scope** in italics, and entries are ordered by it
+within each section, smallest first. The scope is what the work _is_, not how
+long it takes: "one CI run" and "a backend across seven files" are the useful
+distinction, and a guessed number of days is not.
+
+Read across the sections, the shape today is: everything under
+[Testing & CI](#testing--ci) and [Demos](#demos) is an observation waiting on a
+run that no file here can trigger, and every entry that is actually work to
+_write_ is under [The session itself](#the-session-itself), in increasing order
+of how much of the tree it moves.
+
 ### The session itself
 
-- [ ] **Investigate LXC/LXD (or Incus) as a target** — the one container
-      runtime with a real audience that hi does not answer to, and the only
-      open row on [TARGETS.md](TARGETS.md), which carries the case for it and
-      the checklist of the seven places a backend touches.
-
-  - **Which binary, and is it one backend or two.** LXD ships `lxc exec <name>
-    -- <cmd>`; Incus, the LinuxContainers fork, ships `incus exec` with the
-    same shape. They are the same integration twice over, and picking "both"
-    means two rows everywhere, not one with a fallback — decide before writing
-    any of it.
-  - **The cost is paid by machines that do not have it.** `_hi_resolve_backend`
-    runs every predicate in parallel on every `hi <target>`, and `targets.sh`
-    probes every backend on every TAB (GLOSSARY: HI.26). A fifth backend is a
-    fifth process on both hot paths; check the `command -v` guard actually
-    short-circuits before adding one, and re-run `--group bench`.
-  - **The fixture is the hard part.** Every existing backend suite stands up
-    its target from a container image; LXD/Incus wants a real daemon and a
-    storage pool on the runner, which is a self-hosted-box change, not a
-    Dockerfile. A suite that can only ever skip is worth less than no suite.
-  - **Ticks when:** the answer is written down either way — TARGETS.md's row
-    stops saying "open". If it is yes, the binary is named, the backend is in
-    `_HI_BACKENDS`, and its suite is in `_HI_TESTS` — even if it skips
-    everywhere but the self-hosted box.
-
-- [ ] **Work through the second wave of target candidates** —
+- [ ] **Work through the second wave of target candidates** — _scope: research
+      and prose, about a dozen verdict rows; no code unless one comes back yes._
       [TARGETS.md](TARGETS.md) settled the runtimes that had been suggested
       before it existed, and `lxc`/`incus` is the one row it left open. This is
       the list of everything _not_ on it: candidates nobody has ruled on yet,
@@ -149,13 +137,42 @@ not wait on somebody else's spam problem. Its entry stays tracked under
     [TARGETS.md](TARGETS.md) with a verdict and a reason, and each "yes" that
     is not built has its own entry here.
 
-- [ ] **Persistent sessions on a disposable target** — `--tmux` already gives
-      you detach-and-reattach, but only where say-hi is permanently installed:
-      on a disposable target `_hi_tmux_wanted` (`load.sh`) refuses outright,
-      because the tree is deleted when the session ends and a detached tmux
-      would outlive it. This entry is that restriction removed — keep the tree
-      across a dropped connection, reconnect into the same session later, and
-      delete only on a definitive exit or after a configurable timeout.
+- [ ] **Investigate LXC/LXD (or Incus) as a target** — _scope: a decision; then,
+      if it is yes, a backend across the seven places TARGETS.md lists, plus a
+      fixture the self-hosted runner does not have yet._ The one container
+      runtime with a real audience that hi does not answer to, and the only open
+      row on [TARGETS.md](TARGETS.md), which carries both the case for it and
+      that checklist.
+
+  - **Which binary, and is it one backend or two.** LXD ships `lxc exec <name>
+    -- <cmd>`; Incus, the LinuxContainers fork, ships `incus exec` with the
+    same shape. They are the same integration twice over, and picking "both"
+    means two rows everywhere, not one with a fallback — decide before writing
+    any of it.
+  - **The cost is paid by machines that do not have it.** `_hi_resolve_backend`
+    runs every predicate in parallel on every `hi <target>`, and `targets.sh`
+    probes every backend on every TAB (GLOSSARY: HI.26). A fifth backend is a
+    fifth process on both hot paths; check the `command -v` guard actually
+    short-circuits before adding one, and re-run `--group bench`.
+  - **The fixture is the hard part.** Every existing backend suite stands up
+    its target from a container image; LXD/Incus wants a real daemon and a
+    storage pool on the runner, which is a self-hosted-box change, not a
+    Dockerfile. A suite that can only ever skip is worth less than no suite.
+  - **Ticks when:** the answer is written down either way — TARGETS.md's row
+    stops saying "open". If it is yes, the binary is named, the backend is in
+    `_HI_BACKENDS`, and its suite is in `_HI_TESTS` — even if it skips
+    everywhere but the self-hosted box.
+
+- [ ] **Persistent sessions on a disposable target** — _scope: the largest entry
+      here. It changes cleanup semantics on both paths, needs a findable tree
+      path and something to reap it, and rewrites SECURITY.md's footprint
+      promise._ `--tmux` already gives you detach-and-reattach, but only where
+      say-hi is permanently installed: on a disposable target `_hi_tmux_wanted`
+      (`load.sh`) refuses outright, because the tree is deleted when the session
+      ends and a detached tmux would outlive it. This entry is that restriction
+      removed — keep the tree across a dropped connection, reconnect into the
+      same session later, and delete only on a definitive exit or after a
+      configurable timeout.
 
   - **What has to stop happening, carefully.** Cleanup has two independent
     paths — the bootstrap's `trap 'rm -rf $_HI_CLEANUP' exit` and `load.sh`'s
@@ -190,30 +207,13 @@ not wait on somebody else's spam problem. Its entry stays tracked under
 
 ### Testing & CI
 
-- [ ] **See the two advisory scanners green** — both are written, wired and
-      advisory, and neither has been observed green in a real run. That
-      observation is all either one has left.
-
-  - **trivy** over the digest-pinned base images, weekly and on dispatch
-    (`.github/workflows/image-scan.yml`). `--ignore-unfixed` is the whole
-    design rather than a detail: without it `debian:bookworm-slim` alone
-    reports 22 HIGH/CRITICAL that Debian will never fix, and a gate that is red
-    forever teaches everyone to skip it. With it, the job going red means
-    exactly one thing — bump the pin. The scan list is `sed`'d out of the
-    `FROM …@sha256:` lines rather than repeated, so a base image added or
-    repinned is covered without editing the workflow.
-  - **hadolint** over the eighteen fixture Dockerfiles, on every PR
-    (`ci.yml`'s `hadolint` job). `.hadolint.yaml` carries a reason per silenced
-    rule and says which findings are deliberately left visible (`DL3009`,
-    `DL3015`).
-  - **Ticks when:** each has been seen green in CI. Measured locally at the
-    current pins, all three images report zero fixable HIGH/CRITICAL.
-
-- [ ] **See the Windows client-side job green** — `.github/workflows/windows-client.yml`
-      has shipped and is what this entry asked for: the fast group under the
-      runner's own Git Bash, proving `hi.sh` works when the machine you are
-      _sitting at_ is Windows, where `windows-e2e.yml` covers the target side.
-      What is left is a run, which no file here can perform.
+- [ ] **See the Windows client-side job green** — _scope: one CI run, then two
+      lines: `ci.yml` picks the job up on push and README's Windows client row
+      flips._ `.github/workflows/windows-client.yml` has shipped and is what
+      this entry asked for: the fast group under the runner's own Git Bash,
+      proving `hi.sh` works when the machine you are _sitting at_ is Windows,
+      where `windows-e2e.yml` covers the target side. What is left is a run,
+      which no file here can perform.
 
   - **It runs `--group fast --skip shellcheck`.** The lint suite is the one
     suite in that group with nothing to say about Windows, and it cannot run
@@ -236,31 +236,38 @@ not wait on somebody else's spam problem. Its entry stays tracked under
 
 ### Demos
 
-- [ ] **Render the demos in CI — see it go green once.**
-      `.github/workflows/demos.yml` has shipped and does what this entry asked:
-      on a PR touching `docs/tapes/**` it installs the toolchain with
-      [vhs-action](https://github.com/charmbracelet/vhs-action) (SHA-pinned;
-      dependabot already covers it), runs
-      `tapes/generate.sh --require-run color_preview` on a hosted runner, and
-      attaches the GIF for seven days. It renders rather than commits, per
-      `tapes/generate.sh`'s own header. The command was proved locally; the
-      runner path — the action's vhs/ttyd/ffmpeg install — has never executed.
+- [ ] **Shed the seven committed demo GIFs** — _scope: one commit, gated on
+      seeing a render land._ The autogeneration itself has shipped:
+      `demos.yml`'s `publish` job renders every tape but `demo` on the
+      self-hosted box (a tape change, weekly, or dispatch) and `pages.yml` lays
+      the result over the committed copies at the paths every link already
+      resolves to. What is left is the size half, and it deliberately waits.
 
-  - **It calls generate.sh, not vhs.** A tape's `Require hi` is satisfied by any
-    `hi` on `$PATH`, so a runner with one installed would record the wrong tree;
-    the preflight's shim is what makes the render this checkout's.
-  - **vhs itself is deliberately unpinned** (`version` left at the action's
-    default) where everything else this repo installs is pinned to the row: a
-    pinned vhs would hide the upstream break the job exists to catch. The
-    supply-chain half of the pin is the action's SHA.
-  - **The six docker-backed tapes are still not wired up**, and belong on the
-    self-hosted box the e2e jobs already use rather than on a hosted runner.
-    That is a second entry's worth of work, not a condition of this one.
-  - **Ticks when:** the job has run green on a pull request and the artifact is
-    there to download — which the PR carrying `complete.tape` will do on its
-    own, since it touches `docs/tapes/**`.
+  - **Why it waits.** Until a render has actually run, those seven committed
+    GIFs are what the site and README both serve. Deleting them first would
+    trade a working front page for an unverified pipeline, and the pipeline
+    cannot be exercised anywhere but that runner.
+  - **What the commit is.** Delete `docs/demos/*.gif` except `demo.gif`
+    (~1.2 MB), and repoint README's six and `docs/CONFIGURATION.md`'s
+    `color_preview` at the published URLs — relative links resolve on the site
+    but would 404 on github.com once the files are gone, so that half is not
+    optional. `_config.yml`'s note about keeping `docs/demos` needs the same
+    edit.
+  - **Renders are not reproducible**, which is what makes the saving real
+    rather than cosmetic: vhs records live timing through a pty, so every run
+    produces different bytes. Committing them would have added ~1.2 MB of
+    permanent history each time whether a demo had moved or not.
+  - **Ticks when:** a `publish` run has been green, the seven are out of the
+    tree, and the docs point at the site.
 
 ## Outside this repo
+
+These carry the same _scope_ tags as the in-repo half, and are ordered by them
+within each section — except in
+[Repo settings and first runs](#repo-settings-and-first-runs), where the first
+entry blocks two others and dependency order wins. The scope here is only the
+part **you** do — the account, the key, the click, the decision — never the
+waiting.
 
 ### Repo settings and first runs
 
@@ -269,7 +276,9 @@ settings, or a decision — which is why they sit here rather than in the in-rep
 half: no file here can close one. The first one gates both release channels
 below it.
 
-- [ ] **Get a release out under branch protection** — _the rule is on:_ `main`
+- [ ] **Get a release out under branch protection** — _scope: one decision with
+      a code fork behind it (a ruleset bypass actor, or converting `publish` to
+      open a pull request), then one real release._ _The rule is on:_ `main`
       requires a pull request and refuses a direct push, which closes
       Scorecard's highest-severity finding. What has not happened is a release
       under it, and until one does **both release-channel entries below are
@@ -296,9 +305,10 @@ below it.
   - **Ticks when:** a release has gone out under the rule with the manifest
     step green.
 
-- [ ] **A job-started hook on the self-hosted runner** — thirteen jobs across
-      eight workflows open with the same `Reclaim the workspace` step: a
-      `sudo chown -R` of `$GITHUB_WORKSPACE`, guarded on
+- [ ] **A job-started hook on the self-hosted runner** — _scope: a script and an
+      env var on that machine, plus one commit here deleting thirteen copies._
+      Thirteen jobs across eight workflows open with the same `Reclaim the
+      workspace` step: a `sudo chown -R` of `$GITHUB_WORKSPACE`, guarded on
       `runner.environment != 'github-hosted'`, because that box's `_work`
       persists between jobs and one root-owned file from a container test makes
       the next checkout's cleanup throw (docs/PACKAGING.md has the full
@@ -314,14 +324,14 @@ below it.
     one commit. Do both at once: the copies are harmless, but leaving them
     after the hook exists means two mechanisms for one problem.
 
-- [ ] **Decide whether to keep the Scorecard badge** — `scorecard.yml` runs
-      weekly with `publish_results: true` and `README.md` carries the badge, so
-      the score is public either way and the 404 that once blocked it is gone.
-      The open question is whether showing it helps. Three checks a solo
-      maintainer cannot move — Code-Review, CI-Tests and CII-Best-Practices —
-      dominate the number, so it reads as a verdict on the project's headcount
-      rather than on its engineering, sitting next to badges that measure
-      something real.
+- [ ] **Decide whether to keep the Scorecard badge** — _scope: a judgement call
+      and one README line either way._ `scorecard.yml` runs weekly with
+      `publish_results: true` and `README.md` carries the badge, so the score is
+      public either way and the 404 that once blocked it is gone. The open
+      question is whether showing it helps. Three checks a solo maintainer
+      cannot move — Code-Review, CI-Tests and CII-Best-Practices — dominate the
+      number, so it reads as a verdict on the project's headcount rather than on
+      its engineering, sitting next to badges that measure something real.
 
   - **The rest of the report is settled and needs nothing.** SAST counts
     `codeql.yml`'s `actions` pack over the workflows (worth having on its own
@@ -340,11 +350,23 @@ walkthrough (commands, what a clean run prints, what's already been verified)
 is [PACKAGING.md](PACKAGING.md)'s _Publishing each channel_ section; these two
 entries are just the remaining human steps and their tick conditions.
 
-- [ ] **AUR** — _externally blocked:_ registration is closed to new accounts
-      because of spam, so there is no account to push from and nothing in this
-      checkout changes that. `release.yml`'s `aur` job stays written and
-      unexercised until it reopens, and this entry is tracked rather than
-      actionable — it is deliberately not a v1 criterion.
+- [ ] **Homebrew tap** — _scope: a repo, a scoped PAT, and one gate re-run on a
+      real Mac._ Create the `homebrew-tap` repo (a plain GitHub repo with a
+      `Formula/` directory), add a fine-grained PAT scoped to it (contents +
+      pull-requests write) as `HOMEBREW_TAP_TOKEN`, then re-run the `brew
+      install`/`test`/`audit` gate on an actual Mac (the keg lives under
+      `/opt/homebrew` there, not Linuxbrew's prefix used so far).
+
+  - **Ticks when:** `brew install ivy/tap/say-hi` works, from a release the
+    `tap` job opened a PR for.
+
+- [ ] **AUR** — _scope: nothing actionable until registration reopens; then an
+      account, a key, and one manual first push._ _Externally blocked:_
+      registration is closed to new accounts because of spam, so there is no
+      account to push from and nothing in this checkout changes that.
+      `release.yml`'s `aur` job stays written and unexercised until it reopens,
+      and this entry is tracked rather than actionable — it is deliberately not
+      a v1 criterion.
 
   - **When it reopens:** register; `ssh-keygen -t ed25519`, add the public half
     there, add the private half as the `AUR_SSH_KEY` repo secret and delete the
@@ -355,19 +377,11 @@ entries are just the remaining human steps and their tick conditions.
   - **Ticks when:** both packages are live on the AUR and the `aur` job has
     kept `say-hi` current for one real release.
 
-- [ ] **Homebrew tap** — create the `homebrew-tap` repo (a plain GitHub repo
-      with a `Formula/` directory), add a fine-grained PAT scoped to it
-      (contents + pull-requests write) as `HOMEBREW_TAP_TOKEN`, then re-run
-      the `brew install`/`test`/`audit` gate on an actual Mac (the keg lives
-      under `/opt/homebrew` there, not Linuxbrew's prefix used so far).
-
-  - **Ticks when:** `brew install ivy/tap/say-hi` works, from a release the
-    `tap` job opened a PR for.
-
 ### Docs & submissions
 
-- [ ] **tldr page** — eight example lines reach everyone who types `tldr hi`
-      before anyone reads a man page. Upstream has its own style guide and
+- [ ] **tldr page** — _scope: one upstream pull request, gated on the CLI
+      surface being frozen._ Eight example lines reach everyone who types `tldr
+      hi` before anyone reads a man page. Upstream has its own style guide and
       review, so this is a submission, not a file here; the draft is at
       `docs/tldr.md`.
 

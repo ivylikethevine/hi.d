@@ -214,7 +214,37 @@ function test_git_pkgbuild_provides_and_conflicts() {
 function test_pkgbuild_and_formula_agree_on_the_version() {
   local pkgver
   pkgver="$(sed -n 's/^pkgver=//p' "$_HI_PKGBUILD" | head -1)"
-  [ -n "$pkgver" ] && grep -qF "v$pkgver.tar.gz" "$_HI_FORMULA"
+  [ -n "$pkgver" ] &&
+    grep -qF "/releases/download/v$pkgver/say-hi-$pkgver.tar.gz" "$_HI_FORMULA"
+}
+
+# Both channels build from the release asset, never GitHub's auto-generated
+# /archive/ tarball - that one is the only released artifact with no attestation
+# and no signature over it, and a manifest quietly pointing back at it would put
+# the whole chain outside the provenance again with nothing to notice.
+function test_manifests_build_from_the_release_asset() {
+  local f line
+  # the declaration each channel actually fetches, never the prose around it -
+  # the PKGBUILD's comment names /archive/ precisely to say it is not that
+  for f in "$_HI_PKGBUILD:^source=" \
+    "$_HI_PKG_DIR/aur/say-hi/.SRCINFO:^[[:space:]]*source = " \
+    "$_HI_FORMULA:^[[:space:]]*url "; do
+    line="$(grep -E "${f#*:}" "${f%%:*}" | head -1)"
+    case "$line" in
+    *releases/download/*) ;;
+    *)
+      _hi_cecho " | ${f%%:*}: [$line] is not the release asset" "$RED"
+      return 1
+      ;;
+    esac
+    case "$line" in
+    */archive/*)
+      _hi_cecho " | ${f%%:*}: [$line] still points at GitHub's /archive/ tarball" "$RED"
+      return 1
+      ;;
+    esac
+  done
+  return 0
 }
 
 function test_srcinfo_agrees_with_its_pkgbuild() {
@@ -391,7 +421,7 @@ function test_bump_write_rewrites_formula_url_and_sha256() {
   bump_fixture
   (
     _hi_bump_written
-    grep -qF 'v9.9.9.tar.gz' "$_HI_FORMULA" &&
+    grep -qF "$(asset_url 9.9.9)" "$_HI_FORMULA" &&
       grep -qF "sha256 \"$(sha256_of "$_HI_TB")\"" "$_HI_FORMULA"
   )
 }
@@ -404,8 +434,7 @@ function test_bump_srcinfo_fallback_rewrites_the_three_lines() {
     _hi_bump_env
     rewrite_srcinfo_lines feedbeef
     grep -qF 'pkgver = 9.9.9' "$_HI_SRCINFO" &&
-      grep -qF 'source = say-hi-9.9.9.tar.gz::' "$_HI_SRCINFO" &&
-      grep -qF 'v9.9.9.tar.gz' "$_HI_SRCINFO" &&
+      grep -qF "source = $(asset_url 9.9.9)" "$_HI_SRCINFO" &&
       grep -qF 'b2sums = feedbeef' "$_HI_SRCINFO" &&
       grep -q $'^\tpkgver' "$_HI_SRCINFO" # the leading tab survived the sed
   )
@@ -434,7 +463,7 @@ function test_bump_check_catches_stale_srcinfo_b2sums() {
 }
 
 function test_bump_check_catches_stale_srcinfo_source() {
-  _hi_bump_check_rejects 's|^\([[:space:]]*\)source = .*|\1source = say-hi-0.0.1.tar.gz::x/v0.0.1.tar.gz|'
+  _hi_bump_check_rejects 's|^\([[:space:]]*\)source = .*|\1source = x/releases/download/v0.0.1/say-hi-0.0.1.tar.gz|'
 }
 
 # a wrong tool or wrong output field shows up as a wrong constant
@@ -561,6 +590,85 @@ function test_write_checksums_lists_the_artifacts() {
   # ...and it agrees with what SHA256SUMS covers
   diff <(awk '{ print $2 }' "$d/SHA256SUMS" | sort) \
     <(grep -v '^SHA256SUMS$' "$d/ARTIFACTS" | sort)
+}
+
+# The source tarball rides the same list, which is the whole mechanism: being in
+# ARTIFACTS is what puts it under release.yml's attestation and on the release,
+# without either step naming a .tar.gz. It arrives as a file rather than being
+# built here because bump.sh writes the pkgver mkpkg.sh reads back, so the
+# tarball exists before this script knows the version.
+function test_write_checksums_ships_the_source_tarball() {
+  local d="$_HI_WORKDIR/artifacts-src"
+  mkdir -p "$d/elsewhere"
+  : >"$d/say-hi_1.0.0_amd64.deb"
+  : >"$d/say-hi-1.0.0.x86_64.rpm"
+  : >"$d/say-hi-1.0.0.apk"
+  printf 'tarball\n' >"$d/elsewhere/say-hi-1.0.0.tar.gz"
+  (
+    # shellcheck source=../../packaging/mkpkg.sh
+    source "$_HI_PKG_DIR/mkpkg.sh"
+    _HI_DIST="$d"
+    _HI_SRC_TARBALL="$d/elsewhere/say-hi-1.0.0.tar.gz"
+    write_checksums >/dev/null 2>&1
+  ) || return 1
+  # copied in beside the packages, listed, and summed
+  [ -f "$d/say-hi-1.0.0.tar.gz" ] || {
+    _hi_cecho " | the source tarball was not copied into the outdir" "$RED"
+    return 1
+  }
+  diff <(sort "$d/ARTIFACTS") \
+    <(printf '%s\n' say-hi-1.0.0.apk say-hi-1.0.0.tar.gz say-hi-1.0.0.x86_64.rpm say-hi_1.0.0_amd64.deb SHA256SUMS | sort) ||
+    return 1
+  diff <(awk '{ print $2 }' "$d/SHA256SUMS" | sort) \
+    <(grep -v '^SHA256SUMS$' "$d/ARTIFACTS" | sort)
+}
+
+# A tarball already sitting in the outdir is the shape a caller reaches by
+# passing the copy rather than the original; -ef has to make that a no-op
+# instead of cp's "are the same file" failure.
+function test_write_checksums_takes_a_tarball_already_in_the_outdir() {
+  local d="$_HI_WORKDIR/artifacts-src-inplace"
+  mkdir -p "$d"
+  : >"$d/say-hi_1.0.0_amd64.deb"
+  : >"$d/say-hi-1.0.0.x86_64.rpm"
+  : >"$d/say-hi-1.0.0.apk"
+  printf 'tarball\n' >"$d/say-hi-1.0.0.tar.gz"
+  (
+    # shellcheck source=../../packaging/mkpkg.sh
+    source "$_HI_PKG_DIR/mkpkg.sh"
+    _HI_DIST="$d"
+    _HI_SRC_TARBALL="$d/say-hi-1.0.0.tar.gz"
+    write_checksums >/dev/null 2>&1
+  ) || return 1
+  grep -q 'say-hi-1.0.0.tar.gz' "$d/ARTIFACTS"
+}
+
+# src_tarball is the one implementation of "the bytes a release ships", called
+# by packaging/srctar.sh in release.yml and by bump.sh when it has no --tarball.
+# Two properties matter: the say-hi-<version>/ prefix, which is what the AUR
+# package's prepare() symlink resolves against, and byte-stability, without
+# which the manifests' checksums and the uploaded asset could drift apart.
+function test_src_tarball_uses_the_prepare_prefix() {
+  local out="$_HI_WORKDIR/srctar-prefix.tar.gz"
+  src_tarball 9.9.9 HEAD "$out" || return 1
+  [ "$(tar tzf "$out" | head -1)" = "say-hi-9.9.9/" ]
+}
+
+function test_src_tarball_is_byte_stable() {
+  local a="$_HI_WORKDIR/srctar-a.tar.gz" b="$_HI_WORKDIR/srctar-b.tar.gz"
+  src_tarball 9.9.9 HEAD "$a" && src_tarball 9.9.9 HEAD "$b" || return 1
+  cmp -s "$a" "$b"
+}
+
+# release.yml builds that tarball on the tag path too, not only on a rehearsal:
+# a tag that fell back to fetching GitHub's /archive/ would put the released
+# bytes back outside the provenance chain, silently and only on real releases.
+# shellcheck disable=SC2016 # $HI_VERSION is the workflow's variable, matched literally
+function test_release_workflow_builds_the_source_tarball() {
+  grep -qF 'packaging/srctar.sh' "$_HI_RELEASE_WF" &&
+    grep -qF 'packaging/bump.sh --tarball' "$_HI_RELEASE_WF" &&
+    grep -qF 'mkpkg.sh --source-tarball' "$_HI_RELEASE_WF" &&
+    ! grep -qE 'bump\.sh "\$HI_VERSION"' "$_HI_RELEASE_WF"
 }
 
 # The greps above prove every channel calls it; these prove what it does. A
@@ -759,6 +867,7 @@ function run_packaging_tests() {
   _hi_check "PKGBUILD and formula agree" test_pkgbuild_and_formula_agree_on_the_version
   _hi_check ".SRCINFO agrees with its PKGBUILD" test_srcinfo_agrees_with_its_pkgbuild
   _hi_check ".SRCINFO depends match, both packages" test_srcinfo_depends_match_their_pkgbuild
+  _hi_check "All three build from the release asset" test_manifests_build_from_the_release_asset
 
   _hi_h2 "Testing: release.yml"
   _hi_check "Publishing sits behind an environment" test_release_workflow_gates_publishing
@@ -771,6 +880,11 @@ function run_packaging_tests() {
   _hi_check "Every setup-tool call names a row" test_every_setup_tool_call_names_a_manifest_row
   _hi_check "release.yml reads dist/ARTIFACTS" test_release_workflow_reads_the_artifact_list
   _hi_check "write_checksums lists the artifacts" test_write_checksums_lists_the_artifacts
+  _hi_check "...and ships the source tarball with them" test_write_checksums_ships_the_source_tarball
+  _hi_check "...taking one already in the outdir" test_write_checksums_takes_a_tarball_already_in_the_outdir
+  _hi_check "release.yml builds that tarball itself" test_release_workflow_builds_the_source_tarball
+  _hi_check "src_tarball uses prepare()'s prefix" test_src_tarball_uses_the_prepare_prefix
+  _hi_check "src_tarball is byte-stable" test_src_tarball_is_byte_stable
 
   _hi_h2 "Testing: mkpkg.sh / bump.sh"
   _hi_check "mkpkg.sh takes its version from the PKGBUILD" test_package_sh_reads_the_version_from_the_pkgbuild

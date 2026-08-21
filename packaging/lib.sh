@@ -50,6 +50,22 @@ function b2_of() {
   fi
 }
 
+# src_tarball <version> <ref> <outfile> - the source tarball a release ships.
+# Built here rather than fetched: GitHub's auto-generated /archive/ tarball is
+# the one released artifact with nothing signed over it, and its bytes are not
+# promised stable across changes to GitHub's own gzip. This is the same shape -
+# `git archive` with a say-hi-<version>/ prefix, which is what the AUR
+# package's prepare() symlink expects - so nothing downstream can tell the
+# difference except that this one is in SHA256SUMS and under the attestation.
+#
+# Deterministic for a given commit: git picks the format from the .tar.gz
+# suffix and runs its own `gzip -cn`, which writes neither a name nor a
+# timestamp into the header.
+function src_tarball() {
+  local version="$1" ref="$2" out="$3"
+  git -C "$_HI_ROOT" archive --prefix "say-hi-$version/" -o "$out" "$ref"
+}
+
 # The version of record lives in the versioned PKGBUILD (bump.sh writes it
 # there); reading it back rather than keeping copies is what stops the
 # channels disagreeing. Reads $1, defaulting to the caller's $_HI_PKGBUILD.

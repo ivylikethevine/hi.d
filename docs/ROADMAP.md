@@ -18,7 +18,6 @@ here: git history is the ledger, and this file is only what is left to do.
 - [What v1.0.0 means](#what-v100-means)
 - [In-repo code work](#in-repo-code-work)
   - [The session itself](#the-session-itself)
-  - [Release & packaging](#release--packaging)
   - [Testing & CI](#testing--ci)
   - [Demos](#demos)
 - [Outside this repo](#outside-this-repo)
@@ -67,25 +66,15 @@ not wait on somebody else's spam problem. Its entry stays tracked under
 ### The session itself
 
 - [ ] **Investigate LXC/LXD (or Incus) as a target** — the one container
-      runtime with a real audience that hi does not answer to. It is also the
-      _easiest_ target hi could have: an LXC container is normally a full
-      system container running a real distro with systemd and bash already in
-      it, so it lands in the top tier of the fallback ladder rather than the
-      aliases-only one. The question is what it costs on the hot paths, and
-      which project it is.
+      runtime with a real audience that hi does not answer to, and the only
+      open row on [TARGETS.md](TARGETS.md), which carries the case for it and
+      the checklist of the seven places a backend touches.
 
   - **Which binary, and is it one backend or two.** LXD ships `lxc exec <name>
     -- <cmd>`; Incus, the LinuxContainers fork, ships `incus exec` with the
     same shape. They are the same integration twice over, and picking "both"
-    means two rows everywhere below, not one with a fallback — decide before
-    writing any of it.
-  - **What it touches, in roster order.** A row in `_HI_BACKENDS` (`hi.sh`),
-    which is what feeds both the dispatch and `hi --doctor`; a
-    `_hi_is_lxc_container` predicate beside `_hi_is_docker_container`; an arm
-    in `_hi_container_cmds` setting `probe`/`cp`/`attach`; a lister and a
-    `run_lister` case in `common/targets.sh` (plus its usage line), in that
-    file's standalone-POSIX dialect; and an e2e suite under `tests/targets/`
-    registered in `test_runner.sh`'s `_HI_TESTS` under the `backends` group.
+    means two rows everywhere, not one with a fallback — decide before writing
+    any of it.
   - **The cost is paid by machines that do not have it.** `_hi_resolve_backend`
     runs every predicate in parallel on every `hi <target>`, and `targets.sh`
     probes every backend on every TAB (GLOSSARY: HI.26). A fifth backend is a
@@ -95,39 +84,10 @@ not wait on somebody else's spam problem. Its entry stays tracked under
     its target from a container image; LXD/Incus wants a real daemon and a
     storage pool on the runner, which is a self-hosted-box change, not a
     Dockerfile. A suite that can only ever skip is worth less than no suite.
-  - **Ticks when:** the answer is written down either way. If it is yes, the
-    binary is named, the backend is in `_HI_BACKENDS`, and its suite is in
-    `_HI_TESTS` — even if it skips everywhere but the self-hosted box.
-
-- [ ] **Write down every target hi could connect to, and the verdict on each**
-      — the wider question the LXC entry above is one row of. hi answers to ssh
-      plus four container backends, and the reasoning for what is in and what is
-      out lives nowhere: each new suggestion gets re-litigated from scratch, and
-      nobody outside can tell whether their runtime was rejected or never
-      considered.
-
-  - **The shape already exists in this repo.** README's _Compatibility_ section
-    ends with a "shells hi does not style, and why that is settled" table —
-    name, status, and a why long enough to close the question. This is that
-    table for targets, and it belongs next to it or in a `docs/TARGETS.md` the
-    section links to.
-  - **What goes on it**, at least: `lxc`/`incus`; `systemd-nspawn` and
-    `machinectl`; WSL distributions (`wsl -d`); distrobox and toolbx (which
-    wrap podman — do they need a row of their own, or does the podman one
-    already cover them?); `nerdctl`/containerd and `crictl`/CRI-O; Apptainer
-    and Singularity; Proxmox `pct enter`; FreeBSD jails (`jexec`) and illumos
-    zones (`zlogin`); `chroot`; remote docker contexts; and the
-    ssh-that-is-not-ssh transports — AWS SSM `start-session`, `gcloud compute
-    ssh`, `fly ssh console`, Azure Bastion.
-  - **Most rows should be "no", with a reason.** The cheap test is the one the
-    hot-path note above states: every backend on the roster costs a probe on
-    every TAB and every connect, on machines that have none of it. A row earns
-    a "yes" by being something people actually sit in, not by being reachable.
-  - **Some rows are already answered elsewhere** and only need collecting: the
-    ssh-wrapping transports mostly work today, because anything that ends in an
-    ssh connection is a `Host` entry away from being an ordinary ssh target.
-  - **Ticks when:** the table exists with a verdict and a reason per row, and
-    every "yes" that is not built yet has an entry here.
+  - **Ticks when:** the answer is written down either way — TARGETS.md's row
+    stops saying "open". If it is yes, the binary is named, the backend is in
+    `_HI_BACKENDS`, and its suite is in `_HI_TESTS` — even if it skips
+    everywhere but the self-hosted box.
 
 - [ ] **Persistent sessions on a disposable target** — `--tmux` already gives
       you detach-and-reattach, but only where say-hi is permanently installed:
@@ -167,17 +127,6 @@ not wait on somebody else's spam problem. Its entry stays tracked under
   - **Ticks when:** a dropped session on a disposable target can be
     reconnected to, an explicit exit still cleans up immediately, the timeout
     is a documented setting, and the disconnect suite covers both halves.
-
-### Release & packaging
-
-- [ ] **Source tarball under the provenance chain** — _Deliberately not a v1
-      criterion (see [What v1.0.0 means](#what-v100-means)), and orderable on
-      its own now that the gate is written down._ Both manifests checksum GitHub's auto-generated
-      `/archive/` tarball, the one released artifact with no attestation and no
-      signature over it. The release already builds the identical shape
-      (`git archive` in the rehearsal): attach it as an asset, list it in
-      `SHA256SUMS`, point both `url=`s at it. Touches `bump.sh`, both manifests
-      and their tests.
 
 ### Testing & CI
 

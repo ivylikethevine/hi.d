@@ -21,11 +21,14 @@ command -v shift >/dev/null 2>&1 &&
 # returns its definition and poisons later fallthrough chains.
 export _HI_EDITOR_BIN="$(command -v nano || command -v micro || command -v pico || command -v vim || command -v vi)"
 export _HI_BATCAT_BIN="$(command -v bat || command -v batcat || command -v ccat || command -v cat)"
-# the same chain without the plain-cat floor, so it is empty exactly when the
-# fallthrough had to settle for cat. $_HI_BAT_OPTS is bat syntax and coreutils
-# cat exits on the first of them ("unrecognized option '--tabs'"), so attaching
-# them unconditionally breaks `cat` in every session on a box without bat.
-export _HI_BAT_REAL="$(command -v bat || command -v batcat || command -v ccat)"
+# The same family narrowed to bat itself, under either of its two names: this
+# is the tier that parses $_HI_BAT_OPTS, and it is the gate personal.sh attaches
+# them behind. Every other tier of the chain above rejects that syntax -
+# coreutils cat exits on the first one ("unrecognized option '--tabs'") and ccat
+# is a different program with its own flags - so attaching them unconditionally
+# breaks `cat` in every session on a box without bat. ccat still wins
+# $_HI_BATCAT_BIN when it is the best installed; it just gets the bare binary.
+export _HI_BAT_REAL="$(command -v bat || command -v batcat)"
 # exa and eza differ in preference order on purpose, so each needs its own var
 export _HI_EXA_BIN="$(command -v exa || command -v eza || command -v ls)"
 export _HI_EZA_BIN="$(command -v eza || command -v exa || command -v ls)"

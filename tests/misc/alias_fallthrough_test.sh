@@ -48,6 +48,8 @@ fail=0
 if [ -n "${_HI_CHECK_VAR:-}" ]; then
   case "$_HI_CHECK_VAR" in
   EDITOR_BIN) actual=$_HI_EDITOR_BIN ;;
+  BATCAT_BIN) actual=$_HI_BATCAT_BIN ;;
+  BAT_REAL) actual=$_HI_BAT_REAL ;;
   EXA_BIN) actual=$_HI_EXA_BIN ;;
   EZA_BIN) actual=$_HI_EZA_BIN ;;
   esac
@@ -83,6 +85,10 @@ if set -q _HI_CHECK_VAR
   switch "$_HI_CHECK_VAR"
   case EDITOR_BIN
     set actual $_HI_EDITOR_BIN
+  case BATCAT_BIN
+    set actual $_HI_BATCAT_BIN
+  case BAT_REAL
+    set actual $_HI_BAT_REAL
   case EXA_BIN
     set actual $_HI_EXA_BIN
   case EZA_BIN
@@ -200,7 +206,11 @@ function run_fallthrough_tests() {
   _hi_h1 "Fallthrough (command -v a || b || ...) resolution"
   local var last mid installed expect fakepath shell
 
-  for var in EDITOR_BIN:"nano micro pico vim vi" EXA_BIN:"exa eza ls" EZA_BIN:"eza exa ls"; do
+  # BAT_REAL is the one chain here with no floor: it is deliberately empty when
+  # nothing in it is installed, which is what misc/personal.sh gates the
+  # bat-syntax $_HI_BAT_OPTS on. _hi_expect_winner already returns empty for
+  # that case, so the no-floor chain needs no special handling - only listing.
+  for var in EDITOR_BIN:"nano micro pico vim vi" BATCAT_BIN:"bat batcat ccat cat" BAT_REAL:"bat batcat" EXA_BIN:"exa eza ls" EZA_BIN:"eza exa ls"; do
     local name="${var%%:*}" cands="${var#*:}"
     # shellcheck disable=SC2086 # word-splitting into positional candidates is intended
     set -- $cands

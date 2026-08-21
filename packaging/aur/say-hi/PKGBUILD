@@ -22,15 +22,19 @@ optdepends=('zsh: zsh support on the client'
   'podman: container targets'
   'nomad: allocation targets'
   'kubectl: pod targets')
-source=("$pkgname-$pkgver.tar.gz::$url/archive/v$pkgver.tar.gz")
+# the release asset, not GitHub's auto-generated /archive/ tarball: the asset
+# is built by the release, listed in its SHA256SUMS and covered by its build
+# provenance. It is already named $pkgname-$pkgver.tar.gz, so no `::` rename.
+source=("$url/releases/download/v$pkgver/$pkgname-$pkgver.tar.gz")
 # never submit with SKIP - packaging/bump.sh <version> fills in the real sum
 b2sums=('SKIP')
 
 prepare() {
   # scripts/install.sh derives $_HI_HOME as <checkout>/.. and then looks for
-  # $_HI_HOME/say-hi, so the checkout has to be named exactly say-hi - and GitHub's
-  # tarball unpacks to say-hi-$pkgver. A symlink rather than a mv: it is
-  # idempotent, so `makepkg -e` over an existing $srcdir stays a no-op.
+  # $_HI_HOME/say-hi, so the checkout has to be named exactly say-hi - and the
+  # tarball unpacks to say-hi-$pkgver (packaging/lib.sh's src_tarball builds it
+  # with exactly that prefix). A symlink rather than a mv: it is idempotent, so
+  # `makepkg -e` over an existing $srcdir stays a no-op.
   ln -sfn "$srcdir/$pkgname-$pkgver" "$srcdir/say-hi"
 }
 

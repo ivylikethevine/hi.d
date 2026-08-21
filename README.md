@@ -427,6 +427,11 @@ bash-it against hi, each asserting the session comes up with no shell errors
 and that hi neither changed zsh's array base under them nor dropped their
 `PROMPT_COMMAND`.
 
+**Both tables above assume hi can reach the target in the first place.** What it
+can reach - and the verdict on every runtime weighed and left off the roster,
+LXC/Incus, `systemd-nspawn`, WSL, `nerdctl`, jails, zones and the rest - is
+[docs/TARGETS.md](docs/TARGETS.md).
+
 ## Testing
 
 `tests/test_runner.sh` (reachable as `hi --test` once installed) runs the suite
@@ -439,6 +444,8 @@ lint gate, relaying, `_HI_HOME`, and why the tests are local-only — is in
 
 - [docs/CONFIGURATION.md](docs/CONFIGURATION.md) — the config overlay, every
   feature toggle and environment variable hi reads
+- [docs/TARGETS.md](docs/TARGETS.md) — every target hi answers to, every one
+  weighed and left off, and why each answer is settled
 - [docs/ALTERNATIVES.md](docs/ALTERNATIVES.md) — sshrc, xxh, kyrat, sshdot and
   homeshick side by side; what makes say-hi different, and when another tool is
   the better choice
@@ -530,3 +537,10 @@ sha256sum -c --ignore-missing SHA256SUMS                        # the bytes matc
 minisign -Vm SHA256SUMS -P 'RWTDcJ3LGWayrAxK6mbMysyOF8mNLOmMUGRl4YSWk5KIoayS+lW0Fy1L'
 gh attestation verify say-hi_*_all.deb --repo ivylikethevine/say-hi # which CI run built them
 ```
+
+That covers **every** file on the release, `say-hi-<version>.tar.gz` included —
+the source tarball the Homebrew formula and the AUR package build from is one
+the release built and attested, not GitHub's auto-generated `/archive/` one,
+which carries neither sum nor signature. So
+`gh attestation verify say-hi-*.tar.gz --repo ivylikethevine/say-hi` answers for
+the sources the same way the line above answers for the `.deb`.

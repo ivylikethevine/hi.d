@@ -80,12 +80,17 @@ jobs:
         with:
           tool: shellcheck
 
-      # The tarball both channels checksum only exists once the tag does, so
-      # the bump runs here, not before tagging (which needed a force-retag).
-      # Review happens at the environment gate, over the files this produced.
-      # A rehearsal has no tag tarball, so it checksums a HEAD archive built
-      # to the same shape instead - same code path, fake sums, never committed.
-      - name: Pick the version (tag or rehearsal input)
+      # The source tarball both channels build from is made here rather than
+      # fetched: GitHub's auto-generated /archive/ tarball is the one released
+      # artifact with no signature and no attestation over it, so this builds
+      # the identical shape (packaging/srctar.sh), ships it as an asset, and
+      # lets it inherit SHA256SUMS and the provenance below.
+      #
+      # One code path for a tag and a rehearsal, which is the point: the only
+      # difference is the ref the archive comes from. Review happens at the
+      # environment gate, over the files this produced; a rehearsal's sums are
+      # real for its own bytes and are never committed.
+      - name: Pick the version and build the source tarball
         # the input reaches the script through env, never inline ${{ }} in a
         # run block - a crafted dispatch input must stay data (zizmor:
         # template-injection)
@@ -94,22 +99,22 @@ jobs:
         run: |
           set -euo pipefail
           if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
-            echo "HI_VERSION=$REHEARSAL_VERSION" >>"$GITHUB_ENV"
-            git archive --prefix "say-hi-$REHEARSAL_VERSION/" -o /tmp/rehearsal.tar.gz HEAD
-            echo "HI_TARBALL=/tmp/rehearsal.tar.gz" >>"$GITHUB_ENV"
+            version="$REHEARSAL_VERSION"
+            ref=HEAD
           else
-            echo "HI_VERSION=${GITHUB_REF_NAME#v}" >>"$GITHUB_ENV"
-            echo "HI_TARBALL=" >>"$GITHUB_ENV"
+            version="${GITHUB_REF_NAME#v}"
+            ref="$GITHUB_REF_NAME"
           fi
+          tarball="$RUNNER_TEMP/say-hi-$version.tar.gz"
+          packaging/srctar.sh "$version" "$ref" "$tarball"
+          echo "HI_VERSION=$version" >>"$GITHUB_ENV"
+          echo "HI_TARBALL=$tarball" >>"$GITHUB_ENV"
 
+      # --tarball unconditionally: bump.sh sums the exact bytes the step above
+      # built and the publish job is about to upload, so the manifests cannot
+      # be checksumming a different tarball from the released one.
       - name: Regenerate the manifests
-        run: |
-          set -euo pipefail
-          if [ -n "$HI_TARBALL" ]; then
-            packaging/bump.sh --tarball "$HI_TARBALL" "$HI_VERSION"
-          else
-            packaging/bump.sh "$HI_VERSION"
-          fi
+        run: packaging/bump.sh --tarball "$HI_TARBALL" "$HI_VERSION"
 
       - name: Verify the result
         run: packaging/bump.sh --check "$HI_VERSION"
@@ -142,10 +147,12 @@ jobs:
             echo "no APK_SIGNING_KEY secret - the apk will be unsigned"
           fi
 
-      # asserts one artifact per format and writes dist/SHA256SUMS and
-      # dist/ARTIFACTS itself
+      # asserts one artifact per format, adds the source tarball beside them,
+      # and writes dist/SHA256SUMS and dist/ARTIFACTS itself - which is how the
+      # tarball reaches both the attestation and the upload below without
+      # either of them naming it
       - name: Build the packages
-        run: packaging/mkpkg.sh
+        run: packaging/mkpkg.sh --source-tarball "$HI_TARBALL"
 
       # What the release consists of, read from mkpkg.sh's dist/ARTIFACTS
       # rather than respelled as *.deb *.rpm *.apk in three places here.

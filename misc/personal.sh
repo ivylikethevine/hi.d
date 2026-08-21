@@ -12,8 +12,10 @@ export EDITOR="$_HI_EDITOR_BIN"
 alias micro="micro -autoindent=true -colorscheme=darcula -colorcolumn=80 -diffgutter=true -softwrap=true -tabsize=2"
 export IDE="$(command -v zeditor || command -v zed || command -v code || command -v vi)"
 
-# cat is bat with our options when bat exists, plain cat otherwise
-export _HI_BAT_OPTS='--tabs 2 --theme Monokai\ Extended\ Bright --style changes,grid'
+# cat is bat with our options when bat exists, plain cat otherwise. Everything
+# in here is bat syntax, -P (--no-pager) included, which is why it is only ever
+# attached behind $_HI_BAT_REAL - see the chain's comment in aliases.sh.
+export _HI_BAT_OPTS='-P --tabs 2 --theme Monokai\ Extended\ Bright --style changes,grid'
 # batcat is batcat on some Linux distros (fallback to ccat)
 # ccat is cat with syntax highlighting (fallback to cat)
 alias batcat="$_HI_BATCAT_BIN"
@@ -22,7 +24,6 @@ alias batn="batcat"
 [ -n "$_HI_BAT_REAL" ] && alias bat="batcat $_HI_BAT_OPTS" || true
 [ -n "$_HI_BAT_REAL" ] && alias batn="batcat $_HI_BAT_OPTS,numbers" || true
 alias cat="bat"
-# NOTE: -P (--no-pager) causes a break if bat not installed :/
 alias catn="batn"
 
 alias now='echo "LOCAL: $(date $_HI_HUMAN_SHORT_DATE) => UTC: $(date -u $_HI_HUMAN_SHORT_DATE)"'

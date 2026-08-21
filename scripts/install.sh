@@ -452,7 +452,7 @@ function config_header_details() {
 # a blank string, which it would drop on the floor.
 function _hi_packages_floor_preview() {
   local out
-  out="$(_HI_PACKAGES_MIN_PRIORITY="${_hi_floor_candidate:-0}" full_check)"
+  out="$(_HI_PACKAGES_MIN_PRIORITY="${_hi_floor_candidate:-1}" full_check)"
   if [ -n "$out" ]; then
     printf '%s\n' "$out"
   else
@@ -473,7 +473,7 @@ function config_packages_floor() {
   setting_off _HI_HEADER_CHECK "$_HI_SETTINGS" 0 && return 0
   local current reply
   current="$(grep -oE '^export _HI_PACKAGES_MIN_PRIORITY=[0-9]+' "$_HI_SETTINGS" 2>/dev/null | cut -d= -f2)"
-  _hi_floor_candidate="${current:-0}"
+  _hi_floor_candidate="${current:-1}"
   if [ -t 0 ]; then
     _hi_load_preview_sources
     while :; do
@@ -488,9 +488,10 @@ function config_packages_floor() {
       _hi_floor_candidate="$reply"
     done
   fi
-  # 0 is common/header.sh's own default, so it clears the override rather than
-  # restating it - config_max_width does the same with 80.
-  [ "$_hi_floor_candidate" = 0 ] && _hi_floor_candidate=""
+  # 1 is common/header.sh's own default, so it clears the override rather than
+  # restating it - config_max_width does the same with 80. 0 gets written out:
+  # it is a real answer now (rank 0 back on), not the default it used to be.
+  [ "$_hi_floor_candidate" = 1 ] && _hi_floor_candidate=""
   _HI_SETTING_LINES+=("${_hi_floor_candidate:+export _HI_PACKAGES_MIN_PRIORITY=$_hi_floor_candidate}")
 }
 

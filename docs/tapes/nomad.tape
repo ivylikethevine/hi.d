@@ -4,9 +4,16 @@
 # the agent and leaves the alloc ID in /tmp/hi-demo/alloc. Manual artifact,
 # reviewed by eye.
 #
-# Its configuration: _HI_HEADER_IDENTITY=0 and the GHz CPU line. The banner
-# stays on, and has to: the Wait+Screen below is /Disconnected/, which banner()
-# prints - so this is the one demo that cannot switch the header off.
+# Its configuration: _HI_HEADER_IDENTITY=0, the GHz CPU line, and a package
+# floor of 5. The banner stays on, and has to: the Wait+Screen below is
+# /Disconnected/, which banner() prints - so this is the one demo that cannot
+# switch the header off.
+#
+# The floor is not decoration here. On a bare debian alloc the check runs 13
+# lines at the shipped floor of 1 - rank 4 alone is 57 packages, and it speaks
+# when they are *missing* - which fills the frame and scrolls /Disconnected/
+# away before the scrape below can see it. A floor of 5 is three packages, one
+# line, and the sentinel lands.
 #
 # The Hide blocks pace themselves with Wait+Screen on sentinel text instead
 # of fixed sleeps; the quoted split in fixture-o''k keeps the typed command

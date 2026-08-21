@@ -395,10 +395,13 @@ up:docker)
   client_rc zsh dev cache-1
   # demo.tape connects to this same debian box, so the difference between the
   # README's top GIF and this one has to be the *client* - hence a prompt end
-  # of its own and no packages check, neither of which touches the fixture.
+  # of its own and a package floor, neither of which touches the fixture. The
+  # floor rather than _HI_HEADER_CHECK=0, which this was: on a bare debian the
+  # top rank is one line, so the dial shows *and* the check stays short enough
+  # for two sessions to fit one frame.
   demo_settings <<'EOF'
 export _HI_PROMPT_END_ZSH='❯'
-export _HI_HEADER_CHECK='0'
+export _HI_PACKAGES_MIN_PRIORITY='5'
 EOF
   up_container docker db-prod debian
   up_container docker cache-1 zsh
@@ -420,10 +423,12 @@ up:nomad)
   # the header knobs the other demos leave alone. Note what is *not* here:
   # nomad.tape waits on /Disconnected/, which banner() prints, so this is the
   # one demo that cannot turn _HI_HEADER_BANNER or _HI_DISABLE_HEADER off
-  # without hanging its own render.
+  # without hanging its own render. The floor is load-bearing for the same
+  # reason - see nomad.tape.
   demo_settings <<'EOF'
 export _HI_HEADER_IDENTITY='0'
 export _HI_HEADER_GHZ='1'
+export _HI_PACKAGES_MIN_PRIORITY='5'
 EOF
   up_nomad
   ;;

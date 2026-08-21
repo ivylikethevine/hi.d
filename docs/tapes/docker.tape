@@ -3,9 +3,10 @@
 # is the whole pitch. Render with `vhs docs/tapes/docker.tape` from the
 # repo root, docker running, hi on PATH. Manual artifact, reviewed by eye.
 #
-# Its configuration: _HI_PROMPT_END_ZSH and no packages check. demo.tape uses
-# this same debian target, so the two GIFs are kept apart by the client's
-# settings.sh (docs/tapes/fixtures.sh), never by the fixture.
+# Its configuration: _HI_PROMPT_END_ZSH and a package floor of 5, which leaves
+# the check one line long. demo.tape uses this same debian target, so the two
+# GIFs are kept apart by the client's settings.sh (docs/tapes/fixtures.sh),
+# never by the fixture.
 #
 # The Hide blocks pace themselves with Wait+Screen on sentinel text instead
 # of fixed sleeps; the quoted split in fixture-o''k keeps the typed command

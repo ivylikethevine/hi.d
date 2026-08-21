@@ -103,6 +103,10 @@ here: git history is the ledger, and this file is only what is left to do.
     stale twice over, and one re-render settles both. Look at the colored
     output with fresh eyes when you do: hi's own palette is drawn over these
     backgrounds, and the check's tiers now use cyan and magenta as well.
+  - **A third rides along.** The packages check ships at a floor of 1 rather
+    than 0, and docker and nomad now set a floor of 5 of their own - so every
+    committed GIF shows a longer check than its tape will now render, and
+    docker.gif shows none at all where it now shows one line.
   - Its own commit, since it is seven binary files.
   - **Ticks when:** the GIFs show the current name, on the current themes.
 

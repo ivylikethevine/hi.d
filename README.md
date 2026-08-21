@@ -35,6 +35,7 @@ _Don't `ssh`ush your hosts, say `hi`!_
   - [podman](#podman)
   - [nomad](#nomad)
   - [kubernetes](#kubernetes)
+  - [completion, every backend at once](#completion-every-backend-at-once)
 - [Requirements](#requirements)
 - [Installation/Usage](#installationusage)
 - [Configuration](#configuration)
@@ -62,8 +63,9 @@ runs. One GIF per backend, deliberately varying both sides, and each one
 configured differently: the line under every GIF names the knob it is showing,
 so the set reads as a configurable tool rather than one fixed look. The GIF at
 the top of this README is the exception on purpose — it is the stock defaults,
-with nothing turned off. How they are rendered, and what to catch when you
-regenerate them, is at the bottom:
+with nothing turned off. A last GIF closes the section without being a backend
+at all: completion, which answers with every one of them at once. How they are
+rendered, and what to catch when you regenerate them, is at the bottom:
 [Regenerating the demo GIFs](#regenerating-the-demo-gifs).
 
 ### ssh, with a permanent install
@@ -109,6 +111,20 @@ hi's aliases-only fallback. Client: zsh.
 Showing `_HI_DISABLE_GIT_STATUS=1` — the same prompt, without the git segment.
 
 ![hi into a kubernetes pod on a kind cluster](docs/demos/kube.gif)
+
+### completion, every backend at once
+
+Not a session — the roster the sessions come from. `hi <TAB>` answers with the
+`Host` entries in `~/.ssh/config` _and_ every running container, allocation and
+pod, each tagged with the backend it came from; `hi --<TAB>` answers hi's own
+flags, without probing any backend to do it. Client: fish, for the description
+column its pager gives every row.
+
+![hi TAB listing ssh hosts and containers from every backend, then hi --TAB listing flags](docs/demos/complete.gif)
+
+The list stops at eleven rows because fish hands its pager half the screen, so
+two ssh hosts spill into "…and 1 more row". That is completion behaving
+normally, not the GIF cut short.
 
 ## Requirements
 
@@ -174,7 +190,9 @@ Showing `_HI_DISABLE_GIT_STATUS=1` — the same prompt, without the git segment.
   `~/.ssh/config` plus every running container, allocation and pod, each
   tagged with the backend it came from — and `hi --<TAB>` completes hi's own
   flags. bash, zsh and fish read the same list (`common/targets.sh`), so the
-  three cannot drift; a flag word is answered without probing any backend
+  three cannot drift; a flag word is answered without probing any backend.
+  There is a GIF of both halves above:
+  [completion, every backend at once](#completion-every-backend-at-once)
 - configure `~/.ssh/config` tags via sshm
 - [optional] pin specific colors in `~/.config/say-hi/colors` — everything else
   gets a color automatically. Copy `say-hi/misc/colors` there to start from the
@@ -368,8 +386,8 @@ has proven it · ⚠️ works, reduced · ❌ not supported.
 | Linux, musl + busybox (Alpine…)               | ✅ full session with `bash` installed, ⚠️ aliases-only without                                                                                            | `ssh_test.sh`, on Alpine 3.24                                                               |
 | macOS                                         | 🟡 full session — bash 3.2 is what it ships, and the suite runs a real bash 3.2 target; the client half (BSD `sed`/`mktemp`/`base64`) is unit-tested only | `ssh_test.sh` bash-3.2 case; `.github/workflows/macos-e2e.yml` is written but has never run |
 | WSL                                           | 🟡 it is Linux, and the `.deb` installs into it unchanged                                                                                                 | —                                                                                           |
-| Windows, with Git Bash/Cygwin/MSYS2 on `PATH` | 🟡 full session, same code path as any ssh host                                                                                                           | `.github/workflows/windows-e2e.yml`, written, never run                                     |
-| Windows, stock OpenSSH (`cmd.exe`/PowerShell) | ⚠️ plain PowerShell session, no hi styling — the fallback is deliberate, not a failure                                                                    | same, never run                                                                             |
+| Windows, with Git Bash/Cygwin/MSYS2 on `PATH` | 🟡 full session, same code path as any ssh host                                                                                                           | `.github/workflows/windows-client.yml` (client side) and `windows-e2e.yml` (target side), both written, neither run yet |
+| Windows, stock OpenSSH (`cmd.exe`/PowerShell) | ⚠️ plain PowerShell session, no hi styling — the fallback is deliberate, not a failure                                                                    | `windows-e2e.yml`, the target-side half above, never run                                    |
 | \*BSD, Solaris/illumos                        | 🟡 nothing in hi is Linux-specific past the header's `/proc` probes, which degrade to `?`                                                                 | —                                                                                           |
 
 **2. The shell you end up _in_** — what hi hands you once it is on the target.
@@ -409,6 +427,11 @@ bash-it against hi, each asserting the session comes up with no shell errors
 and that hi neither changed zsh's array base under them nor dropped their
 `PROMPT_COMMAND`.
 
+**Both tables above assume hi can reach the target in the first place.** What it
+can reach - and the verdict on every runtime weighed and left off the roster,
+LXC/Incus, `systemd-nspawn`, WSL, `nerdctl`, jails, zones and the rest - is
+[docs/TARGETS.md](docs/TARGETS.md).
+
 ## Testing
 
 `tests/test_runner.sh` (reachable as `hi --test` once installed) runs the suite
@@ -421,6 +444,8 @@ lint gate, relaying, `_HI_HOME`, and why the tests are local-only — is in
 
 - [docs/CONFIGURATION.md](docs/CONFIGURATION.md) — the config overlay, every
   feature toggle and environment variable hi reads
+- [docs/TARGETS.md](docs/TARGETS.md) — every target hi answers to, every one
+  weighed and left off, and why each answer is settled
 - [docs/ALTERNATIVES.md](docs/ALTERNATIVES.md) — sshrc, xxh, kyrat, sshdot and
   homeshick side by side; what makes say-hi different, and when another tool is
   the better choice
@@ -432,7 +457,8 @@ lint gate, relaying, `_HI_HOME`, and why the tests are local-only — is in
 - [docs/SECURITY.md](docs/SECURITY.md) — reporting, and what hi touches on a
   target
 - [docs/PACKAGING.md](docs/PACKAGING.md) — the publishing runbook: cutting a
-  release, the per-channel steps, and the Windows channel assessment
+  release, the per-channel steps, the channels weighed and not shipped, and the
+  reproducibility contract
 - [docs/ROADMAP.md](docs/ROADMAP.md) — what is planned, what each item is
   blocked on, and the one-time setup the release channels wait on
 
@@ -462,6 +488,22 @@ for a missing backend, and what failed. Name tapes to render a subset
 (`generate.sh docker kube`); `--list` shows them, `--down` clears up after a
 crashed run. Manual artifacts, reviewed by eye — regenerate whenever the header
 or prompt changes, and look at what came out before committing it.
+
+The top-of-README demo is the one that goes quietly wrong: it claims to be the
+stock defaults, so it is stale the moment the header, the prompt or the tape
+changes, and nothing about looking at it says so.
+[`.githooks/demo_staleness.sh`](.githooks/demo_staleness.sh) is the reminder —
+it compares `demo.gif`'s last commit against the tape, the fixtures and the
+shipped tree, and says which of them moved since. Run it by hand, or wire it up
+as a pre-commit hook:
+
+```sh
+git config core.hooksPath .githooks
+```
+
+It only ever warns. Rendering a binary nobody looked at is the thing this
+section exists to argue against, so the hook will not do it for you and will
+never block a commit.
 
 By hand it is one `vhs docs/tapes/<name>.tape` per GIF from the repo root, with
 the backend running and `hi` on PATH; `docs/tapes/fixtures.sh` builds every
@@ -495,3 +537,10 @@ sha256sum -c --ignore-missing SHA256SUMS                        # the bytes matc
 minisign -Vm SHA256SUMS -P 'RWTDcJ3LGWayrAxK6mbMysyOF8mNLOmMUGRl4YSWk5KIoayS+lW0Fy1L'
 gh attestation verify say-hi_*_all.deb --repo ivylikethevine/say-hi # which CI run built them
 ```
+
+That covers **every** file on the release, `say-hi-<version>.tar.gz` included —
+the source tarball the Homebrew formula and the AUR package build from is one
+the release built and attested, not GitHub's auto-generated `/archive/` one,
+which carries neither sum nor signature. So
+`gh attestation verify say-hi-*.tar.gz --repo ivylikethevine/say-hi` answers for
+the sources the same way the line above answers for the `.deb`.

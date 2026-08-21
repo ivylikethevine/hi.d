@@ -13,7 +13,7 @@ pkgbase = say-hi
 	optdepends = podman: container targets
 	optdepends = nomad: allocation targets
 	optdepends = kubectl: pod targets
-	source = say-hi-0.0.0.tar.gz::https://github.com/ivylikethevine/say-hi/archive/v0.0.0.tar.gz
+	source = https://github.com/ivylikethevine/say-hi/releases/download/v0.0.0/say-hi-0.0.0.tar.gz
 	b2sums = SKIP
 
 pkgname = say-hi

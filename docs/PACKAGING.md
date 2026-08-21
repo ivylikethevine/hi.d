@@ -76,6 +76,7 @@ where a required reviewer would stall the run rather than gate it — the
 - [The one idea](#the-one-idea)
 - [Layout](#layout)
 - [Cutting a release](#cutting-a-release)
+- [Channels weighed and not shipped](#channels-weighed-and-not-shipped)
 - [Publishing each channel](#publishing-each-channel)
   - [AUR](#aur)
   - [Homebrew tap](#homebrew-tap)
@@ -132,37 +133,95 @@ tarball Homebrew and the AUR build from. A checkout answers `hi --version` with
 `--date <version>`, having no `SOURCE_DATE_EPOCH`, and `stamp.sh` refuses to
 guess one. `tests/packaging/packaging_test.sh` guards all of it.
 
+## Channels weighed and not shipped
+
+**nix.** Looked at, and the answer for now is no — recorded here rather than
+left as an open question, because the build shape was never the hard part.
+
+The derivation is the Homebrew formula: `$out/share/say-hi` plus a wrapped
+`$out/bin/hi` whose only job is `export _HI_HOME=$out/share`. It is the formula
+and not `scripts/install.sh --prefix` for the reason [Layout](#layout) already
+gives — `install_tree` hardcodes `/usr/bin` and `/etc/profile.d`, and neither
+exists in a store path.
+
+Two routes, and they are not the same commitment. A `flake.nix` in this repo is
+publishable with no external review: `nix run github:ivylikethevine/say-hi`
+works the moment it lands, and a flake on the repo itself needs no source hash,
+so `bump.sh` learns nothing new. A nixpkgs submission is discoverable from
+`environment.systemPackages`, which is where nix users actually look, but it is
+upstream review plus a standing maintainer entry, and `bump.sh` grows a fourth
+manifest to checksum. **If it ships, it ships as a flake first.**
+
+**The precondition, before either.** A nix derivation is a _third_ copy of
+`_HI_PACKAGE_CONTENTS`, where `tests/packaging/packaging_test.sh` currently
+guards exactly one (the formula). The drift guard grows a case before anything
+is published, not after — a channel installing a stale file list is the failure
+this repo has already designed against twice.
+
+**The `/etc/profile.d` half has no store-path equivalent.** That snippet is how
+a _new_ process — a login shell, tmux's `update-environment`, another machine's
+`hi` probing this one — reads `$_HI_HOME` with no tree to derive it from. On
+NixOS that wants a module (`environment.etc`, or a `programs.say-hi` option),
+which is not committed to; under home-manager the rc line `install.sh` writes
+already covers it, and the plain answer stays `install.sh --no-link`, which is
+what the formula's `caveats` says today.
+
+Two things would come free and are worth remembering if this is revisited: nix
+builds are hermetic, so the reproducibility [mkpkg.sh works
+for](#reproducibility) becomes a property rather than a CI check, and a
+`checkPhase` running `--group fast` would make the build itself a test.
+
 ## Cutting a release
 
 ```bash
 git tag v1.0.0 && git push origin v1.0.0
 ```
 
-That is the whole local ceremony. The tag never moves: `bump.sh` checksums the
-GitHub tarball, which only exists once the tag is pushed, so the workflow runs
-the bump itself against that tarball rather than requiring a pre-tag bump and a
-force-retag to reconcile the two.
+That is the whole local ceremony. The tag never moves: the manifests carry
+checksums of a tarball that cannot exist before the tag does, so the workflow
+does the bump itself rather than requiring a pre-tag bump and a force-retag to
+reconcile the two.
 
-1. `git tag v1.0.0 && git push origin v1.0.0` — the tarball now exists and the
-   workflow starts.
-2. The `build` job runs the fast suites, then `bump.sh 1.0.0` (fetches the
-   tarball, writes `pkgver`, `b2sums`, the formula `url`/`sha256`, and the
-   derivable `.SRCINFO` lines), verifies with `bump.sh --check`, runs the
-   packaging drift guards against the fresh manifests, and builds the
-   deb/rpm/apk plus a `SHA256SUMS` over them. Nothing has published yet.
+**The tarball is one the release builds**, not GitHub's auto-generated
+`/archive/` one. That matters because the archive is the only artifact a
+release could ship with nothing signed over it: no entry in `SHA256SUMS` and no
+build provenance, in a chain where every other file has both.
+`packaging/srctar.sh` (over `lib.sh`'s `src_tarball`) writes a
+`git archive --prefix say-hi-<version>/` of the tag — the same shape, down to
+the directory the AUR package's `prepare()` symlinks — and that file is what
+`bump.sh` checksums, what `mkpkg.sh` lists in `SHA256SUMS`/`ARTIFACTS`, and
+what the release attaches. One set of bytes, summed once.
+
+1. `git tag v1.0.0 && git push origin v1.0.0` — the workflow starts.
+2. The `build` job builds `say-hi-1.0.0.tar.gz` from the tag, runs the fast
+   suites, then `bump.sh --tarball <that file> 1.0.0` (writes `pkgver`,
+   `b2sums`, the formula `url`/`sha256`, and the derivable `.SRCINFO` lines),
+   verifies with `bump.sh --check`, runs the packaging drift guards against the
+   fresh manifests, and builds the deb/rpm/apk — `mkpkg.sh --source-tarball`
+   puts the tarball beside them and writes one `SHA256SUMS` over the lot.
+   Nothing has published yet.
 3. Approve the `publish` job in the Actions UI — this is your review point, over
-   the exact artifacts the build produced. Packages, `SHA256SUMS`, and manifests
-   land on the release, and the regenerated manifests are committed back to
-   `main` (they are consumed from the AUR/tap repos, not from inside the
-   tarball, so they don't need to be in the tagged tree).
+   the exact artifacts the build produced. Packages, the source tarball,
+   `SHA256SUMS`, and manifests land on the release, and the regenerated
+   manifests are committed back to `main` (they are consumed from the AUR/tap
+   repos, not from inside the tarball, so they don't need to be in the tagged
+   tree).
 4. Both channels update themselves once their secrets exist: the tap gets a PR
    (`HOMEBREW_TAP_TOKEN`), the AUR gets a push (`AUR_SSH_KEY`). Until then, copy
    the manifests from the release (or from `main`) by hand, per the sections
    below.
 
-`bump.sh 1.0.0` still works by hand if CI is ever unavailable
-(`--tarball <file>` skips the download), and `bump.sh --check 1.0.0` stays
-useful locally to confirm the manifests match a cut release.
+Because the tarball is in `dist/ARTIFACTS`, it reaches both the attestation and
+the release upload without either step naming a `.tar.gz`: those two read that
+file rather than a format list spelled out in YAML.
+
+`bump.sh 1.0.0` still works by hand if CI is ever unavailable — with the tag in
+your checkout it builds the identical tarball itself, and `--tarball <file>`
+takes one you already have. It falls back to downloading the published asset
+only when neither is available, which is why the download can no longer be the
+first thing it tries: during a release the asset does not exist yet.
+`bump.sh --check 1.0.0` stays useful locally to confirm the manifests match a
+cut release.
 
 **Release notes are the PR titles.** The publish job's
 `gh release create --generate-notes` drafts the notes from the PR titles merged

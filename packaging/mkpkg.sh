@@ -23,7 +23,8 @@ _HI_PKGBUILD="$_HI_ROOT/packaging/aur/say-hi/PKGBUILD"
 _HI_DIST="$_HI_ROOT/dist"
 _HI_STAGE_ONLY=""
 _HI_VERSION=""
-_HI_USAGE="Usage: mkpkg.sh [--version <x.y.z>] [--stage-only] [--outdir <dir>]"
+_HI_SRC_TARBALL=""
+_HI_USAGE="Usage: mkpkg.sh [--version <x.y.z>] [--stage-only] [--outdir <dir>] [--source-tarball <file>]"
 
 # install.sh insists on a checkout named exactly say-hi ($_HI_HOME/say-hi is how it
 # finds everything). A clone directory called anything else - say-hi-main, a
@@ -95,11 +96,17 @@ function run_nfpm() {
   write_checksums
 }
 
-# One artifact per packager, plus a SHA256SUMS over them for release users to
-# verify downloads against. _HI_PACKAGERS is the single home of "what a
-# release consists of" - the workflows call this rather than repeating the
-# format list in YAML. The sums come from lib.sh's sha256_lines (mac fallback
-# included).
+# One artifact per packager, plus the source tarball when the caller has one,
+# plus a SHA256SUMS over the lot for release users to verify downloads against.
+# _HI_PACKAGERS is the single home of "what a release consists of" - the
+# workflows call this rather than repeating the format list in YAML. The sums
+# come from lib.sh's sha256_lines (mac fallback included).
+#
+# The source tarball is optional because only a release has one: it is built
+# from a tag before the version is known here (bump.sh writes the pkgver this
+# reads), so it arrives as a file rather than being made here. ci.yml's
+# packaging smoke passes none and is unaffected, including its double-build
+# reproducibility diff.
 function write_checksums() {
   local packager f
   local -a built=()
@@ -112,6 +119,18 @@ function write_checksums() {
       built+=("${f##*/}")
     done
   done
+  if [ -n "$_HI_SRC_TARBALL" ]; then
+    [ -f "$_HI_SRC_TARBALL" ] || {
+      _hi_cecho " no such source tarball: $_HI_SRC_TARBALL" "$RED" >&2
+      return 1
+    }
+    # -ef rather than comparing paths: a caller who already wrote the tarball
+    # into $_HI_DIST (or reached it by another route to the same file) gets a
+    # no-op instead of cp's "are the same file" error
+    [ "$_HI_SRC_TARBALL" -ef "$_HI_DIST/${_HI_SRC_TARBALL##*/}" ] ||
+      cp -p "$_HI_SRC_TARBALL" "$_HI_DIST/${_HI_SRC_TARBALL##*/}"
+    built+=("${_HI_SRC_TARBALL##*/}")
+  fi
   (cd "$_HI_DIST" && sha256_lines "${built[@]}" >SHA256SUMS)
   _hi_cecho " $_HI_DIST/SHA256SUMS :)" "$GREEN"
 
@@ -146,6 +165,15 @@ while [ $# -gt 0 ]; do
     shift
     ;;
   --outdir=*) _HI_DIST="${1#--outdir=}" ;;
+  --source-tarball)
+    [ $# -ge 2 ] || {
+      echo "mkpkg.sh: --source-tarball requires a path" >&2
+      exit 1
+    }
+    _HI_SRC_TARBALL="$2"
+    shift
+    ;;
+  --source-tarball=*) _HI_SRC_TARBALL="${1#--source-tarball=}" ;;
   -h | --help)
     cat <<EOF
 $_HI_USAGE
@@ -160,6 +188,11 @@ from that staging root with nfpm.
   --stage-only       Stop after staging. Needs no nfpm, and is the quickest
                      way to see exactly what a package would contain.
   --outdir <dir>     Where to stage and write packages. Default: dist/
+  --source-tarball <file>
+                     Also ship this source tarball: copied into the outdir,
+                     listed in SHA256SUMS and ARTIFACTS, and so covered by the
+                     release's build-provenance attestation. release.yml
+                     builds it with packaging/lib.sh's src_tarball.
 EOF
     exit 0
     ;;

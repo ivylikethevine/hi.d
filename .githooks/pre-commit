@@ -1,0 +1,9 @@
+#!/bin/sh
+# Warn-only hooks, enabled with:
+#
+#   git config core.hooksPath .githooks
+#
+# Kept to one line so the logic lives in a *.sh file the lint suite actually
+# reads - a file named `pre-commit` is invisible to shellcheck's `-name '*.sh'`
+# sweep, and git will not accept any other name.
+exec "$(dirname "$0")/demo_staleness.sh"

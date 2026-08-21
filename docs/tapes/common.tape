@@ -17,9 +17,13 @@
 # **client shell**, so the set has three looks rather than seven and the look
 # tells you which shell you are watching.
 #
-#   bash (no `Set Shell`, the default here)  Catppuccin Mocha
+#   bash (no `Set Shell`, the default here)  GruvboxDark
 #   zsh  (docker.tape, kube.tape)            Dracula
-#   fish (podman.tape)                       nord
+#   fish (podman.tape, complete.tape)        nord
+#
+# bash is the warm one on purpose: it is the shell four of the demos use -
+# demo, ssh, nomad and color_preview - so the odd one out in tone is the one
+# you see most, and the two cool themes then read as "not bash" at a glance.
 #
 # The bash one lives here because it is the default; the other two override it
 # immediately after their `Source` line. Adding a demo on a fourth shell means
@@ -31,6 +35,6 @@ Set Width 1100
 Set Height 620
 Set TypingSpeed 60ms
 
-# The bash default - overridden by the two non-bash tapes. Names come from
+# The bash default - overridden by the non-bash tapes. Names come from
 # `vhs themes`; see https://github.com/charmbracelet/vhs/blob/main/THEMES.md
-Set Theme "Catppuccin Mocha"
+Set Theme "GruvboxDark"

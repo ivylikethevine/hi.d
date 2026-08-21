@@ -116,9 +116,16 @@ jobs:
 
   # The same suites on macOS: /bin/bash 3.2, BSD userland. The %e/width/sort
   # fixes in common/ came out of this job, so it gates for real now.
-  # (shfmt/checkbashisms aren't installed here on purpose: the ubuntu job
-  # already enforces both against pinned versions, and a second, brew-floating
-  # shfmt could disagree with the pinned one about formatting.)
+  #
+  # Minus the lint suite, deliberately. `--skip shellcheck` drops the one suite
+  # in the fast group with nothing to say about this machine: it runs the same
+  # pinned shellcheck over the same file list as the ubuntu job above and
+  # reaches the same findings, because linting text does not depend on the
+  # userland underneath it. What that saves is the pinned install plus the
+  # slowest suite in the group, on a runner billed at ten times the Linux rate.
+  # The lint gate is not weakened - it is enforced, once, where it is cheap.
+  # (shfmt and checkbashisms were already absent here for a related reason: a
+  # brew-floating shfmt could disagree with the pinned one about formatting.)
   test-macos:
     name: fast suites (macos-latest)
     runs-on: ${{ needs.runner.outputs.macos }}
@@ -132,14 +139,8 @@ jobs:
       - name: Install fish
         run: brew install fish
 
-      # pinned rather than brewed: a floating shellcheck here could red this
-      # job with a warning the pinned ubuntu one has never seen
-      - uses: ./.github/actions/setup-tool
-        with:
-          tool: shellcheck
-
       - name: Run fast test suites
-        run: "${{ github.workspace }}/tests/test_runner.sh --verbose --host-report --group fast"
+        run: "${{ github.workspace }}/tests/test_runner.sh --verbose --host-report --group fast --skip shellcheck"
 
   # bad `needs`, invalid contexts, shellcheck over every run: block - the
   # workflows and composite actions are code too, so they get a linter

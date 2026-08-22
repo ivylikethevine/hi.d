@@ -69,13 +69,60 @@ distinction, and a guessed number of days is not.
 Read across the sections, the shape today is: [Testing & CI](#testing--ci),
 [Demos](#demos) and [Project docs](#project-docs) are each down to a single
 entry, an observation waiting on a run or a release that no file here can
-trigger. [The session itself](#the-session-itself) carries two, smallest
-first: OSC 9 notifications, an ordinary unbuilt entry, and persistent
-sessions, deferred past the tag on purpose rather than held in front of it.
-Everything that gates the tag is either a criterion above or an entry under
-[Outside this repo](#outside-this-repo).
+trigger. [The session itself](#the-session-itself) carries three, smallest
+first: the tar padding on BSD clients, and then OSC 9 notifications and
+persistent sessions. The last two are unbuilt features, and the second of
+them is deferred past the tag on purpose rather than held in front of it. The
+first is not like either - it is a bug in shipped behaviour on a supported
+client, so it is the one entry in this half that has a claim on v1.0.0.
+Everything else that gates the tag is either a criterion above or an entry
+under [Outside this repo](#outside-this-repo).
 
 ### The session itself
+
+- [ ] **Stop tar padding the payload on BSD clients** — _scope: one helper and
+      three call sites in `hi.sh`, plus two regression cases._
+      `_hi_payload_tar` and `_hi_overlay_tar` let tar compress (`tar czf -`).
+      GNU tar pads the _uncompressed_ archive to the 10240-byte blocking
+      factor and then compresses it, so the trailing NULs cost about thirty
+      bytes. bsdtar - macOS's `/usr/bin/tar` - pads the _compressed output
+      stream_ instead, appending raw NULs after the gzip member. Every payload
+      a BSD client builds is rounded up to a multiple of 10240, and any change
+      smaller than one block is invisible.
+
+  - **What it costs.** GNU tar against bsdtar on the stripped tree: the stock
+    payload is 32131 B against **40960**, so a macOS client ships about 27%
+    more than it needs to every session; a two-file overlay is 189 B against
+    **10240**, a flat 54x. The padding is armored and sent, so this is real
+    cost, not a reporting error - and `hi`'s connect banner, `hi --doctor`'s
+    `payload` row and its `ships` row all quote the padded figure.
+  - **How it surfaced.** `doctor_payload_diff`'s _Payload diff shown when a
+    toggle trims the wire_ is red on the macOS job and green everywhere else.
+    `_HI_DISABLE_OSC52=1` trims 433 wire bytes under GNU tar and **0** under
+    bsdtar, because it never crosses a block boundary. The 128-byte floor is
+    sound and the test is right - measured jitter on one tree is zero across
+    five runs, not the "few bytes to a couple dozen" the floor's comment
+    assumes, so that comment wants tightening at the same time.
+  - **The fix.** Compress separately: `tar cf - … | gzip -n`, which agrees
+    with GNU tar to within four bytes under both userlands and is byte-stable
+    run to run. Behind one `_hi_tar_gz` helper in `hi.sh`, because three sites
+    need it (`_hi_overlay_tar`, and `_hi_payload_tar`'s `_HI_KEEP_COMMENTS`
+    and staged arms) and the pipe needs a `PIPESTATUS` check - `hi.sh` turns
+    `pipefail` back off for interactive sourcing, so a `tar` failure would
+    otherwise hide behind a successful `gzip`. **Degrade to `tar czf -` when
+    `gzip` is absent**: padded on bsdtar, but a working payload, which is the
+    right trade on a client that lean. The helper grows `hi.sh`, which is
+    itself in `$_HI_PAYLOAD`, so both budgets move - check them.
+  - **Why no test caught it.** `bench_test.sh`'s README-badge check would
+    have: the macOS wire figure is 24% over the badge's 5% window. But
+    `--group bench` does not run on the macOS job. The regression case to add
+    is cheaper and belongs in the fast group - assert `_hi_payload_tar`'s
+    output is not an exact multiple of 10240, and that a small overlay's
+    `_hi_overlay_tar` is well under one block. Whether bench should also run
+    on macOS is the open question this leaves behind.
+  - **Ticks when:** the three sites go through the helper, the two regression
+    cases are in the fast group, `doctor`'s payload-diff case is green on the
+    macOS job, and the OSC 52 wire delta agrees between GNU tar and bsdtar.
 
 - [ ] **OSC 9/777 desktop notifications** — _scope: one escape sequence and a
       toggle, on `shells/osc52.sh`'s exact precedent._ A long-running remote

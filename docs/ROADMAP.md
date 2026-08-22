@@ -60,16 +60,50 @@ within each section, smallest first. The scope is what the work _is_, not how
 long it takes: "one CI run" and "a backend across seven files" are the useful
 distinction, and a guessed number of days is not.
 
-Read across the sections, the shape today is: every section is down to a single
-entry, and **none of them is work for before v1.0.0**. [The session
-itself](#the-session-itself) holds the only one with code left to write, and it
-is deferred past the tag on purpose; [Testing & CI](#testing--ci),
-[Demos](#demos) and [Project docs](#project-docs) are each an observation
-waiting on a run or a release that no file here can trigger. Everything that
-gates the tag is either a criterion above or an entry under [Outside this
-repo](#outside-this-repo).
+Read across the sections, the shape today is: [Testing & CI](#testing--ci),
+[Demos](#demos) and [Project docs](#project-docs) are each down to a single
+entry, an observation waiting on a run or a release that no file here can
+trigger. [The session itself](#the-session-itself) carries two, smallest
+first: OSC 9 notifications, an ordinary unbuilt entry, and persistent
+sessions, deferred past the tag on purpose rather than held in front of it.
+Everything that gates the tag is either a criterion above or an entry under
+[Outside this repo](#outside-this-repo).
 
 ### The session itself
+
+- [ ] **OSC 9/777 desktop notifications** — _scope: one escape sequence and a
+      toggle, on `shells/osc52.sh`'s exact precedent._ A long-running remote
+      command finishing behind a switched-away terminal has nothing to say
+      about it today - `hi_copy` and vim's yank already reach back through the
+      wire with an OSC 52 escape that the local terminal emulator (never the
+      target) acts on, and OSC 9 (or iTerm2's OSC 777) is the same trick for a
+      notification instead of a clipboard write: no target-side daemon, no
+      `notify-send`/`terminal-notifier` to detect or ship, nothing installed -
+      just a different escape sequence written to the same tty.
+
+  - **What it would hook.** Not every command, and not automatically - a
+    notification on every prompt would be noise, not signal. The candidate
+    shape is a `hi_notify <cmd>` alias/function (`misc/aliases.sh`, next to
+    `hi_copy`) that runs `<cmd>` and fires the escape on exit with its status,
+    so it is opt-in per invocation the way `hi_copy` is opt-in per yank -
+    never a hook on the prompt itself.
+  - **The toggle.** `_HI_DISABLE_NOTIFY`, on `_HI_DISABLE_OSC52`'s exact
+    precedent: a row in `common/core.sh`'s `_HI_TOGGLES` array (GLOSSARY:
+    HI.07), its spelled-out mirror in `common/paths.sh`, and a new exclude in
+    `hi.sh`'s `_hi_payload_tar` - a client that never wants it pays nothing on
+    the wire, the same guarantee `_HI_DISABLE_OSC52=1` already makes for the
+    clipboard half.
+  - **Terminal support is the same open question OSC 52 already lives with.**
+    tmux needs passthrough allowed, some emulators ignore OSC 9 outright and a
+    few implement 777 instead of 9 (or both) - `shells/osc52.sh`'s own comment
+    on this is the reference, not a new investigation. Emitting both escapes
+    and letting an emulator that understands neither no-op is the likely
+    answer, same as it would be for any other escape-sequence feature here.
+  - **Ticks when:** `hi_notify <cmd>` exists in `misc/aliases.sh`, fires on
+    exit with the command's status, `_HI_DISABLE_NOTIFY` trims it from the
+    payload and is documented in [CONFIGURATION.md](CONFIGURATION.md), and a
+    case in `tests/shells/osc52_test.sh` (or a sibling) pins the escape shape
+    the way that suite already pins OSC 52's.
 
 - [ ] **Persistent sessions on a disposable target** — _**deferred until after
       v1.0.0.** Scope: the largest entry here. It changes cleanup semantics on
@@ -77,46 +111,79 @@ repo](#outside-this-repo).
       rewrites SECURITY.md's footprint promise._ Deferred because the thing it
       changes is the promise v1 is being tagged on: SECURITY.md says a machine
       you visited looks untouched, and every other entry left is a run or a
-      click rather than a rewrite of that sentence. The notes below stay
-      because they are the research, not because the work is queued.
+      click rather than a rewrite of that sentence. The plan below is the
+      research, not queued work.
 
   A dropped connection currently loses the session outright: the
       tree is deleted when the session ends, so there is nothing to reconnect
       to. This entry is that changed — keep the tree across a dropped
       connection, reconnect into the same session later, and delete only on a
-      definitive exit or after a configurable timeout.
+      definitive exit or after a configurable timeout. **Opt-in, not the
+      default**: a bare `hi <target>` stays exactly as disposable as it is
+      today — a named session is what asks for the tradeoff below, on the same
+      "nothing changes for people who never asked" precedent every toggle in
+      this project follows.
 
+  - **The plan, in one line.** `hi --session <name> <target>` writes a
+    deterministic tree instead of `mktemp`'s random one, `load.sh`'s cleanup
+    trap becomes conditional on whether that session is still wanted, and
+    reattachment rides whatever multiplexer the target already has -
+    nothing new ships to provide one.
   - **What has to stop happening, carefully.** Cleanup has two independent
     paths — the bootstrap's `trap 'rm -rf $_HI_CLEANUP' exit` and `load.sh`'s
     own on-exit hook — and `tests/targets/ssh_disconnect_test.sh` exists
     specifically to prove they fire on an _abrupt_ disconnect rather than only
     a clean exit. That is the current contract and it is deliberate, so this
     makes it conditional rather than weaker: the suite gains a second case
-    (dropped **with** persistence keeps the tree) beside the one it has
+    (dropped **with** `--session` keeps the tree) beside the one it has
     (dropped **without** still reaps it).
-  - **The tree has to be findable again.** It is
-    `mktemp -d -t $(_hi_whoami).hi.XXXXXX` (`hi.sh`), a fresh random name every
-    session, which is exactly what nothing can reconnect to. A resumable
-    session needs a deterministic path, or a pointer the next `hi` reads on the
-    way in — still per-user and still mode 0700, or SECURITY.md's footprint
-    section stops being true.
-  - **Something has to reap it, and there is no daemon.** Two shapes, and they
-    trade the same way: a watchdog detached at disconnect
-    (`sh -c 'sleep N; rm -rf ...'`) keeps the promise even if you never come
-    back, at the cost of leaving a process on the target; reap-on-next-connect
-    costs nothing and runs nothing, but leaves the tree indefinitely if you
-    don't return. Only the first keeps "a machine you visited looks untouched"
-    literally true. Either way SECURITY.md's _Footprint and cleanup_ section
-    needs rewriting, and the timeout wants a name and a row in
-    [CONFIGURATION.md](CONFIGURATION.md).
-  - **Keeping the tree alive is only half of it.** This keeps the _tree_ alive;
-    something still has to keep the _shell_ alive on the target, and hi no
-    longer ships a multiplexer integration to lean on (`--tmux` was removed).
-    Whether that is a multiplexer hi drives, or a reattachable shell of its
-    own, is an open question this entry has to answer rather than inherit.
-  - **Ticks when:** a dropped session on a disposable target can be
-    reconnected to, an explicit exit still cleans up immediately, the timeout
-    is a documented setting, and the disconnect suite covers both halves.
+  - **The tree has to be findable again, and only when asked for by name.**
+    `mktemp -d -t $(_hi_whoami).hi.XXXXXX` (`hi.sh`) stays the default - a
+    fresh random name every session, exactly as unfindable as it is meant to
+    be for a one-off connection. `--session <name>` swaps that for a
+    deterministic path scoped to the same user and target,
+    `${TMPDIR:-/tmp}/$(_hi_whoami).hi.session.<name>` (mode 0700, same as
+    today's tree - GLOSSARY: HI.33's derivation, not a new convention). A
+    second `hi --session <name> <target>` finds it already there, skips
+    re-copying the payload once its manifest matches, and reattaches instead
+    of bootstrapping fresh. `<name>` is a plain token (alnum, `-`, `_`) so it
+    can never walk the path outside `$TMPDIR` - the same shape a target name
+    is already constrained to.
+  - **Reaping it defaults to zero footprint, not a background process.** The
+    default is reap-on-next-connect: a session tree older than
+    `_HI_PERSIST_TIMEOUT` (documented in [CONFIGURATION.md](CONFIGURATION.md),
+    unset means "keep indefinitely until an explicit `hi --session <name>
+    --end`") is deleted the moment the _next_ `hi` of any kind touches that
+    target, not by anything running in the meantime - keeping "a machine you
+    visited looks untouched" true in the stronger sense of leaving no process
+    behind, at the cost of a stale tree sitting there if you never reconnect
+    at all. A detached watchdog (`sh -c 'sleep N; rm -rf ...' &`, disowned) is
+    the opt-in stronger guarantee for someone who wants the timeout enforced
+    even if they never come back - a second flag, not the default, because a
+    process left running on every persistent session is exactly the kind of
+    footprint SECURITY.md currently promises against. Either way, SECURITY.md's
+    _Footprint and cleanup_ section needs rewriting to describe the two modes
+    rather than the one guarantee it states today.
+  - **Keeping the shell alive rides what the target already has, nothing
+    ships to provide it.** This keeps the _tree_ alive; the _shell_ needs a
+    reattachable process, and hi ships no multiplexer config to lean on
+    (`--tmux` and `misc/tmux.conf` were removed). The plan is the same ladder
+    hi already uses for everything else it does not want to own two
+    implementations of ([SUPPORTED.md](SUPPORTED.md), `_HI_SHELL_PREFERENCE`):
+    detect what is already on the target and drive it, in order `tmux` →
+    `screen` → `dtach` (the last needs nothing but a bare `dtach -A
+    <socket> <shell>` - no config file to ship, unlike tmux). `--session`
+    wraps the session in whichever of the three is found first,
+    `tmux new-session -A -s hi-<name>` or the equivalent. A target with **none**
+    of the three declines persistence outright with a clear message at
+    connect time - `--session` on that target behaves like today's plain `hi`,
+    rather than silently pretending the reattach half of the promise held.
+  - **Ticks when:** `hi --session <name> <target>` survives a dropped
+    connection and reattaches on the next `hi --session <name> <target>`, a
+    bare `hi <target>` is unchanged, the timeout and its watchdog opt-in are
+    documented settings, SECURITY.md's footprint section describes both
+    cleanup modes, and the disconnect suite covers persisted-and-reattached
+    alongside the existing dropped-and-reaped case.
 
 ### Testing & CI
 

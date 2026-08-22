@@ -92,6 +92,27 @@ function test_local_reports_the_version() {
   [[ "$out" == *version* && "$out" == *"1.2.3"* ]]
 }
 
+# a settings.sh trimming toggle changes what leaves the wire, so the diff row
+# should appear and say lighter, not heavier
+function test_local_reports_payload_diff_when_toggled() {
+  local dir out
+  dir="$_HI_WORKDIR/payloaddiff_cfg"
+  mkdir -p "$dir"
+  printf "export _HI_DISABLE_OSC52='1'\n" >"$dir/settings.sh"
+  out="$(_HI_CONFIG_DIR="$dir" doctor_local)"
+  [[ "$out" == *"payload_diff"* && "$out" == *"lighter than the stock default"* ]]
+}
+
+# stock config, nothing to diff against itself - the row should not print at
+# all rather than announce a 0-byte difference
+function test_local_omits_payload_diff_at_stock_defaults() {
+  local dir out
+  dir="$_HI_WORKDIR/payloaddiff_stock"
+  mkdir -p "$dir"
+  out="$(_HI_CONFIG_DIR="$dir" doctor_local)"
+  [[ "$out" != *"payload_diff"* ]]
+}
+
 function test_backend_missing_reports_not_installed() {
   local out
   out="$(PATH="$(_hi_doctor_path)" doctor_backend docker docker ps -q)"
@@ -219,6 +240,8 @@ function run_doctor_tests() {
 
   _hi_h2 "Testing: doctor_local"
   _hi_check "Reports the version" test_local_reports_the_version
+  _hi_check "Payload diff shown when a toggle trims the wire" test_local_reports_payload_diff_when_toggled
+  _hi_check "Payload diff omitted at stock defaults" test_local_omits_payload_diff_at_stock_defaults
 
   _hi_h2 "Testing: doctor_backend"
   _hi_check "Missing CLI -> not installed" test_backend_missing_reports_not_installed

@@ -257,9 +257,11 @@ Every username and hostname gets a color deterministically derived from its
 name — nothing to generate, nothing that can go missing. To pin one instead,
 add a line to `say-hi/misc/colors` (`username,root,red` /
 `hostname,prod-db,yellow` / `hosttag,desktop,green`); `hosttag` entries match
-the _leftmost_ tag in a `# Tags: ...` comment directly above a `Host` line in
-`~/.ssh/config`. `hi --color-preview` shows what every ssh host and your user
-currently resolve to, in their actual colors.
+the _leftmost_ tag in a `# Tags: ...` comment directly above a `Host` or
+`Match host` line in `~/.ssh/config` - a wildcard block (`Host prod-*`,
+`Match host prod-*`) tags every name it covers, not just one alias.
+`hi --color-preview` shows what every ssh host and your user currently
+resolve to, in their actual colors.
 
 ## Built from/with/in mind
 

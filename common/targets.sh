@@ -169,13 +169,28 @@ emit_targets() {
 
 # docker and podman are one call (drop-in CLIs); the tag is appended by the
 # read loop rather than by a `sed` over the result - one fewer exec per backend
-# on the path that runs on every TAB, for the reason cache_body gives.
+# on the path that runs on every TAB, for the reason cache_body gives. Docker
+# also carries the compose service label piggybacked on the same call rather
+# than a second `docker ps`: a target one word shorter than the generated
+# container name, resolved back to it by hi.sh's own predicate and exec
+# commands (_hi_compose_container) rather than by anything here.
 list_ps() {
-  run_backend "$1" ps --format '{{.Names}}' 2>/dev/null |
-    while IFS= read -r _hi_name || [ -n "$_hi_name" ]; do
-      [ -n "$_hi_name" ] || continue
-      printf '%s\t%s\n' "$_hi_name" "$1"
-    done
+  if [ "$1" = docker ]; then
+    run_backend docker ps --format '{{.Names}} {{.Label "com.docker.compose.service"}}' 2>/dev/null |
+      while read -r _hi_name _hi_svc || [ -n "$_hi_name" ]; do
+        [ -n "$_hi_name" ] || continue
+        printf '%s\tdocker\n' "$_hi_name"
+        # only when it differs - a custom container_name equal to the
+        # service name would otherwise complete twice for one container
+        [ -n "$_hi_svc" ] && [ "$_hi_svc" != "$_hi_name" ] && printf '%s\tdocker\n' "$_hi_svc"
+      done
+  else
+    run_backend "$1" ps --format '{{.Names}}' 2>/dev/null |
+      while IFS= read -r _hi_name || [ -n "$_hi_name" ]; do
+        [ -n "$_hi_name" ] || continue
+        printf '%s\t%s\n' "$_hi_name" "$1"
+      done
+  fi
 }
 
 # nomad_allocs <job> - the running allocations of one job, and the task names

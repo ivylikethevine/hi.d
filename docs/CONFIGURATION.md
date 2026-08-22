@@ -131,7 +131,9 @@ unpinned host looks the same from every machine you say `hi` from - nothing to
 generate, nothing that can go missing. Pin the ones that matter in
 `~/.config/say-hi/colors`: `username,root,red`, `hostname,bastion,yellow`, or
 `hosttag,prod,red` to color every host carrying a `# Tags: prod` comment above
-its `Host` line in `~/.ssh/config`. A pin always beats the hash.
+its `Host` line - or a `Match host` line, so a fleet grouped with `Host prod-*`
+or `Match host prod-*` gets colored by the wildcard block itself, not just an
+exact alias - in `~/.ssh/config`. A pin always beats the hash.
 
 `hi --color-preview` answers what that adds up to - every host in your ssh
 config and every user it knows of, drawn in the colors themselves, each row

@@ -279,8 +279,24 @@ function _hi_is_container_running() {
 }
 
 # docker and podman are identical for this
-function _hi_is_docker_container() { _hi_is_container_running docker "$1"; }
+function _hi_is_docker_container() {
+  _hi_is_container_running docker "$1" || _hi_compose_container "$1" >/dev/null
+}
 function _hi_is_podman_container() { _hi_is_container_running podman "$1"; }
+
+# _hi_compose_container <service> - the real container name behind a docker
+# compose service alias (common/targets.sh's list_ps), when exactly one
+# running container carries it. Ambiguous (two projects, same service name)
+# and absent both fail rather than guess between projects - a wrong guess
+# would land a session in someone else's container.
+function _hi_compose_container() {
+  command -v docker >/dev/null 2>&1 || return 1
+  local matches
+  matches="$(docker ps --filter "label=com.docker.compose.service=$1" --format '{{.Names}}' 2>/dev/null)"
+  [ -n "$matches" ] || return 1
+  [ "$(printf '%s\n' "$matches" | wc -l)" -eq 1 ] || return 1
+  printf '%s\n' "$matches"
+}
 
 # _hi_outer <target> / _hi_inner <target> - a target may name what to run in as
 # well as where: `pod/container` for kube, `alloc/task` for nomad. One spelling
@@ -721,9 +737,17 @@ function _hi_container_cmds() {
   docker | podman)
     # no inner unit here, so the name is taken whole - a `/` is a legal
     # character in a docker container name and splitting one would break it
-    probe=("$1" exec "$DOMAIN")
-    cp=("$1" exec -i "$DOMAIN")
-    attach=("$1" exec -it "$DOMAIN")
+    local target="$DOMAIN"
+    # only docker carries compose aliases (_hi_is_docker_container), and only
+    # when the literal name doesn't already resolve - the common case pays
+    # for one inspect, not two
+    if [ "$1" = docker ] && ! _hi_is_container_running docker "$DOMAIN"; then
+      local resolved
+      resolved="$(_hi_compose_container "$DOMAIN")" && target="$resolved"
+    fi
+    probe=("$1" exec "$target")
+    cp=("$1" exec -i "$target")
+    attach=("$1" exec -it "$target")
     ;;
   nomad)
     [ -n "$inner" ] && pick=(-task "$inner")

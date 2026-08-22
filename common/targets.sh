@@ -32,15 +32,30 @@ kind="${1:-all}"
 # tests/common/targets_test.sh drift-checks both halves against hi.sh's --help,
 # so a flag added there and forgotten here fails the fast suite.
 if [ "$kind" = flags ]; then
-  # always offered - these work on a client and inside a session alike
-  printf '%s\n' --help --version --doctor
-  # ...and these do not: every one needs the full checkout, which the payload
-  # deliberately does not carry, so offering them on a target completes straight
-  # into hi.sh's $_HI_NO_CHECKOUT refusal. Filtered on the same variable the
-  # session itself is marked with.
+  # Always offered, because each answers without a file the payload drops:
+  # --help and --version are hi.sh's own case arms, and --packages-preview
+  # falls back to the shipped common/header.sh when scripts/ is absent - so it
+  # prints the check itself on a target rather than refusing.
+  printf '%s\n' --help --version --packages-preview
+  # The rest need a tree that is not always on disk, and completing one of those
+  # lands straight on hi.sh's $_HI_NO_CHECKOUT refusal. Two filters rather than
+  # one, because they answer different questions: _HI_REMOTE_SESSION is what a
+  # session is marked with, and the presence checks below catch what that
+  # variable cannot see - a package-manager install ships scripts/ but neither
+  # tests/ nor .git, which is the same pair hi.sh's own --test and --update arms
+  # test for. --doctor belongs here and not above: scripts/doctor.sh is not in
+  # $_HI_PAYLOAD, however much a read-only probe looks like it would work
+  # anywhere. Derived from $0 rather than $_HI_ROOT, since a completion can
+  # reach this file from a shell that never sourced paths.sh (GLOSSARY: HI.33).
   if [ "${_HI_REMOTE_SESSION:-0}" != 1 ]; then
-    printf '%s\n' --install --uninstall --configure --check-configs \
-      --overlay-init --update --color-preview --packages-preview --test
+    case $0 in
+    */*) hi_tree="${0%/*}/.." ;;
+    *) hi_tree=".." ;;
+    esac
+    [ -d "$hi_tree/scripts" ] && printf '%s\n' --install --uninstall \
+      --configure --check-configs --overlay-init --color-preview --doctor
+    [ -f "$hi_tree/tests/test_runner.sh" ] && printf '%s\n' --test
+    [ -d "$hi_tree/.git" ] && printf '%s\n' --update
   fi
   exit 0
 fi

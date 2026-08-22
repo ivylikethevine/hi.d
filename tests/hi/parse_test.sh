@@ -282,6 +282,74 @@ function test_help_flags_are_all_in_the_man_page() {
   done
 }
 
+# ...and that check asks only whether a flag appears in the page at all, which
+# is why the page's *grouping* drifted twice without failing anything. hi.1
+# splits OPTIONS at "The following act on this machine": above it is what works
+# anywhere, below it is what needs a part of the tree the payload does not
+# carry, and that paragraph names the exceptions to itself. common/targets.sh
+# makes the same split at runtime, so the two are one fact written twice - and
+# they disagreed in both directions at once. --doctor was documented in the top
+# group while the roster correctly withheld it in a session (scripts/doctor.sh
+# is not in $_HI_PAYLOAD), and --packages-preview was documented in the bottom
+# group while the roster correctly still offered it there (it falls back to the
+# shipped common/header.sh instead of refusing).
+function test_man_page_option_groups_match_the_roster() {
+  local man="$_HI_HOME/say-hi/docs/hi.1" zones all session flag bad=0
+  [ -f "$man" ] || return 1
+  all="$(sh "$_HI_ROOT/common/targets.sh" flags)" || return 1
+  session="$(_HI_REMOTE_SESSION=1 sh "$_HI_ROOT/common/targets.sh" flags)" || return 1
+  # One "<flag> <zone>" line per mention. top = its own entry above the
+  # paragraph, grouped = its own entry below it, named = spelled out inside the
+  # paragraph as an exception. A flag can be both grouped and named, which is
+  # how --test and --update read: in the group, and called out in the prose.
+  zones="$(awk '
+    function emit(line, zone,   f) {
+      while (match(line, /\\-\\-[a-z]([a-z]|\\-)*/)) {
+        f = substr(line, RSTART, RLENGTH)
+        gsub(/\\/, "", f)
+        print f, zone
+        line = substr(line, RSTART + RLENGTH)
+      }
+    }
+    BEGIN { zone = "top" }
+    /^The following act on this machine/ { zone = "para" }
+    zone == "para" && $0 == ".TP" { zone = "grouped" }
+    /^Everything else is passed through/ { zone = "tail" }
+    zone == "para" { emit($0, "named") }
+    (zone == "top" || zone == "grouped") && prev == ".TP" && /^\.BR? / { emit($0, zone) }
+    { prev = $0 }
+  ' "$man")" || return 1
+  # a scrape that found nothing would pass every case below as an empty loop
+  [ -n "$zones" ] || return 1
+  while read -r flag; do
+    [ -n "$flag" ] || continue
+    case $'\n'"$session"$'\n' in
+    *$'\n'"$flag"$'\n'*)
+      # works in a session, so the page must not file it under the group -
+      # unless the group's own paragraph names it as the exception it is
+      case $'\n'"$zones"$'\n' in
+      *$'\n'"$flag top"$'\n'* | *$'\n'"$flag named"$'\n'*) ;;
+      *)
+        _hi_cecho "   $flag works in a session, but hi.1 files it under the needs-a-checkout group without naming it an exception" "$RED"
+        bad=1
+        ;;
+      esac
+      ;;
+    *)
+      # withheld in a session, so the page has to say so - below the paragraph
+      case $'\n'"$zones"$'\n' in
+      *$'\n'"$flag grouped"$'\n'*) ;;
+      *)
+        _hi_cecho "   $flag is withheld in a session, but hi.1 documents it as working anywhere" "$RED"
+        bad=1
+        ;;
+      esac
+      ;;
+    esac
+  done < <(printf '%s\n' "$all")
+  [ "$bad" = 0 ]
+}
+
 # The ladders drift the same way the flags do - doctor.sh once still promised
 # a stale list after the tree changed (the comment above $_HI_SHELL_LADDER
 # tells it), and the man page repeated the trick with the session shells. Every
@@ -487,6 +555,7 @@ function run_hi_parse_tests() {
   _hi_check_eq "-h is the same text" "$(_hi_help_out --help)" _hi_help_out -h
   _hi_check "Lists hi's flags and the target ladder" test_help_lists_hi_s_own_flags
   _hi_check "Every flag is in the man page" test_help_flags_are_all_in_the_man_page
+  _hi_check "The man page groups them as the roster does" test_man_page_option_groups_match_the_roster
   _hi_check "Both shell ladders are in the man page" test_shell_ladders_are_in_the_man_page
   _hi_check "The ladder is the shell tree without bash" test_the_shell_tree_is_the_documented_order
   _hi_suite_end "hi.sh (parsing and dispatch)"

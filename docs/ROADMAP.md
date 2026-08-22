@@ -32,21 +32,15 @@ README carries EXPERIMENTAL UNTIL v1.0.0 and entries below are ordered against
 it, so this is the list that makes that orderable: what has to be true before
 the tag, each line naming the entry or file that satisfies it. It is a **gate,
 not a wish list** — anything that would merely be nice by v1 stays an ordinary
-unticked entry below rather than padding this. The point is a list short enough
-to finish.
+unticked entry below rather than padding this, and the one piece of product work
+left (_[persistent sessions](#the-session-itself)_) is explicitly deferred past
+the tag rather than held in front of it. The point is a list short enough to
+finish.
 
 - [ ] **The CLI surface is frozen.** `_hi_parse` in `hi.sh`, `docs/hi.1` and
       `docs/tldr.md` describe the same flags, and no rename is expected. This
       is what the [tldr page](#docs--submissions) entry is waiting on —
       examples that churn are worse than no page.
-- [ ] **`macos-e2e.yml` has been green at least once.** It is written and
-      called on every push; README's compatibility table still says "written
-      but has never run", and that sentence is the criterion.
-- [ ] **`windows-e2e.yml` has been green at least once** — the target-side
-      half, same table, same sentence. Its client-side counterpart,
-      `windows-client.yml`, is deliberately **not** on this list: it is an
-      ordinary entry under [Testing & CI](#testing--ci), because a Windows
-      _client_ is not what "stable" promises.
 - [ ] **A release has gone out under branch protection**, with the manifest
       step green — the [Get a release out under branch
       protection](#repo-settings-and-first-runs) entry. The criterion below it
@@ -70,17 +64,26 @@ long it takes: "one CI run" and "a backend across seven files" are the useful
 distinction, and a guessed number of days is not.
 
 Read across the sections, the shape today is: every section is down to a single
-entry. [The session itself](#the-session-itself) holds the only one with code
-left to write - and it is the largest thing on this page; [Testing &
-CI](#testing--ci), [Demos](#demos) and [Project docs](#project-docs) are each an
-observation waiting on a run or a release that no file here can trigger.
+entry, and **none of them is work for before v1.0.0**. [The session
+itself](#the-session-itself) holds the only one with code left to write, and it
+is deferred past the tag on purpose; [Testing & CI](#testing--ci),
+[Demos](#demos) and [Project docs](#project-docs) are each an observation
+waiting on a run or a release that no file here can trigger. Everything that
+gates the tag is either a criterion above or an entry under [Outside this
+repo](#outside-this-repo).
 
 ### The session itself
 
-- [ ] **Persistent sessions on a disposable target** — _scope: the largest entry
-      here. It changes cleanup semantics on both paths, needs a findable tree
-      path and something to reap it, and rewrites SECURITY.md's footprint
-      promise._ A dropped connection currently loses the session outright: the
+- [ ] **Persistent sessions on a disposable target** — _**deferred until after
+      v1.0.0.** Scope: the largest entry here. It changes cleanup semantics on
+      both paths, needs a findable tree path and something to reap it, and
+      rewrites SECURITY.md's footprint promise._ Deferred because the thing it
+      changes is the promise v1 is being tagged on: SECURITY.md says a machine
+      you visited looks untouched, and every other entry left is a run or a
+      click rather than a rewrite of that sentence. The notes below stay
+      because they are the research, not because the work is queued.
+
+  A dropped connection currently loses the session outright: the
       tree is deleted when the session ends, so there is nothing to reconnect
       to. This entry is that changed — keep the tree across a dropped
       connection, reconnect into the same session later, and delete only on a
@@ -120,58 +123,94 @@ observation waiting on a run or a release that no file here can trigger.
 
 ### Testing & CI
 
-- [ ] **See the Windows client-side job green** — _scope: one CI run, then two
-      lines: `ci.yml` picks the job up on push and README's Windows client row
-      flips._ `.github/workflows/windows-client.yml` has shipped and is what
-      this entry asked for: the fast group under the runner's own Git Bash,
-      proving `hi.sh` works when the machine you are _sitting at_ is Windows,
-      where `windows-e2e.yml` covers the target side. What is left is a run,
-      which no file here can perform.
+- [ ] **Decide what the Windows client job is allowed to assert** — _scope: a
+      decision about the test fixtures, then whatever it implies; no product
+      code is implicated._ `.github/workflows/windows-client.yml` has run.
+      It is red, and what it found is worth writing down rather than
+      re-deriving: **37 failures across 8 suites, none of them a portability
+      bug in `hi`.** Every one traces to two facts about Git Bash.
 
-  - **It runs `--group fast --skip shellcheck`.** The lint suite is the one
-    suite in that group with nothing to say about Windows, and it cannot run
-    there anyway: `.github/actions/setup-tool` resolves linux/darwin asset
-    slugs into `/usr/local/bin`, and `run_shellcheck` exits 1 rather than
-    standing down when shellcheck is missing — on purpose, since a lint gate
-    that did not run must not read as a pass. `runner_test.sh` checks that
-    every `--skip` name in a workflow is a real suite, so a rename cannot
-    silently put it back.
-  - **Dispatch-only until it is green**, on `windows-e2e.yml`'s precedent:
-    nothing here has ever executed the harness under Git Bash, so the first
-    runs are information rather than a gate on somebody's pull request. The
-    `workflow_call` trigger is already there for the day ci.yml picks it up
-    beside `e2e-windows`.
-  - **Expect skips, not a clean sweep.** There is no zsh or fish on a Windows
-    runner, so several suites will stand down yellow; that is the honest shape
-    and why the job passes neither `--require-run` nor `--totals-file`.
-  - **Ticks when:** the job has been green once, ci.yml calls it on push, and
-    README's Windows client row reads ✅ instead of 🟡.
+  - **It cannot create symbolic links.** `ln -s` needs Developer Mode or
+    administrator on Windows, so it fails outright. That is the whole of:
+    `install`'s seven `config_hi`/`install_tree` cases and `packaging`'s
+    _Symlink matches install_tree's_ (they exercise the symlink `install.sh`
+    makes); `install_location`'s _runs through a symlink onto it_; and - less
+    obviously - `targets`' three sweep cases, `packages_preview`'s two and most
+    of `doctor`'s five, because `_hi_real_path` (`tests/lib/fixtures.sh:95`)
+    builds its toolboxes out of `ln -sf` and silently prints an **empty**
+    directory when they fail. A suite that then replaces `$PATH` with it has no
+    `sh`, `awk` or `sed` at all, which is why those cases fail in ways that
+    look unrelated to symlinks.
+  - **It has no POSIX execute bit.** MSYS answers `access(X_OK)` from the
+    file's magic or extension unless the mount carries `acl`, so `chmod +x` on
+    a file with no `#!` does not stick. `_hi_probe_home` (`tests/hi/remote_test.sh:40`)
+    makes its launcher with `: >hi.sh` - an empty file - and
+    `_hi_remote_root_probe` requires `[ -x "$_h/say-hi/hi.sh" ]`, so the probe
+    correctly answers "nothing installed" for all fourteen of `hi_remote`'s
+    cases. The probe is right; the fixture cannot say what it means to say
+    there.
+  - **Two odds and ends.** `test_lib`'s _wrapper really allocates a pty_ wants
+    Python's `pty`, which is Unix-only. `packaging`'s two checksum cases see
+    `<hash> *name` because `sha256sum` opens binary by default on Windows -
+    the assertion is brittle, not the code: `SHA256SUMS` is written by Linux
+    CI and `sha256sum -c` reads both spellings either way.
+  - **So the decision is about the fixtures, not about hi.** Either the cases
+    that need a real symlink or a real exec bit learn to stand down yellow on
+    MSYS - the doctrine the backend suites already use, and the only route to a
+    green job - or this job stays dispatch-only and red-but-explained. Nothing
+    is blocked on it either way: a Windows _client_ is deliberately not a
+    v1.0.0 criterion, because a Windows client is not what "stable" promises.
+    `windows-e2e.yml` covers the target side, and that is the half the tag
+    rests on.
+  - **Unchanged from before the run:** it runs `--group fast --skip
+    shellcheck`, because `.github/actions/setup-tool` resolves linux/darwin
+    asset slugs and `run_shellcheck` exits 1 rather than standing down when
+    shellcheck is missing. There is no zsh or fish on the runner either, so 45
+    cases skip yellow before any of the above.
+  - **Ticks when:** the fixtures either stand down or are made to work, the job
+    is green once, ci.yml calls it on push, and
+    [SUPPORTED.md](SUPPORTED.md#the-targets-os)'s Windows row reads ✅ for the
+    client half as well as the target half.
 
 ### Demos
 
-- [ ] **Shed the seven committed demo GIFs** — _scope: one commit, gated on
-      seeing a render land._ The autogeneration itself has shipped:
-      `demos.yml`'s `publish` job renders every tape but `demo` on the
-      self-hosted box (a tape change, weekly, or dispatch) and `pages.yml` lays
-      the result over the committed copies at the paths every link already
-      resolves to. What is left is the size half, and it deliberately waits.
+- [ ] **See a full demo render land on the site** — _scope: one green
+      `publish` run; the commit half has already shipped._ Both halves of the
+      autogeneration are in: `demos.yml`'s `publish` job renders every tape but
+      `demo` on the self-hosted box, `pages.yml` lays the result over the site,
+      the six GIFs are out of the tree, and README and
+      [CONFIGURATION.md](CONFIGURATION.md) already link them at their published
+      URLs. `docs/demos/demo.gif` stays committed on purpose - it is the
+      hand-rendered one, and `.githooks/demo_staleness.sh` is what says when it
+      has gone stale.
 
-  - **Why it waits.** Until a render has actually run, those seven committed
-    GIFs are what the site and README both serve. Deleting them first would
-    trade a working front page for an unverified pipeline, and the pipeline
-    cannot be exercised anywhere but that runner.
-  - **What the commit is.** Delete `docs/demos/*.gif` except `demo.gif`
-    (~1.2 MB), and repoint README's six and `docs/CONFIGURATION.md`'s
-    `color_preview` at the published URLs — relative links resolve on the site
-    but would 404 on github.com once the files are gone, so that half is not
-    optional. `_config.yml`'s note about keeping `docs/demos` needs the same
-    edit.
-  - **Renders are not reproducible**, which is what makes the saving real
-    rather than cosmetic: vhs records live timing through a pty, so every run
-    produces different bytes. Committing them would have added ~1.2 MB of
-    permanent history each time whether a demo had moved or not.
-  - **Ticks when:** a `publish` run has been green, the seven are out of the
-    tree, and the docs point at the site.
+  - **Nothing 404s yet, and the merge order decides whether anything ever
+    does.** The deletion and the URL repoint live on `dev` only: `main` still
+    carries the six GIFs and the relative links that resolve to them, so the
+    front page is intact today. It breaks the moment `dev` merges — and since
+    `publish` never runs on a pull request (below), dispatching one against
+    `main` *before* the merge keeps that window at zero, where merging first
+    leaves the front page broken for the length of a render. Nothing here can
+    prove the pipeline either way, which is why this entry stays open after the
+    commit: the pipeline is now the only source of the images the front page
+    shows.
+  - **The pull-request job is not the one that matters.** `demos.yml` has two:
+    `render` gates a PR that touches a tape, on a hosted runner, and renders
+    exactly `color_preview` - a green there says the vhs/ttyd/font toolchain
+    works and nothing about the other seven. `publish` is the one that produces
+    the site's GIFs, and it never runs on a pull request: push to `main`,
+    the weekly cron, or a manual dispatch.
+  - **The renderer's own dependencies were the last thing to bite.** A tape
+    that opens `Set Shell zsh` wants that shell on the machine doing the
+    recording, not on the target, so `publish` installs zsh, fish and nomad the
+    way `ci.yml`'s backends job does - docker, podman, kind and kubectl are
+    what the box already carries. Without them five of the seven tapes failed
+    under `--require-run`.
+  - **Ticks when:** a `publish` run has been green end to end and the seven
+    published URLs actually serve an image — README's six, plus the
+    `color_preview` one that [CONFIGURATION.md](CONFIGURATION.md) is the only
+    link to. Seven tapes render; six GIFs left the tree, because `complete` was
+    never committed in the first place.
 
 ### Project docs
 
@@ -220,38 +259,37 @@ settings, or a decision — which is why they sit here rather than in the in-rep
 half: no file here can close one. The first one gates both release channels
 below it.
 
-- [ ] **Get a release out under branch protection** — _scope: one decision with
-      a code fork behind it (a ruleset bypass actor, or converting `publish` to
-      open a pull request), then one real release._ _The rule is on:_ `main`
+- [ ] **Get a release out under branch protection** — _scope: one real release,
+      plus one repository setting to confirm first._ _The rule is on:_ `main`
       requires a pull request and refuses a direct push, which closes
       Scorecard's highest-severity finding. What has not happened is a release
       under it, and until one does **both release-channel entries below are
-      blocked behind this one**: `tap` and `aur` are `needs: publish`, and
-      `publish` is the job that cannot currently finish.
+      blocked behind this one**: `tap` and `aur` are `needs: publish`.
 
-  - **`publish` still pushes straight to `main`, and that push is now
-    refused.** `release.yml`'s second checkout is the one that keeps its
-    credentials (`ref: main`), and the `Commit the manifests to main` step ends
-    in `git push origin main`, under `set -euo pipefail`, to land the
-    regenerated `PKGBUILD`, `.SRCINFO` and `say-hi.rb`. Under a PR-required
-    rule that fails, so the next tag dies at the last step of the release with
-    the packages already published and neither channel job reached.
-  - **Two ways to close it**, and they are a real choice rather than a
-    formality: give the GitHub Actions app a bypass actor on the ruleset and
-    leave the job alone, or convert `publish` to open a pull request the way
-    the `aur`/`tap` half already does — the `tap` job is the in-repo precedent
-    for exactly that shape. The bypass keeps releases one-step; the PR keeps
-    the rule honest with no exceptions.
+  - **The code half has shipped.** `publish` no longer pushes to `main`: its
+    credential-keeping checkout writes the regenerated `PKGBUILD`, `.SRCINFO`
+    and `say-hi.rb` onto a `manifests-<tag>` branch and opens a pull request,
+    on the `tap` job's precedent, with `pull-requests: write` on the job to do
+    it. No workflow in the tree pushes to `main` any more. The release does not
+    wait on that merge either - `tap` and `aur` read the manifests out of the
+    `packages` artifact, not out of `main`.
+  - **Confirm one setting before the first tag.** A workflow can only open that
+    pull request if _Settings → Actions → General → Allow GitHub Actions to
+    create and approve pull requests_ is on. With it off, `gh pr create` fails
+    with "GitHub Actions is not permitted to create or approve pull requests" -
+    at the last step of the release, with the packages already published, which
+    is exactly the failure the PR conversion was meant to remove.
   - **The required checks are still unset.** Only the pull-request requirement
     is configured. When they go on, per the note on the markdownlint job, do
     not make the advisory ones required — `markdownlint`, `hadolint`, lychee
-    and trivy are all designed to be ignorable.
-  - **Ticks when:** a release has gone out under the rule with the manifest
-    step green.
+    and trivy are all designed to be ignorable. `e2e (macOS)` and
+    `e2e (Windows)` are now green on push and are reasonable candidates.
+  - **Ticks when:** a release has gone out under the rule, with the manifest
+    pull request opened rather than a push refused.
 
 - [ ] **A job-started hook on the self-hosted runner** — _scope: a script and an
-      env var on that machine, plus one commit here deleting thirteen copies._
-      Thirteen jobs across eight workflows open with the same `Reclaim the
+      env var on that machine, plus one commit here deleting fifteen copies._
+      Fifteen jobs across ten workflows open with the same `Reclaim the
       workspace` step: a `sudo chown -R` of `$GITHUB_WORKSPACE`, guarded on
       `runner.environment != 'github-hosted'`, because that box's `_work`
       persists between jobs and one root-owned file from a container test makes
@@ -264,25 +302,41 @@ below it.
     runner itself — a script the runner executes before every job, which is
     exactly this step's scope. Setting it is a file and an env var on that
     machine, which is why this is here and not in the in-repo half.
-  - **Ticks when:** the hook is in place and the thirteen copies are deleted in
-    one commit. Do both at once: the copies are harmless, but leaving them
-    after the hook exists means two mechanisms for one problem.
+  - **Recount before deleting rather than trusting the number here.** It was
+    thirteen across eight when this entry was written and is fifteen across ten
+    now, because workflows keep arriving;
+    `grep -rc 'Reclaim the workspace' .github/workflows/` is the whole check.
+  - **Ticks when:** the hook is in place and every copy is deleted in one
+    commit. Do both at once: the copies are harmless, but leaving them after
+    the hook exists means two mechanisms for one problem.
 
 - [ ] **Decide whether to keep the Scorecard badge** — _scope: a judgement call
-      and one README line either way._ `scorecard.yml` runs weekly with
-      `publish_results: true` and `README.md` carries the badge, so the score is
-      public either way and the 404 that once blocked it is gone. The open
-      question is whether showing it helps. Two checks a solo maintainer cannot
-      move — Code-Review and CI-Tests — dominate the number, so it reads partly
-      as a verdict on the project's headcount rather than on its engineering,
-      sitting next to badges that measure something real.
+      and one README line either way, with nothing to judge before
+      2026-08-25._ `scorecard.yml` runs weekly with `publish_results: true` and
+      `README.md` carries the badge, but **no score has been published yet**:
+      `api.scorecard.dev` and `api.securityscorecards.dev` both 404 for this
+      repo, and the badge renders `openssf scorecard: invalid repo path` — on
+      `main` as much as here. The cause is benign. `publish_results` only takes
+      effect on a *scheduled* run against the default branch, the cron is
+      `41 7 * * 2`, and the schedule-only trigger landed on `main` on Wed
+      2026-08-19 — so the first run is Tue 2026-08-25 and there has not been
+      one. If the badge is still an error after that date, a run fired and
+      failed rather than never having fired, and the Actions tab is the only
+      place that tells those two apart.
 
+  - **Until then the README shows an error rather than a number.** Leave it:
+    re-adding the line afterwards is a second commit spent on a few days of
+    cosmetic blemish, on a repo whose first heading already says EXPERIMENTAL.
+    Pull it only if that reads worse in practice than it does written down.
+  - **The question the number has to answer** is whether showing it helps. Two
+    checks a solo maintainer cannot move — Code-Review and CI-Tests — dominate
+    it, so it reads partly as a verdict on the project's headcount rather than
+    on its engineering, sitting next to badges that measure something real.
   - **CII-Best-Practices used to be on that list and is not.** It reads for a
-    contribution guide among other things, so it is movable by writing one —
-    which is the [`CONTRIBUTING.md` entry](#project-docs) under Project docs.
-    That makes the judgement here worth deferring until after it lands: a
-    number with one unmovable check fewer is a different number to decide
-    about.
+    contribution guide among other things, so it was movable by writing one —
+    and `docs/CONTRIBUTING.md` has since shipped. That is one unmovable check
+    fewer than when this entry was written, which is the other reason to judge
+    the first real report rather than guess at it.
   - **The rest of the report is settled and needs nothing.** SAST counts
     `codeql.yml`'s `actions` pack over the workflows (worth having on its own
     merits, and a poor reason to believe the resulting number, since the

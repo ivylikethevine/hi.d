@@ -1026,10 +1026,10 @@ need the full say-hi checkout, so inside a hi session each says so and stops:
       --configure        revisit the feature toggles, leaving the rc wiring be
       --check-configs    re-run just the shell rc syntax validation
       --overlay-init     make the config overlay a git repo, in place
-      --update           git pull in the say-hi checkout
+      --update           git pull in the say-hi checkout (needs its .git)
       --color-preview    what every ssh host and your user resolve to, in color
       --packages-preview the package-priority legend, as the header prints it
-      --test             run the test suite
+      --test             run the test suite (needs the full checkout)
 
 Everything else is passed to ssh unchanged - -p, -i, -J, -o and the rest behave
 exactly as they do there. Only the first non-option word is the target;

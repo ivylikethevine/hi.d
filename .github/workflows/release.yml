@@ -395,7 +395,12 @@ jobs:
   tap:
     name: open a PR against the Homebrew tap
     needs: publish
-    if: github.event_name == 'push'
+    # ...and nothing at all on a v0.0.x tag. Those are debug tags, pushed to
+    # exercise the release path itself rather than to ship, so no external
+    # channel should see one. A missing token would skip this job too, but
+    # that is a fact about which secrets happen to exist rather than a
+    # promise about which tags publish - this line is the promise.
+    if: github.event_name == 'push' && !startsWith(github.ref_name, 'v0.0.')
     runs-on: ${{ vars.RUNNER_LABEL || 'ubuntu-latest' }}
     timeout-minutes: 15
     environment: release
@@ -467,7 +472,10 @@ jobs:
   aur:
     name: push the AUR package
     needs: publish
-    if: github.event_name == 'push'
+    # A v0.0.x tag is a debug tag - pushed to exercise the release path
+    # itself, not to ship - so it reaches no external channel, on the tap
+    # job's reasoning above.
+    if: github.event_name == 'push' && !startsWith(github.ref_name, 'v0.0.')
     runs-on: ${{ vars.RUNNER_LABEL || 'ubuntu-latest' }}
     timeout-minutes: 15
     environment: release

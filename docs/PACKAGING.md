@@ -8,7 +8,7 @@ Nothing here publishes on its own — the publishing job waits on a manual
 approval, and the AUR and the Homebrew tap are copies you make by hand. Both
 signing keys are in place, so a release signs its sums and its apk; what is
 still one-time setup is the AUR deploy key and the tap token, a checklist with
-exact commands in [ROADMAP.md](ROADMAP.md)'s _Release channels_ section.
+exact commands in [docs/ROADMAP.md](ROADMAP.md)'s _Release channels_ section.
 
 Every workflow's `runs-on:` reads a repo/org Actions variable first —
 `vars.RUNNER_LABEL`, or `vars.MACOS_RUNNER_LABEL` / `vars.WINDOWS_RUNNER_LABEL`
@@ -102,9 +102,9 @@ process with no tree to derive from - a login shell, tmux's
 `update-environment`, another machine's `hi` probing this one - has nothing else
 to read.
 
-| channel            | tree                 | how `_HI_HOME` gets set                                    |
-| ------------------ | -------------------- | ---------------------------------------------------------- |
-| AUR, deb, rpm, apk | `/usr/share/say-hi`    | `/etc/profile.d/say-hi.sh`, written by `install_tree`        |
+| channel            | tree                   | how `_HI_HOME` gets set                                    |
+| ------------------ | ---------------------- | ---------------------------------------------------------- |
+| AUR, deb, rpm, apk | `/usr/share/say-hi`    | `/etc/profile.d/say-hi.sh`, written by `install_tree`      |
 | Homebrew           | `<keg>/libexec/say-hi` | the `bin/hi` wrapper, plus the rc line `install.sh` writes |
 
 `scripts/install.sh --prefix /usr/share` (with `$DESTDIR`) does all of this and
@@ -117,15 +117,15 @@ formula cannot call it: `install_tree` hardcodes `/usr/bin` and
 
 ## Layout
 
-| path               | what it is                                                                          |
-| ------------------ | ----------------------------------------------------------------------------------- |
-| `mkpkg.sh`         | stages the tree, stamps it, then builds deb/rpm/apk with nfpm                       |
-| `stamp.sh`         | writes the version into a built tree's `hi.sh` and man page; every channel calls it |
-| `bump.sh`          | writes the version + real checksums into every manifest; `--check` verifies         |
+| path                 | what it is                                                                          |
+| -------------------- | ----------------------------------------------------------------------------------- |
+| `mkpkg.sh`           | stages the tree, stamps it, then builds deb/rpm/apk with nfpm                       |
+| `stamp.sh`           | writes the version into a built tree's `hi.sh` and man page; every channel calls it |
+| `bump.sh`            | writes the version + real checksums into every manifest; `--check` verifies         |
 | `aur/say-hi/`        | the versioned AUR package (`PKGBUILD`, `.SRCINFO`)                                  |
 | `aur/say-hi-git/`    | the same package built from `main`                                                  |
 | `homebrew/say-hi.rb` | the tap formula                                                                     |
-| `nfpm/nfpm.yaml`   | deb/rpm/apk, built from the staged tree                                             |
+| `nfpm/nfpm.yaml`     | deb/rpm/apk, built from the staged tree                                             |
 
 **The version stamp.** `packaging/stamp.sh` writes `_HI_RELEASE=` into the
 `hi.sh` a channel installs and the version into the man page's `.TH` line. All
@@ -225,6 +225,11 @@ Every channel below is gated on the manual approval in `release.yml`, and two of
 them (the AUR and the tap) are pushed by CI once their secrets exist — the
 checks each section describes are still yours to run first.
 
+**A `v0.0.x` tag reaches none of them.** Those are debug tags, pushed to
+exercise the release path rather than to ship, so the `tap` and `aur` jobs skip
+on the tag name itself — not merely because a secret is missing. The GitHub
+Release is still created, with the packages attached.
+
 ### AUR
 
 Not done, and not currently doable: AUR registration is closed to new accounts
@@ -273,8 +278,8 @@ Then push `PKGBUILD` + `.SRCINFO` — only those two — to
 `ssh://aur@aur.archlinux.org/say-hi-git.git`, `say-hi-git` first since it needs
 no tag. **That first push is the manual one**, because it is where namcap gates.
 After it, `release.yml`'s `aur` job pushes the versioned `say-hi` on every
-release, given the `AUR_SSH_KEY` secret; `say-hi-git` has no version to bump and
-CI never touches it.
+release but a `v0.0.x` debug tag, given the `AUR_SSH_KEY` secret; `say-hi-git`
+has no version to bump and CI never touches it.
 
 Never submit the versioned package with `b2sums=('SKIP')` — `SKIP` is correct
 only on `say-hi-git`, whose source is a git ref.

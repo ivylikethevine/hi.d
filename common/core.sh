@@ -166,6 +166,18 @@ function _hi_elapsed() {
   awk -v a="$1" -v b="$2" 'BEGIN { printf "%.3f", b - a }'
 }
 
+# H:MM:SS (or M:SS under an hour) from an _hi_elapsed second count - load.sh's
+# disconnect line, where the same fractional-second precision a sub-second
+# probe wants would be unreadable past a few minutes of session.
+function _hi_human_duration() {
+  awk -v s="$1" 'BEGIN {
+    s = int(s)
+    h = int(s / 3600); m = int((s % 3600) / 60); sec = s % 60
+    if (h > 0) printf "%d:%02d:%02d", h, m, sec
+    else printf "%d:%02d", m, sec
+  }'
+}
+
 # total size of the given paths; --apparent-size is GNU-only, so the verdict is
 # taken once per shell - load.sh asks at session close, with the user waiting
 function _hi_du_size() {
@@ -444,11 +456,39 @@ function _hi_ssh_host_tag() {
   return "$_HI_TAG_RC"
 }
 
-# The "# Tags: a, b" comment directly above a "Host <alias>" line in
-# ~/.ssh/config; unknown host returns 1, a known host with no tag returns 2.
-# `Host` matches case-insensitively, the way ssh reads its keywords.
+# _hi_ssh_pattern_hit <name> <space/comma-separated patterns> - ssh's own Host
+# and Match-host glob syntax (*, ?) is bash and zsh's case-pattern syntax too,
+# so no translation is needed, only a way to try each token that survives
+# being sourced by both shells. GLOSSARY: HI.37 - two zsh divergences, why
+# `${~pat}` and not `setopt globsubst`, and why a leading "!" is inert rather
+# than honored as ssh's own negation.
+function _hi_ssh_pattern_hit() {
+  local name="$1" pat hit=1
+  if [ -n "${ZSH_VERSION:-}" ]; then
+    setopt localoptions shwordsplit
+    # eval'd like HI.33's `${(%):-%x}`: shellcheck parses this file as bash,
+    # which cannot parse `${~pat}` at all (SC2296) - a string literal is
+    # opaque to it the way the bash branch below, in plain sight, is not
+    for pat in $2; do
+      eval 'case "$name" in ${~pat}) hit=0 ;; esac'
+    done
+  else
+    for pat in $2; do
+      # shellcheck disable=SC2254 # deliberate: $pat is a glob, not a literal
+      case "$name" in $pat) hit=0 ;; esac
+    done
+  fi
+  return "$hit"
+}
+
+# The "# Tags: a, b" comment directly above a "Host <alias>" or "Match host
+# <pattern>" line in ~/.ssh/config; unknown host returns 1, a known host with
+# no tag returns 2. Both keywords match case-insensitively, the way ssh reads
+# its own. A wildcard Host/Match-host block (`Host prod-*`) tags every name it
+# covers, not just a literal alias - the same convention people already use to
+# group a fleet by environment.
 function _hi_ssh_host_tag_walk() {
-  local line trimmed rest tag="" aliases
+  local line trimmed rest tag="" patterns
   [ -f "$_HI_SSH_CONFIG" ] || return 1
   while IFS= read -r line || [ -n "$line" ]; do
     # leading whitespace off, once, for every branch below
@@ -467,15 +507,38 @@ function _hi_ssh_host_tag_walk() {
       esac
       ;;
     [Hh][Oo][Ss][Tt][[:space:]]*)
-      aliases="${trimmed#[Hh][Oo][Ss][Tt]}"
-      aliases="${aliases%%#*}" # a trailing comment is not an alias
-      # padded substring, not a loop: zsh doesn't word-split unquoted, so a
-      # loop never matched. Tabs folded first; literal names only.
-      aliases="${aliases//	/ }"
-      case " $aliases " in
-      *" $1 "*)
+      patterns="${trimmed#[Hh][Oo][Ss][Tt]}"
+      patterns="${patterns%%#*}" # a trailing comment is not a pattern
+      # tabs and commas folded to spaces - Host's own syntax is space
+      # separated, but a stray comma is friendlier folded than rejected
+      patterns="${patterns//	/ }"
+      patterns="${patterns//,/ }"
+      if _hi_ssh_pattern_hit "$1" "$patterns"; then
         [ -n "$tag" ] && printf '%s\n' "$tag" && return 0
         return 2
+      fi
+      tag=""
+      ;;
+    [Mm][Aa][Tt][Cc][Hh][[:space:]]*)
+      rest="${trimmed#[Mm][Aa][Tt][Cc][Hh]}"
+      rest="${rest#"${rest%%[![:space:]]*}"}"
+      case "$rest" in
+      [Hh][Oo][Ss][Tt][[:space:]]*)
+        patterns="${rest#[Hh][Oo][Ss][Tt]}"
+        patterns="${patterns%%#*}"
+        # stop at the next Match criterion, so "Match host <pat> user deploy"
+        # only contributes the host half - ssh allows several per line
+        patterns="${patterns%%[[:space:]][Uu][Ss][Ee][Rr][[:space:]]*}"
+        patterns="${patterns%%[[:space:]][Ll][Oo][Cc][Aa][Ll][Uu][Ss][Ee][Rr][[:space:]]*}"
+        patterns="${patterns%%[[:space:]][Ee][Xx][Ee][Cc][[:space:]]*}"
+        patterns="${patterns%%[[:space:]][Cc][Aa][Nn][Oo][Nn][Ii][Cc][Aa][Ll]*}"
+        patterns="${patterns%%[[:space:]][Ff][Ii][Nn][Aa][Ll]*}"
+        patterns="${patterns//	/ }"
+        patterns="${patterns//,/ }"
+        if _hi_ssh_pattern_hit "$1" "$patterns"; then
+          [ -n "$tag" ] && printf '%s\n' "$tag" && return 0
+          return 2
+        fi
         ;;
       esac
       tag=""

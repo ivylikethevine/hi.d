@@ -129,6 +129,21 @@ Host devhost otheralias
 # Tags: lower
 host lowerhost
     HostName 10.10.10.10
+
+# Tags: prod
+Host prod-*
+    HostName 11.11.11.11
+
+# Tags: staging
+Match host staging-*, staging2-*
+    HostName 12.12.12.12
+
+Host wilduntagged-*
+    HostName 13.13.13.13
+
+# Tags: excluded
+Host web-* !web-99
+    HostName 14.14.14.14
 EOF
   printf '%s' "$f"
 }
@@ -178,6 +193,44 @@ function test_ssh_host_tag_return_codes() {
   _HI_SSH_CONFIG="$f" _hi_ssh_host_tag no-such-host >/dev/null
   rc=$?
   [ "$rc" -eq 1 ]
+}
+
+function test_ssh_host_tag_wildcard_host_block() {
+  local f
+  f="$(_hi_ssh_tag_fixture)"
+  [ "$(_HI_SSH_CONFIG="$f" _hi_ssh_host_tag prod-web1)" = "prod" ]
+}
+
+# "prod" alone is not "prod-anything" - a bare miss must not fall through to
+# the wildcard block that happens to share its prefix
+function test_ssh_host_tag_wildcard_requires_the_dash() {
+  local f
+  f="$(_hi_ssh_tag_fixture)"
+  ! _HI_SSH_CONFIG="$f" _hi_ssh_host_tag prod
+}
+
+function test_ssh_host_tag_match_host_comma_patterns() {
+  local f
+  f="$(_hi_ssh_tag_fixture)"
+  [ "$(_HI_SSH_CONFIG="$f" _hi_ssh_host_tag staging-db1)" = "staging" ] || return 1
+  [ "$(_HI_SSH_CONFIG="$f" _hi_ssh_host_tag staging2-x)" = "staging" ]
+}
+
+function test_ssh_host_tag_wildcard_untagged_block_is_rc_2() {
+  local f rc
+  f="$(_hi_ssh_tag_fixture)"
+  _HI_SSH_CONFIG="$f" _hi_ssh_host_tag wilduntagged-abc >/dev/null
+  rc=$?
+  [ "$rc" -eq 2 ]
+}
+
+# documented tradeoff (GLOSSARY: HI.37): a "!" token is inert, not honored as
+# ssh's own negation, so web-99 still inherits the block's tag despite being
+# explicitly excluded there. Pinned so a future change to this is deliberate.
+function test_ssh_host_tag_negation_token_is_inert_not_exclusionary() {
+  local f
+  f="$(_hi_ssh_tag_fixture)"
+  [ "$(_HI_SSH_CONFIG="$f" _hi_ssh_host_tag web-99)" = "excluded" ]
 }
 
 function test_resolve_color_override_wins() {
@@ -279,6 +332,13 @@ function test_zsh_hash_color_agrees_with_bash() {
 
 function test_zsh_host_tag_agrees_with_bash() {
   _hi_shell_agrees 'printf "%s|%s" "$(_hi_ssh_host_tag myhost)" "$(_hi_ssh_host_tag devhost)"'
+}
+
+# GLOSSARY: HI.37 - the two zsh divergences _hi_ssh_pattern_hit works around
+# (word-splitting, then GLOB_SUBST) are each invisible to a bash-only suite
+function test_zsh_host_tag_wildcard_agrees_with_bash() {
+  _hi_ssh_tag_fixture >/dev/null
+  _hi_shell_agrees 'printf "%s|%s" "$(_hi_ssh_host_tag prod-web1)" "$(_hi_ssh_host_tag staging2-x)"'
 }
 
 function test_zsh_host_tag_rejects_the_same_hosts() {
@@ -428,6 +488,11 @@ function run_core_tests() {
   _hi_check "Unknown host fails" test_ssh_host_tag_unknown_host_fails
   _hi_check "Lowercase 'host' keyword matches" test_ssh_host_tag_matches_lowercase_host_keyword
   _hi_check "rc contract: 0 tagged / 2 untagged / 1 unknown" test_ssh_host_tag_return_codes
+  _hi_check "Wildcard Host block tags every match" test_ssh_host_tag_wildcard_host_block
+  _hi_check "Wildcard requires the literal dash" test_ssh_host_tag_wildcard_requires_the_dash
+  _hi_check "Match host, comma-separated patterns" test_ssh_host_tag_match_host_comma_patterns
+  _hi_check "Untagged wildcard block is rc 2" test_ssh_host_tag_wildcard_untagged_block_is_rc_2
+  _hi_check "A '!' token is inert, not exclusionary" test_ssh_host_tag_negation_token_is_inert_not_exclusionary
 
   _hi_h2 "Testing: _hi_resolve_color precedence"
   _hi_check "Exact override wins" test_resolve_color_override_wins
@@ -445,6 +510,7 @@ function run_core_tests() {
   _hi_check_requires zsh "_hi_hash_color agrees with bash" test_zsh_hash_color_agrees_with_bash
   _hi_check_requires zsh "_hi_ssh_host_tag agrees with bash" test_zsh_host_tag_agrees_with_bash
   _hi_check_requires zsh "...and rejects the same hosts" test_zsh_host_tag_rejects_the_same_hosts
+  _hi_check_requires zsh "...and agrees on wildcard blocks" test_zsh_host_tag_wildcard_agrees_with_bash
   _hi_check_requires zsh "_hi_resolve_color agrees with bash" test_zsh_resolve_color_agrees_with_bash
   _hi_check_requires zsh "zsh.zsh leaves KSH_ARRAYS off" test_zsh_rc_leaves_ksharrays_alone
   _hi_check_requires zsh "zsh.zsh survives KSH_ARRAYS being on" test_zsh_rc_survives_ksharrays_being_on

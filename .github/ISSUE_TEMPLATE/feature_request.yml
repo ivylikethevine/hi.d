@@ -11,7 +11,8 @@ body:
         runtimes, shells, packaging channels, removed features — and
         [docs/ROADMAP.md](https://github.com/ivylikethevine/say-hi/blob/main/docs/ROADMAP.md)
         is what is already planned. A reason that has stopped being true is worth
-        raising; so is a case neither file considered.
+        raising; so is a case neither file considered. Additionally, a sufficiently
+        clean implementation of a previous feature may be considered.
 
   - type: textarea
     id: what

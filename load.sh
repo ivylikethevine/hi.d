@@ -161,11 +161,14 @@ function load() {
   [ "$shell" = fish ] && shell_cmd=(fish -C "set fish_greeting ''" -i)
   "${shell_cmd[@]}" || shell_ec=$?
 
-  local size
+  local size dur
   size="$(_hi_du_size "$_HI_ROOT")"
-  _hi_cecho " $size" "$NC" 1
+  # $start is load()'s own entry, before the "Connected" banner - so this is
+  # the whole session, not just the setup the "load:" line above timed
+  dur="$(_hi_human_duration "$(_hi_elapsed "$start" "$(_hi_now)")")"
+  _hi_cecho " $size | session: $dur" "$NC" 1
   if [[ "${_HI_DISABLE_HEADER:-0}" != 1 ]]; then
-    banner Disconnected "$BRRED" " $size"
+    banner Disconnected "$BRRED" " $size | session: $dur"
     [[ "${_HI_HEADER_TIMESTAMP:-1}" == 0 ]] || timestamp
   fi
   _hi_cecho " | " "$NC" 1

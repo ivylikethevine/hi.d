@@ -87,8 +87,15 @@ function _hi_backend_interactive_case() {
 # Everything is ephemeral and nothing touches host ssh config. Skips cleanly
 # if $backend isn't installed/running. Needs network access the first time it
 # runs, to pull/build the test images.
+#
+# Extra case functions (docker_test.sh's compose-alias case, so far - podman
+# has none) ride in the same parallel batch, on _hi_backend_pair_cases'
+# precedent: each takes no args of its own and reads $_HI_BACKEND/
+# $_HI_TEST_MARKER, since _hi_par_case runs it in a fresh subshell per case.
 function _hi_container_backend_test() {
   local backend="$1"
+  shift
+  local -a extra_cases=("$@")
 
   _hi_require_backend "$backend"
   _HI_BACKEND="$backend"
@@ -134,6 +141,10 @@ function _hi_container_backend_test() {
     fi
   done
   _hi_par_case sh _hi_backend_case sh alpine:3.24 "$(_hi_probe_cmd "$_HI_TEST_MARKER" fallback)"
+  local extra
+  for extra in ${extra_cases[@]+"${extra_cases[@]}"}; do
+    _hi_par_case "${extra##*_}" "$extra"
+  done
   _hi_par_wait
 
   # $$-suffixed like the container names: without it a second run of this

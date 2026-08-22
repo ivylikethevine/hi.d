@@ -55,6 +55,7 @@ file doesn't define. This file never ships (the payload is `$_HI_PAYLOAD` in
 - [HI.34 test suite preamble](#hi34-test-suite-preamble)
 - [HI.35 payload comment strip](#hi35-payload-comment-strip)
 - [HI.36 overlay toggle source](#hi36-overlay-toggle-source)
+- [HI.37 zsh pattern-in-variable](#hi37-zsh-pattern-in-variable)
 
 ## HI.01 empty-array guard
 
@@ -540,3 +541,42 @@ that will apply there. The client's exported copy means something else -
 visit", and trimming the payload on it would stop shipping files to targets that
 never disabled them. Matches `scripts/install.sh`'s `export NAME='value'`
 contract for `$_HI_SETTINGS`.
+
+## HI.37 zsh pattern-in-variable
+
+`_hi_ssh_pattern_hit` (`common/core.sh`) matches a name against `Host`/`Match
+host` glob patterns read out of `~/.ssh/config` - `*` and `?` mean the same
+thing in ssh's syntax as in a `case` pattern, so no translation is needed,
+only a way to try each pattern that survives being sourced by both bash and
+zsh (this file is HI.34's "every bash/zsh script sources this" entry point).
+
+Two zsh divergences stack here, not one. The first is the one HI.26's
+neighbor already worked around before this entry existed: zsh does not
+word-split an unquoted variable, so a bare `for pat in $patterns` loop never
+iterates - it hands the whole string to `pat` once. `setopt localoptions
+shwordsplit` fixes that, scoped to the function by `localoptions` so it
+never leaks into a caller.
+
+The second is easy to miss because the symptom looks identical - a `case`
+that never matches - but the cause is not splitting, it's globbing. Even
+once `pat` correctly holds one token per iteration, `case "$name" in $pat)`
+does not treat `*` in a *variable's* value as an active wildcard unless
+`GLOB_SUBST` is set; bash needs no such flag; zsh's default is startlingly
+literal here; unquoted or quoted makes no difference. The tempting fix -
+`setopt globsubst` alongside `shwordsplit` - breaks the first workaround
+instead of completing it: with both set, splitting `$patterns` *also*
+glob-expands each token against real files in the working directory, and a
+pattern matching nothing on disk errors the whole loop out (`no matches
+found`) rather than surviving to the `case`. `${~pat}` is the escape: a
+per-expansion toggle that asks zsh to treat that one substitution as a
+pattern, at the point it's used, without turning `GLOB_SUBST` on globally or
+touching how `$patterns` was split. Bash does not understand `${~pat}` at
+all, so the function branches on `$ZSH_VERSION` rather than writing one line
+both shells read differently.
+
+A `!`-prefixed token (ssh's own per-pattern negation) is not honored as
+exclusion - it survives as a literal pattern nothing is ever named, so it is
+inert rather than wrong. Wiring up real negation would need per-token
+filtering ahead of the match, which is exactly the loop this works around;
+the cost of skipping it is a wrongly-colored excluded host, which is
+cosmetic, never a connection.

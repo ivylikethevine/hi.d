@@ -27,10 +27,12 @@ function _hi_write_shims() {
   local dir="$_HI_WORKDIR/shims" tool
   mkdir -p "$dir"
 
+  # "beta compose-svc" is the compose-labeled shape: {{.Names}} {{.Label ...}}
+  # separated by a space, an empty second field for a plain container
   cat >"$dir/docker" <<'EOF'
 #!/bin/sh
 [ "$1" = ps ] || exit 1
-printf 'alpha\nbeta\n'
+printf 'alpha\nbeta compose-svc\n'
 EOF
 
   cat >"$dir/podman" <<'EOF'
@@ -206,6 +208,22 @@ function test_docker_kind_lists_running_containers() {
   local out
   out="$(_hi_targets "$_HI_CONFIG" docker)"
   _hi_has_row "$out" alpha docker && _hi_has_row "$out" beta docker
+}
+
+# beta's compose label rides in as a third row - the friendlier name a real
+# session resolves back to "beta" through hi.sh's _hi_compose_container
+function test_docker_kind_lists_compose_service_alias() {
+  local out
+  out="$(_hi_targets "$_HI_CONFIG" docker)"
+  _hi_has_row "$out" compose-svc docker
+}
+
+# alpha has no label, so its second field is empty - must not turn into a
+# blank completable row
+function test_docker_kind_omits_alias_row_when_label_is_empty() {
+  local out
+  out="$(_hi_targets "$_HI_CONFIG" docker)"
+  ! printf '%s\n' "$out" | grep -qxF $'\t''docker'
 }
 
 function test_podman_kind_lists_running_containers() {
@@ -480,20 +498,52 @@ function test_help_flags_all_appear_in_roster() {
 
 # Inside a session the local sub-commands need a checkout the payload does not
 # carry, so completing one lands on hi.sh's refusal. The roster has to know.
+# --doctor is one of them, which this test used to assert the opposite of:
+# scripts/doctor.sh is not in $_HI_PAYLOAD, so `hi --doctor` on a target answers
+# $_HI_NO_CHECKOUT like the rest, however much a read-only probe looks portable.
 function test_flags_drop_local_subcommands_in_a_session() {
-  local out
+  local out flag
   out="$(_HI_REMOTE_SESSION=1 sh "$_HI_ROOT/common/targets.sh" flags)"
+  for flag in --install --doctor --test --update; do
+    case $'\n'"$out"$'\n' in
+    *$'\n'"$flag"$'\n'*)
+      _hi_cecho "   a session was offered $flag" "$RED"
+      return 1
+      ;;
+    esac
+  done
+  # ...while the one that does work there is still offered: --packages-preview
+  # falls back to the shipped common/header.sh rather than refusing.
   case $'\n'"$out"$'\n' in
-  *$'\n--install\n'*)
-    _hi_cecho "   a session was offered --install" "$RED"
-    return 1
-    ;;
+  *$'\n--packages-preview\n'*) return 0 ;;
   esac
-  # ...while the ones that do work there are still offered
+  _hi_cecho "   a session lost --packages-preview, which works there" "$RED"
+  return 1
+}
+
+# The case _HI_REMOTE_SESSION cannot see. A package-manager install ships
+# scripts/ - so every sub-command above works - but neither tests/ nor .git, so
+# --test and --update are exactly the two that must not be offered there. The
+# roster is answered out of a staged tree rather than this checkout, because
+# this checkout has all three and would pass either way.
+function test_flags_drop_what_a_package_lacks() {
+  local tree="$_HI_WORKDIR/pkgtree" out flag
+  rm -rf "$tree"
+  mkdir -p "$tree/common" "$tree/scripts"
+  cp "$_HI_ROOT/common/targets.sh" "$tree/common/targets.sh"
+  out="$(sh "$tree/common/targets.sh" flags)"
+  for flag in --test --update; do
+    case $'\n'"$out"$'\n' in
+    *$'\n'"$flag"$'\n'*)
+      _hi_cecho "   a packaged install was offered $flag" "$RED"
+      return 1
+      ;;
+    esac
+  done
   case $'\n'"$out"$'\n' in
   *$'\n--doctor\n'*) return 0 ;;
   esac
-  _hi_cecho "   a session lost --doctor, which works there" "$RED"
+  _hi_cecho "   a packaged install lost --doctor, which works there" "$RED"
   return 1
 }
 
@@ -564,6 +614,8 @@ function run_targets_tests() {
 
   _hi_h2 "Testing: container/orchestrator backends"
   _hi_check "docker -> running containers" test_docker_kind_lists_running_containers
+  _hi_check "docker -> compose service alias" test_docker_kind_lists_compose_service_alias
+  _hi_check "docker -> no alias row for an empty label" test_docker_kind_omits_alias_row_when_label_is_empty
   _hi_check "podman -> running containers" test_podman_kind_lists_running_containers
   _hi_check "nomad -> running allocs, no header row" test_nomad_kind_lists_running_allocs
   _hi_check "kube -> running pods" test_kube_kind_lists_running_pods
@@ -594,6 +646,7 @@ function run_targets_tests() {
   _hi_check "flags: every one is in hi --help" test_flags_all_appear_in_help
   _hi_check "flags: every --help flag is in the roster" test_help_flags_all_appear_in_roster
   _hi_check "flags: a session is offered only what works there" test_flags_drop_local_subcommands_in_a_session
+  _hi_check "flags: a package is offered only what works there" test_flags_drop_what_a_package_lacks
   _hi_check "flags: answered without probing a backend" test_flags_do_not_probe
   _hi_check "flags: a dash word completes hi's options" test_complete_offers_hi_flags_for_a_dash_word
   _hi_check "flags: filtered by prefix, never a target" test_complete_flags_filter_by_prefix_and_never_reach_targets

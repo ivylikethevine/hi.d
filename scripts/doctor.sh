@@ -73,6 +73,41 @@ function doctor_row() {
   return 0
 }
 
+# What this client's toggles change on the wire, against the stock default -
+# the same figure the README badge and bench_test.sh's budget both measure,
+# recomputed here rather than hardcoded so it can't drift from either. Pointing
+# $_HI_CONFIG_DIR at a path with no settings.sh makes _hi_payload_tar (the
+# only reader of the three trimming toggles) see no overlay at all, which is
+# exactly "stock" - the prefix assignment is scoped to this one call, so the
+# doctor's own environment is untouched either side of it.
+#
+# _hi_wire_bytes is not perfectly reproducible run to run - empirically a few
+# bytes to a couple dozen, gzip-level, the same imprecision
+# bench_payload_readme_badge gives the README's own badge a 5% window for. A
+# rounded-string comparison was tried first and was wrong the other direction:
+# _HI_DISABLE_OSC52 alone trims ~450 bytes, comfortably real, but that is
+# _less_ than one _hi_human_bytes rounding step on a ~46KB payload, so it
+# silently vanished. 128 bytes is the fixed floor instead - roughly 9x the
+# worst jitter observed and 3x under the smallest single toggle's real effect,
+# with room on both sides for either to drift somewhat before this needs
+# revisiting.
+_HI_PAYLOAD_DIFF_FLOOR=128
+function doctor_payload_diff() {
+  local this_bytes default_bytes default_h delta
+  this_bytes="$(_hi_wire_bytes)"
+  default_bytes="$(_HI_CONFIG_DIR=/nonexistent-hi-doctor-stock _hi_wire_bytes)"
+  default_h="$(_hi_human_bytes "$default_bytes")"
+  if [ "$this_bytes" -lt "$default_bytes" ]; then
+    delta="$((default_bytes - this_bytes))"
+    [ "$delta" -lt "$_HI_PAYLOAD_DIFF_FLOOR" ] && return 0
+    doctor_row payload_diff "$(_hi_human_bytes "$delta") lighter than the stock default ($default_h) - your toggles trim the wire" ok
+  else
+    delta="$((this_bytes - default_bytes))"
+    [ "$delta" -lt "$_HI_PAYLOAD_DIFF_FLOOR" ] && return 0
+    doctor_row payload_diff "$(_hi_human_bytes "$delta") heavier than the stock default ($default_h) - _HI_KEEP_COMMENTS=1, most likely" warn
+  fi
+}
+
 function doctor_local() {
   local branch changes
   _hi_h2 "The local tree"
@@ -89,6 +124,7 @@ function doctor_local() {
   # (a gzipped tar, base64-armored for the ssh path) and how big the thing is
   # once it lands. The first is the one people mean by "what does hi cost".
   doctor_row payload "$(_hi_wire_estimate) over the wire per ssh session, $(_hi_size) unpacked (${_HI_PAYLOAD[*]})"
+  doctor_payload_diff
   # the shell column of core.sh's _HI_SHELL_TABLE, so this report cannot fall
   # behind the roster install.sh and load.sh wire up
   local s have=""

@@ -27,7 +27,7 @@ trust boundaries sit, and how to report what slipped through.
   you can read.
 - **The payload is an allow list.** What goes over the wire is exactly
   `$_HI_PAYLOAD` at the top of `hi.sh` (`common misc shells load.sh
-  hi.sh`) - docs, tests, CI and editor config never leave the client.
+hi.sh`) - docs, tests, CI and editor config never leave the client.
   `hi.sh` is in that list so a session can say `hi` onward from the
   target. Your overlay (`settings.sh`, `colors`, `packages` from
   `~/.config/say-hi/`) is a second, smaller allow list.
@@ -123,5 +123,3 @@ either:
 
 - report privately via
   [GitHub private vulnerability reporting](https://github.com/ivylikethevine/say-hi/security/advisories/new),
-  or
-- email <ivylikethevine@gmail.com>.

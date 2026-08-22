@@ -32,15 +32,30 @@ kind="${1:-all}"
 # tests/common/targets_test.sh drift-checks both halves against hi.sh's --help,
 # so a flag added there and forgotten here fails the fast suite.
 if [ "$kind" = flags ]; then
-  # always offered - these work on a client and inside a session alike
-  printf '%s\n' --help --version --doctor
-  # ...and these do not: every one needs the full checkout, which the payload
-  # deliberately does not carry, so offering them on a target completes straight
-  # into hi.sh's $_HI_NO_CHECKOUT refusal. Filtered on the same variable the
-  # session itself is marked with.
+  # Always offered, because each answers without a file the payload drops:
+  # --help and --version are hi.sh's own case arms, and --packages-preview
+  # falls back to the shipped common/header.sh when scripts/ is absent - so it
+  # prints the check itself on a target rather than refusing.
+  printf '%s\n' --help --version --packages-preview
+  # The rest need a tree that is not always on disk, and completing one of those
+  # lands straight on hi.sh's $_HI_NO_CHECKOUT refusal. Two filters rather than
+  # one, because they answer different questions: _HI_REMOTE_SESSION is what a
+  # session is marked with, and the presence checks below catch what that
+  # variable cannot see - a package-manager install ships scripts/ but neither
+  # tests/ nor .git, which is the same pair hi.sh's own --test and --update arms
+  # test for. --doctor belongs here and not above: scripts/doctor.sh is not in
+  # $_HI_PAYLOAD, however much a read-only probe looks like it would work
+  # anywhere. Derived from $0 rather than $_HI_ROOT, since a completion can
+  # reach this file from a shell that never sourced paths.sh (GLOSSARY: HI.33).
   if [ "${_HI_REMOTE_SESSION:-0}" != 1 ]; then
-    printf '%s\n' --install --uninstall --configure --check-configs \
-      --overlay-init --update --color-preview --packages-preview --test
+    case $0 in
+    */*) hi_tree="${0%/*}/.." ;;
+    *) hi_tree=".." ;;
+    esac
+    [ -d "$hi_tree/scripts" ] && printf '%s\n' --install --uninstall \
+      --configure --check-configs --overlay-init --color-preview --doctor
+    [ -f "$hi_tree/tests/test_runner.sh" ] && printf '%s\n' --test
+    [ -d "$hi_tree/.git" ] && printf '%s\n' --update
   fi
   exit 0
 fi
@@ -154,13 +169,28 @@ emit_targets() {
 
 # docker and podman are one call (drop-in CLIs); the tag is appended by the
 # read loop rather than by a `sed` over the result - one fewer exec per backend
-# on the path that runs on every TAB, for the reason cache_body gives.
+# on the path that runs on every TAB, for the reason cache_body gives. Docker
+# also carries the compose service label piggybacked on the same call rather
+# than a second `docker ps`: a target one word shorter than the generated
+# container name, resolved back to it by hi.sh's own predicate and exec
+# commands (_hi_compose_container) rather than by anything here.
 list_ps() {
-  run_backend "$1" ps --format '{{.Names}}' 2>/dev/null |
-    while IFS= read -r _hi_name || [ -n "$_hi_name" ]; do
-      [ -n "$_hi_name" ] || continue
-      printf '%s\t%s\n' "$_hi_name" "$1"
-    done
+  if [ "$1" = docker ]; then
+    run_backend docker ps --format '{{.Names}} {{.Label "com.docker.compose.service"}}' 2>/dev/null |
+      while read -r _hi_name _hi_svc || [ -n "$_hi_name" ]; do
+        [ -n "$_hi_name" ] || continue
+        printf '%s\tdocker\n' "$_hi_name"
+        # only when it differs - a custom container_name equal to the
+        # service name would otherwise complete twice for one container
+        [ -n "$_hi_svc" ] && [ "$_hi_svc" != "$_hi_name" ] && printf '%s\tdocker\n' "$_hi_svc"
+      done
+  else
+    run_backend "$1" ps --format '{{.Names}}' 2>/dev/null |
+      while IFS= read -r _hi_name || [ -n "$_hi_name" ]; do
+        [ -n "$_hi_name" ] || continue
+        printf '%s\t%s\n' "$_hi_name" "$1"
+      done
+  fi
 }
 
 # nomad_allocs <job> - the running allocations of one job, and the task names

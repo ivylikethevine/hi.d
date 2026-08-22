@@ -1,5 +1,11 @@
 # Tooling & practices roadmap
 
+# urgent item --- rename ~/.config/say-hi to something like ~/.say-hi-conf
+
+# urgent item --- also, instead of personal parts of the shells being inside of the shells/ dir, they should be in their own overrides under ~/.say-hi-conf
+
+# urgent item --- make a list of what variables users can access in their say-hi-confs
+
 What is left to do on say-hi. [What v1.0.0 means](#what-v100-means) is the gate
 the tag waits on, and the rest is in two halves:
 
@@ -32,21 +38,12 @@ README carries EXPERIMENTAL UNTIL v1.0.0 and entries below are ordered against
 it, so this is the list that makes that orderable: what has to be true before
 the tag, each line naming the entry or file that satisfies it. It is a **gate,
 not a wish list** — anything that would merely be nice by v1 stays an ordinary
-unticked entry below rather than padding this. The point is a list short enough
-to finish.
+unticked entry below rather than padding this, and the one piece of product work
+left (_[persistent sessions](#the-session-itself)_) is explicitly deferred past
+the tag rather than held in front of it. The point is a list short enough to
+finish — and what is left of it is no longer a list but a single chain: the
+release below unblocks the channels below that, and nothing else gates the tag.
 
-- [ ] **The CLI surface is frozen.** `_hi_parse` in `hi.sh`, `docs/hi.1` and
-      `docs/tldr.md` describe the same flags, and no rename is expected. This
-      is what the [tldr page](#docs--submissions) entry is waiting on —
-      examples that churn are worse than no page.
-- [ ] **`macos-e2e.yml` has been green at least once.** It is written and
-      called on every push; README's compatibility table still says "written
-      but has never run", and that sentence is the criterion.
-- [ ] **`windows-e2e.yml` has been green at least once** — the target-side
-      half, same table, same sentence. Its client-side counterpart,
-      `windows-client.yml`, is deliberately **not** on this list: it is an
-      ordinary entry under [Testing & CI](#testing--ci), because a Windows
-      _client_ is not what "stable" promises.
 - [ ] **A release has gone out under branch protection**, with the manifest
       step green — the [Get a release out under branch
       protection](#repo-settings-and-first-runs) entry. The criterion below it
@@ -69,109 +66,221 @@ within each section, smallest first. The scope is what the work _is_, not how
 long it takes: "one CI run" and "a backend across seven files" are the useful
 distinction, and a guessed number of days is not.
 
-Read across the sections, the shape today is: every section is down to a single
-entry. [The session itself](#the-session-itself) holds the only one with code
-left to write - and it is the largest thing on this page; [Testing &
-CI](#testing--ci), [Demos](#demos) and [Project docs](#project-docs) are each an
-observation waiting on a run or a release that no file here can trigger.
+Read across the sections, the shape today is: [Testing & CI](#testing--ci),
+[Demos](#demos) and [Project docs](#project-docs) are each down to a single
+entry, an observation waiting on a run or a release that no file here can
+trigger. [The session itself](#the-session-itself) carries two, smallest
+first: OSC 9 notifications, an ordinary unbuilt entry, and persistent
+sessions, deferred past the tag on purpose rather than held in front of it.
+Everything that gates the tag is either a criterion above or an entry under
+[Outside this repo](#outside-this-repo).
 
 ### The session itself
 
-- [ ] **Persistent sessions on a disposable target** — _scope: the largest entry
-      here. It changes cleanup semantics on both paths, needs a findable tree
-      path and something to reap it, and rewrites SECURITY.md's footprint
-      promise._ A dropped connection currently loses the session outright: the
-      tree is deleted when the session ends, so there is nothing to reconnect
-      to. This entry is that changed — keep the tree across a dropped
-      connection, reconnect into the same session later, and delete only on a
-      definitive exit or after a configurable timeout.
+- [ ] **OSC 9/777 desktop notifications** — _scope: one escape sequence and a
+      toggle, on `shells/osc52.sh`'s exact precedent._ A long-running remote
+      command finishing behind a switched-away terminal has nothing to say
+      about it today - `hi_copy` and vim's yank already reach back through the
+      wire with an OSC 52 escape that the local terminal emulator (never the
+      target) acts on, and OSC 9 (or iTerm2's OSC 777) is the same trick for a
+      notification instead of a clipboard write: no target-side daemon, no
+      `notify-send`/`terminal-notifier` to detect or ship, nothing installed -
+      just a different escape sequence written to the same tty.
 
+  - **What it would hook.** Not every command, and not automatically - a
+    notification on every prompt would be noise, not signal. The candidate
+    shape is a `hi_notify <cmd>` alias/function (`misc/aliases.sh`, next to
+    `hi_copy`) that runs `<cmd>` and fires the escape on exit with its status,
+    so it is opt-in per invocation the way `hi_copy` is opt-in per yank -
+    never a hook on the prompt itself.
+  - **The toggle.** `_HI_DISABLE_NOTIFY`, on `_HI_DISABLE_OSC52`'s exact
+    precedent: a row in `common/core.sh`'s `_HI_TOGGLES` array (GLOSSARY:
+    HI.07), its spelled-out mirror in `common/paths.sh`, and a new exclude in
+    `hi.sh`'s `_hi_payload_tar` - a client that never wants it pays nothing on
+    the wire, the same guarantee `_HI_DISABLE_OSC52=1` already makes for the
+    clipboard half.
+  - **Terminal support is the same open question OSC 52 already lives with.**
+    tmux needs passthrough allowed, some emulators ignore OSC 9 outright and a
+    few implement 777 instead of 9 (or both) - `shells/osc52.sh`'s own comment
+    on this is the reference, not a new investigation. Emitting both escapes
+    and letting an emulator that understands neither no-op is the likely
+    answer, same as it would be for any other escape-sequence feature here.
+  - **Ticks when:** `hi_notify <cmd>` exists in `misc/aliases.sh`, fires on
+    exit with the command's status, `_HI_DISABLE_NOTIFY` trims it from the
+    payload and is documented in [CONFIGURATION.md](CONFIGURATION.md), and a
+    case in `tests/shells/osc52_test.sh` (or a sibling) pins the escape shape
+    the way that suite already pins OSC 52's.
+
+- [ ] **Persistent sessions on a disposable target** — _**deferred until after
+      v1.0.0.** Scope: the largest entry here. It changes cleanup semantics on
+      both paths, needs a findable tree path and something to reap it, and
+      rewrites SECURITY.md's footprint promise._ Deferred because the thing it
+      changes is the promise v1 is being tagged on: SECURITY.md says a machine
+      you visited looks untouched, and every other entry left is a run or a
+      click rather than a rewrite of that sentence. The plan below is the
+      research, not queued work.
+
+  A dropped connection currently loses the session outright: the
+  tree is deleted when the session ends, so there is nothing to reconnect
+  to. This entry is that changed — keep the tree across a dropped
+  connection, reconnect into the same session later, and delete only on a
+  definitive exit or after a configurable timeout. **Opt-in, not the
+  default**: a bare `hi <target>` stays exactly as disposable as it is
+  today — a named session is what asks for the tradeoff below, on the same
+  "nothing changes for people who never asked" precedent every toggle in
+  this project follows.
+
+  - **The plan, in one line.** `hi --session <name> <target>` writes a
+    deterministic tree instead of `mktemp`'s random one, `load.sh`'s cleanup
+    trap becomes conditional on whether that session is still wanted, and
+    reattachment rides whatever multiplexer the target already has -
+    nothing new ships to provide one.
   - **What has to stop happening, carefully.** Cleanup has two independent
     paths — the bootstrap's `trap 'rm -rf $_HI_CLEANUP' exit` and `load.sh`'s
     own on-exit hook — and `tests/targets/ssh_disconnect_test.sh` exists
     specifically to prove they fire on an _abrupt_ disconnect rather than only
     a clean exit. That is the current contract and it is deliberate, so this
     makes it conditional rather than weaker: the suite gains a second case
-    (dropped **with** persistence keeps the tree) beside the one it has
+    (dropped **with** `--session` keeps the tree) beside the one it has
     (dropped **without** still reaps it).
-  - **The tree has to be findable again.** It is
-    `mktemp -d -t $(_hi_whoami).hi.XXXXXX` (`hi.sh`), a fresh random name every
-    session, which is exactly what nothing can reconnect to. A resumable
-    session needs a deterministic path, or a pointer the next `hi` reads on the
-    way in — still per-user and still mode 0700, or SECURITY.md's footprint
-    section stops being true.
-  - **Something has to reap it, and there is no daemon.** Two shapes, and they
-    trade the same way: a watchdog detached at disconnect
-    (`sh -c 'sleep N; rm -rf ...'`) keeps the promise even if you never come
-    back, at the cost of leaving a process on the target; reap-on-next-connect
-    costs nothing and runs nothing, but leaves the tree indefinitely if you
-    don't return. Only the first keeps "a machine you visited looks untouched"
-    literally true. Either way SECURITY.md's _Footprint and cleanup_ section
-    needs rewriting, and the timeout wants a name and a row in
-    [CONFIGURATION.md](CONFIGURATION.md).
-  - **Keeping the tree alive is only half of it.** This keeps the _tree_ alive;
-    something still has to keep the _shell_ alive on the target, and hi no
-    longer ships a multiplexer integration to lean on (`--tmux` was removed).
-    Whether that is a multiplexer hi drives, or a reattachable shell of its
-    own, is an open question this entry has to answer rather than inherit.
-  - **Ticks when:** a dropped session on a disposable target can be
-    reconnected to, an explicit exit still cleans up immediately, the timeout
-    is a documented setting, and the disconnect suite covers both halves.
+  - **The tree has to be findable again, and only when asked for by name.**
+    `mktemp -d -t $(_hi_whoami).hi.XXXXXX` (`hi.sh`) stays the default - a
+    fresh random name every session, exactly as unfindable as it is meant to
+    be for a one-off connection. `--session <name>` swaps that for a
+    deterministic path scoped to the same user and target,
+    `${TMPDIR:-/tmp}/$(_hi_whoami).hi.session.<name>` (mode 0700, same as
+    today's tree - GLOSSARY: HI.33's derivation, not a new convention). A
+    second `hi --session <name> <target>` finds it already there, skips
+    re-copying the payload once its manifest matches, and reattaches instead
+    of bootstrapping fresh. `<name>` is a plain token (alnum, `-`, `_`) so it
+    can never walk the path outside `$TMPDIR` - the same shape a target name
+    is already constrained to.
+  - **Reaping it defaults to zero footprint, not a background process.** The
+    default is reap-on-next-connect: a session tree older than
+    `_HI_PERSIST_TIMEOUT` (documented in [CONFIGURATION.md](CONFIGURATION.md),
+    unset means "keep indefinitely until an explicit `hi --session <name>
+--end`") is deleted the moment the _next_ `hi` of any kind touches that
+    target, not by anything running in the meantime - keeping "a machine you
+    visited looks untouched" true in the stronger sense of leaving no process
+    behind, at the cost of a stale tree sitting there if you never reconnect
+    at all. A detached watchdog (`sh -c 'sleep N; rm -rf ...' &`, disowned) is
+    the opt-in stronger guarantee for someone who wants the timeout enforced
+    even if they never come back - a second flag, not the default, because a
+    process left running on every persistent session is exactly the kind of
+    footprint SECURITY.md currently promises against. Either way, SECURITY.md's
+    _Footprint and cleanup_ section needs rewriting to describe the two modes
+    rather than the one guarantee it states today.
+  - **Keeping the shell alive rides what the target already has, nothing
+    ships to provide it.** This keeps the _tree_ alive; the _shell_ needs a
+    reattachable process, and hi ships no multiplexer config to lean on
+    (`--tmux` and `misc/tmux.conf` were removed). The plan is the same ladder
+    hi already uses for everything else it does not want to own two
+    implementations of ([SUPPORTED.md](SUPPORTED.md), `_HI_SHELL_PREFERENCE`):
+    detect what is already on the target and drive it, in order `tmux` →
+    `screen` → `dtach` (the last needs nothing but a bare `dtach -A
+<socket> <shell>` - no config file to ship, unlike tmux). `--session`
+    wraps the session in whichever of the three is found first,
+    `tmux new-session -A -s hi-<name>` or the equivalent. A target with **none**
+    of the three declines persistence outright with a clear message at
+    connect time - `--session` on that target behaves like today's plain `hi`,
+    rather than silently pretending the reattach half of the promise held.
+  - **Ticks when:** `hi --session <name> <target>` survives a dropped
+    connection and reattaches on the next `hi --session <name> <target>`, a
+    bare `hi <target>` is unchanged, the timeout and its watchdog opt-in are
+    documented settings, SECURITY.md's footprint section describes both
+    cleanup modes, and the disconnect suite covers persisted-and-reattached
+    alongside the existing dropped-and-reaped case.
 
 ### Testing & CI
 
-- [ ] **See the Windows client-side job green** — _scope: one CI run, then two
-      lines: `ci.yml` picks the job up on push and README's Windows client row
-      flips._ `.github/workflows/windows-client.yml` has shipped and is what
-      this entry asked for: the fast group under the runner's own Git Bash,
-      proving `hi.sh` works when the machine you are _sitting at_ is Windows,
-      where `windows-e2e.yml` covers the target side. What is left is a run,
-      which no file here can perform.
+- [ ] **Decide what the Windows client job is allowed to assert** — _scope: a
+      decision about the test fixtures, then whatever it implies; no product
+      code is implicated._ `.github/workflows/windows-client.yml` has run.
+      It is red, and what it found is worth writing down rather than
+      re-deriving: **37 failures across 8 suites, none of them a portability
+      bug in `hi`.** Every one traces to two facts about Git Bash.
 
-  - **It runs `--group fast --skip shellcheck`.** The lint suite is the one
-    suite in that group with nothing to say about Windows, and it cannot run
-    there anyway: `.github/actions/setup-tool` resolves linux/darwin asset
-    slugs into `/usr/local/bin`, and `run_shellcheck` exits 1 rather than
-    standing down when shellcheck is missing — on purpose, since a lint gate
-    that did not run must not read as a pass. `runner_test.sh` checks that
-    every `--skip` name in a workflow is a real suite, so a rename cannot
-    silently put it back.
-  - **Dispatch-only until it is green**, on `windows-e2e.yml`'s precedent:
-    nothing here has ever executed the harness under Git Bash, so the first
-    runs are information rather than a gate on somebody's pull request. The
-    `workflow_call` trigger is already there for the day ci.yml picks it up
-    beside `e2e-windows`.
-  - **Expect skips, not a clean sweep.** There is no zsh or fish on a Windows
-    runner, so several suites will stand down yellow; that is the honest shape
-    and why the job passes neither `--require-run` nor `--totals-file`.
-  - **Ticks when:** the job has been green once, ci.yml calls it on push, and
-    README's Windows client row reads ✅ instead of 🟡.
+  - **It cannot create symbolic links.** `ln -s` needs Developer Mode or
+    administrator on Windows, so it fails outright. That is the whole of:
+    `install`'s seven `config_hi`/`install_tree` cases and `packaging`'s
+    _Symlink matches install_tree's_ (they exercise the symlink `install.sh`
+    makes); `install_location`'s _runs through a symlink onto it_; and - less
+    obviously - `targets`' three sweep cases, `packages_preview`'s two and most
+    of `doctor`'s five, because `_hi_real_path` (`tests/lib/fixtures.sh:95`)
+    builds its toolboxes out of `ln -sf` and silently prints an **empty**
+    directory when they fail. A suite that then replaces `$PATH` with it has no
+    `sh`, `awk` or `sed` at all, which is why those cases fail in ways that
+    look unrelated to symlinks.
+  - **It has no POSIX execute bit.** MSYS answers `access(X_OK)` from the
+    file's magic or extension unless the mount carries `acl`, so `chmod +x` on
+    a file with no `#!` does not stick. `_hi_probe_home` (`tests/hi/remote_test.sh:40`)
+    makes its launcher with `: >hi.sh` - an empty file - and
+    `_hi_remote_root_probe` requires `[ -x "$_h/say-hi/hi.sh" ]`, so the probe
+    correctly answers "nothing installed" for all fourteen of `hi_remote`'s
+    cases. The probe is right; the fixture cannot say what it means to say
+    there.
+  - **Two odds and ends.** `test_lib`'s _wrapper really allocates a pty_ wants
+    Python's `pty`, which is Unix-only. `packaging`'s two checksum cases see
+    `<hash> *name` because `sha256sum` opens binary by default on Windows -
+    the assertion is brittle, not the code: `SHA256SUMS` is written by Linux
+    CI and `sha256sum -c` reads both spellings either way.
+  - **So the decision is about the fixtures, not about hi.** Either the cases
+    that need a real symlink or a real exec bit learn to stand down yellow on
+    MSYS - the doctrine the backend suites already use, and the only route to a
+    green job - or this job stays dispatch-only and red-but-explained. Nothing
+    is blocked on it either way: a Windows _client_ is deliberately not a
+    v1.0.0 criterion, because a Windows client is not what "stable" promises.
+    `windows-e2e.yml` covers the target side, and that is the half the tag
+    rests on.
+  - **Unchanged from before the run:** it runs `--group fast --skip
+shellcheck`, because `.github/actions/setup-tool` resolves linux/darwin
+    asset slugs and `run_shellcheck` exits 1 rather than standing down when
+    shellcheck is missing. There is no zsh or fish on the runner either, so 45
+    cases skip yellow before any of the above.
+  - **Ticks when:** the fixtures either stand down or are made to work, the job
+    is green once, ci.yml calls it on push, and
+    [SUPPORTED.md](SUPPORTED.md#the-targets-os)'s Windows row reads ✅ for the
+    client half as well as the target half.
 
 ### Demos
 
-- [ ] **Shed the seven committed demo GIFs** — _scope: one commit, gated on
-      seeing a render land._ The autogeneration itself has shipped:
-      `demos.yml`'s `publish` job renders every tape but `demo` on the
-      self-hosted box (a tape change, weekly, or dispatch) and `pages.yml` lays
-      the result over the committed copies at the paths every link already
-      resolves to. What is left is the size half, and it deliberately waits.
+- [ ] **See a full demo render land on the site** — _scope: one green
+      `publish` run; the commit half has already shipped._ Both halves of the
+      autogeneration are in: `demos.yml`'s `publish` job renders every tape but
+      `demo` on the self-hosted box, `pages.yml` lays the result over the site,
+      the six GIFs are out of the tree, and README and
+      [CONFIGURATION.md](CONFIGURATION.md) already link them at their published
+      URLs. `docs/demos/demo.gif` stays committed on purpose - it is the
+      hand-rendered one, and `.githooks/demo_staleness.sh` is what says when it
+      has gone stale.
 
-  - **Why it waits.** Until a render has actually run, those seven committed
-    GIFs are what the site and README both serve. Deleting them first would
-    trade a working front page for an unverified pipeline, and the pipeline
-    cannot be exercised anywhere but that runner.
-  - **What the commit is.** Delete `docs/demos/*.gif` except `demo.gif`
-    (~1.2 MB), and repoint README's six and `docs/CONFIGURATION.md`'s
-    `color_preview` at the published URLs — relative links resolve on the site
-    but would 404 on github.com once the files are gone, so that half is not
-    optional. `_config.yml`'s note about keeping `docs/demos` needs the same
-    edit.
-  - **Renders are not reproducible**, which is what makes the saving real
-    rather than cosmetic: vhs records live timing through a pty, so every run
-    produces different bytes. Committing them would have added ~1.2 MB of
-    permanent history each time whether a demo had moved or not.
-  - **Ticks when:** a `publish` run has been green, the seven are out of the
-    tree, and the docs point at the site.
+  - **Nothing 404s yet, and the merge order decides whether anything ever
+    does.** The deletion and the URL repoint live on `dev` only: `main` still
+    carries the six GIFs and the relative links that resolve to them, so the
+    front page is intact today. It breaks the moment `dev` merges — and since
+    `publish` never runs on a pull request (below), dispatching one against
+    `main` _before_ the merge keeps that window at zero, where merging first
+    leaves the front page broken for the length of a render. Nothing here can
+    prove the pipeline either way, which is why this entry stays open after the
+    commit: the pipeline is now the only source of the images the front page
+    shows.
+  - **The pull-request job is not the one that matters.** `demos.yml` has two:
+    `render` gates a PR that touches a tape, on a hosted runner, and renders
+    exactly `color_preview` - a green there says the vhs/ttyd/font toolchain
+    works and nothing about the other seven. `publish` is the one that produces
+    the site's GIFs, and it never runs on a pull request: push to `main`,
+    the weekly cron, or a manual dispatch.
+  - **The renderer's own dependencies were the last thing to bite.** A tape
+    that opens `Set Shell zsh` wants that shell on the machine doing the
+    recording, not on the target, so `publish` installs zsh, fish and nomad the
+    way `ci.yml`'s backends job does - docker, podman, kind and kubectl are
+    what the box already carries. Without them five of the seven tapes failed
+    under `--require-run`.
+  - **Ticks when:** a `publish` run has been green end to end and the seven
+    published URLs actually serve an image — README's six, plus the
+    `color_preview` one that [CONFIGURATION.md](CONFIGURATION.md) is the only
+    link to. Seven tapes render; six GIFs left the tree, because `complete` was
+    never committed in the first place.
 
 ### Project docs
 
@@ -195,7 +304,7 @@ half that cannot be written in advance: what a release says it changed.
     [PACKAGING.md](PACKAGING.md#verifying-a-release-download) so the key exists
     once in the tree.
   - **Why it is composed rather than two flags.** `gh` appends generated notes
-    *after* `--notes`, which would bury what changed under how to check it.
+    _after_ `--notes`, which would bury what changed under how to check it.
   - **A `CHANGELOG.md` is still not open**, and should only be opened if the
     generated notes turn out not to be enough — the same test as before.
   - **Ticks when:** a release has gone out whose body names what changed as well
@@ -220,39 +329,38 @@ settings, or a decision — which is why they sit here rather than in the in-rep
 half: no file here can close one. The first one gates both release channels
 below it.
 
-- [ ] **Get a release out under branch protection** — _scope: one decision with
-      a code fork behind it (a ruleset bypass actor, or converting `publish` to
-      open a pull request), then one real release._ _The rule is on:_ `main`
+- [ ] **Get a release out under branch protection** — _scope: one real release,
+      plus one repository setting to confirm first._ _The rule is on:_ `main`
       requires a pull request and refuses a direct push, which closes
       Scorecard's highest-severity finding. What has not happened is a release
       under it, and until one does **both release-channel entries below are
-      blocked behind this one**: `tap` and `aur` are `needs: publish`, and
-      `publish` is the job that cannot currently finish.
+      blocked behind this one**: `tap` and `aur` are `needs: publish`.
 
-  - **`publish` still pushes straight to `main`, and that push is now
-    refused.** `release.yml`'s second checkout is the one that keeps its
-    credentials (`ref: main`), and the `Commit the manifests to main` step ends
-    in `git push origin main`, under `set -euo pipefail`, to land the
-    regenerated `PKGBUILD`, `.SRCINFO` and `say-hi.rb`. Under a PR-required
-    rule that fails, so the next tag dies at the last step of the release with
-    the packages already published and neither channel job reached.
-  - **Two ways to close it**, and they are a real choice rather than a
-    formality: give the GitHub Actions app a bypass actor on the ruleset and
-    leave the job alone, or convert `publish` to open a pull request the way
-    the `aur`/`tap` half already does — the `tap` job is the in-repo precedent
-    for exactly that shape. The bypass keeps releases one-step; the PR keeps
-    the rule honest with no exceptions.
+  - **The code half has shipped.** `publish` no longer pushes to `main`: its
+    credential-keeping checkout writes the regenerated `PKGBUILD`, `.SRCINFO`
+    and `say-hi.rb` onto a `manifests-<tag>` branch and opens a pull request,
+    on the `tap` job's precedent, with `pull-requests: write` on the job to do
+    it. No workflow in the tree pushes to `main` any more. The release does not
+    wait on that merge either - `tap` and `aur` read the manifests out of the
+    `packages` artifact, not out of `main`.
+  - **Confirm one setting before the first tag.** A workflow can only open that
+    pull request if _Settings → Actions → General → Allow GitHub Actions to
+    create and approve pull requests_ is on. With it off, `gh pr create` fails
+    with "GitHub Actions is not permitted to create or approve pull requests" -
+    at the last step of the release, with the packages already published, which
+    is exactly the failure the PR conversion was meant to remove.
   - **The required checks are still unset.** Only the pull-request requirement
     is configured. When they go on, per the note on the markdownlint job, do
     not make the advisory ones required — `markdownlint`, `hadolint`, lychee
-    and trivy are all designed to be ignorable.
-  - **Ticks when:** a release has gone out under the rule with the manifest
-    step green.
+    and trivy are all designed to be ignorable. `e2e (macOS)` and
+    `e2e (Windows)` are now green on push and are reasonable candidates.
+  - **Ticks when:** a release has gone out under the rule, with the manifest
+    pull request opened rather than a push refused.
 
 - [ ] **A job-started hook on the self-hosted runner** — _scope: a script and an
-      env var on that machine, plus one commit here deleting thirteen copies._
-      Thirteen jobs across eight workflows open with the same `Reclaim the
-      workspace` step: a `sudo chown -R` of `$GITHUB_WORKSPACE`, guarded on
+      env var on that machine, plus one commit here deleting fifteen copies._
+      Fifteen jobs across ten workflows open with the same `Reclaim the
+workspace` step: a `sudo chown -R` of `$GITHUB_WORKSPACE`, guarded on
       `runner.environment != 'github-hosted'`, because that box's `_work`
       persists between jobs and one root-owned file from a container test makes
       the next checkout's cleanup throw (docs/PACKAGING.md has the full
@@ -264,25 +372,41 @@ below it.
     runner itself — a script the runner executes before every job, which is
     exactly this step's scope. Setting it is a file and an env var on that
     machine, which is why this is here and not in the in-repo half.
-  - **Ticks when:** the hook is in place and the thirteen copies are deleted in
-    one commit. Do both at once: the copies are harmless, but leaving them
-    after the hook exists means two mechanisms for one problem.
+  - **Recount before deleting rather than trusting the number here.** It was
+    thirteen across eight when this entry was written and is fifteen across ten
+    now, because workflows keep arriving;
+    `grep -rc 'Reclaim the workspace' .github/workflows/` is the whole check.
+  - **Ticks when:** the hook is in place and every copy is deleted in one
+    commit. Do both at once: the copies are harmless, but leaving them after
+    the hook exists means two mechanisms for one problem.
 
 - [ ] **Decide whether to keep the Scorecard badge** — _scope: a judgement call
-      and one README line either way._ `scorecard.yml` runs weekly with
-      `publish_results: true` and `README.md` carries the badge, so the score is
-      public either way and the 404 that once blocked it is gone. The open
-      question is whether showing it helps. Two checks a solo maintainer cannot
-      move — Code-Review and CI-Tests — dominate the number, so it reads partly
-      as a verdict on the project's headcount rather than on its engineering,
-      sitting next to badges that measure something real.
+      and one README line either way, with nothing to judge before
+      2026-08-25._ `scorecard.yml` runs weekly with `publish_results: true` and
+      `README.md` carries the badge, but **no score has been published yet**:
+      `api.scorecard.dev` and `api.securityscorecards.dev` both 404 for this
+      repo, and the badge renders `openssf scorecard: invalid repo path` — on
+      `main` as much as here. The cause is benign. `publish_results` only takes
+      effect on a _scheduled_ run against the default branch, the cron is
+      `41 7 * * 2`, and the schedule-only trigger landed on `main` on Wed
+      2026-08-19 — so the first run is Tue 2026-08-25 and there has not been
+      one. If the badge is still an error after that date, a run fired and
+      failed rather than never having fired, and the Actions tab is the only
+      place that tells those two apart.
 
+  - **Until then the README shows an error rather than a number.** Leave it:
+    re-adding the line afterwards is a second commit spent on a few days of
+    cosmetic blemish, on a repo whose first heading already says EXPERIMENTAL.
+    Pull it only if that reads worse in practice than it does written down.
+  - **The question the number has to answer** is whether showing it helps. Two
+    checks a solo maintainer cannot move — Code-Review and CI-Tests — dominate
+    it, so it reads partly as a verdict on the project's headcount rather than
+    on its engineering, sitting next to badges that measure something real.
   - **CII-Best-Practices used to be on that list and is not.** It reads for a
-    contribution guide among other things, so it is movable by writing one —
-    which is the [`CONTRIBUTING.md` entry](#project-docs) under Project docs.
-    That makes the judgement here worth deferring until after it lands: a
-    number with one unmovable check fewer is a different number to decide
-    about.
+    contribution guide among other things, so it was movable by writing one —
+    and `docs/CONTRIBUTING.md` has since shipped. That is one unmovable check
+    fewer than when this entry was written, which is the other reason to judge
+    the first real report rather than guess at it.
   - **The rest of the report is settled and needs nothing.** SAST counts
     `codeql.yml`'s `actions` pack over the workflows (worth having on its own
     merits, and a poor reason to believe the resulting number, since the
@@ -304,7 +428,7 @@ entries are just the remaining human steps and their tick conditions.
       real Mac._ Create the `homebrew-tap` repo (a plain GitHub repo with a
       `Formula/` directory), add a fine-grained PAT scoped to it (contents +
       pull-requests write) as `HOMEBREW_TAP_TOKEN`, then re-run the `brew
-      install`/`test`/`audit` gate on an actual Mac (the keg lives under
+install`/`test`/`audit` gate on an actual Mac (the keg lives under
       `/opt/homebrew` there, not Linuxbrew's prefix used so far).
 
   - **Ticks when:** `brew install ivy/tap/say-hi` works, from a release the
@@ -329,13 +453,19 @@ entries are just the remaining human steps and their tick conditions.
 
 ### Docs & submissions
 
-- [ ] **tldr page** — _scope: one upstream pull request, gated on the CLI
-      surface being frozen._ Eight example lines reach everyone who types `tldr
-      hi` before anyone reads a man page. Upstream has its own style guide and
-      review, so this is a submission, not a file here; the draft is at
-      `docs/tldr.md`.
+- [ ] **tldr page** — _scope: one upstream pull request; the gate it waited on
+      has lifted._ Seven example lines reach everyone who types `tldr hi` before
+      anyone reads a man page. Upstream has its own style guide and review, so
+      this is a submission, not a file here; the draft is at `docs/tldr.md`.
 
-  - **Do:** open the PR against tldr-pages once the CLI surface is frozen —
-    the first line of [What v1.0.0 means](#what-v100-means). Examples that
-    churn are worse than no page.
+  - **The CLI surface is frozen, which is what this was waiting on.** All twelve
+    flags agree across `hi.sh`'s `_HI_SUBCOMMANDS` table and case arms,
+    `docs/hi.1`, and `common/targets.sh`'s completion roster — and the agreement
+    is CI-enforced in both directions rather than read: `tests/hi/parse_test.sh`
+    checks that every `--help` flag reaches the man page _and_ that the page
+    groups them the way the roster does, while `tests/common/targets_test.sh`
+    checks the roster against `--help` each way round. Examples that churn are
+    worse than no page, and these can no longer churn quietly.
+  - **Do:** open the PR against tldr-pages. The draft leans on three flags —
+    `--doctor`, `--version` and `--configure` — all of them frozen.
   - **Ticks when:** it is merged upstream.

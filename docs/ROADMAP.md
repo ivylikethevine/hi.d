@@ -1,5 +1,11 @@
 # Tooling & practices roadmap
 
+# urgent item --- rename ~/.config/say-hi to something like ~/.say-hi-conf
+
+# urgent item --- also, instead of personal parts of the shells being inside of the shells/ dir, they should be in their own overrides under ~/.say-hi-conf
+
+# urgent item --- make a list of what variables users can access in their say-hi-confs
+
 What is left to do on say-hi. [What v1.0.0 means](#what-v100-means) is the gate
 the tag waits on, and the rest is in two halves:
 
@@ -115,14 +121,14 @@ Everything that gates the tag is either a criterion above or an entry under
       research, not queued work.
 
   A dropped connection currently loses the session outright: the
-      tree is deleted when the session ends, so there is nothing to reconnect
-      to. This entry is that changed — keep the tree across a dropped
-      connection, reconnect into the same session later, and delete only on a
-      definitive exit or after a configurable timeout. **Opt-in, not the
-      default**: a bare `hi <target>` stays exactly as disposable as it is
-      today — a named session is what asks for the tradeoff below, on the same
-      "nothing changes for people who never asked" precedent every toggle in
-      this project follows.
+  tree is deleted when the session ends, so there is nothing to reconnect
+  to. This entry is that changed — keep the tree across a dropped
+  connection, reconnect into the same session later, and delete only on a
+  definitive exit or after a configurable timeout. **Opt-in, not the
+  default**: a bare `hi <target>` stays exactly as disposable as it is
+  today — a named session is what asks for the tradeoff below, on the same
+  "nothing changes for people who never asked" precedent every toggle in
+  this project follows.
 
   - **The plan, in one line.** `hi --session <name> <target>` writes a
     deterministic tree instead of `mktemp`'s random one, `load.sh`'s cleanup
@@ -153,7 +159,7 @@ Everything that gates the tag is either a criterion above or an entry under
     default is reap-on-next-connect: a session tree older than
     `_HI_PERSIST_TIMEOUT` (documented in [CONFIGURATION.md](CONFIGURATION.md),
     unset means "keep indefinitely until an explicit `hi --session <name>
-    --end`") is deleted the moment the _next_ `hi` of any kind touches that
+--end`") is deleted the moment the _next_ `hi` of any kind touches that
     target, not by anything running in the meantime - keeping "a machine you
     visited looks untouched" true in the stronger sense of leaving no process
     behind, at the cost of a stale tree sitting there if you never reconnect
@@ -172,7 +178,7 @@ Everything that gates the tag is either a criterion above or an entry under
     implementations of ([SUPPORTED.md](SUPPORTED.md), `_HI_SHELL_PREFERENCE`):
     detect what is already on the target and drive it, in order `tmux` →
     `screen` → `dtach` (the last needs nothing but a bare `dtach -A
-    <socket> <shell>` - no config file to ship, unlike tmux). `--session`
+<socket> <shell>` - no config file to ship, unlike tmux). `--session`
     wraps the session in whichever of the three is found first,
     `tmux new-session -A -s hi-<name>` or the equivalent. A target with **none**
     of the three declines persistence outright with a clear message at
@@ -227,7 +233,7 @@ Everything that gates the tag is either a criterion above or an entry under
     `windows-e2e.yml` covers the target side, and that is the half the tag
     rests on.
   - **Unchanged from before the run:** it runs `--group fast --skip
-    shellcheck`, because `.github/actions/setup-tool` resolves linux/darwin
+shellcheck`, because `.github/actions/setup-tool` resolves linux/darwin
     asset slugs and `run_shellcheck` exits 1 rather than standing down when
     shellcheck is missing. There is no zsh or fish on the runner either, so 45
     cases skip yellow before any of the above.
@@ -253,7 +259,7 @@ Everything that gates the tag is either a criterion above or an entry under
     carries the six GIFs and the relative links that resolve to them, so the
     front page is intact today. It breaks the moment `dev` merges — and since
     `publish` never runs on a pull request (below), dispatching one against
-    `main` *before* the merge keeps that window at zero, where merging first
+    `main` _before_ the merge keeps that window at zero, where merging first
     leaves the front page broken for the length of a render. Nothing here can
     prove the pipeline either way, which is why this entry stays open after the
     commit: the pipeline is now the only source of the images the front page
@@ -298,7 +304,7 @@ half that cannot be written in advance: what a release says it changed.
     [PACKAGING.md](PACKAGING.md#verifying-a-release-download) so the key exists
     once in the tree.
   - **Why it is composed rather than two flags.** `gh` appends generated notes
-    *after* `--notes`, which would bury what changed under how to check it.
+    _after_ `--notes`, which would bury what changed under how to check it.
   - **A `CHANGELOG.md` is still not open**, and should only be opened if the
     generated notes turn out not to be enough — the same test as before.
   - **Ticks when:** a release has gone out whose body names what changed as well
@@ -354,7 +360,7 @@ below it.
 - [ ] **A job-started hook on the self-hosted runner** — _scope: a script and an
       env var on that machine, plus one commit here deleting fifteen copies._
       Fifteen jobs across ten workflows open with the same `Reclaim the
-      workspace` step: a `sudo chown -R` of `$GITHUB_WORKSPACE`, guarded on
+workspace` step: a `sudo chown -R` of `$GITHUB_WORKSPACE`, guarded on
       `runner.environment != 'github-hosted'`, because that box's `_work`
       persists between jobs and one root-owned file from a container test makes
       the next checkout's cleanup throw (docs/PACKAGING.md has the full
@@ -381,7 +387,7 @@ below it.
       `api.scorecard.dev` and `api.securityscorecards.dev` both 404 for this
       repo, and the badge renders `openssf scorecard: invalid repo path` — on
       `main` as much as here. The cause is benign. `publish_results` only takes
-      effect on a *scheduled* run against the default branch, the cron is
+      effect on a _scheduled_ run against the default branch, the cron is
       `41 7 * * 2`, and the schedule-only trigger landed on `main` on Wed
       2026-08-19 — so the first run is Tue 2026-08-25 and there has not been
       one. If the badge is still an error after that date, a run fired and
@@ -422,7 +428,7 @@ entries are just the remaining human steps and their tick conditions.
       real Mac._ Create the `homebrew-tap` repo (a plain GitHub repo with a
       `Formula/` directory), add a fine-grained PAT scoped to it (contents +
       pull-requests write) as `HOMEBREW_TAP_TOKEN`, then re-run the `brew
-      install`/`test`/`audit` gate on an actual Mac (the keg lives under
+install`/`test`/`audit` gate on an actual Mac (the keg lives under
       `/opt/homebrew` there, not Linuxbrew's prefix used so far).
 
   - **Ticks when:** `brew install ivy/tap/say-hi` works, from a release the

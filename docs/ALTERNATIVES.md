@@ -1,8 +1,7 @@
 # say-hi and the alternatives
 
-An honest look at what else solves this problem, where say-hi is genuinely
-different, and where another tool is the better one. Written for someone
-deciding whether to use say-hi, not to sell it.
+This project and some related, but different alternatives. Some might be better
+for you than this, and some have been instrumental in this project!
 
 ## Contents
 
@@ -29,7 +28,7 @@ no `ll`.
 There are two families of answer.
 
 **Install your config there.** Dotfile managers — [chezmoi], [yadm], [GNU Stow],
-[dotbot], [rcm], [homeshick] — or config management like Ansible. These are excellent, and
+[dotbot], [rcm], [homeshick], These are excellent, and
 say-hi does not compete with them: they assume the machine is yours, that you'll
 be back, and that leaving files behind is fine. That fails for a shared
 production host, a box you touch once, or a container. The line blurs at the
@@ -56,7 +55,7 @@ terminal.
 
 ## The direct alternatives, side by side
 
-|                                     | **say-hi**                                                  | **[sshrc]**                                                                                     | **[xxh]**                                                | **[kyrat]**                     | **[sshdot]**             |
+|                                     | **say-hi**                                                | **[sshrc]**                                                                                     | **[xxh]**                                                | **[kyrat]**                     | **[sshdot]**             |
 | ----------------------------------- | --------------------------------------------------------- | ----------------------------------------------------------------------------------------------- | -------------------------------------------------------- | ------------------------------- | ------------------------ |
 | Written in                          | POSIX/bash shell                                          | shell                                                                                           | Python                                                   | bash                            | shell                    |
 | Client needs                        | `bash` 3.2+, `base64`                                     | bash, ssh                                                                                       | a Python install (pip/pipx/conda) or the portable binary | `bash` **≥ 4.0**, GNU coreutils | shell, ssh               |
@@ -106,6 +105,8 @@ you can read all of it in one sitting.
 [xxh]'s pitch is different and more ambitious: it uploads a **portable build of
 the shell itself**, so you can use fish or zsh on a host that has neither.
 
+NOTE: AUR reports as out of date & orphaned
+
 **Where xxh wins outright:** that capability. say-hi cannot give you a shell the
 target lacks — its no-bash ladder (`fish > zsh > dash > ash > sh`) picks the
 best of what is installed and says so. If you need _your_ shell on a
@@ -130,12 +131,11 @@ plugin model is also more principled than copying dotfiles blind.
 command line, cleanup on exit, `KYRAT_SHELL` to pick bash/zsh/sh. If the table
 above looks like a description of say-hi, that is because it nearly is.
 
-The differences are narrow and concrete. kyrat requires **bash ≥ 4.0**, ruling
-out macOS's system bash — the exact constraint say-hi contorts itself to respect
-(no `mapfile`, no associative arrays, no namerefs, enforced by a lint grep and
-a real bash-3.2 container in CI). kyrat spawns bash, zsh or sh; say-hi styles
-bash, zsh and fish, and gives the POSIX tiers a colored prompt. And kyrat is
-ssh-only.
+NOTE: Not on AUR
+
+If you don't use fish shell, kyrat is a lighter alternative. It does not work on
+as many targets (ssh only, no macOS due to bash >= 4.0 requirement), but is
+simpler.
 
 ### sshdot
 
@@ -143,7 +143,11 @@ ssh-only.
 command line. Narrower in scope than say-hi; the honest summary is that it solves
 the one problem it names.
 
+NOTE: Not on AUR
+
 ### homeshick — the same constraints, the opposite answer
+
+NOTE: Orphaned on AUR
 
 [homeshick] is a git dotfiles synchronizer written in bash, and it is the tool
 whose _constraints_ look most like say-hi's: "provided that at least Bash 3 and
@@ -197,15 +201,6 @@ composition has a wrinkle worth knowing.
 - **[chezmoi]/[yadm] as the overlay's keeper.** say-hi's per-user overlay lives
   at `~/.config/say-hi/`. Keep it in your dotfile manager and the two compose
   cleanly: chezmoi versions it, hi ships it to every target, per-session.
-- **[sshx]** shares a terminal you already have with other people through a
-  browser — despite the name, not in this family at all. An sshx session
-  started inside a hi session simply shares the styled session.
-- **[distrobox]/toolbox** containers share your real `$HOME`, so `hi` into one
-  grafts into the same rc files your host shells read. The exit trap strips
-  them as everywhere else; an uncleanly killed session is the one case where
-  graft lines outlive their tree in a file you care about, which is why every
-  graft is wrapped in a tree-exists guard that stands down silently
-  (`load.sh`'s `configure_files`, proven by the load suite).
 
 ## What actually makes say-hi different
 
@@ -281,5 +276,3 @@ place.
 [Warp]: https://docs.warp.dev/terminal/warpify/
 [atuin]: https://atuin.sh/
 [hishtory]: https://github.com/ddworken/hishtory
-[sshx]: https://sshx.io/
-[distrobox]: https://distrobox.it/

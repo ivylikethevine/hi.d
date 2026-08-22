@@ -1,10 +1,7 @@
 # Contributing to say-hi
 
-The conventions here are real, written down, and mostly not obvious from the
-code — this page is the shortest path to them. It is a signpost rather than a
-second copy: [docs/TESTING.md](TESTING.md) carries the test runbook and
-[docs/GLOSSARY.md](GLOSSARY.md) the named idioms, and anything restated
-here would only drift out of step with them.
+[docs/TESTING.md](TESTING.md) - the test runbook and
+[docs/GLOSSARY.md](GLOSSARY.md) - the named idioms
 
 say-hi is [EXPERIMENTAL UNTIL v1.0.0](../README.md#experimental-until-v100-stable-releases).
 Interfaces can still move, and [docs/ROADMAP.md](ROADMAP.md) is what is
@@ -27,10 +24,7 @@ left to do — including the entries that are deliberately not being done.
   does reach; [docs/ALTERNATIVES.md](ALTERNATIVES.md) does the same for the
   tools say-hi is not trying to be. A "no" there is a settled answer with its
   reasoning attached, not an oversight — though a reason that has stopped being
-  true is worth an issue.
-- **Open an issue first for anything with a shape** — a new backend, a new
-  setting, a change to what a session leaves on a target. Small fixes, a
-  failing case, a doc correction: just send the pull request.
+  true is worth an issue, and if a good implementation appears, I would consider it.
 
 ## The gate
 
@@ -49,6 +43,8 @@ when they can't run, never green. If your change touches one of those paths, run
 that group (`--group e2e`, `--group backends`, or the suite by name) and say in
 the pull request whether it ran or skipped. `--require-run` turns a skip into a
 failure when you want to be certain it really ran.
+
+TODO: Mention using act runner & test that.
 
 Everything else about the runner — the groups, `--skip`, the parallel container
 cases, why the coverage figures are not to be trusted — is in
@@ -78,7 +74,7 @@ These are the constraints the tree enforces rather than requests:
   file, run `--group bench` and check both. Tooling-only helpers do not belong
   in `common/core.sh`.
 - **A new suite has a home and a registration.** It lives in `tests/<the
-  directory it tests>/`, sources the `tests/test_lib.sh` façade and nothing else
+directory it tests>/`, sources the `tests/test_lib.sh` façade and nothing else
   (`GLOSSARY: HI.34`), and goes in `test_runner.sh`'s `_HI_TESTS` table — no
   group runs it otherwise.
 - **A red `shfmt` is fixed on the paths it names**, not with `shfmt -w .`, which
@@ -102,10 +98,12 @@ Nothing here has a docs-only counterpart that can be skipped:
 
 ## Opening the pull request
 
-- **Base it on the default branch** unless an issue says otherwise. `main` is
-  protected: it takes pull requests, not pushes, and releases are cut from it.
-- **No commit-message convention** — no Conventional Commits, no required
-  prefix. A subject line that says what moved is enough.
+- **Base it on the dev branch** unless an issue says otherwise. `main` is
+  protected: it takes pull requests from `dev`, and then releases are built off it.
+  `dev` is where community input is merged and tested while preparing for
+  new builds and releases.
+- **Simple, concise commits**. Keep it simple, but allow some idea of what is
+  going on. The Pull Request body is where the bullet point will live.
 - **Say if AI wrote part of it.** [README's AI Usage](../README.md#ai-usage)
   statement is the standard the project holds itself to, and it applies to
   contributions: the tool is fine, and the code is still yours to have
@@ -113,6 +111,5 @@ Nothing here has a docs-only counterpart that can be skipped:
 
 ## Reporting a vulnerability
 
-Not through an issue or a pull request. [docs/SECURITY.md](SECURITY.md#reporting-a-vulnerability)
-has the two private channels, and also describes what hi deliberately does and
-does not do on a target — worth reading before deciding something is a bug.
+If you feel there is a critical security failing (keeping in mind this is, at its
+heart, a shell script), please report it privately here: [docs/SECURITY.md](SECURITY.md#reporting-a-vulnerability)

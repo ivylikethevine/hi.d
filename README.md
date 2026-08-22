@@ -22,15 +22,7 @@ This is a hobby project.
 ![bash](https://img.shields.io/badge/bash-3.2%2B-4EAA25?logo=gnubash&logoColor=white)
 ![license](https://img.shields.io/badge/license-MIT-blue)
 
-Both coverage badges are grey because neither number can be taken at face value,
-and neither gates anything: **kcov** loses its `DEBUG` trap the moment the test
-harness is sourced, so it counts only what ran while things were loading and
-reads far too low — `common/git_prompt.sh` shows 2.56% with seventeen cases
-passing against it. **bashcov** reads bash's own `xtrace` instead and gets that
-same file right at 92.68%, but it counts every line of a *heredoc body* as
-covered, so `hi.sh` — which builds the entire remote script out of heredocs —
-reads far too high, reporting 100% for two connect functions the fast suites
-never call.
+[Test Badge Disclaimer](docs/TESTING.md#coverage-and-profiling)
 
 **One config directory to rule them all, uniting all shells from all hosts!**
 
@@ -144,7 +136,7 @@ normally, not the GIF cut short.
   (`_hi_read_lines` in `common/core.sh` does that job), no associative arrays,
   no namerefs, no `${x,,}`. Enforced twice: `tests/lint/shellcheck_test.sh`
   greps for those constructs, and `tests/targets/ssh_test.sh` runs a real bash
-  3.2 container target and fails on so much as one shell error.
+  3.2 container target to test this.
 - **Target**: `base64` for ssh targets (effectively everywhere — coreutils,
   busybox, macOS/BSD); nothing extra for container/alloc/pod targets. `bash`
   gets the full experience; without it `hi` still lands you in the best shell
@@ -156,8 +148,7 @@ normally, not the GIF cut short.
 ## Installation/Usage
 
 - `say-hi/scripts/install.sh`, or `hi --install` once hi is on your `PATH` —
-  the same script either way. Re-run it any time; it repairs its own lines,
-  even if say-hi moved. Before touching your shell rc files it validates
+  the same script either way. Before touching your shell rc files it validates
   whichever of `~/.bashrc`, `~/.zshrc` and `~/.config/fish/config.fish` are
   installed, each with that shell's own syntax checker, and asks whether to
   continue if any have issues
@@ -205,29 +196,13 @@ normally, not the GIF cut short.
   - run `hi --packages-preview` to see what each priority means, the colors it
     renders installed and missing packages in, one real example of each from
     your own file, and the check itself as a connect will print it
-- say `hi`!
-- [optional] modify `say-hi/misc/*` and `say-hi/shells/*` in your checkout to
-  your liking —
-  though anything with an overlay (`settings.sh`, `colors`, `packages`,
-  `aliases.sh`) is better edited in `~/.config/say-hi/`, which
-  keeps the checkout clean for `hi --update`
-  - tip: the tree is a git checkout, so if you do edit it, push to your own
-    fork and clone that on your next device — same setup everywhere, kept in
-    sync by `hi --update`
 - done with it? `say-hi/scripts/uninstall.sh`, or `hi --uninstall`, is the
   install's inverse: it strips hi's lines back out of your rc files, removes
   the `settings.sh` it wrote, and unlinks `/usr/bin/hi`. It leaves the `say-hi`
   directory alone, and your `colors`/`packages` too — delete those yourself if
   you want them gone
 
----
-
 Usage: `hi foo` (just like ssh!)
-
----
-
-Reminder — place local only changes after the "`# hi-config-end`" comment in
-the local files.
 
 ## Configuration
 
@@ -254,7 +229,7 @@ shell you land in and what is left behind — is
 ### Hostname, username, and group/tag colors
 
 Every username and hostname gets a color deterministically derived from its
-name — nothing to generate, nothing that can go missing. To pin one instead,
+name. To pin a specific color instead,
 add a line to `say-hi/misc/colors` (`username,root,red` /
 `hostname,prod-db,yellow` / `hosttag,desktop,green`); `hosttag` entries match
 the _leftmost_ tag in a `# Tags: ...` comment directly above a `Host` or
@@ -331,10 +306,8 @@ developer already using `ssh`/`docker`/`kubectl` most likely works.
 
 ## say-hi and the alternatives
 
-How say-hi compares to `sshrc`, `xxh`, `kyrat`, `sshdot` and `homeshick`, which
-adjacent tools compose with it rather than compete, what actually makes it
-different, and where another tool is the better choice:
-[docs/ALTERNATIVES.md](docs/ALTERNATIVES.md).
+How say-hi compares to similar tools, what the differences are, and when you
+want to use something else. See [docs/ALTERNATIVES.md](docs/ALTERNATIVES.md).
 
 ### Compatibility
 
@@ -355,6 +328,18 @@ and prints a colored pass/fail summary; `--group fast` is what CI runs on every
 push/PR. The runbook — all four suite groups, the parallel container cases, the
 lint gate, relaying, `_HI_HOME`, and why the tests are local-only — is in
 [docs/TESTING.md](docs/TESTING.md).
+
+### Coverage and Profiling
+
+Both coverage badges are grey because neither number can be taken at face value,
+and neither gates anything: **kcov** loses its `DEBUG` trap the moment the test
+harness is sourced, so it counts only what ran while things were loading and
+reads far too low — `common/git_prompt.sh` shows 2.56% with seventeen cases
+passing against it. **bashcov** reads bash's own `xtrace` instead and gets that
+same file right at 92.68%, but it counts every line of a _heredoc body_ as
+covered, so `hi.sh` — which builds the entire remote script out of heredocs —
+reads far too high, reporting 100% for two connect functions the fast suites
+never call.
 
 ## More docs
 

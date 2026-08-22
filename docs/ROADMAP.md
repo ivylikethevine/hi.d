@@ -69,101 +69,13 @@ within each section, smallest first. The scope is what the work _is_, not how
 long it takes: "one CI run" and "a backend across seven files" are the useful
 distinction, and a guessed number of days is not.
 
-Read across the sections, the shape today is: [Demos](#demos) and all but one
-entry under [Testing & CI](#testing--ci) are observations waiting on a run that
-no file here can trigger; [The session itself](#the-session-itself) is the work
-that moves the product, in increasing order of how much of the tree it touches;
-and [Project docs](#project-docs) is work that moves no code at all, which is
-why it sits last rather than first.
+Read across the sections, the shape today is: every section is down to a single
+entry. [The session itself](#the-session-itself) holds the only one with code
+left to write - and it is the largest thing on this page; [Testing &
+CI](#testing--ci), [Demos](#demos) and [Project docs](#project-docs) are each an
+observation waiting on a run or a release that no file here can trigger.
 
 ### The session itself
-
-- [ ] **Work through the second wave of target candidates** — _scope: research
-      and prose, about a dozen verdict rows; no code unless one comes back yes._
-      [TARGETS.md](TARGETS.md) settled the runtimes that had been suggested
-      before it existed, and `lxc`/`incus` is the one row it left open. This is
-      the list of everything _not_ on it: candidates nobody has ruled on yet,
-      with a first read on each. It is an evaluation to finish, not a plan to
-      build — most of these should end up as "decided against" rows, and the
-      entry ticks either way.
-
-  The bar is the one TARGETS.md states: a row earns a yes by being something
-  people **sit in**, not by being reachable, because every backend on the
-  roster costs a fork on every `hi <target>` and every TAB (GLOSSARY: HI.26) on
-  machines that have none of it.
-
-  - **Not backends at all — naming layers over what already ships.** The
-    cheapest wins here, if they are wins: they cost no probe, because the
-    runtime underneath is already on the roster.
-    - **`docker compose` service names.** People think in `web`/`db`, not in
-      `myproject-web-1`. `docker compose ps -q <service>` resolves one to a
-      container hi already answers to. The open question is where it belongs:
-      a lister in `common/targets.sh` so TAB offers both names, or nothing at
-      all if the container name is close enough.
-    - **devcontainers / VS Code dev containers.** Already reachable today, on
-      exactly the distrobox precedent — they are docker containers, so the
-      docker row finds them by name. Worth a TARGETS.md row saying so rather
-      than a backend.
-  - **Genuinely new backends, roughly in order of how real the audience is.**
-    - **`adb shell` (Android).** The best fit on this list: `adb shell`,
-      `adb push`, `adb devices` map onto `_hi_container_cmds`' probe/cp/attach
-      triple almost exactly, the CLI is one binary on every platform hi runs
-      on, and a debuggable device is a full Linux userland people genuinely sit
-      in. The catch is what lands there — a Toybox/Android shell, so the
-      no-bash tier, and `$HOME` semantics that are not a normal Unix home.
-    - **AWS ECS Exec** (`aws ecs execute-command --interactive`). Real audience
-      and a real exec shape, but the name is a cluster/task/container triple
-      rather than one word, and it needs the Session Manager plugin installed
-      beside the CLI. Closer to nomad's `alloc/task` split than to docker's.
-    - **Slurm** (`srun --pty bash`). The HPC row. Whether it is a target at all
-      is the question: `srun` _allocates_ rather than attaches, so `hi` would
-      be queueing a job, not connecting to a machine — and the thing people
-      want a styled shell on is usually the login node, which is already an
-      ordinary ssh host.
-    - **`multipass`, Vagrant, Codespaces** (`multipass shell`,
-      `vagrant ssh`, `gh codespace ssh`). All three end in ssh, so they are
-      arguably already answered the way TARGETS.md answers AWS SSM and
-      `gcloud compute ssh` — a `Host` entry away. Confirm that, and if it
-      holds, they are one collected row rather than three candidates.
-    - **Docker Swarm services**, **Azure Container Instances**
-      (`az container exec`), **`systemd-run`/portable services**. Listed for
-      completeness; none has shown an audience that sits in them.
-  - **Rows that are interesting because they are "no".** A verdict with a
-    reason is the deliverable, and these are the ones people will ask about:
-    **Talos Linux** and other shell-less immutable distributions (there is no
-    shell to style, by design); **serial consoles** (`picocom`, `virsh
-    console`) and **telnet**, where there is no file transfer channel at all,
-    so the payload cannot land; **WinRM / PowerShell Remoting**, which is the
-    same bash-only answer README's compatibility table already gives.
-  - **Ticks when:** every candidate above has a row in
-    [TARGETS.md](TARGETS.md) with a verdict and a reason, and each "yes" that
-    is not built has its own entry here.
-
-- [ ] **Investigate LXC/LXD (or Incus) as a target** — _scope: a decision; then,
-      if it is yes, a backend across the seven places TARGETS.md lists, plus a
-      fixture the self-hosted runner does not have yet._ The one container
-      runtime with a real audience that hi does not answer to, and the only open
-      row on [TARGETS.md](TARGETS.md), which carries both the case for it and
-      that checklist.
-
-  - **Which binary, and is it one backend or two.** LXD ships `lxc exec <name>
-    -- <cmd>`; Incus, the LinuxContainers fork, ships `incus exec` with the
-    same shape. They are the same integration twice over, and picking "both"
-    means two rows everywhere, not one with a fallback — decide before writing
-    any of it.
-  - **The cost is paid by machines that do not have it.** `_hi_resolve_backend`
-    runs every predicate in parallel on every `hi <target>`, and `targets.sh`
-    probes every backend on every TAB (GLOSSARY: HI.26). A fifth backend is a
-    fifth process on both hot paths; check the `command -v` guard actually
-    short-circuits before adding one, and re-run `--group bench`.
-  - **The fixture is the hard part.** Every existing backend suite stands up
-    its target from a container image; LXD/Incus wants a real daemon and a
-    storage pool on the runner, which is a self-hosted-box change, not a
-    Dockerfile. A suite that can only ever skip is worth less than no suite.
-  - **Ticks when:** the answer is written down either way — TARGETS.md's row
-    stops saying "open". If it is yes, the binary is named, the backend is in
-    `_HI_BACKENDS`, and its suite is in `_HI_TESTS` — even if it skips
-    everywhere but the self-hosted box.
 
 - [ ] **Persistent sessions on a disposable target** — _scope: the largest entry
       here. It changes cleanup semantics on both paths, needs a findable tree
@@ -235,42 +147,6 @@ why it sits last rather than first.
   - **Ticks when:** the job has been green once, ci.yml calls it on push, and
     README's Windows client row reads ✅ instead of 🟡.
 
-- [ ] **Collapse the coverage tooling to the half that is honest** — _scope:
-      mostly deletion — one script, one workflow, one badge and a paragraph out;
-      one `.simplecov` filter in._ Two scripts, two workflows, two README badges
-      and a section of [TESTING.md](TESTING.md) exist to publish two numbers
-      that this repo separately tells you not to believe, in three places. Both
-      badges are deliberately grey and read `load-time` and `heredoc-inflated`
-      rather than `coverage`. That is honest, and it is also the argument for
-      not carrying them.
-
-  - **The two failure modes are not equally fixable**, which is what makes this
-    a deletion rather than a repair. kcov loses its `DEBUG` trap the moment the
-    harness is sourced, so its figure describes what ran while things were
-    _loading_ — `common/git_prompt.sh` at 2.56% with seventeen cases passing
-    against it. Nothing in this checkout can reach that; it is where kcov reads
-    a bash script from.
-  - **bashcov is wrong in a bounded way.** It reads bash's own `xtrace`, gets
-    that same file right at 92.68%, and correctly reads 0 for an uncalled
-    function. It counts every line of a **heredoc body** as covered, so the
-    files that generate scripts read high — `hi.sh` at 97.38%, with `_say_hi`
-    and `_say_hi_container` both reporting 100% for 182 lines nothing in
-    `--group fast` calls. TESTING.md already names the believable set
-    (`common/`, `shells/`, `misc/`), which is the filter this entry writes down.
-  - **What the commit is.** A `.simplecov` filter scoping `coverage_v2.sh` to
-    the files without heredocs, so the aggregate means something; then
-    `tests/coverage.sh`, `.github/workflows/coverage.yml`, the kcov badge and
-    its half of README's disclaimer paragraph come out, and TESTING.md's
-    _Coverage and profiling_ loses the "read both or neither" framing it only
-    needs while there are two.
-  - **Neither gates anything, and neither should start.** The point is one
-    number a reader can act on instead of two that each need a disclaimer — not
-    a threshold. `docs/TESTING.md`'s "don't write tests to move those figures"
-    survives this entry unchanged.
-  - **Ticks when:** one coverage script and one workflow remain, the surviving
-    badge's number is one the docs do not have to apologise for, and README
-    carries a single coverage badge.
-
 ### Demos
 
 - [ ] **Shed the seven committed demo GIFs** — _scope: one commit, gated on
@@ -299,10 +175,9 @@ why it sits last rather than first.
 
 ### Project docs
 
-Work addressed to people rather than to the product: what a release says it
-changed, what a contributor is told before they open a pull request, and how
-much of the front page is reference material. None of it moves a line of `hi`,
-and all of it is what somebody meets first.
+Work addressed to people rather than to the product. It moves no line of `hi`,
+and it is what somebody meets first — which is why what is left here is the one
+half that cannot be written in advance: what a release says it changed.
 
 - [ ] **Say what changed in a release** — _scope: shipped; waits on a real
       release to prove it._ say-hi ships to deb, rpm, apk and Homebrew, and
@@ -328,58 +203,6 @@ and all of it is what somebody meets first.
     [Get a release out under branch
     protection](#repo-settings-and-first-runs), like everything else that needs
     a real tag.
-
-- [ ] **A `CONTRIBUTING.md`, and issue/PR templates** — _scope: three short
-      files, mostly links to docs that already exist._ `.github/` holds
-      workflows, a composite action and dependabot config, and nothing
-      addressed to a person. The conventions are real and written down — the
-      `_HI_HOME` rule, where a suite lives, the bash 3.2 floor, the `GLOSSARY:`
-      tag discipline — but they live in `CLAUDE.md`, which is addressed to
-      agent sessions. Somebody opening their first pull request has no
-      equivalent.
-
-  - **Short, and mostly a signpost.** [TESTING.md](TESTING.md) already carries
-    the runbook and [GLOSSARY.md](GLOSSARY.md) the idioms; what is missing is
-    the page that says _read those two, run `--group fast`, and here is the
-    bash 3.2 floor_. Anything longer will drift out of step with the files it
-    is summarising.
-  - **It also moves a Scorecard check.** The
-    [Scorecard badge](#repo-settings-and-first-runs) entry lists three checks a
-    solo maintainer cannot move; CII-Best-Practices is not one of them, because
-    a contribution guide is part of what it reads for. That entry has been
-    corrected to say so, and the judgement it is waiting on should be made
-    after this one lands rather than before.
-  - **Ticks when:** a `CONTRIBUTING.md` exists, the templates are in
-    `.github/`, and neither restates what TESTING.md or GLOSSARY.md already
-    say.
-
-- [ ] **Finish the README split** — _scope: two sections moved, plus the
-      anchors and the contents block that point at them._ The front page is
-      down to two sections that are reference material rather than a pitch:
-      **How it works**, and **Built from/with/in mind** with its four backend
-      subsections. _Regenerating the demo GIFs_ and _Verifying a release
-      download_ have already gone to [PACKAGING.md](PACKAGING.md); these are
-      what is left of the same argument.
-
-  - **Where each goes.** _How it works_ is the mechanism behind the config
-    overlay it currently sits under, so [CONFIGURATION.md](CONFIGURATION.md).
-    _Built from/with/in mind_ is a per-backend account of what hi does on the
-    other end, which is [TARGETS.md](TARGETS.md)'s subject — and TARGETS.md
-    already carries the verdict rows those four sections describe the
-    implementation of.
-  - **The links are the work**, not the prose. Both are linked from inside
-    README and from the compatibility table, and relative anchors that resolve
-    on the Pages site 404 on github.com — the same trap the
-    [demo GIF entry](#demos) names. Every inbound link moves with the section.
-  - **Not a rule about length.** The test is whether a section answers "should
-    I use this" or "how does this work"; the second kind is what `docs/` is
-    for. Nothing here is deleted, and nothing shipped changes — every comment
-    in the tree is stripped out of the payload on the way to a target
-    (GLOSSARY: HI.35), so prose density in the code is not the same question
-    and is not part of this entry.
-  - **Ticks when:** both sections are in `docs/`, README's contents block and
-    every inbound link point at their new homes, and no link 404s on
-    github.com.
 
 ## Outside this repo
 

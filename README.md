@@ -51,7 +51,6 @@ _Don't `ssh`ush your hosts, say `hi`!_
 - [Installation/Usage](#installationusage)
 - [Configuration](#configuration)
   - [Hostname, username, and group/tag colors](#hostname-username-and-grouptag-colors)
-  - [How it works](#how-it-works)
 - [Built from/with/in mind](#built-fromwithin-mind)
   - [Docker / Podman containers](#docker--podman-containers)
   - [Nomad allocations](#nomad-allocations)
@@ -243,6 +242,15 @@ environment variable hi reads (`_HI_SHELL_PREFERENCE`, `_HI_PROMPT`,
 `_HI_ASCII`, `_HI_HEADER_GHZ`, ...) — is in
 [docs/CONFIGURATION.md](docs/CONFIGURATION.md).
 
+**_IMPORTANT: Local-only changes MUST stay in `~/.bashrc`, `~/.zshrc`,
+`~/.config/fish/config.fish`, etc. — anything in
+`${XDG_CONFIG_HOME:-$HOME/.config}/say-hi/` is copied to every host you say
+`hi` to._**
+
+How a session actually gets there — what is packed, how it travels, which
+shell you land in and what is left behind — is
+[How it works](docs/CONFIGURATION.md#how-it-works) there too.
+
 ### Hostname, username, and group/tag colors
 
 Every username and hostname gets a color deterministically derived from its
@@ -252,58 +260,6 @@ add a line to `say-hi/misc/colors` (`username,root,red` /
 the _leftmost_ tag in a `# Tags: ...` comment directly above a `Host` line in
 `~/.ssh/config`. `hi --color-preview` shows what every ssh host and your user
 currently resolve to, in their actual colors.
-
-### How it works
-
-1. `hi.sh` runs on the client, tars `say-hi/` and sends it to the target, which
-   unpacks it into a `/tmp` directory. `$_HI_PAYLOAD` at the top of `hi.sh` is
-   the authoritative allow list — no `.git`, `scripts/`, `tests/`, `docs/` or
-   CI. Your overlay (see [Configuration](#configuration)) follows in a second,
-   much smaller archive, landing in a `config/` of its own so your `aliases.sh`
-   stays additive. A target that already has its own `say-hi` gets neither: hi
-   loads that tree in place and it reads its own overlay.
-2. Both are base64-armored into one script and written over the **stdin** of an
-   ssh connection the session then reuses — not argv, which Linux caps at 128KB
-   however big `ARG_MAX` says it is. Every shell file is comment-stripped on
-   the way into that archive — the checkout keeps its comments, the wire does
-   not, which is about 40% of it; set `_HI_KEEP_COMMENTS=1` to ship the tree
-   verbatim when you need to read the real source on a target.
-3. That assembled script is what `hi` prints the size of on connect, and what
-   the payload badge measures — for a _default_ configuration, since a client
-   whose overlay turns off the editor overrides or the OSC 52 clipboard sends
-   less. Read it as the per-session wire cost, not as the package badge beside
-   it: that one is what a release downloads and what it occupies on disk, which
-   is the larger figure, `scripts/` and the docs shipping in a package and
-   never over the wire.
-4. On the target, `load.sh` prints the header, appends hi's shell configs to
-   the host's own rc files, and drops you into **your login shell** when hi
-   styles it (bash, zsh, fish), else the best the target has of
-   `$_HI_SHELL_TREE` — `fish > zsh > bash > dash > ash > sh`.
-   `_HI_SHELL_PREFERENCE` is that rule as a setting. Where there is no bash at
-   all the choice comes from `$_HI_SHELL_LADDER`, that same list with bash
-   taken out.
-5. On exit, `load.sh`'s `trap` strips those additions back out and the `/tmp`
-   directory is removed.
-6. `hi <target> 'some command'` skips the session and runs the command there
-   instead, the way `ssh` does.
-
-The bootstrap is plain POSIX `sh`, so a target with no `bash` still gets a
-session — the best plain shell it has, with the aliases loaded, rather than the
-full `load.sh`. For ssh targets hi first checks, over the same connection so it
-costs no extra authentication, whether a permanent say-hi is already there; if
-so it uses that in place and copies nothing. It does not assume `~/say-hi`: the
-check reads the `_HI_HOME` line `install.sh` wrote into that target's login rc
-files (or `/etc/profile.d` for a packaged install), then falls back to the home
-directory, and finally to the places an install lands when nothing declared it —
-`~/.local/share`, `/usr/local/share`, `/opt`, `/usr/share` and Homebrew's
-default keg prefixes, which is what finds a `brew install`ed target that never
-had its shells wired up. A tree installed anywhere is still found and reused.
-`hi --doctor` prints the wire size and the unpacked size, labeled.
-
-**_IMPORTANT: Local-only changes MUST stay in `~/.bashrc`, `~/.zshrc`,
-`~/.config/fish/config.fish`, etc. — anything in
-`${XDG_CONFIG_HOME:-$HOME/.config}/say-hi/` is copied to every host you say
-`hi` to._**
 
 ## Built from/with/in mind
 
@@ -380,62 +336,15 @@ different, and where another tool is the better choice:
 
 ### Compatibility
 
-Two questions, because hi answers them at two different moments.
-**Legend:** ✅ exercised by a suite on every run · 🟡 expected to work, nobody
-has proven it · ⚠️ works, reduced · ❌ not supported.
+Two questions, because hi answers them at two different moments: **can hi land a
+session on that OS at all**, and **what shell do you end up in** once it has.
+Both are answered with a table, a legend and what proves each row, in
+[docs/SUPPORTED.md](docs/SUPPORTED.md) — along with the targets hi reaches and
+what a "yes" costs it to add one.
 
-**1. The target's OS** — can hi land a session there at all?
-
-| target OS                                     | result                                                                                                                                                    | proven by                                                                                   |
-| --------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| Linux, glibc (Debian/Ubuntu/Fedora/Arch…)     | ✅ full session                                                                                                                                           | `tests/targets/ssh_test.sh`, on Debian bookworm                                             |
-| Linux, musl + busybox (Alpine…)               | ✅ full session with `bash` installed, ⚠️ aliases-only without                                                                                            | `ssh_test.sh`, on Alpine 3.24                                                               |
-| macOS                                         | 🟡 full session — bash 3.2 is what it ships, and the suite runs a real bash 3.2 target; the client half (BSD `sed`/`mktemp`/`base64`) is unit-tested only | `ssh_test.sh` bash-3.2 case; `.github/workflows/macos-e2e.yml` is written but has never run |
-| WSL                                           | 🟡 it is Linux, and the `.deb` installs into it unchanged                                                                                                 | —                                                                                           |
-| Windows, with Git Bash/Cygwin/MSYS2 on `PATH` | 🟡 full session, same code path as any ssh host                                                                                                           | `.github/workflows/windows-client.yml` (client side) and `windows-e2e.yml` (target side), both written, neither run yet |
-| Windows, stock OpenSSH (`cmd.exe`/PowerShell) | ⚠️ plain PowerShell session, no hi styling — the fallback is deliberate, not a failure                                                                    | `windows-e2e.yml`, the target-side half above, never run                                    |
-| \*BSD, Solaris/illumos                        | 🟡 nothing in hi is Linux-specific past the header's `/proc` probes, which degrade to `?`                                                                 | —                                                                                           |
-
-**2. The shell you end up _in_** — what hi hands you once it is on the target.
-
-| session shell                                    | result                                                                | note                                                                                                                                                                                                                                                                                           |
-| ------------------------------------------------ | --------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `bash` ≥ 3.2                                     | ✅ full: header, prompt, git status, aliases, editor configs          | 3.2 is the floor because macOS still ships it                                                                                                                                                                                                                                                  |
-| `zsh`                                            | ✅ full                                                               | `shells/zsh.zsh`                                                                                                                                                                                                                                                                               |
-| `fish`                                           | ✅ full                                                               | `shells/config.fish`                                                                                                                                                                                                                                                                           |
-| `sh`/`dash`/`ash` (no bash on the target)        | ⚠️ aliases and a colored `user@host` prompt, with a warning saying so | no header and no git segment - those need bash                                                                                                                                                                                                                                                 |
-| `nushell`, `elvish`, `xonsh`, `ion`, `oil`/`osh` | ❌ **decided against**, not pending                                   | see the table below. You still get a session — hi lands you in the best of `$_HI_SHELL_TREE` the target has                                                                                                                                                                                    |
-| PowerShell                                       | ❌                                                                    | bash-only by design                                                                                                                                                                                                                                                                            |
-
-**Shells hi does not style, and why that is settled.** Each would need its own
-rc in `shells/` (prompt, aliases, completion) plus a tier in the fallback
-ladder in `hi.sh`'s `_hi_remote_suffix` and `load.sh`'s `load()`.
-
-| shell        | status                          | why                                                                                                                                                                                                                                                                                                                                                                  |
-| ------------ | ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `elvish`     | **decided against**             | its own language, so the prompt and aliases would be a second implementation to keep in sync forever, for an audience hi has no evidence of. A `shells/rc.elv` is what it would take, and nobody has asked                                                                                                                                                           |
-| `xonsh`      | **decided against**             | Python — a third implementation, on the same terms as elvish and with the same answer                                                                                                                                                                                                                                                                                |
-| `tcsh`/`csh` | **decided against**             | different rc syntax _and_ no `$ENV` equivalent, so there is no hook to land on at all: it would need its own rc and its own delivery mechanism                                                                                                                                                                                                                       |
-| `nushell`    | **decided against**             | Nu is not POSIX, so it can source none of `common/`                                                                                                                                                                                                                                                                                                                  |
-| `ksh`/`mksh` | **decided against** | they land in the `sh` tier like any other bash-less shell - aliases and the colored prompt, no header. A ksh-specific tier once existed for the sake of a live git segment; it was removed as not worth a second POSIX implementation to keep in sync |
-| PowerShell   | not a POSIX shell               | the greeting hi prints there is the whole extent of it                                                                                                                                                                                                                                                                                                               |
-
-Using one of these as a _login_ shell still works, and always did — hi lands
-you in the best of `$_HI_SHELL_TREE` the target actually has. Only the
-_session_ shell is limited, and only for the three above.
-
-**If you use a shell framework**, hi lands you in your own login shell, so it
-loads normally — that is what `_HI_SHELL_PREFERENCE`'s default (`login`, then
-the styled head of `$_HI_SHELL_TREE`: `fish zsh bash`) means.
-`tests/targets/framework_test.sh` tests oh-my-zsh, powerlevel10k, starship and
-bash-it against hi, each asserting the session comes up with no shell errors
-and that hi neither changed zsh's array base under them nor dropped their
-`PROMPT_COMMAND`.
-
-**Both tables above assume hi can reach the target in the first place.** What it
-can reach - and the verdict on every runtime weighed and left off the roster,
-LXC/Incus, `systemd-nspawn`, WSL, `nerdctl`, jails, zones and the rest - is
-[docs/TARGETS.md](docs/TARGETS.md).
+The other half of the same question — every OS, shell, runtime, packaging
+channel and feature weighed and answered **no**, each with the argument attached
+— is [docs/UNSUPPORTED.md](docs/UNSUPPORTED.md).
 
 ## Testing
 
@@ -449,8 +358,10 @@ lint gate, relaying, `_HI_HOME`, and why the tests are local-only — is in
 
 - [docs/CONFIGURATION.md](docs/CONFIGURATION.md) — the config overlay, every
   feature toggle and environment variable hi reads
-- [docs/TARGETS.md](docs/TARGETS.md) — every target hi answers to, every one
-  weighed and left off, and why each answer is settled
+- [docs/SUPPORTED.md](docs/SUPPORTED.md) — every target hi answers to, which
+  target OSes land a full session, and which shell you end up in
+- [docs/UNSUPPORTED.md](docs/UNSUPPORTED.md) — every runtime, shell, packaging
+  channel and feature answered **no**, and the argument for each answer
 - [docs/ALTERNATIVES.md](docs/ALTERNATIVES.md) — sshrc, xxh, kyrat, sshdot and
   homeshick side by side; what makes say-hi different, and when another tool is
   the better choice
@@ -467,6 +378,9 @@ lint gate, relaying, `_HI_HOME`, and why the tests are local-only — is in
   demo GIFs are regenerated
 - [docs/ROADMAP.md](docs/ROADMAP.md) — what is planned, what each item is
   blocked on, and the one-time setup the release channels wait on
+- [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) — the gate to run before a pull
+  request, the constraints a review will bounce on, and which doc changes with
+  what
 
 ## AI Usage
 

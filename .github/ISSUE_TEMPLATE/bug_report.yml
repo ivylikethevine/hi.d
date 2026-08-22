@@ -1,0 +1,91 @@
+name: Bug report
+description: Something hi did that it should not have, or did not do that it should
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Nothing exploitable here, please — [docs/SECURITY.md](https://github.com/ivylikethevine/say-hi/blob/main/docs/SECURITY.md#reporting-a-vulnerability)
+        has the two private channels for that.
+
+        hi runs on two machines at once, so the useful bug report says which end
+        misbehaved. `hi --doctor` answers most of that on its own.
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you saw, and what you expected instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: How to reproduce
+      description: The exact `hi` command, and anything about the target that matters.
+      placeholder: |
+        hi my-host
+        # the target is a Debian 11 box with no fish, logging in as a non-root user
+      render: shell
+    validations:
+      required: true
+
+  - type: dropdown
+    id: backend
+    attributes:
+      label: Which kind of target
+      options:
+        - ssh
+        - docker
+        - podman
+        - nomad
+        - kubernetes
+        - a local shell (no target)
+        - something else / not sure
+    validations:
+      required: true
+
+  - type: textarea
+    id: doctor
+    attributes:
+      label: "`hi --doctor` output"
+      description: >-
+        From the machine you typed `hi` on. Add `hi --doctor <target>` too if the
+        problem is on the far end. Redact hostnames freely — what matters is the
+        versions, the tiers and the sizes.
+      render: text
+    validations:
+      required: true
+
+  - type: input
+    id: client
+    attributes:
+      label: The machine you typed `hi` on
+      description: OS, and the shell you were in.
+      placeholder: macOS 15.5, fish 4.0 (bash 3.2 as /bin/bash)
+    validations:
+      required: true
+
+  - type: input
+    id: target
+    attributes:
+      label: The target, if you know
+      description: OS and login shell on the far end.
+      placeholder: Alpine 3.21, ash, no bash installed
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: checked
+    attributes:
+      label: Before you send it
+      options:
+        - label: >-
+            This is not an exploitable security issue (those go to
+            docs/SECURITY.md's private channels instead).
+          required: true
+        - label: >-
+            If this is about a target hi does not answer to, I checked
+            docs/UNSUPPORTED.md — it may already carry a verdict and a reason.
+          required: false

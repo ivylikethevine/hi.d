@@ -220,7 +220,7 @@ server and the containers on it that is the feature, and nothing else in this
 space does it.
 
 **2. It degrades in stated tiers rather than failing or lying.** The
-[compatibility tables](../README.md#compatibility) answer two questions — can hi
+[compatibility tables](SUPPORTED.md) answer two questions — can hi
 land a session here at all, and what shell do you end up in — and mark every
 cell proven-by-a-suite, expected, reduced, or unsupported. A target
 with no bash gets aliases, a colored prompt, and a warning saying so; a Windows

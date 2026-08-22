@@ -136,6 +136,30 @@ jobs:
         with:
           persist-credentials: false
 
+      # generate.sh's roster (the top of that file) names what each tape needs,
+      # and it is not only the backends: a tape that opens `Set Shell zsh` wants
+      # that shell on the *renderer*, and a missing one is a vhs error rather
+      # than a clean stand-down. docker, podman, kind and kubectl are what the
+      # self-hosted box is for; these three are not, and --require-run below
+      # turns each missing one into a failed tape (docker and kube want zsh,
+      # podman wants fish, complete wants both fish and nomad).
+      #
+      # The same three ci.yml's backends job installs, by the same route, for
+      # the same machine - neither job may assume the other has run, and apt is
+      # idempotent when one has.
+      - name: Install zsh, fish and nomad
+        run: |
+          set -euo pipefail
+          # gpg unprivileged, `sudo` only for the write - see the identical
+          # step in ci.yml for why `sudo gpg` cannot work in an Actions step
+          curl -sSfL https://apt.releases.hashicorp.com/gpg |
+            gpg --batch --yes --dearmor |
+            sudo tee /usr/share/keyrings/hashicorp-archive-keyring.gpg >/dev/null
+          echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" |
+            sudo tee /etc/apt/sources.list.d/hashicorp.list >/dev/null
+          sudo apt-get update && sudo apt-get install -y zsh fish nomad
+          nomad version
+
       - name: Install vhs, ttyd and ffmpeg
         uses: charmbracelet/vhs-action@f6d7db07a432fcd3b06772628d36a57f96d95dcf # v2.1.1
         with:

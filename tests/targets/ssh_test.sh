@@ -7,8 +7,8 @@
 # loads it in place rather than shipping a tree, and the same install at a
 # non-default path, which only _hi_remote_root's rc-reading probe can find;
 # bash-less alpine with only zsh
-# with only fish, and with only mksh, for the fallback tiers the plain alpine
-# image never reaches; and that same install plus tmux, for --tmux. The debian base comes
+# and with only fish, for the fallback tiers the plain alpine
+# image never reaches. The debian base comes
 # from test_lib.sh's _hi_sshd_image, shared with ssh_disconnect_test.sh.
 #
 # GLOSSARY: HI.30 + HI.34
@@ -21,66 +21,6 @@ source "${_HI_TEST_LIB:-${BASH_SOURCE[0]%/*}/../test_lib.sh}"
 # "<label>=<0|1>" through test_lib.sh's _hi_kv_get/_hi_kv_set rather than an
 # associative array, which is bash 4 (macOS ships 3.2)
 _HI_ALPINE_OK=""
-
-# _hi_post_check <label> <container> <cmd> - the extra assertion a case can
-# make inside its own container once the session verdict is in. Empty <cmd>
-# passes. ssh-specific, so it lives here rather than in tests/lib/; it goes
-# through $_HI_BACKEND like the rest of the harness, where the two copies it
-# replaces both said `docker` outright.
-function _hi_post_check() {
-  local label="$1" name="$2" post="$3"
-  [ -n "$post" ] || return 0
-  "${_HI_BACKEND:-docker}" exec "$name" sh -c "$post" >/dev/null 2>&1 && return 0
-  _hi_h3 " | [$label] -- post-check FAILED: $post" "$RED"
-  return 1
-}
-
-# <label> <image> <login_shell> <cmd> [post] [extra-marker...] - anything past
-# $5 is handed to _hi_case_result as a further must-appear transcript marker
-# (the same variadic contract _hi_run_ksh_git_case uses for the branch name)
-function _hi_run_case() {
-  local label="$1" image="$2" login_shell="$3" cmd="$4" post="${5:-}" name exit_code=0 t0 t1 ok=0
-  # the container's mapped port, owned by this case: _hi_sshd_container assigns
-  # into this frame, so a case running beside it connects to its own sshd and
-  # greps the process table by its own port
-  local _HI_SSH_PORT=""
-
-  name="hi-sshtest-$label-$$"
-  _hi_h3 "Testing login shell: $label ($login_shell)"
-  t0="$(_hi_now)"
-
-  _hi_sshd_container "$name" "$image" -e "LOGIN_SHELL=$login_shell" || return 1
-
-  _hi_cecho " | Running: $_HI_LAUNCHER -p $_HI_SSH_PORT hitest@127.0.0.1 $cmd"
-  _hi_ssh_launch "$_HI_SSH_PORT"
-  # Backgrounded and waited on rather than a bare command substitution: a
-  # target that never returns has to fail this case, not hang the suite. A
-  # one-line mistake in the fallback rc left the `nobash` case sitting in a
-  # command substitution for 36 minutes before anyone noticed, because there
-  # was nothing here to stop it. 124 is _hi_wait_pid's timeout status.
-  #
-  # `<&3` is load-bearing and belongs with the _hi_pty_stdin call in
-  # run_ssh_tests below - the two only work as a pair (see _hi_pty_stdin in
-  # test_lib.sh). Backgrounding is exactly what takes stdin away: with job
-  # control off, bash points a background job's fd 0 at /dev/null no matter
-  # what ours was, `ssh -t` then can't allocate a pty, and a remote
-  # `bash --rcfile` with no tty is not interactive - so it ignores the rcfile
-  # outright and every case that hands off to bash fails with no output past
-  # hi's connect prefix.
-  local out_file="$_HI_WORKDIR/$label.ssh.out"
-  "${_HI_SSH_LAUNCH[@]}" "$cmd" <&3 >"$out_file" 2>&1 &
-  _hi_wait_pid "$!" "${_HI_SSH_CASE_TIMEOUT:-90}"
-  exit_code="$_HI_WAIT_EXIT"
-  t1="$(_hi_now)"
-
-  if _hi_case_result "$label" "ssh path" "$exit_code" "$t0" "$t1" "$out_file" "$_HI_TEST_MARKER" "${@:6}"; then
-    ok=1
-    _hi_post_check "$label" "$name" "$post" || ok=0
-  fi
-
-  _hi_rm_container "$name"
-  [ "$ok" -eq 1 ]
-}
 
 function _hi_run_interactive_case() {
   local label="$1" image="$2" login_shell="$3" post="${4:-}" name ok=0
@@ -96,126 +36,6 @@ function _hi_run_interactive_case() {
     ok=1
     _hi_post_check "$label" "$name" "$post" || ok=0
   fi
-
-  _hi_rm_container "$name"
-  [ "$ok" -eq 1 ]
-}
-
-# `hi --tmux <target>`: the session runs inside a named tmux on the target, and
-# the whole point of it is that a dropped connection detaches rather than losing
-# the work. So this case does not drive an interactive session at all - it
-# starts one, waits for the tmux session to exist, *kills the client*, and
-# asserts the session is still there afterwards. Nothing short of that actually
-# tests the promise.
-#
-# The target is the pre-installed image plus tmux, since load.sh refuses --tmux
-# on a disposable tree - a detached tmux would outlive the tree it reads.
-function _hi_tmux_session_listed() {
-  docker exec -u hitest "$1" tmux ls 2>/dev/null | grep -q "^hi:"
-}
-
-function _hi_run_tmux_case() {
-  local name="hi-sshtest-tmux-$$" ok=0 session_pid out cut
-  local _HI_SSH_PORT=""
-  local -a launch
-
-  _hi_h3 "Testing interactive session: tmux (--tmux, permanent install)"
-  _hi_sshd_container "$name" "hi-sshtest-debian-tmux-$$" -e "LOGIN_SHELL=/bin/bash" || return 1
-  _hi_ssh_launch "$_HI_SSH_PORT"
-  # --tmux goes after the launcher and before the target: _hi_parse takes hi's
-  # own flags anywhere ahead of the first bare word
-  launch=("${_HI_SSH_LAUNCH_BARE[0]}" --tmux "${_HI_SSH_LAUNCH_BARE[@]:1}")
-  out="$_HI_WORKDIR/tmux.interactive.out"
-  cut="$_HI_WORKDIR/tmux.cut"
-  : >"$out"
-  rm -f "$cut"
-
-  # Held open rather than fed an `exit`: this session is meant to be
-  # interrupted, not ended politely. What holds it open waits on $cut - a file
-  # touched below the instant the client has been killed - rather than on a
-  # flat `sleep 120`, because `wait` on a background *pipeline* waits for every
-  # process in it: a sleep still counting down after the client it was holding
-  # open for is dead sat here for its full two minutes, which was 120s of this
-  # suite's 157 (the other 22 cases take about a second each). Same 120s
-  # ceiling, reached only if the kill never happens.
-  # TERM is pinned rather than inherited: tmux refuses to start on a terminal
-  # whose terminfo has no `clear`, and `dumb` is exactly such an entry - so
-  # running this suite from a dumb terminal (CI, an editor pane, an agent
-  # session) failed the case with "open terminal failed: terminal does not
-  # support clear" and no fault of hi's. hi passes `dumb` through on purpose
-  # (it is in _HI_TERM_FALLBACK's allow list), which is right for a shell and
-  # useless for tmux. The term-* cases below vary TERM deliberately; this one
-  # is asserting that a session survives a dropped connection, so it holds the
-  # terminal still.
-  # shellcheck disable=SC2094 # separate processes; the reader only polls
-  { _hi_poll_bool 480 0.25 test -f "$cut" || true; } |
-    TERM=xterm-256color "${_HI_PTY_FORCED[@]}" "${launch[@]}" >"$out" 2>&1 &
-  session_pid=$!
-
-  if _hi_poll_bool 60 0.5 _hi_tmux_session_listed "$name"; then
-    kill -9 "$session_pid" 2>/dev/null || true
-    : >"$cut"
-    wait "$session_pid" 2>/dev/null || true
-    # the session outlived the client that started it, which is the feature
-    if _hi_poll_bool 20 0.5 _hi_tmux_session_listed "$name"; then
-      ok=1
-      _hi_align " | [tmux] -- the session survived the dropped connection" "OK" "$GREEN"
-    else
-      _hi_h3 " | [tmux] -- the tmux session died with the client" "$RED"
-    fi
-  else
-    kill -9 "$session_pid" 2>/dev/null || true
-    : >"$cut"
-    wait "$session_pid" 2>/dev/null || true
-    _hi_h3 " | [tmux] -- no tmux session was ever created" "$RED"
-    sed 's/^/      /' "$out" | tail -5
-  fi
-
-  _hi_rm_container "$name"
-  [ "$ok" -eq 1 ]
-}
-
-# The bash-less ksh/mksh tier's git segment (shells/ksh.sh), which is the one
-# thing in hi's prompt that has to be recomputed per line without bash around.
-# It has to be an *interactive* case: the command-shaped nobash-ksh case above
-# goes through $CMDARG and never draws a prompt at all.
-#
-# The login directory is made the repo rather than cd-ing into one, so the very
-# first prompt already carries the segment and the driver stays the shared one.
-# The branch name is the assertion: a pty echoes back everything typed, and
-# nothing types this, so finding it in the transcript means mksh expanded
-# $(_hi_ksh_git) while drawing the prompt.
-function _hi_run_ksh_git_case() {
-  local image="$1" name="hi-sshtest-kshgit-$$" branch="hi-ksh-probe" ok=0
-  local _HI_SSH_PORT=""
-
-  _hi_h3 "Testing the mksh tier's git segment"
-  _hi_sshd_container "$name" "$image" -e "LOGIN_SHELL=/bin/ash" || return 1
-
-  # identity and safe.directory passed with -c rather than written by
-  # `git config`: the exec runs as root inside a directory owned by hitest,
-  # which is exactly the dubious-ownership case git refuses to write config in
-  if ! docker exec "$name" sh -c "
-    G=\"git -c safe.directory=/home/hitest -c user.email=test@example.com -c user.name=Test -C /home/hitest\"
-    \$G init -q -b $branch . &&
-    echo tracked > /home/hitest/tracked.txt &&
-    \$G add tracked.txt &&
-    \$G commit -qm initial &&
-    chown -R hitest:hitest /home/hitest" >/dev/null 2>&1; then
-    _hi_h3 " | [kshgit] -- could not build the probe repo" "$RED"
-    _hi_rm_container "$name"
-    return 1
-  fi
-
-  _hi_ssh_launch "$_HI_SSH_PORT"
-
-  # The shared driver, with its knobs turned for this tier: no bash means the
-  # session never reaches load.sh, so there is no "hi closing" to wait for -
-  # the echoed marker is the closing line instead - and the branch name is the
-  # extra assertion: nothing types it, so it is in the transcript only because
-  # mksh expanded $(_hi_ksh_git) to draw the prompt.
-  _hi_interactive_case -c "$_HI_TEST_MARKER-INTERACTIVE" -m "$branch" \
-    kshgit "mksh git segment" "$_HI_TEST_MARKER" 90 "${_HI_SSH_LAUNCH_BARE[@]}" && ok=1
 
   _hi_rm_container "$name"
   [ "$ok" -eq 1 ]
@@ -293,10 +113,9 @@ function run_ssh_tests() {
   _hi_sshd_image "its shells" || _HI_DEBIAN_OK=0
 
   # "+" separates extra packages, not a space: the specs are split on
-  # whitespace by the loop itself. The mksh image carries git because it is the
-  # only one whose prompt has a live git segment to render (shells/ksh.sh).
+  # whitespace by the loop itself.
   _HI_SSH_IMAGES=()
-  for _hi_img in alpine: alpine-zsh:zsh alpine-fish:fish alpine-ksh:mksh+git; do
+  for _hi_img in alpine: alpine-zsh:zsh alpine-fish:fish; do
     _hi_label="${_hi_img%%:*}"
     _hi_ctx="$_HI_WORKDIR/$_hi_label"
     mkdir -p "$_hi_ctx"
@@ -337,15 +156,6 @@ function run_ssh_tests() {
     _hi_build_image debian-nested "hi-sshtest-debian-nested-$$" "the non-default install path case" \
       --build-arg "BASE=$_HI_SSHD_IMAGE" \
       -f "$(_hi_dockerfile installed-nested)" "$_HI_ROOT" && _HI_NESTED_OK=1
-  fi
-
-  # the same permanent install, plus tmux, for the --tmux case below
-  _HI_TMUX_OK=0
-  if [ "$_HI_INSTALLED_OK" -eq 1 ]; then
-    mkdir -p "$_HI_WORKDIR/debian-tmux"
-    _hi_build_image debian-tmux "hi-sshtest-debian-tmux-$$" "the --tmux case" \
-      --build-arg "BASE=hi-sshtest-debian-installed-$$" \
-      -f "$(_hi_dockerfile installed-tmux)" "$_HI_WORKDIR/debian-tmux" && _HI_TMUX_OK=1
   fi
 
   _HI_TEST_MARKER="HI_SSH_TEST_OK"
@@ -399,15 +209,12 @@ function run_ssh_tests() {
   fi
 
   for _hi_case_spec in nobash:alpine:ssh_fallback nobash-zsh:alpine-zsh:ssh_fallback \
-    nobash-fish:alpine-fish:ssh_fallback_fish nobash-ksh:alpine-ksh:ssh_fallback; do
+    nobash-fish:alpine-fish:ssh_fallback_fish; do
     IFS=: read -r _hi_label _hi_image _hi_shape <<<"$_hi_case_spec"
     if [ "$(_hi_kv_get _HI_ALPINE_OK "$_hi_image")" = 1 ]; then
       _hi_par_case "$_hi_label" _hi_run_case "$_hi_label" "hi-sshtest-$_hi_image-$$" /bin/ash "$(_hi_probe_cmd "$_HI_TEST_MARKER" "$_hi_shape")"
     fi
   done
-
-  [ "$(_hi_kv_get _HI_ALPINE_OK alpine-ksh)" = 1 ] &&
-    _hi_par_case kshgit _hi_run_ksh_git_case "hi-sshtest-alpine-ksh-$$"
 
   if [ "$_HI_BASH32_OK" -eq 1 ]; then
     _hi_par_case bash32 _hi_run_case bash32 "hi-sshtest-bash32-$$" /usr/local/bin/bash "$(_hi_probe_cmd "$_HI_TEST_MARKER" bash)"
@@ -464,14 +271,6 @@ function run_ssh_tests() {
       "$(_hi_probe_cmd "$_HI_TEST_MARKER" installed_nested)" "" 'local say-hi install'
   fi
 
-  if [ "$_HI_TMUX_OK" -eq 1 ]; then
-    if [ "${#_HI_PTY_FORCED[@]}" -eq 0 ]; then
-      _hi_skip "[tmux]" "no python3 to drive an interactive pty"
-    else
-      _hi_par_case tmux _hi_run_tmux_case
-    fi
-  fi
-
   if [ "$_HI_DEBIAN_OK" -eq 1 ]; then
     # the mirror image: a tree hi *did* ship over has to be gone afterwards,
     # so the guard above can't be satisfied by never cleaning up at all
@@ -500,8 +299,8 @@ function run_ssh_tests() {
   # the alpine tags come from the build loop above, so a variant added there
   # is cleaned up without a second list to remember
   docker image rm -f "${_HI_SSH_IMAGES[@]}" \
-    "hi-sshtest-bash32-$$" "hi-sshtest-debian-installed-$$" "hi-sshtest-debian-nested-$$" \
-    "hi-sshtest-debian-tmux-$$" >/dev/null 2>&1 || true
+    "hi-sshtest-bash32-$$" "hi-sshtest-debian-installed-$$" \
+    "hi-sshtest-debian-nested-$$" >/dev/null 2>&1 || true
 
   _hi_suite_end "" \
     "hi's ssh path survived every login shell tested ($_HI_TOTAL cases)" \

@@ -231,7 +231,7 @@ function doctor_target() {
 function _hi_doctor_probe_snippet() {
   # shellcheck disable=SC2016 # "$c" is the target shell's variable, not ours -
   # expanding it here is exactly what must not happen
-  printf 'for c in base64 bash %s tmux vim git; do command -v "$c" >/dev/null 2>&1 && printf "%%s " "$c"; done' "$_HI_SHELL_LADDER"
+  printf 'for c in base64 bash %s vim git; do command -v "$c" >/dev/null 2>&1 && printf "%%s " "$c"; done' "$_HI_SHELL_LADDER"
 }
 
 # The container half, and deliberately the same shape as doctor_ssh_target: what

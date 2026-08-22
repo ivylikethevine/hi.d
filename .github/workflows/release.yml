@@ -16,13 +16,14 @@ on:
         required: false
         default: "0.0.0"
 
-# read-only by default; only the gated publish job gets `contents: write`
+# read-only by default; only the gated publish job gets write scopes
 permissions:
   contents: read
 
 # Serialized, never cancelled: two tags pushed close together would otherwise
-# race the publish job's manifest push to main. Waiting on the environment
-# approval costs nothing here - that wait doesn't count against job timeouts.
+# each open a manifest PR against main from the other's base. Waiting on the
+# environment approval costs nothing here - that wait doesn't count against job
+# timeouts.
 concurrency:
   group: release
   cancel-in-progress: false
@@ -218,6 +219,7 @@ jobs:
     environment: release
     permissions:
       contents: write
+      pull-requests: write
     steps:
       # hands the persistent self-hosted workspace back to the runner user, so
       # checkout's own cleanup can always finish - see docs/PACKAGING.md
@@ -266,8 +268,59 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+          # The body is two halves: what changed, then how to check it.
+          #
+          # The notes half is generated rather than hand-kept - docs/ROADMAP.md
+          # deletes finished entries because git history is the ledger, and this
+          # is the one place that ledger has to be *published*, since `git log`
+          # is not something a `brew upgrade` reaches.
+          #
+          # Asking the API for the notes and composing the body here, rather
+          # than passing --generate-notes and --notes together, is what fixes
+          # the order: gh appends the generated notes *after* --notes, which
+          # would put the checklist above the thing a reader opened the release
+          # for. --jq .body on a POST to generate-notes returns the same
+          # markdown --generate-notes would have used.
+          notes="$(gh api --method POST \
+            "repos/$GITHUB_REPOSITORY/releases/generate-notes" \
+            -f tag_name="$GITHUB_REF_NAME" --jq .body 2>/dev/null || true)"
+          [ -n "$notes" ] || notes="_Release notes could not be generated for this tag._"
+          # The checklist half. Every command here is the one docs/PACKAGING.md
+          # documents under "Verifying a release download", and the public key is
+          # *read out of that file* rather than copied: one more literal copy of
+          # it in the tree is one more thing that can drift silently, and a
+          # verification line telling you the wrong key is worse than no line.
+          pubkey="$(sed -n "s/^minisign -Vm SHA256SUMS -P '\([^']*\)'.*/\1/p" \
+            docs/PACKAGING.md | head -n1)"
+          [ -n "$pubkey" ] ||
+            { echo "no minisign public key in docs/PACKAGING.md - did that section move?" >&2; exit 1; }
+          # Only advertise the signature check when a signature actually shipped:
+          # the signing step above no-ops without MINISIGN_SECRET_KEY, and
+          # telling a reader to verify a .minisig that is not on the release
+          # would send them looking for a missing file.
+          if [ -f dist/SHA256SUMS.minisig ]; then
+            sigline="minisign -Vm SHA256SUMS -P '$pubkey'"
+          else
+            sigline="# SHA256SUMS is unsigned for this release - no minisign check"
+          fi
+          # printf rather than a heredoc: a heredoc body would have to be
+          # unindented, which ends the YAML block scalar this step is.
+          body="$(printf '%s\n' \
+            "$notes" \
+            "" \
+            "## Verifying this download" \
+            "" \
+            "The sums cover every file here, the source tarball included." \
+            "" \
+            '```sh' \
+            "sha256sum -c --ignore-missing SHA256SUMS" \
+            "$sigline" \
+            "gh attestation verify say-hi_*_all.deb --repo $GITHUB_REPOSITORY" \
+            '```' \
+            "" \
+            "Full runbook: [docs/PACKAGING.md](https://github.com/$GITHUB_REPOSITORY/blob/main/docs/PACKAGING.md#verifying-a-release-download)")"
           gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 ||
-            gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --generate-notes
+            gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --notes "$body"
           # The manifests ride along with the packages so that updating the AUR
           # and the tap is a copy rather than a re-derivation of the same sums.
           # the package list comes from mkpkg.sh's dist/ARTIFACTS; read line by
@@ -278,17 +331,27 @@ jobs:
           [ -f dist/SHA256SUMS.minisig ] && files+=(dist/SHA256SUMS.minisig)
           gh release upload "$GITHUB_REF_NAME" --clobber "${files[@]}"
 
-      # Committing the regenerated manifests here - after the human gate - is
+      # Bringing the regenerated manifests back here - after the human gate - is
       # what lets the tag stay put: they are consumed from the AUR/tap repos,
       # not from inside the tarball, so they needn't be in the tagged tree.
-      # the one checkout that keeps its credentials: the step below pushes to
-      # main with them (every other checkout sets persist-credentials: false)
+      #
+      # A PR, not a direct push, on the tap job's precedent below: `main`
+      # requires a pull request and refuses a direct push, which is the whole
+      # point of the rule and worth keeping without an exception. The release
+      # does not wait on the merge - the tap and aur jobs read the manifests out
+      # of the `packages` artifact, not out of `main`, so the only thing the PR
+      # gates is the copy this repo keeps for the next release to diff against.
+      #
+      # the one checkout that keeps its credentials: the step below pushes a
+      # branch with them (every other checkout sets persist-credentials: false)
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1 # zizmor: ignore[artipacked]
         with:
           ref: main
           path: main
 
-      - name: Commit the manifests to main
+      - name: Open the manifest PR against main
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           cp dist/manifests/PKGBUILD main/packaging/aur/say-hi/PKGBUILD
@@ -296,14 +359,27 @@ jobs:
           cp dist/manifests/say-hi.rb main/packaging/homebrew/say-hi.rb
           cd main
           if git diff --quiet; then
-            echo "manifests already current on main - nothing to commit"
+            echo "manifests already current on main - nothing to open"
             exit 0
           fi
+          branch="manifests-$GITHUB_REF_NAME"
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$branch"
           git add packaging/aur/say-hi/PKGBUILD packaging/aur/say-hi/.SRCINFO packaging/homebrew/say-hi.rb
           git commit -m "packaging: manifests for $GITHUB_REF_NAME"
-          git push origin main
+          git push origin "$branch"
+          # Built with printf rather than a heredoc - a heredoc's body would have
+          # to be unindented, which ends the YAML block scalar this step is.
+          body="$(printf '%s\n' \
+            "Regenerated packaging manifests for say-hi $GITHUB_REF_NAME." \
+            "" \
+            "Opened by the release workflow after the publish gate. The packages" \
+            "and the tap/AUR jobs read these from the release artifact, so" \
+            "nothing is waiting on this merge - it keeps the in-repo copy" \
+            "current for the next release to diff against.")"
+          gh pr create --head "$branch" --base main \
+            --title "packaging: manifests for $GITHUB_REF_NAME" --body "$body"
 
   # The tap half of "publishing each channel", automated: copying one formula
   # into a GitHub repo is a push, and a push is a job. It stays behind the same

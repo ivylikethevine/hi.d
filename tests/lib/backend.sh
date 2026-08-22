@@ -100,7 +100,7 @@ function _hi_container_backend_test() {
   # cannot follow (the name is a string there)
   local shell shell_ok=""
   local -a built_images=()
-  for shell in zsh fish mksh; do
+  for shell in zsh fish dash; do
     # an empty context: alpine-shell.Dockerfile has no COPY, and the build
     # still wants a directory to be handed
     mkdir -p "$_HI_WORKDIR/$shell"
@@ -127,7 +127,7 @@ function _hi_container_backend_test() {
   _hi_par_case bash _hi_backend_case bash debian:bookworm-slim "$(_hi_probe_cmd "$_HI_TEST_MARKER" bash)"
   _hi_par_case bash-interactive _hi_backend_interactive_case bash-interactive debian:bookworm-slim
   local spec
-  for spec in zsh:fallback fish:fallback_fish mksh:fallback; do
+  for spec in zsh:fallback fish:fallback_fish dash:fallback; do
     shell="${spec%%:*}"
     if [ "$(_hi_kv_get shell_ok "$shell")" = 1 ]; then
       _hi_par_case "$shell" _hi_backend_case "$shell" "hi-${backend}test-$shell-$$" "$(_hi_probe_cmd "$_HI_TEST_MARKER" "${spec#*:}")"

@@ -57,7 +57,7 @@ _HI_PAYLOAD=(common misc shells load.sh hi.sh)
 # It lands in a config/ of its own rather than over misc/: misc/aliases.sh
 # sources $_HI_CONFIG_DIR/aliases.sh last, so one directory would make it
 # source itself forever.
-_HI_OVERLAY_FILES=(settings.sh colors packages tmux.conf aliases.sh)
+_HI_OVERLAY_FILES=(settings.sh colors packages aliases.sh)
 
 # What a bash-less target falls back to, best first: core.sh's $_HI_SHELL_TREE
 # minus bash (a missing bash is this ladder's precondition), derived so the two
@@ -80,9 +80,32 @@ function _hi_armored_line() {
   printf 'echo "%s" | %s %s %s' "$($_HI_ARMOR)" "$_HI_UNARMOR" "$1" "$2"
 }
 
+# _hi_shquote <var> <value> - <value> as one single-quoted sh word, into <var>.
+#
+# Everything this file bakes into a script for the target is text the target's
+# shell will parse, and some of it is data rather than code: $DOMAIN comes off
+# argv, $_HI_TARGET_TAG out of a free-text `# Tags:` comment in ~/.ssh/config,
+# $_HI_RELEASE off `git describe --dirty`. A `$`, a quote or a backtick in any
+# of them used to land in the generated script unescaped - a bootloader that no
+# longer parses, and a command substitution the target would run. _hi_ssh_sh
+# quotes its `sh -c` word through here too, so the transports cannot drift
+# into two dialects.
+function _hi_shquote() {
+  local _s="$2" _o=""
+  # A hand loop rather than the ${2//.../...} spelling: bash 3.2 - the floor,
+  # and the bash macOS ships - leaves the quoting of the replacement word in
+  # the result, so that spelling emits a word no sh can parse. Prefix and
+  # suffix removal answer the same on every bash there is.
+  while [ "${_s#*\'}" != "$_s" ]; do
+    _o="$_o${_s%%\'*}'\\''"
+    _s="${_s#*\'}"
+  done
+  printf -v "$1" "'%s'" "$_o$_s"
+}
+
 # The client-derived env both transports export into the session, one
-# NAME<TAB>value pair per line: the ssh preamble renders `export NAME="v"`,
-# the container path folds them into one `sh -c "export ..."` string
+# NAME<TAB>value pair per line: both render `NAME='v'`, the ssh preamble behind
+# an `export` each, the container path folded into one `sh -c "export ..."`
 function _hi_session_env() {
   printf '_HI_TARGET\t%s\n' "$DOMAIN"
   printf '_HI_TARGET_COLOR\t%s\n' "$(_hi_target_color)"
@@ -90,8 +113,6 @@ function _hi_session_env() {
   printf '_HI_LOCAL_USER\t%s\n' "$(_hi_whoami)"
   printf '_HI_LOCAL_HOSTNAME\t%s\n' "$(_hi_hostname)"
   printf '_HI_RELEASE\t%s\n' "$(_hi_version)"
-  printf '_HI_TMUX_ATTACH\t%s\n' "${_HI_TMUX_ATTACH:-0}"
-  printf '_HI_TMUX_SESSION\t%s\n' "${_HI_TMUX_SESSION:-hi}"
   # the client's glyph verdict, not the target's: see _hi_ascii_flag
   printf '_HI_ASCII\t%s\n' "${_HI_ASCII:-$(_hi_ascii_flag)}"
   # the client's no-color choice travels the same way (nothing when unset,
@@ -173,7 +194,7 @@ AWK
 #
 # misc/aliases.sh is deliberately NOT trimmed under _HI_DISABLE_ALIASES=1: that
 # toggle turns off the *personal* aliases, while the same file installs the
-# vim/nano, hi_copy and tmux aliases and fish's toggle backstop above its own
+# vim/nano and hi_copy aliases and fish's toggle backstop above its own
 # early return. Dropping it would take those too - a behaviour change wearing a
 # size saving's clothes. The two that are trimmed are safe because every
 # consumer of shells/osc52.sh tests the file exists first (misc/aliases.sh's
@@ -218,23 +239,32 @@ function _hi_payload_tar() {
   # Staged, because the strip rewrites files and the tree is not ours to touch.
   # The tar|tar pair rather than cp -R: it reuses the exclusion list above
   # exactly, and -h resolves the symlinks so the stage holds real files.
+  #
+  # All of it inside a subshell so the cleanup can be a trap rather than an rm
+  # on each way out: a ^C between the mktemp and the last of those - which is a
+  # normal thing to do while a slow payload builds - used to leave the stage in
+  # the client's tmp. The subshell is what makes the trap safe; set in this
+  # function's own shell it would replace the one _hi installed for its error
+  # log. INT and TERM are spelled out because a signal that kills the subshell
+  # outright never reaches the EXIT trap.
   local stage f tmp
-  stage="$(mktemp -d -t hi.stage.XXXXXX)" || return 1
-  tar cf - -h ${excl[@]+"${excl[@]}"} -C "$_HI_HOME" "${_HI_PAYLOAD[@]/#/say-hi/}" |
-    tar xf - -C "$stage" || {
-    rm -rf "$stage"
-    return 1
-  }
-  _hi_strip_awk >"$stage/strip.awk"
-  tmp="$stage/strip.out"
-  # _hi_write_back, not mv: mktemp's mode would land on the file and hi.sh has
-  # to stay executable - the target's probe tests `[ -x .../hi.sh ]`.
-  # GLOSSARY: HI.09
-  while IFS= read -r f; do
-    awk -f "$stage/strip.awk" "$f" >"$tmp" && _hi_write_back "$tmp" "$f"
-  done < <(find "$stage/say-hi" -type f \( -name '*.sh' -o -name '*.zsh' -o -name '*.fish' \))
-  tar czf - -C "$stage" say-hi
-  rm -rf "$stage"
+  (
+    stage="$(mktemp -d -t hi.stage.XXXXXX)" || exit 1
+    trap 'rm -rf "$stage"' EXIT
+    trap 'exit 130' INT
+    trap 'exit 143' TERM
+    tar cf - -h ${excl[@]+"${excl[@]}"} -C "$_HI_HOME" "${_HI_PAYLOAD[@]/#/say-hi/}" |
+      tar xf - -C "$stage" || exit 1
+    _hi_strip_awk >"$stage/strip.awk"
+    tmp="$stage/strip.out"
+    # _hi_write_back, not mv: mktemp's mode would land on the file and hi.sh has
+    # to stay executable - the target's probe tests `[ -x .../hi.sh ]`.
+    # GLOSSARY: HI.09
+    while IFS= read -r f; do
+      awk -f "$stage/strip.awk" "$f" >"$tmp" && _hi_write_back "$tmp" "$f"
+    done < <(find "$stage/say-hi" -type f \( -name '*.sh' -o -name '*.zsh' -o -name '*.fish' \))
+    tar czf - -C "$stage" say-hi
+  )
 }
 
 # The walker's rc 2 means "known host, no tag"; only 1 means not in the config.
@@ -292,9 +322,10 @@ _HI_BACKENDS=(
 # Run <script> on $DOMAIN through `sh -c`, with ssh's own flags in "$@"
 # GLOSSARY: HI.18 - fish-shaped login shells, and quoting over %q
 function _hi_ssh_sh() {
-  local script="$1"
+  local script="$1" q
   shift
-  ssh "$@" "${SSHARGS[@]}" "$DOMAIN" "sh -c '${script//\'/\'\\\'\'}'"
+  _hi_shquote q "$script"
+  ssh "$@" "${SSHARGS[@]}" "$DOMAIN" "sh -c $q"
 }
 
 # _hi_ctl_open <persist-secs> [ssh-opts...] - a fresh ControlMaster socket into
@@ -314,9 +345,10 @@ function _hi_ctl_close() {
 
 # The sh script _hi_remote_root runs on the target: the path of a permanent
 # say-hi there, or nothing. Candidates come from what install.sh wrote into the
-# login rc files, read as *files* (`sh -c` over ssh sources none of them),
-# then $HOME. Its own function so a suite can run it without an ssh hop.
-# GLOSSARY: HI.33 - the candidate order, the two seds, and what `--tmux` gets
+# login rc files, read as *files* (`sh -c` over ssh sources none of them), then
+# $HOME, then the locations an install lands in when nothing announced it. Its
+# own function so a suite can run it without an ssh hop.
+# GLOSSARY: HI.33 - the candidate order and the two seds
 # from it. The unwrapping sed's `-e` order matters: one pattern space in
 # sequence, so the comment strip goes first, addressed to unquoted lines - after
 # unquoting it would eat a `#` from inside the quotes.
@@ -327,7 +359,9 @@ _c=$(for _f in "$HOME/.bashrc" "$HOME/.zshrc" "$HOME/.config/fish/config.fish" /
 done | sed -e '/^"/!s/[[:space:]]*#.*$//' -e 's/^"\([^"]*\)".*$/\1/' -e 's/[[:space:]]*$//')
 IFS='
 '
-for _h in $_c "$HOME"; do
+for _h in $_c "$HOME" "$HOME/.local/share" /usr/local/share /opt /usr/share \
+  "$HOME/.linuxbrew/opt/say-hi/libexec" /home/linuxbrew/.linuxbrew/opt/say-hi/libexec \
+  /opt/homebrew/opt/say-hi/libexec /usr/local/opt/say-hi/libexec; do
   [ -n "$_h" ] || continue
   [ -x "$_h/say-hi/hi.sh" ] && [ -f "$_h/say-hi/common/paths.sh" ] && {
     printf "%s" "$_h/say-hi"
@@ -400,22 +434,26 @@ function _hi_ladder_probe() {
     "$_HI_SHELL_LADDER" "$1"
 }
 
-# A prompt for the bash-less tiers (sh, ash, dash, ksh, mksh - fish and zsh get
-# their own rc), baked on the client; $1 = "git" adds the live segment only
-# _hi_remote_suffix's ksh/mksh arm asks for.
-# GLOSSARY: HI.21 - why baked, and the quoting trick
+# A prompt for the bash-less tiers (sh, ash, dash - fish and zsh get their own
+# rc), baked on the client.
+# GLOSSARY: HI.21 - why baked
 function _hi_fallback_prompt() {
-  local host="${DOMAIN##*@}" nc git=""
+  local host="${DOMAIN##*@}" nc
   [ "${_HI_DISABLE_PROMPT:-0}" = 1 ] && return 0
-  # the fragment closes the double-quoted run, adds a single-quoted one, and
-  # reopens it - "…"'$(_hi_ksh_git)'" …" is one word to the shell
-  [ "${1:-}" = git ] && git="\"'\$(_hi_ksh_git)'\""
+  # The host is display text, not a value, and it lands *inside* the double
+  # quotes of the PS1 below - so the four characters that would end or re-open
+  # that quoting are escaped rather than quoted away. A target named with a `$`
+  # has to render, not break the rc it is being written into.
+  host="${host//\\/\\\\}"
+  host="${host//\$/\\\$}"
+  host="${host//\`/\\\`}"
+  host="${host//\"/\\\"}"
   # _hi_color_escape already emits real escapes; only $NC is a literal to expand
   printf -v nc '%b' "$NC"
   printf '_hi_u=$(id -un 2>/dev/null || echo "${USER:-?}")\n'
-  printf 'PS1=" %s${_hi_u}%s@%s%s%s%s %s "\n' \
+  printf 'PS1=" %s${_hi_u}%s@%s%s%s %s "\n' \
     "$(_hi_user_escape)" "$nc" "$(_hi_color_escape "$(_hi_target_color)")" \
-    "$host" "$nc" "$git" "$(_hi_prompt_end SH)"
+    "$host" "$nc" "$(_hi_prompt_end SH)"
 }
 
 function _hi_size() {
@@ -479,21 +517,26 @@ function _hi_version() {
 # _hi_env_each <printf-format> - _hi_session_env's NAME<TAB>value pairs through
 # <format>, name then value. Both transports render the same stream in
 # different shapes, so the tab contract is stated once, not in two loops.
+#
+# The value arrives already quoted by _hi_shquote, so a format takes it bare
+# (`%s=%s`, never `%s="%s"`): quoting is one decision made here rather than a
+# dialect per transport, where one of the two would eventually be the one that
+# forgot.
 function _hi_env_each() {
-  local n v
+  local n v q
   while IFS=$'\t' read -r n v; do
+    _hi_shquote q "$v"
     # shellcheck disable=SC2059 # the format is ours, not user data
-    printf "$1" "$n" "$v"
+    printf "$1" "$n" "$q"
   done < <(_hi_session_env)
 }
 
 function _hi_env_exports() {
-  _hi_env_each '      export %s="%s"\n'
+  _hi_env_each '      export %s=%s\n'
 }
 
-# The bit both _say_hi branches need first; tmux lines settle only "asked for?"
-# - the rest is load.sh's question. Everything expands on the client: no
-# backtick or unescaped $( ) below, not even inside a comment.
+# The bit both _say_hi branches need first. Everything expands on the client:
+# no backtick or unescaped $( ) below, not even inside a comment.
 function _hi_remote_preamble() {
   cat <<REMOTE
       _hi_now() { d=\$(date +%s.%N 2>/dev/null); case "\$d" in *N*|'') date +%s ;; *) printf '%s' "\$d" ;; esac; }
@@ -531,7 +574,7 @@ function _hi_remote_suffix() {
       else
         _hi_fallback=sh
         $(_hi_ladder_probe '_hi_fallback="$_hi_s"')
-        printf '%s no bash on [$DOMAIN], dropping into plain %s w/ aliases only %s\n' "$hi_esc" "\$_hi_fallback" "$nc_esc" >&2
+        printf '%s no bash on [%s], dropping into plain %s w/ aliases only %s\n' "$hi_esc" "\$_HI_TARGET" "\$_hi_fallback" "$nc_esc" >&2
         $(_hi_fallback_rc | _hi_armored_line '>' '"$_hi_rc_dir/.hi_fallback_rc"')
         case "\$_hi_fallback" in
         zsh)
@@ -539,14 +582,6 @@ function _hi_remote_suffix() {
           ZDOTDIR="\$_hi_rc_dir" zsh -i
           ;;
         fish) fish -C "\$(cat "\$_hi_rc_dir/.hi_fallback_rc")" ;;
-        # ksh/mksh read \$ENV as sh does, sharing the rc; on top they get
-        # shells/ksh.sh and the live git segment (both expand \$( ) at prompt
-        # time, which busybox ash cannot). Header stays bash-only.
-        ksh | mksh)
-          printf '%s\n' '. \$_HI_ROOT/shells/ksh.sh' >> "\$_hi_rc_dir/.hi_fallback_rc"
-          $(_hi_fallback_prompt git | _hi_armored_line '>>' '"$_hi_rc_dir/.hi_fallback_rc"')
-          ENV="\$_hi_rc_dir/.hi_fallback_rc" "\$_hi_fallback" -i
-          ;;
         # sh/dash/ash; the prompt is appended here, not in the shared rc,
         # which also feeds fish (no PS1) and zsh (different \$ escape)
         *)
@@ -564,8 +599,10 @@ REMOTE
 # _hi_wire_estimate assemble one shape rather than two kept in step. (The
 # permanent-install branch stays inline in _say_hi; nothing else builds it.)
 function _hi_remote_middle() {
+  local tmpl
+  _hi_shquote tmpl "$(_hi_whoami).hi.XXXXXX"
   cat <<REMOTE
-      export _HI_HOME=\$(mktemp -d -t $(_hi_whoami).hi.XXXXXX) # busybox mktemp needs exactly six X
+      export _HI_HOME=\$(mktemp -d -t $tmpl) # busybox mktemp needs exactly six X
       export _HI_ROOT=\$_HI_HOME/say-hi
       export _HI_CONFIG_DIR=\$_HI_ROOT/config
       export _HI_CLEANUP=\$_HI_HOME
@@ -655,9 +692,9 @@ $(_hi_remote_suffix)"
   # armoring the whole thing again cost a third of every session for nothing.
   # GLOSSARY: HI.19 - the argv cap, and why it must be two calls
   if printf '%s\n' "$script" | ssh "${ctl_opts[@]}" "${SSHARGS[@]}" "$DOMAIN" \
-    "sh -c 'command -v base64 >/dev/null 2>&1 && mkdir -m 700 $boot_tmp && cat > $boot_tmp/bootloader'" 2>/dev/null; then
+    "sh -c 'command -v base64 >/dev/null 2>&1 && mkdir -m 700 \"$boot_tmp\" && cat > \"$boot_tmp/bootloader\"'" 2>/dev/null; then
     ssh -t "${ctl_opts[@]}" "${SSHARGS[@]}" "$DOMAIN" \
-      "sh $boot_tmp/bootloader; rm -rf $boot_tmp" || ec=$?
+      "sh \"$boot_tmp/bootloader\"; rm -rf \"$boot_tmp\"" || ec=$?
   else
     ssh -t "${ctl_opts[@]}" "${SSHARGS[@]}" "$DOMAIN" \
       powershell -NoLogo -NoExit -Command \
@@ -710,10 +747,13 @@ function _hi_container_cmds() {
 function _say_hi_container() {
   local label="$1" tmp="$2" copy_start="$3"
   local shell_end root fallback exit_code size prefix tarball env_kv
-  local ksh_git=""
   local -a probe cp attach
   _hi_container_cmds "$label"
 
+  # A literal /tmp on purpose: this path is created inside the *container*, so
+  # the client's $TMPDIR has nothing to say about it. Mode 700 at creation, the
+  # way the ssh path's own scratch directory is made (see _say_hi's boot_tmp) -
+  # a bare `mkdir -p` left it on whatever umask the image happens to carry.
   root="/tmp/$(_hi_whoami).hi.log.$$"
   shell_end="$(_hi_now)"
 
@@ -723,47 +763,30 @@ function _say_hi_container() {
     [ -n "$fallback" ] || return 1
     _hi_cecho " no bash in [$DOMAIN], skipping hi config -> plain $fallback w/ aliases" "$YELLOW"
 
-    if ! "${cp[@]}" sh -c "mkdir -p '$root' && cat > '$root/aliases.sh'" <"$_HI_ALIASES" 2>"$tmp"; then
+    if ! "${cp[@]}" sh -c "mkdir -m 700 -p '$root' && cat > '$root/aliases.sh'" <"$_HI_ALIASES" 2>"$tmp"; then
       _hi_cecho " failed to copy aliases.sh into [$DOMAIN]" "$BRRED"
       "${attach[@]}" "$fallback"
       return $?
     fi
 
-    # personal.sh rides along, for the same reason ksh.sh does below: this path
-    # ships files rather than the tree, and aliases.sh's `. $_HI_ROOT/misc/
-    # personal.sh` has nothing to resolve against here. Sourced by absolute
-    # path out of the fallback rc instead. Skipped when the overlay turned the
-    # personal aliases off, so this arm trims exactly what _hi_payload_tar does.
+    # personal.sh rides along because this path ships files rather than the
+    # tree, and aliases.sh's `. $_HI_ROOT/misc/personal.sh` has nothing to
+    # resolve against here. Sourced by absolute path out of the fallback rc
+    # instead. Skipped when the overlay turned the personal aliases off, so
+    # this arm trims exactly what _hi_payload_tar does.
     if [ "$(_hi_overlay_toggle _HI_DISABLE_ALIASES)" != 1 ] && [ -f "$_HI_ROOT/misc/personal.sh" ]; then
       "${cp[@]}" sh -c "cat > '$root/personal.sh'" <"$_HI_ROOT/misc/personal.sh" 2>"$tmp" || true
     fi
-
-    # ksh/mksh get the live git segment as on the ssh path - but that path has
-    # the whole tree there, and this one ships aliases.sh alone, so the segment
-    # has to be copied too
-    case "$fallback" in
-    ksh | mksh)
-      "${cp[@]}" sh -c "cat > '$root/ksh.sh'" <"$_HI_ROOT/shells/ksh.sh" 2>"$tmp" &&
-        ksh_git=1
-      ;;
-    esac
 
     # the shared fallback rc in its aliases-only shape, plus the POSIX prompt
     # for the shells that can parse it - the ssh path's `*)` rule, applied
     # while the file is written rather than in a second `exec` round trip
     {
       _hi_fallback_rc --aliases-only "$root"
-      if [ -n "$ksh_git" ]; then
-        # after the rc's verdict exports, which shells/ksh.sh reads for its
-        # glyphs and colors
-        printf '. %s/ksh.sh\n' "$root"
-        _hi_fallback_prompt git
-      else
-        case "$fallback" in
-        zsh | fish) ;;
-        *) _hi_fallback_prompt ;;
-        esac
-      fi
+      case "$fallback" in
+      zsh | fish) ;;
+      *) _hi_fallback_prompt ;;
+      esac
     } |
       "${cp[@]}" sh -c "cat > '$root/.hi_fallback_rc'" 2>"$tmp"
 
@@ -795,7 +818,7 @@ function _say_hi_container() {
   prefix=" $size"
   echo -ne " $size"
 
-  if ! "${cp[@]}" sh -c "mkdir -p '$root' && tar mxzf - -C '$root'" <"$tarball"; then
+  if ! "${cp[@]}" sh -c "mkdir -m 700 -p '$root' && tar mxzf - -C '$root'" <"$tarball"; then
     rm -f "$tarball"
     _hi_cecho " failed to copy say-hi into [$DOMAIN]" "$BRRED"
     "${probe[@]}" rm -rf "$root" >/dev/null 2>&1
@@ -815,7 +838,7 @@ function _say_hi_container() {
   # _HI_CLEANUP marks the tree disposable for load.sh's clean_all; the
   # `rm -rf "$root"` below is the client-side belt to it. Shared vars come from
   # _hi_session_env; the tree paths and timing are this transport's own.
-  env_kv="$(_hi_env_each " %s='%s'")"
+  env_kv="$(_hi_env_each ' %s=%s')"
   "${attach[@]}" sh -c "export$env_kv _HI_HOME='$root' _HI_ROOT='$root/say-hi' _HI_CONFIG_DIR='$root/say-hi/config' _HI_CLEANUP='$root' _HI_COPY_TIME='$(_hi_copy_time "$copy_start" "$_HI_SHELL_START" "$shell_end")' _HI_CONNECT_PREFIX='$prefix'; exec bash --rcfile '$root/say-hi/hi.bashrc'"
   exit_code=$?
 
@@ -837,8 +860,6 @@ function _hi_parse() {
       SSHARGS+=("$1" "$2")
       shift
       ;;
-    --tmux) _HI_TMUX_ATTACH=1 ;;
-    --no-tmux) _HI_TMUX_ATTACH=0 ;;
     -*) SSHARGS+=("$1") ;;
     *)
       if [ -z "${DOMAIN:-}" ]; then
@@ -927,13 +948,49 @@ function _hi_run_script() {
   exit 1
 }
 
+# The sub-commands that only hand off to one of those scripts, as
+# <flag>|<the path variable>|<argument the script needs first>. A table rather
+# than eight `case` arms differing in nothing but those three fields, where one
+# naming the wrong script read exactly like the seven correct ones. Anything
+# needing logic of its own stays a case arm below.
+_HI_SUBCOMMANDS=(
+  "--install|_HI_INSTALL|"
+  "--uninstall|_HI_UNINSTALL|"
+  "--configure|_HI_INSTALL|--features-only"
+  "--check-configs|_HI_INSTALL|--check-configs"
+  "--overlay-init|_HI_INSTALL|--overlay-init"
+  "--color-preview|_HI_COLOR_PREVIEW|"
+  "--doctor|_HI_DOCTOR|"
+  "--test|_HI_TEST_RUN|"
+)
+
+# _hi_dispatch_subcommand "$@" - hands $1 to its script and never returns when
+# the table names it; returns 1 otherwise, leaving the case below to answer.
+# ${!var} is bash 2 indirect expansion, not a bash-4 form the lint suite greps.
+function _hi_dispatch_subcommand() {
+  local row flag rest var arg
+  for row in "${_HI_SUBCOMMANDS[@]}"; do
+    flag="${row%%|*}"
+    [ "$flag" = "${1:-}" ] || continue
+    rest="${row#*|}"
+    var="${rest%%|*}"
+    arg="${rest#*|}"
+    shift
+    _hi_run_script "$flag" "${!var}" ${arg:+"$arg"} "$@"
+  done
+  return 1
+}
+
 set +euo pipefail # the connection paths below run against unknown hosts, where a probe that fails is normal, not fatal
 
 # sourcing this file defines its functions without connecting, for testing
 [[ "${BASH_SOURCE[0]}" == "$0" ]] || return 0
 
 # hi's own flags, dispatched on $1 alone: _hi_parse hands every other -flag to
-# ssh, so anything hi answers itself has to be caught first.
+# ssh, so anything hi answers itself has to be caught first; the plain
+# hand-off-to-a-script flags come off $_HI_SUBCOMMANDS instead.
+_hi_dispatch_subcommand "$@"
+
 case "${1:-}" in
 # caught before the ssh pass-through, so this answers for hi rather than
 # handing back ssh's usage block. A bare `hi` still execs ssh, so `hi -V` and
@@ -943,7 +1000,7 @@ case "${1:-}" in
 $_HI_USAGE
 
 Copies your say-hi to <target> and hands you an identical shell session there -
-header, colors, git prompt, aliases, vim/nano/tmux configs - then strips it all
+header, colors, git prompt, aliases, vim/nano configs - then strips it all
 back out when the session ends. With [command ...], runs that instead, the way
 ssh does.
 
@@ -961,11 +1018,6 @@ hi's own options:
                         the local tree, the config overlay, every backend
                         probed and timed, and with a target, which backend the
                         name resolves to plus an ssh reachability check
-      --tmux            run the session inside a named tmux on the target, so a
-                        dropped connection detaches instead of losing the work.
-                        Needs a permanent say-hi there. May appear anywhere
-                        before the target.
-      --no-tmux         turn that back off when settings.sh made it the default
 
 hi's local sub-commands, which act on this machine instead of connecting. They
 need the full say-hi checkout, so inside a hi session each says so and stops:
@@ -987,38 +1039,6 @@ Configuration lives outside this tree, in \${XDG_CONFIG_HOME:-\$HOME/.config}/sa
 so it survives an upgrade. See \`man hi\` and the README for all of it.
 EOF
   exit 0
-  ;;
---install)
-  shift
-  _hi_run_script --install "$_HI_INSTALL" "$@"
-  ;;
---uninstall)
-  shift
-  _hi_run_script --uninstall "$_HI_UNINSTALL" "$@"
-  ;;
---configure)
-  shift
-  _hi_run_script --configure "$_HI_INSTALL" --features-only "$@"
-  ;;
---check-configs)
-  shift
-  _hi_run_script --check-configs "$_HI_INSTALL" --check-configs "$@"
-  ;;
---overlay-init)
-  shift
-  _hi_run_script --overlay-init "$_HI_INSTALL" --overlay-init "$@"
-  ;;
---color-preview)
-  shift
-  _hi_run_script --color-preview "$_HI_COLOR_PREVIEW" "$@"
-  ;;
---doctor)
-  shift
-  _hi_run_script --doctor "$_HI_DOCTOR" "$@"
-  ;;
---test)
-  shift
-  _hi_run_script --test "$_HI_TEST_RUN" "$@"
   ;;
 # .git as the test: absent from payloads and packaged installs alike, so this
 # is the one local command that cannot borrow $_HI_NO_CHECKOUT's wording

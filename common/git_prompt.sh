@@ -98,7 +98,7 @@ _hi_git_prompt() {
 
   # one line per stash push/apply, the count `rev-list --walk-reflogs` gives;
   # counted with the read builtin rather than _hi_read_lines, whose two evals a
-  # line are real work per draw on a long reflog - the shape ksh.sh already uses
+  # line are real work per draw on a long reflog
   local stash=0
   if [[ -f "$git_dir/logs/refs/stash" ]]; then
     while IFS= read -r line || [[ -n "$line" ]]; do

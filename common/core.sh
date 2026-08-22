@@ -29,7 +29,7 @@ if [ -z "${_hi_core_loaded:-}" ]; then
   # _hi_fallback_rc; config.fish keeps its own copy.
   _HI_TOGGLES=(_HI_DISABLE_LOCAL _HI_REMOTE_SESSION _HI_DISABLE_HEADER
     _HI_DISABLE_PROMPT _HI_DISABLE_PERSONAL _HI_DISABLE_GIT_STATUS
-    _HI_DISABLE_EDITORS _HI_DISABLE_ALIASES _HI_DISABLE_OSC52 _HI_DISABLE_TMUX)
+    _HI_DISABLE_EDITORS _HI_DISABLE_ALIASES _HI_DISABLE_OSC52)
   for _hi_t in "${_HI_TOGGLES[@]}"; do
     eval ": \"\${$_hi_t:=0}\"; export $_hi_t"
   done
@@ -80,7 +80,7 @@ function _hi_shell_rows() {
 # hi.sh's $_HI_SHELL_LADDER is this list minus bash (a missing bash is that
 # ladder's precondition). dash/ash/sh are one tier - named separately to say
 # which `sh` a target gets when it has more than one.
-export _HI_SHELL_TREE="fish zsh bash mksh ksh dash ash sh"
+export _HI_SHELL_TREE="fish zsh bash dash ash sh"
 
 # color names match fish's set_color vocabulary; greys are skipped, since fish has none.
 _HI_COLOR_NAMES=(red green yellow blue magenta cyan brred brgreen bryellow brblue brmagenta brcyan)
@@ -271,7 +271,7 @@ function _hi_on_exit() {
 }
 
 # What each shell's prompt ends with unless overridden, <SHELL>:<char>. SH is
-# the ksh/mksh/sh fallback hi.sh bakes on the client. config.fish keeps its
+# the sh fallback hi.sh bakes on the client. config.fish keeps its
 # own copy (fish parses no bash); hi_test.sh pins it here.
 _HI_PROMPT_END_DEFAULTS=('BASH:\$' 'ZSH:>' 'FISH:|' 'SH:\$')
 

@@ -67,7 +67,7 @@ function test_payload_ships_everything_by_default() {
 
 # _HI_DISABLE_ALIASES cuts along the seam between the two alias files and not
 # through either: misc/personal.sh leaves the payload, misc/aliases.sh stays.
-# Both halves matter. aliases.sh installs the vim/nano, hi_copy and tmux
+# Both halves matter. aliases.sh installs the vim/nano and hi_copy
 # aliases above the source line, so trimming it would be a behaviour change
 # wearing a size saving's clothes; personal.sh is preference the target will
 # not read, so shipping it is bytes on the wire for nothing.
@@ -83,7 +83,7 @@ function test_payload_trims_personal_but_keeps_aliases() {
     ;;
   esac
   case "$listing" in *say-hi/misc/aliases.sh*) ;; *)
-    _hi_cecho " | _HI_DISABLE_ALIASES=1 dropped misc/aliases.sh, which still carries the editor, hi_copy and tmux aliases" "$RED"
+    _hi_cecho " | _HI_DISABLE_ALIASES=1 dropped misc/aliases.sh, which still carries the editor and hi_copy aliases" "$RED"
     return 1
     ;;
   esac
@@ -164,11 +164,6 @@ function test_overlay_tar_carries_aliases() {
   local dir
   dir="$(_hi_overlay_fixture withaliases aliases.sh)"
   [ "$(_HI_CONFIG_DIR="$dir" _hi_overlay_tar | tar tzf -)" = "aliases.sh" ]
-}
-
-# ksh.sh has to ride the payload, or the rc sources a file that isn't there
-function test_payload_carries_ksh_sh() {
-  [ -f "$_HI_ROOT/shells/ksh.sh" ] && [[ " ${_HI_PAYLOAD[*]} " == *" shells "* ]]
 }
 
 # This block exists because both halves were wrong at once: the connect line
@@ -300,7 +295,6 @@ function run_hi_payload_tests() {
   _hi_check "Overlay trims what it disabled" test_payload_trims_what_the_overlay_disabled
   _hi_check "A default client ships everything" test_payload_ships_everything_by_default
   _hi_check "The toggle trims personal.sh and keeps aliases.sh" test_payload_trims_personal_but_keeps_aliases
-  _hi_check "ksh.sh rides the payload" test_payload_carries_ksh_sh
 
   _hi_h2 "Testing: the in-transit comment strip"
   _hi_check "No full-line comments survive" test_strip_leaves_no_full_line_comments

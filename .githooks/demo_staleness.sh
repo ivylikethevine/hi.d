@@ -1,20 +1,22 @@
 #!/bin/bash
 # Warn when docs/demos/demo.gif is older than the things that decide what it
-# shows. Warn, never block: the GIFs are manual artifacts reviewed by eye
+# shows. Warn, never block: demo.gif is a manual artifact reviewed by eye
 # (docs/tapes/generate.sh says so at the top), and a check that refused a
 # commit would be making that call for you. Exit status is always 0.
 #
-# Run by hand, or as the pre-commit hook beside it - see README's "Regenerating
-# the demo GIFs". It lives in .githooks/ rather than scripts/ because scripts/
-# is in $_HI_PACKAGE_CONTENTS: a contributor's git hook has no business in
-# /usr/share/say-hi, and a subdirectory under scripts/ also falls straight
-# through nfpm.yaml's one-level apk globs (packaging_test.sh fails on it).
+# Run by hand, or as the pre-commit hook beside it - see docs/PACKAGING.md's
+# "Regenerating the demo GIFs". It lives in .githooks/ rather than scripts/
+# because scripts/ is in $_HI_PACKAGE_CONTENTS: a contributor's git hook has no
+# business in /usr/share/say-hi, and a subdirectory under scripts/ also falls
+# straight through nfpm.yaml's one-level apk globs (packaging_test.sh fails on
+# it).
 #
-# Only the topmost README demo, on purpose. It is the one GIF that claims to be
-# the stock defaults with nothing turned off, so it is the one that goes quietly
-# wrong when the header, the prompt or the tape changes. The other six each
-# advertise a knob and are re-rendered when that knob moves; widening this is
-# one more line in $_HI_DEMO_INPUTS.
+# Only the topmost README demo, on purpose - and it is now the only demo this
+# could apply to. It is the one GIF that claims to be the stock defaults with
+# nothing turned off, so it is the one that goes quietly wrong when the header,
+# the prompt or the tape changes, and the one a person still renders by hand.
+# The other seven each advertise a knob and are rendered by CI on a cadence
+# (.github/workflows/demos.yml), so nothing here has to watch them.
 set -euo pipefail
 
 # Deliberately NOT the standalone-entry form of GLOSSARY: HI.33. That form lets

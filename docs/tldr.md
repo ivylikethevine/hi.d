@@ -28,10 +28,6 @@
 
 `hi --version`
 
-- Run the session inside a tmux on the target (needs say-hi installed there), so a drop detaches:
-
-`hi --tmux {{host}}`
-
 - Re-run the feature toggle prompts (header, prompt, git status, aliases, ...):
 
 `hi --configure`

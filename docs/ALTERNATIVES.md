@@ -107,7 +107,7 @@ you can read all of it in one sitting.
 the shell itself**, so you can use fish or zsh on a host that has neither.
 
 **Where xxh wins outright:** that capability. say-hi cannot give you a shell the
-target lacks — its no-bash ladder (`fish > zsh > mksh > ksh > dash > ash > sh`) picks the
+target lacks — its no-bash ladder (`fish > zsh > dash > ash > sh`) picks the
 best of what is installed and says so. If you need _your_ shell on a
 locked-down box that ships only `sh`, xxh is the answer and say-hi is not; its
 plugin model is also more principled than copying dotfiles blind.
@@ -134,8 +134,8 @@ The differences are narrow and concrete. kyrat requires **bash ≥ 4.0**, ruling
 out macOS's system bash — the exact constraint say-hi contorts itself to respect
 (no `mapfile`, no associative arrays, no namerefs, enforced by a lint grep and
 a real bash-3.2 container in CI). kyrat spawns bash, zsh or sh; say-hi styles
-bash, zsh and fish, and gives the POSIX tiers a colored prompt and —
-for ksh/mksh — a live git segment. And kyrat is ssh-only.
+bash, zsh and fish, and gives the POSIX tiers a colored prompt. And kyrat is
+ssh-only.
 
 ### sshdot
 
@@ -230,8 +230,8 @@ the table at all.
 
 Secondary but real: a per-user config overlay (settings, colors, packages,
 aliases) that rides along without dirtying the tree, `hi --doctor` for when
-something is slow, `--tmux` so a dropped connection detaches instead of losing
-work, and detecting a permanent `~/say-hi` on the target to use in place.
+something is slow, and detecting a permanent say-hi on the target to use in
+place.
 
 ## Where say-hi is the wrong choice
 

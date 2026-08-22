@@ -359,10 +359,6 @@ function _hi_osc52_preview() {
   printf 'hi_copy  -> %s\n' "$_HI_OSC52"
 }
 
-function _hi_tmux_preview() {
-  printf 'tmux -> tmux -f %s\n' "$_HI_TMUXCONF"
-}
-
 # alias count plus a handful of names, read straight from misc/aliases.sh
 # rather than duplicating its fallthrough logic here
 # One awk, not three pipelines over the same file: it counts and collects the
@@ -396,7 +392,6 @@ _HI_FEATURE_PROMPTS=(
   "_HI_DISABLE_EDITORS|1|_hi_editors_preview| Enable the vim/nano config overrides?"
   "_HI_DISABLE_ALIASES|1|_hi_aliases_preview| Enable the personal aliases in misc/aliases.sh (sudo, cat/eza, git, docker, pacman/apt, etc)?"
   "_HI_DISABLE_OSC52|1|_hi_osc52_preview| Enable the OSC 52 clipboard (a yank on a target lands in your local clipboard)?"
-  "_HI_DISABLE_TMUX|1|_hi_tmux_preview| Enable hi's tmux config (permanent installs only - a detached tmux would outlive a disposable tree)?"
   "_HI_DISABLE_LOCAL|1|| Enable all of the above on this machine (the one say-hi is installed on), not just when you hi elsewhere?"
 )
 

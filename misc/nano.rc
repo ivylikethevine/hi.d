@@ -12,7 +12,11 @@ set mouse
 set softwrap
 set tabsize 2
 set tabstospaces
-set whitespace "·»"
+# no `set whitespace`: nano's own default is the locale-aware pair - "»⋅"
+# under UTF-8 and ">." everywhere else. A hardcoded multibyte pair is two
+# characters only to a UTF-8 nano; on a target in the C locale the same
+# line counts four and nano opens with "Two single-column characters
+# required" over the file. The payload has to survive the target it lands on.
 set zap
 
 set titlecolor brightwhite,blue

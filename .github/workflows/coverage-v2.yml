@@ -1,0 +1,151 @@
+name: Coverage (bashcov)
+
+# bashcov over the fast suites, published as an artifact - visibility, never a
+# gate: no PR waits on this and no threshold fails it. The sibling of
+# coverage.yml, which does the same job with kcov.
+#
+# Dispatch-only, on coverage.yml's reasoning and one of its own. tests/
+# coverage_v2.sh opens with WHY A SECOND COVERAGE SCRIPT: bashcov reads bash's
+# own xtrace instead of driving a DEBUG trap, so it does not lose the suites the
+# way kcov does - common/git_prompt.sh reads 92.68% here against kcov's 2.56%,
+# from the same seventeen cases. That half is trustworthy.
+#
+# The half that is not: bashcov marks every line of a *heredoc body* as covered,
+# including lines that are pure text. hi.sh builds the entire remote script out
+# of heredocs, and its two connect functions - _say_hi and _say_hi_container,
+# 182 lines that nothing in --group fast executes - report 100%. So the figure
+# this publishes is an over-count where kcov's is an under-count, and the badge
+# says `heredoc-inflated` in grey for the same reason kcov's says `load-time`.
+# Put a schedule here the day that is fixed.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  bashcov:
+    name: bashcov over the fast suites
+    runs-on: ${{ vars.RUNNER_LABEL || 'ubuntu-latest' }}
+    timeout-minutes: 45
+    steps:
+      # hands the persistent self-hosted workspace back to the runner user, so
+      # checkout's own cleanup can always finish - see docs/PACKAGING.md
+      - name: Reclaim the workspace
+        if: ${{ runner.environment != 'github-hosted' }}
+        run: |
+          set -euo pipefail
+          sudo chown -R "$(id -u):$(id -g)" "$GITHUB_WORKSPACE"
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install zsh and fish
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y zsh fish
+
+      # No setup-tool step and nothing built from source: bashcov is a rubygem,
+      # which is the one practical advantage it has over kcov here - kcov ships
+      # no binary asset and reaches Debian/Ubuntu only through a PPA, so
+      # coverage.yml has to compile it. ruby is preinstalled on the hosted
+      # images; installed explicitly so a self-hosted runner without it says so
+      # here rather than failing inside the sweep.
+      #
+      # The version is pinned by hand here rather than in setup-tool's
+      # tools.txt, which is the roster for everything else: every `kind` that
+      # file knows (raw, tar.gz, tar.xz, cmake) fetches a GitHub release asset,
+      # and a gem is none of those - adding it would mean teaching install.sh
+      # about rubygems for one dispatch-only workflow. The cost of the
+      # exception is that bashcov is the one tool check_tool_versions.sh cannot
+      # report drift on, so this pin is bumped by hand or not at all.
+      - name: Install ruby and bashcov
+        env:
+          BASHCOV_VERSION: "3.3.0"
+        run: | # zizmor: ignore[adhoc-packages]
+          set -euo pipefail
+          command -v ruby >/dev/null 2>&1 || sudo apt-get install -y ruby-full
+          # zizmor flags this as an ad-hoc install, and the ignore rides on
+          # the `run:` line above - a comment in here is shell text, not YAML,
+          # and the audit never sees it. The version pin is the answer to the
+          # finding: the lockfile it would rather see is a Gemfile for a single
+          # gem in a job that installs nothing else. ci.yml audits with no
+          # --min-severity, so even a low finding exits 12 - the suppression
+          # has to be written down rather than assumed.
+          gem install --user-install bashcov -v "$BASHCOV_VERSION"
+          # --user-install puts the binary somewhere off the default PATH;
+          # coverage_v2.sh looks there itself, but exporting it here keeps the
+          # step below readable and lets `bashcov --version` be the smoke test
+          for d in "$HOME"/.local/share/gem/ruby/*/bin; do
+            [ -x "$d/bashcov" ] && echo "$d" >>"$GITHUB_PATH"
+          done
+
+      - name: Show the bashcov version
+        run: bashcov --version
+
+      # No shellcheck/shfmt/checkbashisms here on purpose: tests/coverage_v2.sh
+      # drops the `shellcheck` suite from the sweep (it is a linter run over the
+      # tree, not a path through hi's bash), so nothing left in the group
+      # invokes them. The host report names them and prints "(absent)", which is
+      # not a failure.
+      - name: Run the fast suites under bashcov
+        run: tests/coverage_v2.sh coverage-v2-report
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: coverage-v2-report
+          path: coverage-v2-report
+          if-no-files-found: error
+          retention-days: 90
+
+      # One line for pages.yml to turn into README's bashcov badge, on the same
+      # split coverage.yml uses: the report above is a 90-day artifact somebody
+      # downloads, this is a number the site re-reads on every deploy until the
+      # next run replaces it.
+      #
+      # ruby, not sed: SimpleCov's .resultset.json is nested arrays (one entry
+      # per source line, null where the line is not executable, otherwise a hit
+      # count), so there is no aggregate percentage in the file to grep for - it
+      # has to be computed. ruby is guaranteed present here, bashcov being a
+      # gem. The filters coverage_v2.sh applies are already baked into the
+      # resultset, so this sums exactly the files the table printed.
+      - name: Write the badge figure
+        run: |
+          set -euo pipefail
+          src=coverage-v2-report/.resultset.json
+          if [ ! -f "$src" ]; then
+            echo "::warning::$src is missing - no badge figure to publish"
+            exit 0
+          fi
+          pct="$(ruby -rjson -e '
+            merged = {}
+            JSON.parse(File.read(ARGV[0])).each_value do |payload|
+              (payload["coverage"] || {}).each do |file, data|
+                lines = data.is_a?(Hash) ? data["lines"] : data
+                if merged[file]
+                  merged[file] = merged[file].each_with_index.map do |v, i|
+                    [v, lines[i]].compact.sum if v || lines[i]
+                  end
+                else
+                  merged[file] = lines.dup
+                end
+              end
+            end
+            relevant = merged.values.flatten.compact
+            exit 1 if relevant.empty?
+            printf("%.2f", 100.0 * relevant.count { |c| c > 0 } / relevant.size)
+          ' "$src")" || {
+            echo "::warning::could not compute a percentage out of $src"
+            exit 0
+          }
+          mkdir -p coverage-v2-pct
+          printf '%s\n' "$pct" >coverage-v2-pct/pct
+          echo "bashcov reports ${pct}% of lines executed"
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: hashFiles('coverage-v2-pct/pct') != ''
+        with:
+          name: coverage-v2-pct
+          path: coverage-v2-pct
+          if-no-files-found: error

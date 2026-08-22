@@ -126,6 +126,70 @@ function _hi_sshd_container() {
 
 # Clients of the throwaway sshd on $_HI_SSH_PORT - the port is what keeps a
 # concurrent hi session on this machine out of the match.
+# _hi_post_check <label> <container> <cmd> - the extra assertion a case can
+# make inside its own container once the session verdict is in. Empty <cmd>
+# passes. Goes through $_HI_BACKEND like the rest of the harness, where the two
+# copies it replaces both said `docker` outright.
+function _hi_post_check() {
+  local label="$1" name="$2" post="$3"
+  [ -n "$post" ] || return 0
+  "${_HI_BACKEND:-docker}" exec "$name" sh -c "$post" >/dev/null 2>&1 && return 0
+  _hi_h3 " | [$label] -- post-check FAILED: $post" "$RED"
+  return 1
+}
+
+# <label> <image> <login_shell> <cmd> [post] [extra-marker...] - anything past
+# $5 is handed to _hi_case_result as a further must-appear transcript marker
+# (the same variadic contract _hi_run_ksh_git_case uses for the branch name).
+#
+# Shared by every suite that drives hi over real ssh - ssh_test.sh across login
+# shells, install_methods_test.sh across the ways say-hi gets onto a target - so
+# the `<&3` contract below is stated once. $_HI_SSH_CASE_PREFIX names the
+# containers, so two suites running at once cannot collide on one.
+function _hi_run_case() {
+  local label="$1" image="$2" login_shell="$3" cmd="$4" post="${5:-}" name exit_code=0 t0 t1 ok=0
+  # the container's mapped port, owned by this case: _hi_sshd_container assigns
+  # into this frame, so a case running beside it connects to its own sshd and
+  # greps the process table by its own port
+  local _HI_SSH_PORT=""
+
+  name="${_HI_SSH_CASE_PREFIX:-hi-sshtest}-$label-$$"
+  _hi_h3 "Testing login shell: $label ($login_shell)"
+  t0="$(_hi_now)"
+
+  _hi_sshd_container "$name" "$image" -e "LOGIN_SHELL=$login_shell" || return 1
+
+  _hi_cecho " | Running: $_HI_LAUNCHER -p $_HI_SSH_PORT hitest@127.0.0.1 $cmd"
+  _hi_ssh_launch "$_HI_SSH_PORT"
+  # Backgrounded and waited on rather than a bare command substitution: a
+  # target that never returns has to fail this case, not hang the suite. A
+  # one-line mistake in the fallback rc left the `nobash` case sitting in a
+  # command substitution for 36 minutes before anyone noticed, because there
+  # was nothing here to stop it. 124 is _hi_wait_pid's timeout status.
+  #
+  # `<&3` is load-bearing and belongs with the _hi_pty_stdin call in
+  # run_ssh_tests below - the two only work as a pair (see _hi_pty_stdin in
+  # test_lib.sh). Backgrounding is exactly what takes stdin away: with job
+  # control off, bash points a background job's fd 0 at /dev/null no matter
+  # what ours was, `ssh -t` then can't allocate a pty, and a remote
+  # `bash --rcfile` with no tty is not interactive - so it ignores the rcfile
+  # outright and every case that hands off to bash fails with no output past
+  # hi's connect prefix.
+  local out_file="$_HI_WORKDIR/$label.ssh.out"
+  "${_HI_SSH_LAUNCH[@]}" "$cmd" <&3 >"$out_file" 2>&1 &
+  _hi_wait_pid "$!" "${_HI_SSH_CASE_TIMEOUT:-90}"
+  exit_code="$_HI_WAIT_EXIT"
+  t1="$(_hi_now)"
+
+  if _hi_case_result "$label" "ssh path" "$exit_code" "$t0" "$t1" "$out_file" "$_HI_TEST_MARKER" "${@:6}"; then
+    ok=1
+    _hi_post_check "$label" "$name" "$post" || ok=0
+  fi
+
+  _hi_rm_container "$name"
+  [ "$ok" -eq 1 ]
+}
+
 function _hi_ssh_client_pids() {
   pgrep -f -- "ssh .*-p $_HI_SSH_PORT .*hitest@127.0.0.1" 2>/dev/null || true
 }

@@ -1,11 +1,14 @@
 # Packaging & releases
 
-Everything needed to ship `hi` through a package manager. Nothing here publishes
-on its own — the publishing job waits on a manual approval, and the AUR and the
-Homebrew tap are copies you make by hand. Both signing keys are in place, so a
-release signs its sums and its apk; what is still one-time setup is the AUR
-deploy key and the tap token, a checklist with exact commands in
-[ROADMAP.md](ROADMAP.md)'s _Release channels_ section.
+Everything needed to ship `hi` through a package manager, plus the two things
+that hang off a release once it exists: [checking a download you did not
+build](#verifying-a-release-download), and [regenerating the demo
+GIFs](#regenerating-the-demo-gifs) the release pipeline publishes to the site.
+Nothing here publishes on its own — the publishing job waits on a manual
+approval, and the AUR and the Homebrew tap are copies you make by hand. Both
+signing keys are in place, so a release signs its sums and its apk; what is
+still one-time setup is the AUR deploy key and the tap token, a checklist with
+exact commands in [ROADMAP.md](ROADMAP.md)'s _Release channels_ section.
 
 Every workflow's `runs-on:` reads a repo/org Actions variable first —
 `vars.RUNNER_LABEL`, or `vars.MACOS_RUNNER_LABEL` / `vars.WINDOWS_RUNNER_LABEL`
@@ -84,6 +87,8 @@ where a required reviewer would stall the run rather than gate it — the
 - [Verifying a packaged build locally](#verifying-a-packaged-build-locally)
   - [Reproducibility](#reproducibility)
 - [After installing from a package](#after-installing-from-a-package)
+- [Regenerating the demo GIFs](#regenerating-the-demo-gifs)
+- [Verifying a release download](#verifying-a-release-download)
 
 ## The one idea
 
@@ -203,13 +208,18 @@ what the release attaches. One set of bytes, summed once.
 3. Approve the `publish` job in the Actions UI — this is your review point, over
    the exact artifacts the build produced. Packages, the source tarball,
    `SHA256SUMS`, and manifests land on the release, and the regenerated
-   manifests are committed back to `main` (they are consumed from the AUR/tap
-   repos, not from inside the tarball, so they don't need to be in the tagged
-   tree).
+   manifests come back to `main` as a `manifests-v1.0.0` **pull request** (they
+   are consumed from the AUR/tap repos, not from inside the tarball, so they
+   don't need to be in the tagged tree). `main` requires a pull request and
+   refuses a direct push, so the job opens one rather than being granted an
+   exception to the rule.
 4. Both channels update themselves once their secrets exist: the tap gets a PR
-   (`HOMEBREW_TAP_TOKEN`), the AUR gets a push (`AUR_SSH_KEY`). Until then, copy
-   the manifests from the release (or from `main`) by hand, per the sections
-   below.
+   (`HOMEBREW_TAP_TOKEN`), the AUR gets a push (`AUR_SSH_KEY`). **Neither waits
+   on the manifest PR** — both read the manifests out of the `packages`
+   artifact, so merging it is bookkeeping for the next release to diff against.
+   Until those secrets exist, copy the manifests from the release by hand, per
+   the sections below.
+5. Merge the manifest PR.
 
 Because the tarball is in `dist/ARTIFACTS`, it reaches both the attestation and
 the release upload without either step naming a `.tar.gz`: those two read that
@@ -223,13 +233,20 @@ first thing it tries: during a release the asset does not exist yet.
 `bump.sh --check 1.0.0` stays useful locally to confirm the manifests match a
 cut release.
 
-**Release notes are the PR titles.** The publish job's
-`gh release create --generate-notes` drafts the notes from the PR titles merged
-since the last tag — there is no separate notes file to write. The discipline
-that makes this good enough: title PRs the way you'd want them read in release
-notes, and skim `gh pr list --state merged` before tagging to retitle anything
-that wouldn't. Revisit git-cliff only if the generated notes start needing
-curation.
+**Release notes are the PR titles.** The publish job asks GitHub's
+`releases/generate-notes` endpoint for the notes and puts them at the top of the
+release body — the PR titles merged since the last tag, with no separate notes
+file to write. The discipline that makes this good enough: title PRs the way
+you'd want them read in release notes, and skim `gh pr list --state merged`
+before tagging to retitle anything that wouldn't. Revisit git-cliff only if the
+generated notes start needing curation.
+
+Below the notes the same step appends the
+[verification checklist](#verifying-a-release-download), so the two questions a
+release has to answer — _what changed_ and _how do I check this download_ — are
+both in the body. It is composed rather than passed as
+`--generate-notes --notes`, because `gh` appends the generated notes **after**
+`--notes`, which would bury the notes under the checklist.
 
 ## Publishing each channel
 
@@ -366,6 +383,12 @@ people ask for a repo to subscribe to.
 
 ## Verifying a packaged build locally
 
+This is the half you run on a package **you** just built, before it goes
+anywhere. Its near-namesake at the bottom —
+[Verifying a release download](#verifying-a-release-download) — is the other
+direction: what somebody who downloaded a release runs to check it is the one
+this repo published.
+
 ```bash
 tests/test_runner.sh packaging install header   # the offline drift guards
 packaging/mkpkg.sh --stage-only               # inspect exactly what ships
@@ -413,3 +436,93 @@ The tree is root-owned and holds nobody's settings. Each user runs, once:
 to `~/.config/say-hi/`, never into the tree, which is what lets a root-owned
 checkout work at all. `hi --update` correctly refuses to `git pull` and points
 at the package manager instead.
+
+**Saying `hi` _to_ a packaged machine works whether or not anyone ran that.**
+The package's `/etc/profile.d/say-hi.sh` is what `hi.sh`'s `_hi_remote_root`
+probe reads to find `/usr/share/say-hi` and use it in place instead of shipping
+a payload over it, and `/usr/share` is on the probe's install-prefix list even
+if that snippet is gone (GLOSSARY: HI.33).
+`tests/targets/install_methods_test.sh` installs a real `.deb`, `.rpm` and
+`.apk` on real targets and asserts exactly that.
+
+## Regenerating the demo GIFs
+
+[`docs/tapes/generate.sh`](tapes/generate.sh) renders all of them: one
+`vhs` run per tape, cheapest first, with a `fixtures.sh down` in between — no
+tape cleans up after itself — and a summary of what rendered, what stood down
+for a missing backend, and what failed. Name tapes to render a subset
+(`generate.sh docker kube`); `--list` shows them, `--down` clears up after a
+crashed run.
+
+**Seven of the eight render themselves.**
+[`.github/workflows/demos.yml`](../.github/workflows/demos.yml) runs every tape
+but `demo` on the self-hosted runner — the only machine with all four backends —
+on
+a tape change, weekly, or on dispatch, and hands the GIFs to the Pages build,
+which lays them over the committed copies at the same paths. Nothing is
+committed back: a bot commit on top of the author's is what branch protection
+refuses, and it is the same reason the tests badge is published rather than
+written into this file.
+
+The top-of-README demo is the one that goes quietly wrong: it claims to be the
+stock defaults, so it is stale the moment the header, the prompt or the tape
+changes, and nothing about looking at it says so.
+[`.githooks/demo_staleness.sh`](../.githooks/demo_staleness.sh) is the reminder
+— it compares `demo.gif`'s last commit against the tape, the fixtures and the
+shipped tree, and says which of them moved since. Run it by hand, or wire it up
+as a pre-commit hook:
+
+```sh
+git config core.hooksPath .githooks
+```
+
+It only ever warns. Rendering a binary nobody looked at is the thing this
+section exists to argue against, so the hook will not do it for you and will
+never block a commit.
+
+By hand it is one `vhs docs/tapes/<name>.tape` per GIF from the repo root, with
+the backend running and `hi` on PATH; `docs/tapes/fixtures.sh` builds every
+target the tapes connect to, `fixtures.sh down` removes them. There is one more
+in [CONFIGURATION.md](CONFIGURATION.md#colors) — `color_preview.tape`, the
+only one needing no backend at all.
+
+Two things to get right when you do it that way — the two the script exists to
+take care of. `hi` on `$PATH` must be _this_ checkout (`/usr/bin/hi` may point
+elsewhere; the script shims its own onto the front of `$PATH`). And the target
+image builds from `HEAD`, so uncommitted work shows on the client side of the
+GIF but not the target's: render from a commit, or set
+`HI_DEMO_SOURCE=worktree`, which is what the script picks for you on a dirty
+tree.
+
+Both sides of every GIF are staged, not inherited. Each tape sources a small rc
+`fixtures.sh` writes, giving the outside shell hi's own prompt under a chosen
+`user@host` instead of the renderer's — and every target gets an explicit
+hostname rather than a backend's random hex ID. The pairs vary on purpose:
+docker's client is `cache-1` and one of its targets is `cache-1` too, while the
+rest say `hi` somewhere they are not.
+
+## Verifying a release download
+
+Releases ship a `SHA256SUMS`, signed build provenance, and a detached
+[minisign](https://jedisct1.github.io/minisign/) signature over the sums (the
+offline half — no `gh`, no network, one static public key):
+
+```sh
+sha256sum -c --ignore-missing SHA256SUMS                        # the bytes match the release
+minisign -Vm SHA256SUMS -P 'RWTDcJ3LGWayrAxK6mbMysyOF8mNLOmMUGRl4YSWk5KIoayS+lW0Fy1L'
+gh attestation verify say-hi_*_all.deb --repo ivylikethevine/say-hi # which CI run built them
+```
+
+**That `minisign` line is load-bearing, not just an example.** `release.yml`'s
+publish job `sed`s the public key out of it to build the checklist it puts in
+every release body, and fails the release if the pattern stops matching — one
+literal copy of the key in the tree rather than two that can drift apart. Keep
+it a single line starting `minisign -Vm SHA256SUMS -P '`, with the key in single
+quotes; the prose and the trailing comments around it are free to change.
+
+That covers **every** file on the release, `say-hi-<version>.tar.gz` included —
+the source tarball the Homebrew formula and the AUR package build from is one
+the release built and attested, not GitHub's auto-generated `/archive/` one,
+which carries neither sum nor signature. So
+`gh attestation verify say-hi-*.tar.gz --repo ivylikethevine/say-hi` answers for
+the sources the same way the line above answers for the `.deb`.

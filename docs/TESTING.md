@@ -2,7 +2,7 @@
 
 Every script resolves against `$_HI_HOME/say-hi`. The runner defaults `_HI_HOME`
 to this checkout's parent, so a fresh clone works with no setup - but never
-point anything at your real `~/say-hi`:
+point anything at your real say-hi install:
 
 ```sh
 export _HI_HOME=/path/to/parent-of-say-hi
@@ -14,6 +14,7 @@ tests/test_runner.sh
 - [Running the tests](#running-the-tests)
   - [Where a suite lives](#where-a-suite-lives)
   - [The container suites run their cases in parallel](#the-container-suites-run-their-cases-in-parallel)
+  - [The install-method suite](#the-install-method-suite)
   - [Coverage and profiling](#coverage-and-profiling)
   - [The images are files; the build contexts are not](#the-images-are-files-the-build-contexts-are-not)
     - [What is pinned, and what deliberately is not](#what-is-pinned-and-what-deliberately-is-not)
@@ -60,9 +61,10 @@ membership, which is the copy to trust —
   `test_lib_par` and `test_runner`, which are the harness testing itself.
 - **`bench`** — hot-path timings checked against ceilings, plus the payload's
   two size budgets.
-- **`e2e`** — `ssh`, `ssh_disconnect`, `ssh_relay`, `docker`, `framework`: real
-  throwaway containers driving `hi.sh`'s actual connection paths, covering both
-  halves of it (`_say_hi` and `_say_hi_container`).
+- **`e2e`** — `ssh`, `ssh_disconnect`, `ssh_relay`, `install_methods`,
+  `docker`, `framework`: real throwaway containers driving `hi.sh`'s actual
+  connection paths, covering both halves of it (`_say_hi` and
+  `_say_hi_container`).
 - **`backends`** — `podman`, `nomad`, `kube`: split from `e2e` because they need
   extra runner setup (podman, nomad, kind) beyond docker; a separate, slower CI
   job.
@@ -84,7 +86,8 @@ HI.34).
 
 ### The container suites run their cases in parallel
 
-`ssh`, `ssh_relay`, `docker`, `podman`, `framework` and `kube` spend nearly all
+`ssh`, `ssh_relay`, `install_methods`, `docker`, `podman`, `framework` and
+`kube` spend nearly all
 their wall clock waiting on one container at a time, so their cases run in a
 batch: `_hi_par_case` in `tests/lib/parallel.sh` submits a case to a background
 subshell, `_hi_par_wait` collects the batch. Each case writes its verdict to a
@@ -109,9 +112,31 @@ _HI_PAR_WIDTH=8 tests/test_runner.sh ssh   # a big machine, if the daemon can ta
 its cleanup hook purges, which is the one fixture in the tree that is not
 case-scoped.
 
+### The install-method suite
+
+`install_methods` is the sibling of `ssh_test.sh`, split on what each one
+varies: `ssh` runs one install against every login shell, `install_methods`
+runs one login shell against every way say-hi gets onto a machine — the `.deb`,
+the `.rpm`, the `.apk`, a Homebrew-shaped keg, a system-wide
+`install.sh --prefix`, and a tree whose `/etc/profile.d` announcement has been
+removed. They share the case runner in `tests/lib/ssh.sh`.
+
+Every case asserts the same thing: `$_HI_ROOT` is the path the installer left,
+and no payload was copied. A session that merely works proves nothing here — hi
+shipping its whole tree over the top produces one of those too, which is the
+waste the permanent-install path exists to avoid.
+
+The three package cases build what they install with `packaging/mkpkg.sh`, so
+they need `nfpm`; without it they stand down yellow. That is a **per-case**
+skip, which `--require-run` does not catch (it reads suite-level skips), so
+`ci.yml`'s e2e job pins nfpm through `setup-tool` to make them actually run.
+The other three need nothing beyond docker.
+
 ### Coverage and profiling
 
-Two hand-run tools sit beside the suites, both deliberately out of CI.
+Three hand-run tools sit beside the suites, all deliberately out of CI. Two of
+them measure coverage, they disagree, and neither is right — read both or
+neither.
 
 `tests/coverage.sh` runs the fast suites under kcov when you want to know which
 arms of `install.sh`/`bump.sh` the cases never touch. Its numbers are currently
@@ -120,10 +145,28 @@ figure describes what ran while things were _loading_ rather than what the
 suites cover — `common/git_prompt.sh` reads 2.56% with seventeen cases passing
 against it. Don't write tests to move those figures.
 
-README's **kcov badge** is that aggregate, published by the dispatch-only
-`coverage.yml` and picked up by `pages.yml` from the last successful run. It is
-grey and says `load-time` rather than green and `coverage` for exactly the
-reason above; until someone dispatches the workflow it reads `not measured`.
+`tests/coverage_v2.sh` is the same sweep under
+[bashcov](https://github.com/infertux/bashcov), which reads bash's own `xtrace`
+instead of driving a DEBUG trap and so cannot fail that way — it puts
+`common/git_prompt.sh` at 92.68%, and an uncalled function correctly reads 0.
+It fails the other way instead: every line of a **heredoc body** counts as
+covered, including lines that are pure text, so anything that generates scripts
+reads high. `hi.sh` is the worst case at 97.38%, where `_say_hi` and
+`_say_hi_container` both report 100% — 182 lines nothing in `--group fast`
+calls. Files with no heredocs (all of `common/`, `shells/`, `misc/`) are the
+ones to believe.
+
+It needs a gem rather than a source build: `gem install --user-install bashcov`,
+which needs ruby. The script finds a `--user-install` binary off `$PATH` by
+itself. It writes a `.simplecov` into the checkout for the length of the run and
+removes it afterwards, and refuses to start rather than overwrite one you have.
+
+README's **kcov** and **bashcov** badges are those two aggregates, published by
+the dispatch-only `coverage.yml` and `coverage-v2.yml` and picked up by
+`pages.yml` from the last successful run of each. Both are grey, and say
+`load-time` and `heredoc-inflated` rather than green and `coverage`, for exactly
+the reasons above; until someone dispatches the workflow each reads
+`not measured`. Neither gates anything.
 
 `tests/profile.sh` is what to run when a `--group bench` ceiling trips:
 `_hi_bench` says _whether_ a path got slower, and this says _which command in
@@ -151,9 +194,10 @@ reason the header says to read the ranking, not the milliseconds.
 ### The images are files; the build contexts are not
 
 Every container image an e2e suite builds is a real Dockerfile under
-[`tests/dockerfiles/`](../tests/dockerfiles) - `sshd-debian` and `sshd-alpine`
-for the ssh targets, `alpine-shell` for the bare shell ones, `framework-*` for
-the nine shell frameworks, and so on. What stays generated per case is the
+[`tests/dockerfiles/`](../tests/dockerfiles) - `sshd-debian`, `sshd-alpine` and
+`sshd-fedora` for the ssh targets, `alpine-shell` for the bare shell ones,
+`installed-*` for the install-method targets, `framework-*` for the nine shell
+frameworks, and so on. What stays generated per case is the
 _build context_: the throwaway keypair's `entrypoint.sh`, and for the
 pre-installed case the repo itself. Suites reach a file through
 `_hi_dockerfile <stem>` and pass it with `-f`; the variants that differ only by
@@ -175,8 +219,10 @@ Scorecard's Pinned-Dependencies check reports every line below and will keep
 reporting some of them. The answer, so it does not get re-decided each time that
 report is read:
 
-**Base images are digest-pinned, and that is not negotiable.** `alpine`,
-`debian:bookworm-slim` and `bash:3.2` each carry a `@sha256:` in their `FROM`. A
+**Base images are digest-pinned, and that is not negotiable.** Every `FROM` in
+`tests/dockerfiles/` carries a `@sha256:` - `alpine`, `debian:bookworm-slim`,
+`debian:trixie-slim`, `bash:3.2` and `fedora` (the rpm target the
+install-method suite installs a real `.rpm` on). A
 digest is what makes a failed e2e run reproducible, and it is what makes a
 base-image move a deliberate, reviewable act instead of a green run going red
 for reasons nobody changed. Dependabot bumps the digests weekly. The upgrade

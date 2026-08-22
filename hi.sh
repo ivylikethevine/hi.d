@@ -87,11 +87,20 @@ function _hi_armored_line() {
 # argv, $_HI_TARGET_TAG out of a free-text `# Tags:` comment in ~/.ssh/config,
 # $_HI_RELEASE off `git describe --dirty`. A `$`, a quote or a backtick in any
 # of them used to land in the generated script unescaped - a bootloader that no
-# longer parses, and a command substitution the target would run. The same
-# idiom _hi_ssh_sh quotes its script with, as a function so the two transports
-# cannot drift into two dialects.
+# longer parses, and a command substitution the target would run. _hi_ssh_sh
+# quotes its `sh -c` word through here too, so the transports cannot drift
+# into two dialects.
 function _hi_shquote() {
-  printf -v "$1" "'%s'" "${2//\'/\'\\\'\'}"
+  local _s="$2" _o=""
+  # A hand loop rather than the ${2//.../...} spelling: bash 3.2 - the floor,
+  # and the bash macOS ships - leaves the quoting of the replacement word in
+  # the result, so that spelling emits a word no sh can parse. Prefix and
+  # suffix removal answer the same on every bash there is.
+  while [ "${_s#*\'}" != "$_s" ]; do
+    _o="$_o${_s%%\'*}'\\''"
+    _s="${_s#*\'}"
+  done
+  printf -v "$1" "'%s'" "$_o$_s"
 }
 
 # The client-derived env both transports export into the session, one
@@ -313,9 +322,10 @@ _HI_BACKENDS=(
 # Run <script> on $DOMAIN through `sh -c`, with ssh's own flags in "$@"
 # GLOSSARY: HI.18 - fish-shaped login shells, and quoting over %q
 function _hi_ssh_sh() {
-  local script="$1"
+  local script="$1" q
   shift
-  ssh "$@" "${SSHARGS[@]}" "$DOMAIN" "sh -c '${script//\'/\'\\\'\'}'"
+  _hi_shquote q "$script"
+  ssh "$@" "${SSHARGS[@]}" "$DOMAIN" "sh -c $q"
 }
 
 # _hi_ctl_open <persist-secs> [ssh-opts...] - a fresh ControlMaster socket into

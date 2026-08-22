@@ -63,13 +63,16 @@ jobs:
       - name: Install ruby and bashcov
         env:
           BASHCOV_VERSION: "3.3.0"
-        run: |
+        run: | # zizmor: ignore[adhoc-packages]
           set -euo pipefail
           command -v ruby >/dev/null 2>&1 || sudo apt-get install -y ruby-full
-          # zizmor flags this as an ad-hoc install (low, and below the
-          # threshold that fails ci.yml's audit). The version pin above is the
-          # answer to it: the lockfile it would rather see is a Gemfile for a
-          # single gem in a job that installs nothing else.
+          # zizmor flags this as an ad-hoc install, and the ignore rides on
+          # the `run:` line above - a comment in here is shell text, not YAML,
+          # and the audit never sees it. The version pin is the answer to the
+          # finding: the lockfile it would rather see is a Gemfile for a single
+          # gem in a job that installs nothing else. ci.yml audits with no
+          # --min-severity, so even a low finding exits 12 - the suppression
+          # has to be written down rather than assumed.
           gem install --user-install bashcov -v "$BASHCOV_VERSION"
           # --user-install puts the binary somewhere off the default PATH;
           # coverage_v2.sh looks there itself, but exporting it here keeps the

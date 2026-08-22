@@ -306,10 +306,17 @@ never loads `paths.sh` — there `hi` is simply not defined.
 ## Local-only
 
 The tests are local-only: `tests/` is stripped from the payload, so `hi --test`
-on a target says so rather than running (likewise `hi --install`,
-`hi --configure`, `hi --check-configs`, `hi --color-preview`). `hi --update` is
-the odd one out — it needs a `.git`, absent both in a hi session and in a
-package-manager install, so it says where to update instead of running
-`git pull` in a non-repo. `hi --packages-preview` is the other: its legend lives
-in `scripts/`, but the check it previews lives in the shipped
-`common/header.sh`, so on a target it runs that half rather than saying no.
+on a target says so rather than running. It is not alone — every flag that needs
+`scripts/`, `tests/` or a `.git` answers the same way there, and two of them
+(`--test` and `--update`) answer that way in a package-manager install too,
+which ships `scripts/` but neither of the other two.
+
+**Which flag needs what is `docs/hi.1`'s OPTIONS section**, where the grouping is
+drift-checked against `common/targets.sh`'s completion roster by
+`tests/hi/parse_test.sh`. This file used to keep a fourth copy of that list and
+it had already gone stale — it omitted `--doctor`, which is exactly the flag the
+man page itself was wrong about — so it now points rather than repeats.
+
+`hi --packages-preview` is the one that does not refuse: its legend lives in
+`scripts/`, but the check it previews lives in the shipped `common/header.sh`,
+so on a target it runs that half instead.

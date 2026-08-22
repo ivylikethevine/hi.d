@@ -35,12 +35,9 @@ not a wish list** — anything that would merely be nice by v1 stays an ordinary
 unticked entry below rather than padding this, and the one piece of product work
 left (_[persistent sessions](#the-session-itself)_) is explicitly deferred past
 the tag rather than held in front of it. The point is a list short enough to
-finish.
+finish — and what is left of it is no longer a list but a single chain: the
+release below unblocks the channels below that, and nothing else gates the tag.
 
-- [ ] **The CLI surface is frozen.** `_hi_parse` in `hi.sh`, `docs/hi.1` and
-      `docs/tldr.md` describe the same flags, and no rename is expected. This
-      is what the [tldr page](#docs--submissions) entry is waiting on —
-      examples that churn are worse than no page.
 - [ ] **A release has gone out under branch protection**, with the manifest
       step green — the [Get a release out under branch
       protection](#repo-settings-and-first-runs) entry. The criterion below it
@@ -383,13 +380,19 @@ entries are just the remaining human steps and their tick conditions.
 
 ### Docs & submissions
 
-- [ ] **tldr page** — _scope: one upstream pull request, gated on the CLI
-      surface being frozen._ Eight example lines reach everyone who types `tldr
-      hi` before anyone reads a man page. Upstream has its own style guide and
-      review, so this is a submission, not a file here; the draft is at
-      `docs/tldr.md`.
+- [ ] **tldr page** — _scope: one upstream pull request; the gate it waited on
+      has lifted._ Seven example lines reach everyone who types `tldr hi` before
+      anyone reads a man page. Upstream has its own style guide and review, so
+      this is a submission, not a file here; the draft is at `docs/tldr.md`.
 
-  - **Do:** open the PR against tldr-pages once the CLI surface is frozen —
-    the first line of [What v1.0.0 means](#what-v100-means). Examples that
-    churn are worse than no page.
+  - **The CLI surface is frozen, which is what this was waiting on.** All twelve
+    flags agree across `hi.sh`'s `_HI_SUBCOMMANDS` table and case arms,
+    `docs/hi.1`, and `common/targets.sh`'s completion roster — and the agreement
+    is CI-enforced in both directions rather than read: `tests/hi/parse_test.sh`
+    checks that every `--help` flag reaches the man page _and_ that the page
+    groups them the way the roster does, while `tests/common/targets_test.sh`
+    checks the roster against `--help` each way round. Examples that churn are
+    worse than no page, and these can no longer churn quietly.
+  - **Do:** open the PR against tldr-pages. The draft leans on three flags —
+    `--doctor`, `--version` and `--configure` — all of them frozen.
   - **Ticks when:** it is merged upstream.

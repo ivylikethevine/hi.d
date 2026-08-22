@@ -225,6 +225,11 @@ Every channel below is gated on the manual approval in `release.yml`, and two of
 them (the AUR and the tap) are pushed by CI once their secrets exist — the
 checks each section describes are still yours to run first.
 
+**A `v0.0.x` tag reaches none of them.** Those are debug tags, pushed to
+exercise the release path rather than to ship, so the `tap` and `aur` jobs skip
+on the tag name itself — not merely because a secret is missing. The GitHub
+Release is still created, with the packages attached.
+
 ### AUR
 
 Not done, and not currently doable: AUR registration is closed to new accounts
@@ -273,8 +278,8 @@ Then push `PKGBUILD` + `.SRCINFO` — only those two — to
 `ssh://aur@aur.archlinux.org/say-hi-git.git`, `say-hi-git` first since it needs
 no tag. **That first push is the manual one**, because it is where namcap gates.
 After it, `release.yml`'s `aur` job pushes the versioned `say-hi` on every
-release, given the `AUR_SSH_KEY` secret; `say-hi-git` has no version to bump and
-CI never touches it.
+release but a `v0.0.x` debug tag, given the `AUR_SSH_KEY` secret; `say-hi-git`
+has no version to bump and CI never touches it.
 
 Never submit the versioned package with `b2sums=('SKIP')` — `SKIP` is correct
 only on `say-hi-git`, whose source is a git ref.

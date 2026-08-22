@@ -1,0 +1,57 @@
+name: Feature request
+description: A setting, a flag, or a target hi should answer to
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Two files answer most of these before they are asked:
+        [docs/UNSUPPORTED.md](https://github.com/ivylikethevine/say-hi/blob/main/docs/UNSUPPORTED.md)
+        carries a verdict and a reason for everything weighed and answered no —
+        runtimes, shells, packaging channels, removed features — and
+        [docs/ROADMAP.md](https://github.com/ivylikethevine/say-hi/blob/main/docs/ROADMAP.md)
+        is what is already planned. A reason that has stopped being true is worth
+        raising; so is a case neither file considered.
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What you want
+      description: The behaviour, not the implementation.
+    validations:
+      required: true
+
+  - type: textarea
+    id: today
+    attributes:
+      label: What you do today instead
+      description: >-
+        The workaround, if there is one — an `~/.ssh/config` entry, a wrapper
+        script, an alias. Sometimes that turns out to be the answer, and it is
+        always the measure of how much this would buy.
+    validations:
+      required: true
+
+  - type: textarea
+    id: target
+    attributes:
+      label: If this is a new target
+      description: >-
+        The bar docs/SUPPORTED.md sets is whether it is something people **sit in**,
+        not merely something reachable: every backend on the roster costs a fork
+        on every `hi <target>` and every TAB, on machines that have none of it.
+        Name the CLI, how it execs an interactive shell, and how a file gets in.
+      placeholder: |
+        CLI:      lxc / incus
+        exec:     lxc exec <name> -- <cmd>
+        file in:  lxc file push
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: checked
+    attributes:
+      label: Before you send it
+      options:
+        - label: I checked docs/UNSUPPORTED.md and docs/ROADMAP.md for an existing answer.
+          required: true
